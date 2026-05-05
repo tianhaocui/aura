@@ -4,16 +4,19 @@ import com.alibaba.fastjson2.JSON;
 import io.aura.Aura;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 public class TestClient {
 
     private final Aura app;
     private final Router router;
+    private final List<CompiledRoute> compiled;
 
     TestClient(Aura app, Router router) {
         this.app = app;
         this.router = router;
+        this.compiled = UndertowStarter.compileRoutes(router);
     }
 
     public static TestClient of(Aura app) {
@@ -72,21 +75,22 @@ public class TestClient {
         }
 
         public Response execute() {
-            var compiled = UndertowStarter.compileRoutes(router);
+            String routePath = path.contains("?") ? path.substring(0, path.indexOf('?')) : path;
+            Map<String, String> queryParams = parseQueryString(path);
+
             for (var route : compiled) {
                 if (!route.method().equals(method)) continue;
-                Map<String, String> params = route.match(path);
+                Map<String, String> params = route.match(routePath);
                 if (params == null) continue;
 
-                var mockCtx = new MockContext(params, headers, body, app);
+                var mockCtx = new MockContext(params, queryParams, headers, body, app);
                 try {
                     for (Handler mw : route.beforeHandlers()) {
                         mw.handle(mockCtx);
                     }
                     route.handler().handle(mockCtx);
                 } catch (Exception e) {
-                    if (mockCtx.status == 0) mockCtx.status = 500;
-                    mockCtx.responseBody = JSON.toJSONString(Map.of("error", e.getMessage()));
+                    handleException(e, mockCtx);
                 } finally {
                     for (Handler h : route.afterHandlers()) {
                         try { h.handle(mockCtx); } catch (Exception ignored) {}
@@ -95,6 +99,36 @@ public class TestClient {
                 return new Response(mockCtx.status == 0 ? 200 : mockCtx.status, mockCtx.responseBody);
             }
             return new Response(404, "Not Found");
+        }
+
+        @SuppressWarnings({"unchecked", "rawtypes"})
+        private void handleException(Exception e, MockContext ctx) {
+            for (var entry : router.exceptionHandlers.entrySet()) {
+                if (entry.getKey().isAssignableFrom(e.getClass())) {
+                    try {
+                        ((ExceptionHandler) entry.getValue()).handle(e, ctx);
+                    } catch (Exception inner) {
+                        if (ctx.status == 0) ctx.status = 500;
+                    }
+                    return;
+                }
+            }
+            if (ctx.status == 0) ctx.status = 500;
+            ctx.responseBody = JSON.toJSONString(Map.of("error",
+                    e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName()));
+        }
+
+        private static Map<String, String> parseQueryString(String path) {
+            Map<String, String> params = new HashMap<>();
+            int idx = path.indexOf('?');
+            if (idx < 0) return params;
+            String qs = path.substring(idx + 1);
+            for (String pair : qs.split("&")) {
+                String[] kv = pair.split("=", 2);
+                if (kv.length == 2) params.put(kv[0], kv[1]);
+                else if (kv.length == 1) params.put(kv[0], "");
+            }
+            return params;
         }
 
         public Response expect(int statusCode) {

@@ -18,13 +18,14 @@ class MockContext extends Context {
     private final Aura app;
     private final Map<Class<?>, Object> attrs = new ConcurrentHashMap<>();
 
-    MockContext(Map<String, String> pathParams, Map<String, String> headers, String body, Aura app) {
+    MockContext(Map<String, String> pathParams, Map<String, String> queryParams,
+                Map<String, String> headers, String body, Aura app) {
         super(null, pathParams, app);
         this.pathParams = pathParams;
         this.headers = headers;
         this.body = body;
         this.app = app;
-        this.queryParams = parseQuery();
+        this.queryParams = queryParams;
     }
 
     @Override public String path(String name) { return pathParams.get(name); }
@@ -52,6 +53,4 @@ class MockContext extends Context {
         return null;
     }
     @Override public Aura app() { return app; }
-
-    private Map<String, String> parseQuery() { return new HashMap<>(); }
 }
