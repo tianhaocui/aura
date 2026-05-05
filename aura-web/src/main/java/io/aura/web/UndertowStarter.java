@@ -66,7 +66,6 @@ public class UndertowStarter implements AuraStarter {
         }
 
         compiledRoutes = compile(router, "", new ArrayList<>(), new ArrayList<>());
-        app.setCompiledRoutes(compiledRoutes);
 
         String staticPath = app.staticFilesPath();
         if (staticPath != null) {

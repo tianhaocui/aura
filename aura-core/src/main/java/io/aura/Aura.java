@@ -35,7 +35,6 @@ public class Aura {
     private java.io.PrintStream mcpStdout;
     private AuraStarter starter;
     private McpStarter mcpStarter;
-    private Object compiledRoutesRef;
 
     private Aura() {
         loadConfig("aura.properties");
@@ -257,9 +256,6 @@ public class Aura {
     public int shutdownTimeout() { return shutdownTimeout; }
     public int mcpPort() { return mcpPort; }
     public java.io.PrintStream mcpStdout() { return mcpStdout; }
-
-    public void setCompiledRoutes(Object routes) { this.compiledRoutesRef = routes; }
-    public Object getCompiledRoutes() { return compiledRoutesRef; }
 
     private void fireStart() {
         for (Consumer<Aura> hook : startHooks) {

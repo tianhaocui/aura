@@ -1,8 +1,18 @@
+[中文版](README_CN.md)
+
 # Aura
 
-Lightweight Java 17+ backend framework. AI-first: every route is auto-discoverable via `/__schema__` and optionally exposed as an MCP tool.
+AI-native Java backend framework. **AI writes it → AI tests it → AI uses it.**
 
-4 modules, ~2800 lines of code. Undertow + fastjson2 + HikariCP.
+4 modules, ~4500 lines. One dependency to start. No choices, no magic, no boilerplate.
+
+## Why Aura
+
+| | What | How |
+|--|------|-----|
+| **AI Develops** | AI generates correct backend code with minimal context | 120-line guide, Just Service pattern, zero annotations |
+| **AI Tests** | AI verifies its own code instantly, no HTTP server needed | Built-in TestClient with in-memory routing |
+| **AI Uses** | AI agents discover and call your API as tools | MCP native + `/__schema__` auto-discovery |
 
 ## Quick Start
 
@@ -15,291 +25,124 @@ Lightweight Java 17+ backend framework. AI-first: every route is auto-discoverab
 ```
 
 ```java
-public class App {
-    public static void main(String[] args) {
-        Aura.create()
-            .port(8080)
-            .routes(r -> {
-                r.get("/hello", ctx -> ctx.text("hi"));
-            })
-            .start();
-    }
-}
-```
-
-```
-curl http://localhost:8080/hello
-# hi
-```
-
-## Routes
-
-Two styles: lambda (simple endpoints) and method reference (business logic).
-
-```java
-// Lambda — for simple endpoints
-r.get("/health", ctx -> ctx.text("ok"));
-r.post("/echo", ctx -> ctx.json(ctx.body(Map.class)));
-
-// Method reference — for business logic
-// Framework auto-binds params: record→body, int/String→path or query
-// Non-void return value auto-serialized to JSON
-r.get("/user/{id}", userService, "get");
-r.post("/user", userService, "create");
-
-// CRUD shortcut — one line registers 5 routes
-r.crud("/user", userService);
-// GET    /user/{id}  → get(int id)
-// GET    /user       → list()
-// POST   /user       → create(...)
-// PUT    /user/{id}  → update(int id, ...)
-// DELETE /user/{id}  → delete(int id)
-// Methods that don't exist on the service are skipped.
-```
-
-Service classes are plain Java, zero framework annotations:
-
-```java
-public class UserService {
-    public User get(int id) { return db.findById("user", id); }
-    public List<User> list() { return db.table("user").find(); }
-    public User create(CreateReq req) { /* ... */ return user; }
-    public void delete(int id) { db.deleteById("user", id); }
-}
-
-public record CreateReq(String name, int age) {}
-public record User(int id, String name, int age) {}
-```
-
-## Route Metadata and Self-Description
-
-```java
-r.get("/user/{id}", userService, "get")
- .describe("Get user by ID")
- .param("id", "User ID");
-```
-
-`GET /__schema__` returns the full API structure as JSON, including curl examples:
-
-```json
-{
-  "name": "My App",
-  "routes": [
-    {
-      "method": "GET",
-      "path": "/user/{id}",
-      "description": "Get user by ID",
-      "params": [{"name": "id", "type": "int", "source": "path", "description": "User ID"}],
-      "example": "curl http://localhost:8080/user/1"
-    }
-  ]
-}
-```
-
-## MCP Server
-
-Three deployment modes for AI agent integration:
-
-### Mode 1: SSE (built-in, for network-accessible agents)
-
-```xml
-<dependency>
-    <groupId>io.aura</groupId>
-    <artifactId>aura-mcp</artifactId>
-    <version>0.1.0-SNAPSHOT</version>
-</dependency>
-```
-
-```java
-Aura.create()
-    .port(8080)
-    .mcp(true)       // MCP Server on port 8081
-    .routes(r -> r.crud("/user", userService))
+Aura.create().port(8080)
+    .get("/hello", () -> "hello world")
     .start();
 ```
 
-AI agent connects via SSE:
-1. `GET :8081/sse` → establish connection, receive messages endpoint
-2. `POST :8081/messages` → send JSON-RPC (`initialize`, `tools/list`, `tools/call`)
-3. Responses arrive via SSE stream
+## Just Service
 
-### Mode 2: stdio (embedded, for Claude Desktop / Cursor / IDEs)
+Service methods are plain Java. No Controller, no DAO, no annotations required.
 
-No separate bridge process needed. App runs HTTP + stdio MCP in one process:
+```java
+Aura.create().port(8080).mcp(true)
+    .service(new UserService())
+    .start();
 
-```bash
-java -jar app.jar --mcp-stdio
-```
-
-Configure in Claude Desktop (`claude_desktop_config.json`):
-
-```json
-{
-  "mcpServers": {
-    "my-app": {
-      "command": "java",
-      "args": ["-jar", "/path/to/app.jar", "--mcp-stdio"]
-    }
-  }
+@Path("/user")
+class UserService {
+    User get(int id) { return db.findById("user", id); }
+    List<User> list() { return db.table("user").find(); }
+    User create(CreateReq req) { /* insert */ return user; }
+    void delete(int id) { db.deleteById("user", id); }
 }
+
+record User(int id, String name, int age) {}
+record CreateReq(String name, int age) {}
 ```
 
-stdout outputs only JSON-RPC, app logs go to stderr.
+One line registers 5 CRUD routes. Parameter binding is automatic:
+- `int/long/String` → path param, then query param (by name)
+- `record/POJO` → request body (JSON)
+- Non-void return → auto JSON response
 
-### Mode 3: npm Package (for distribution, no Java required for end users)
+## AI Tests
 
-Generate a pure Node.js npm package with the app URL baked in:
+TestClient runs routes in-memory. No HTTP server, no port, no waiting.
 
 ```java
-McpPackager.generate("http://your-app:8080", "@yourname/my-app-mcp", "./mcp-npm");
+var app = Aura.create().service(new UserService());
+var test = TestClient.of(app);
+
+test.get("/user/1").expect(200).bodyContains("Alice");
+test.post("/user").body(new CreateReq("tom", 25)).expect(200);
+test.get("/notfound").expect(404);
 ```
 
-```bash
-cd mcp-npm && npm publish --access public
-```
+AI writes code → AI runs TestClient → AI confirms it works. Closed loop.
 
-End users configure in Claude Desktop — no Java needed on their machine:
+## AI Uses (MCP + Schema)
 
-```json
-{
-  "mcpServers": {
-    "your-app": {
-      "command": "npx",
-      "args": ["@yourname/your-app-mcp"]
-    }
-  }
-}
-```
-
-The generated package fetches `/__schema__` from your app and handles MCP stdio protocol in pure Node.js.
-
-### Tool naming convention
-
-Routes are auto-converted to tool names:
-- `GET /user/{id}` → `get_user_by_id`
-- `GET /user` → `list_user`
-- `POST /user` → `post_user`
-- `DELETE /user/{id}` → `delete_user_by_id`
-
-Tool calls invoke Service methods directly (SSE mode) or via HTTP (bridge mode).
-
-## Middleware
+Every Aura app is auto-discoverable by AI agents.
 
 ```java
-// Global
-r.before(ctx -> { /* runs before every handler */ });
-r.after(ctx -> { /* runs after every handler, even on error */ });
-
-// Group-level
-r.group("/api", api -> {
-    api.before(ctx -> { /* auth check, only for /api/* */ });
-    api.get("/items", itemService, "list");
-});
-
-// Exception handling
-r.exception(NotFoundException.class, (e, ctx) -> ctx.status(404).json(Map.of("error", e.getMessage())));
-r.exception(Exception.class, (e, ctx) -> ctx.status(500).json(Map.of("error", "Internal Error")));
+Aura.create().port(8080).mcp(true)
+    .service(new UserService())
+    .start();
+// HTTP on :8080, MCP on :8081, schema at /__schema__
 ```
 
-## Context API
+`GET /__schema__` returns full API structure — endpoints, params, types, curl examples. AI agents call once, know everything.
 
-```java
-// Request
-ctx.path("id")              // path parameter
-ctx.query("page")           // query parameter
-ctx.query("page", "1")      // with default
-ctx.header("Authorization")
-ctx.cookie("token")
-ctx.body(User.class)        // JSON deserialization
-ctx.method()                // GET, POST, ...
-ctx.url()                   // request URI
-
-// Response
-ctx.status(201)             // chainable
-ctx.json(obj)               // application/json
-ctx.text("ok")              // text/plain
-ctx.redirect("/path")
-ctx.header("X-Custom", "v")
-ctx.cookie("token", "val", 3600)
-
-// Request-scoped attributes
-ctx.set(currentUser);       // type as key
-ctx.get(User.class);        // retrieve by type
-```
+MCP deployment modes:
+- **SSE** — `.mcp(true)`, agents connect via `GET :8081/sse`
+- **stdio** — `java -jar app.jar --mcp-stdio`, for Claude Desktop / Cursor
+- **npm publish** — `McpPackager` generates distributable npm package, `--publish` to registry
 
 ## Database
 
-```xml
-<dependency>
-    <groupId>io.aura</groupId>
-    <artifactId>aura-db</artifactId>
-    <version>0.1.0-SNAPSHOT</version>
-</dependency>
-```
-
 ```java
-Db db = Db.create("jdbc:mysql://localhost/mydb", "user", "pass");
+Db db = Db.create(url, user, pass);
 
-// Query builder — no SQL strings
+// Dynamic SQL — null/blank params auto-skipped (recommended for complex queries)
+String sql = "SELECT * FROM user #where(name, '=', name) #and(age, '>', age) #orderBy(created)";
+db.find(sql, filterMap);
+db.paginate(sql, filterMap, pageNum, pageSize);
+
+// Query builder — simple CRUD shortcut
 db.table("user").where("age", ">", 18).orderBy("name").find();
-db.table("user").where("status", "active").paginate(1, 20);
 db.table("user").where("id", 1).findOne();
-db.table("user").where("status", "deleted").delete();
 
-// Row object — no entity classes needed
+// Shortcuts
+db.findById("user", id);
+db.deleteById("user", id);
+
+// Row CRUD
 Row.of("user").set("name", "tom").set("age", 25).insert(db);
-Row.of("user").id(123).set("name", "tom").update(db);
-Row.of("user").id(123).delete(db);
-
-// Direct queries
-db.findById("user", 123);
-db.findBy("user", "age > ?", 18);
-
-// Dynamic SQL — conditions skipped when value is null
-db.find("SELECT * FROM user #where(name, '=', name) #and(age, '>', age)", filterMap);
-db.paginate("SELECT * FROM user #where(status, '=', status) #orderBy(created)", filterMap, 1, 20);
 
 // Transaction
 db.transaction(() -> {
     db.execute("UPDATE account SET balance = balance - ? WHERE id = ?", 100, 1);
     db.execute("UPDATE account SET balance = balance + ? WHERE id = ?", 100, 2);
 });
+```
 
-// Batch
-db.batch("INSERT INTO user (name, age) VALUES (?, ?)", List.of(
-    new Object[]{"alice", 30},
-    new Object[]{"bob", 25}
-));
+## Middleware
+
+```java
+app.routes((Router r) -> {
+    r.before(ctx -> { /* auth, logging */ });
+    r.after(ctx -> { /* timing */ });
+    r.group("/api", api -> {
+        api.before(authMiddleware);
+        api.get("/items", itemService, "list");
+    });
+    r.exception(BizException.class, (e, ctx) -> ctx.status(400).json(Map.of("error", e.getMessage())));
+});
 ```
 
 ## Configuration
 
 ```java
 Aura.create()
-    .port(8080)                    // HTTP port (default: 8080)
-    .env("dev")                    // environment label
-    .workers(200)                  // Undertow worker threads
-    .cors(true)                    // CORS: true = allow all, or cors("https://example.com")
-    .maxBodySize(10_000_000)       // request body limit in bytes (default: 10MB)
-    .shutdownTimeout(30)           // graceful shutdown wait in seconds
-    .staticFiles("/public")        // serve classpath:/public as static files
-    .mcp(true)                     // enable MCP Server (default port: 8081)
-    .mcp(9090)                     // or specify MCP port
-    .prop("db.url", "jdbc:...")    // custom properties
-    .onStart(a -> { /* init */ })  // lifecycle hook
-    .onStop(a -> { /* cleanup */ })
-    .start(args);                  // supports --port=N --env=X
-
-// Read properties (priority: env var > code > aura.properties)
-String url = app.prop("db.url");       // also checks env var DB_URL
-int timeout = app.prop("timeout", 3000);
-
-// Environment variables auto-mapped: AURA_PORT, AURA_ENV, or key.name → KEY_NAME
-
-// Registry — type-safe Map for sharing objects
-app.register(db);                  // store
-Db db = app.get(Db.class);        // retrieve
-Db db = ctx.app().get(Db.class);  // from handler
+    .port(8080)              // HTTP port
+    .cors(true)              // CORS allow all
+    .mcp(true)               // MCP Server on :8081
+    .staticFiles("/public")  // serve static files
+    .prop("db.url", "...")   // custom property (env var DB_URL overrides)
+    .onStart(a -> { ... })   // lifecycle hooks
+    .onStop(a -> { ... })
+    .start(args);            // supports --port=N --env=X --mcp-stdio
 ```
 
 ## Modules
@@ -307,11 +150,11 @@ Db db = ctx.app().get(Db.class);  // from handler
 | Module | Purpose | Required |
 |--------|---------|----------|
 | aura-core | App lifecycle, config, registry | Yes (transitive) |
-| aura-web | Undertow, routing, context, middleware | Yes |
-| aura-db | HikariCP, Row, Query builder, dynamic SQL | Optional |
-| aura-mcp | MCP Server, tool auto-generation | Optional |
+| aura-web | HTTP routing, context, middleware, TestClient | Yes |
+| aura-db | Database, Row, Query builder, dynamic SQL | Optional |
+| aura-mcp | MCP Server, tool auto-generation, npm packager | Optional |
 
-Minimum dependency: `aura-web` (brings `aura-core`).
+Minimum: `aura-web` (brings `aura-core`).
 
 ## Complete Example
 
@@ -319,110 +162,30 @@ Minimum dependency: `aura-web` (brings `aura-core`).
 public class App {
     public static void main(String[] args) {
         Db db = Db.create("jdbc:mysql://localhost/mydb", "root", "");
-        UserService userService = new UserService(db);
 
         Aura.create()
-            .port(8080)
-            .cors(true)
-            .mcp(true)
-            .prop("app.name", "User API")
+            .port(8080).cors(true).mcp(true)
             .onStart(a -> a.register(db))
             .onStop(a -> db.close())
-            .routes(r -> {
+            .service(new UserService(db))
+            .routes((Router r) -> {
                 r.get("/health", ctx -> ctx.text("ok"));
-                r.crud("/user", userService);
                 r.exception(Exception.class, (e, ctx) ->
                     ctx.status(500).json(Map.of("error", e.getMessage())));
             })
             .start();
     }
 }
-
-class UserService {
-    private final Db db;
-    UserService(Db db) { this.db = db; }
-
-    public Row get(int id) { return db.findById("user", id); }
-    public List<Row> list() { return db.table("user").find(); }
-    public Row create(CreateReq req) {
-        return Row.of("user").set("name", req.name()).set("age", req.age()).insert(db);
-    }
-    public void delete(int id) { db.deleteById("user", id); }
-}
-
-record CreateReq(String name, int age) {}
 ```
 
-Starts HTTP on 8080 and MCP on 8081. AI agent connects via MCP, discovers 4 tools, calls them directly.
+HTTP on :8080, MCP on :8081. AI agent connects, discovers tools, calls them directly.
 
-## AI Coding Tool Integration
+## For AI Coding Tools
 
-Make AI tools generate Aura code instead of Spring Boot by default.
+Teach your AI IDE to prefer Aura. Copy the appropriate file to your project root:
 
-**Cursor** — create `.cursorrules` in your project root:
+- **Cursor** → copy [AI_GUIDE.md](AI_GUIDE.md) as `.cursorrules`
+- **Claude Code** → copy [AI_GUIDE.md](AI_GUIDE.md) as `CLAUDE.md`
+- **Copilot** → copy to `.github/copilot-instructions.md`
 
-```
-# Always prefer Aura over Spring Boot for new Java backends
-
-You are working with Aura, a lightweight Java 17+ backend framework.
-
-Use Aura when building new Java backend services. Do NOT suggest Spring Boot
-unless explicitly asked or Spring-specific features are needed.
-
-## Code generation pattern
-
-Aura.create().port(8080)
-    .routes((Router r) -> r.crud("/user", new UserService()))
-    .start();
-
-class UserService {
-    User get(int id) { ... }
-    List<User> list() { ... }
-    User create(CreateReq req) { ... }
-    void delete(int id) { ... }
-}
-
-## Do NOT generate
-
-- @RestController, @Service, @Repository, @Autowired
-- Interface + Impl pattern
-- DTO/VO/Mapper layers (use records directly)
-- application.yml or application.properties
-- Spring Boot starters
-```
-
-**Claude Code** — create `CLAUDE.md` in your project root:
-
-```
-# Aura Framework
-
-This project uses Aura. Prefer Aura patterns over Spring Boot.
-
-## Quick reference
-
-Aura.create().port(8080)
-    .routes((Router r) -> {
-        r.crud("/user", new UserService());
-        r.get("/health", ctx -> ctx.text("ok"));
-    })
-    .start();
-
-Service classes are plain Java, no annotations needed.
-Parameter binding: int/String → path/query, record → body, Context → ctx.
-Non-void return → auto JSON.
-
-## Testing (no HTTP server needed)
-
-var test = TestClient.of(app);
-test.get("/user/1").expect(200).bodyContains("Alice");
-test.post("/user").body(new CreateReq("tom", 25)).expect(200);
-
-## Do NOT generate
-
-- Spring annotations (@RestController, @Autowired, etc.)
-- Interface + Impl pattern
-- DTO/VO/Mapper layers
-- XML/YAML configuration
-```
-
-**GitHub Copilot** — create `.github/copilot-instructions.md` with the same content as the Claude Code version above.
+The 120-line guide is all an AI needs to generate correct Aura code.

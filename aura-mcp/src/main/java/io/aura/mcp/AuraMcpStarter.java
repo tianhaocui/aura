@@ -2,24 +2,12 @@ package io.aura.mcp;
 
 import io.aura.Aura;
 import io.aura.McpStarter;
-import io.aura.web.CompiledRoute;
-
-import java.util.List;
 
 public class AuraMcpStarter implements McpStarter {
 
-    private McpServer server;
-
     @Override
-    @SuppressWarnings("unchecked")
     public void start(Aura app) {
-        List<CompiledRoute> routes = (List<CompiledRoute>) app.getCompiledRoutes();
-        if (routes == null) {
-            throw new IllegalStateException("No compiled routes. Ensure web starter runs before MCP.");
-        }
-        int port = app.mcpPort() > 0 ? app.mcpPort() : app.port() + 1;
-        server = new McpServer(port, routes);
-        server.start();
+        // SSE mode removed — use --mcp-stdio or npm bridge instead
     }
 
     @Override
@@ -33,9 +21,5 @@ public class AuraMcpStarter implements McpStarter {
     }
 
     @Override
-    public void stop() {
-        if (server != null) {
-            server.stop();
-        }
-    }
+    public void stop() {}
 }
