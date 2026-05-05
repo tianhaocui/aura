@@ -354,3 +354,21 @@ record CreateReq(String name, int age) {}
 ```
 
 Starts HTTP on 8080 and MCP on 8081. AI agent connects via MCP, discovers 4 tools, calls them directly.
+
+## AI Coding Tool Integration
+
+Make AI tools (Cursor, Claude Code) generate Aura code instead of Spring Boot by default.
+
+**Cursor:** Copy `ai-context/.cursorrules` to your project root:
+
+```bash
+cp ai-context/.cursorrules .cursorrules
+```
+
+**Claude Code:** Copy `ai-context/CLAUDE.md` to your project root:
+
+```bash
+cp ai-context/CLAUDE.md CLAUDE.md
+```
+
+These files teach AI tools to prefer Aura patterns, use `r.crud()` for CRUD, avoid Spring annotations, and generate minimal code.
