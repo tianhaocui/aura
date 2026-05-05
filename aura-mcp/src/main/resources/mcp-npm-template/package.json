@@ -1,0 +1,11 @@
+{
+  "name": "${PACKAGE_NAME}",
+  "version": "${PACKAGE_VERSION}",
+  "description": "MCP server for ${APP_NAME}",
+  "bin": {
+    "${BIN_NAME}": "./index.js"
+  },
+  "files": ["index.js", "bridge.jar"],
+  "keywords": ["mcp", "aura", "ai"],
+  "license": "MIT"
+}

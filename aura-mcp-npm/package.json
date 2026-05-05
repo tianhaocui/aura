@@ -1,0 +1,14 @@
+{
+  "name": "@aura-framework/mcp-bridge",
+  "version": "0.1.0",
+  "description": "MCP bridge for Aura framework applications",
+  "bin": {
+    "aura-mcp": "./index.js"
+  },
+  "files": [
+    "index.js",
+    "bridge.jar"
+  ],
+  "keywords": ["mcp", "aura", "ai", "tools"],
+  "license": "MIT"
+}

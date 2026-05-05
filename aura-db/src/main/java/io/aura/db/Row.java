@@ -1,0 +1,109 @@
+package io.aura.db;
+
+import java.util.LinkedHashMap;
+import java.util.Map;
+
+public class Row extends LinkedHashMap<String, Object> {
+
+    private String table;
+    private String primaryKey = "id";
+
+    private Row() {}
+
+    public static Row of(String table) {
+        Row row = new Row();
+        row.table = table;
+        return row;
+    }
+
+    public static Row of(String table, String primaryKey) {
+        Row row = new Row();
+        row.table = table;
+        row.primaryKey = primaryKey;
+        return row;
+    }
+
+    public Row set(String key, Object value) {
+        put(key, value);
+        return this;
+    }
+
+    public Row id(Object id) {
+        put(primaryKey, id);
+        return this;
+    }
+
+    @SuppressWarnings("unchecked")
+    public <T> T id() {
+        return (T) get(primaryKey);
+    }
+
+    public String getStr(String key) {
+        Object v = get(key);
+        return v == null ? null : v.toString();
+    }
+
+    public Integer getInt(String key) {
+        Object v = get(key);
+        if (v == null) return null;
+        if (v instanceof Number n) return n.intValue();
+        return Integer.parseInt(v.toString());
+    }
+
+    public Long getLong(String key) {
+        Object v = get(key);
+        if (v == null) return null;
+        if (v instanceof Number n) return n.longValue();
+        return Long.parseLong(v.toString());
+    }
+
+    public Boolean getBool(String key) {
+        Object v = get(key);
+        if (v == null) return null;
+        if (v instanceof Boolean b) return b;
+        return Boolean.parseBoolean(v.toString());
+    }
+
+    public String table() { return table; }
+    public String primaryKey() { return primaryKey; }
+
+    // --- CRUD shortcuts (require Db instance) ---
+
+    public Row insert(Db db) {
+        if (table == null) throw new IllegalStateException("Table name not set");
+        var cols = new java.util.ArrayList<>(keySet());
+        var vals = cols.stream().map(this::get).toArray();
+        String colStr = String.join(", ", cols);
+        String placeholders = String.join(", ", cols.stream().map(c -> "?").toList());
+        String sql = "INSERT INTO " + table + " (" + colStr + ") VALUES (" + placeholders + ")";
+        db.execute(sql, vals);
+        return this;
+    }
+
+    public boolean update(Db db) {
+        if (table == null) throw new IllegalStateException("Table name not set");
+        Object idVal = get(primaryKey);
+        if (idVal == null) throw new IllegalStateException("Primary key value not set");
+        var setCols = new java.util.ArrayList<String>();
+        var params = new java.util.ArrayList<>();
+        for (var entry : entrySet()) {
+            if (!entry.getKey().equals(primaryKey)) {
+                setCols.add(entry.getKey() + " = ?");
+                params.add(entry.getValue());
+            }
+        }
+        if (setCols.isEmpty()) return false;
+        params.add(idVal);
+        String sql = "UPDATE " + table + " SET " + String.join(", ", setCols)
+                + " WHERE " + primaryKey + " = ?";
+        return db.execute(sql, params.toArray()) > 0;
+    }
+
+    public boolean delete(Db db) {
+        if (table == null) throw new IllegalStateException("Table name not set");
+        Object idVal = get(primaryKey);
+        if (idVal == null) throw new IllegalStateException("Primary key value not set");
+        String sql = "DELETE FROM " + table + " WHERE " + primaryKey + " = ?";
+        return db.execute(sql, idVal) > 0;
+    }
+}
