@@ -146,31 +146,9 @@ Configure in Claude Desktop (`claude_desktop_config.json`):
 
 stdout outputs only JSON-RPC, app logs go to stderr.
 
-### Mode 3: stdio Bridge (separate process, for remote apps)
+### Mode 3: npm Package (for distribution, no Java required for end users)
 
-When the app runs on a remote server, use the bridge jar locally:
-
-```bash
-mvn package -pl aura-mcp
-# produces: aura-mcp/target/aura-mcp-bridge.jar (5.5MB)
-```
-
-```json
-{
-  "mcpServers": {
-    "my-app": {
-      "command": "java",
-      "args": ["-jar", "/path/to/aura-mcp-bridge.jar", "http://remote-server:8080"]
-    }
-  }
-}
-```
-
-The bridge reads `/__schema__` from the remote app and proxies tool calls via HTTP.
-
-### Mode 4: npm Package (for distribution)
-
-Generate a publishable npm package that wraps the bridge:
+Generate a pure Node.js npm package with the app URL baked in:
 
 ```java
 McpPackager.generate("http://your-app:8080", "@yourname/my-app-mcp", "./mcp-npm");
@@ -180,7 +158,20 @@ McpPackager.generate("http://your-app:8080", "@yourname/my-app-mcp", "./mcp-npm"
 cd mcp-npm && npm publish --access public
 ```
 
-End users: `npx @yourname/my-app-mcp`
+End users configure in Claude Desktop — no Java needed on their machine:
+
+```json
+{
+  "mcpServers": {
+    "your-app": {
+      "command": "npx",
+      "args": ["@yourname/your-app-mcp"]
+    }
+  }
+}
+```
+
+The generated package fetches `/__schema__` from your app and handles MCP stdio protocol in pure Node.js.
 
 ### Tool naming convention
 
