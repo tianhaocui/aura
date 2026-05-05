@@ -123,13 +123,12 @@ AI agent connects via SSE:
 2. `POST :8081/messages` → send JSON-RPC (`initialize`, `tools/list`, `tools/call`)
 3. Responses arrive via SSE stream
 
-### Mode 2: stdio Bridge (for Claude Desktop, Cursor, etc.)
+### Mode 2: stdio (embedded, for Claude Desktop / Cursor / IDEs)
 
-Build the bridge jar:
+No separate bridge process needed. App runs HTTP + stdio MCP in one process:
 
 ```bash
-mvn package -pl aura-mcp
-# produces: aura-mcp/target/aura-mcp-bridge.jar (5.5MB)
+java -jar app.jar --mcp-stdio
 ```
 
 Configure in Claude Desktop (`claude_desktop_config.json`):
@@ -139,35 +138,49 @@ Configure in Claude Desktop (`claude_desktop_config.json`):
   "mcpServers": {
     "my-app": {
       "command": "java",
-      "args": ["-jar", "/path/to/aura-mcp-bridge.jar", "http://localhost:8080"]
+      "args": ["-jar", "/path/to/app.jar", "--mcp-stdio"]
     }
   }
 }
 ```
 
-The bridge reads `/__schema__` from your running app and exposes all routes as MCP tools over stdio.
+stdout outputs only JSON-RPC, app logs go to stderr.
 
-### Mode 3: npm Package (for distribution)
+### Mode 3: stdio Bridge (separate process, for remote apps)
+
+When the app runs on a remote server, use the bridge jar locally:
+
+```bash
+mvn package -pl aura-mcp
+# produces: aura-mcp/target/aura-mcp-bridge.jar (5.5MB)
+```
+
+```json
+{
+  "mcpServers": {
+    "my-app": {
+      "command": "java",
+      "args": ["-jar", "/path/to/aura-mcp-bridge.jar", "http://remote-server:8080"]
+    }
+  }
+}
+```
+
+The bridge reads `/__schema__` from the remote app and proxies tool calls via HTTP.
+
+### Mode 4: npm Package (for distribution)
 
 Generate a publishable npm package that wraps the bridge:
 
 ```java
-McpPackager.generate(
-    "http://your-app-url:8080",  // app URL baked into package
-    "@yourname/my-app-mcp",       // npm package name
-    "./mcp-npm"                   // output directory
-);
+McpPackager.generate("http://your-app:8080", "@yourname/my-app-mcp", "./mcp-npm");
 ```
 
 ```bash
 cd mcp-npm && npm publish --access public
 ```
 
-Users install with:
-
-```bash
-npx @yourname/my-app-mcp
-```
+End users: `npx @yourname/my-app-mcp`
 
 ### Tool naming convention
 
