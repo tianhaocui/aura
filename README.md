@@ -2,7 +2,7 @@
 
 Lightweight Java 17+ backend framework. AI-first: every route is auto-discoverable via `/__schema__` and optionally exposed as an MCP tool.
 
-4 modules, ~2400 lines of code. Undertow + fastjson2 + HikariCP.
+4 modules, ~2800 lines of code. Undertow + fastjson2 + HikariCP.
 
 ## Quick Start
 
