@@ -2,6 +2,8 @@
 
 # Aura
 
+**A**I · **U**sable · **R**apid · **A**utonomous
+
 AI-native Java backend framework. **AI writes it → AI tests it → AI uses it.**
 
 4 modules, ~4500 lines. One dependency to start. No choices, no magic, no boilerplate.
@@ -35,7 +37,7 @@ Aura.create().port(8080)
 Service methods are plain Java. No Controller, no DAO, no annotations required.
 
 ```java
-Aura.create().port(8080).mcp(true)
+Aura.create().port(8080)
     .service(new UserService())
     .start();
 
@@ -76,16 +78,15 @@ AI writes code → AI runs TestClient → AI confirms it works. Closed loop.
 Every Aura app is auto-discoverable by AI agents.
 
 ```java
-Aura.create().port(8080).mcp(true)
+Aura.create().port(8080)
     .service(new UserService())
-    .start();
-// HTTP on :8080, MCP on :8081, schema at /__schema__
+    .start(args); // pass --mcp-stdio to enable MCP
+// HTTP on :8080, schema at /__schema__
 ```
 
 `GET /__schema__` returns full API structure — endpoints, params, types, curl examples. AI agents call once, know everything.
 
 MCP deployment modes:
-- **SSE** — `.mcp(true)`, agents connect via `GET :8081/sse`
 - **stdio** — `java -jar app.jar --mcp-stdio`, for Claude Desktop / Cursor
 - **npm publish** — `McpPackager` generates distributable npm package, `--publish` to registry
 
@@ -137,7 +138,7 @@ app.routes((Router r) -> {
 Aura.create()
     .port(8080)              // HTTP port
     .cors(true)              // CORS allow all
-    .mcp(true)               // MCP Server on :8081
+    .mcp(true)               // enable --mcp-stdio mode
     .staticFiles("/public")  // serve static files
     .prop("db.url", "...")   // custom property (env var DB_URL overrides)
     .onStart(a -> { ... })   // lifecycle hooks
@@ -164,7 +165,7 @@ public class App {
         Db db = Db.create("jdbc:mysql://localhost/mydb", "root", "");
 
         Aura.create()
-            .port(8080).cors(true).mcp(true)
+            .port(8080).cors(true)
             .onStart(a -> a.register(db))
             .onStop(a -> db.close())
             .service(new UserService(db))
@@ -178,7 +179,7 @@ public class App {
 }
 ```
 
-HTTP on :8080, MCP on :8081. AI agent connects, discovers tools, calls them directly.
+HTTP on :8080. Run with `--mcp-stdio` to enable AI agent access.
 
 ## For AI Coding Tools
 

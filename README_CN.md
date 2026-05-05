@@ -2,6 +2,8 @@
 
 # Aura
 
+**A**I · **U**sable · **R**apid · **A**utonomous
+
 AI 原生 Java 后端框架。**AI 开发 → AI 测试 → AI 使用。**
 
 4 个模块，约 4500 行代码。一个依赖启动。无选择、无魔法、无样板代码。
@@ -35,7 +37,7 @@ Aura.create().port(8080)
 Service 方法就是普通 Java 方法。没有 Controller，没有 DAO，不需要注解。
 
 ```java
-Aura.create().port(8080).mcp(true)
+Aura.create().port(8080)
     .service(new UserService())
     .start();
 
@@ -76,16 +78,15 @@ AI 写代码 → AI 跑 TestClient → AI 确认通过。闭环。
 每个 Aura 应用都能被 AI agent 自动发现。
 
 ```java
-Aura.create().port(8080).mcp(true)
+Aura.create().port(8080)
     .service(new UserService())
-    .start();
-// HTTP :8080, MCP :8081, schema 在 /__schema__
+    .start(args); // 传入 --mcp-stdio 启用 MCP
+// HTTP :8080, schema 在 /__schema__
 ```
 
 `GET /__schema__` 返回完整 API 结构——端点、参数、类型、curl 示例。AI agent 调一次就知道所有接口。
 
 MCP 部署方式：
-- **SSE** — `.mcp(true)`，agent 通过 `GET :8081/sse` 连接
 - **stdio** — `java -jar app.jar --mcp-stdio`，用于 Claude Desktop / Cursor
 - **npm 发布** — `McpPackager` 生成可分发的 npm 包，`--publish` 直接发布到 registry
 
@@ -137,7 +138,7 @@ app.routes((Router r) -> {
 Aura.create()
     .port(8080)              // HTTP 端口
     .cors(true)              // CORS 允许所有来源
-    .mcp(true)               // MCP 服务器 :8081
+    .mcp(true)               // 启用 --mcp-stdio 模式
     .staticFiles("/public")  // 静态文件
     .prop("db.url", "...")   // 自定义属性（环境变量 DB_URL 优先）
     .onStart(a -> { ... })   // 生命周期钩子
@@ -164,7 +165,7 @@ public class App {
         Db db = Db.create("jdbc:mysql://localhost/mydb", "root", "");
 
         Aura.create()
-            .port(8080).cors(true).mcp(true)
+            .port(8080).cors(true)
             .onStart(a -> a.register(db))
             .onStop(a -> db.close())
             .service(new UserService(db))
@@ -178,7 +179,7 @@ public class App {
 }
 ```
 
-HTTP :8080，MCP :8081。AI agent 连接后自动发现工具并直接调用。
+HTTP :8080。使用 `--mcp-stdio` 启动即可让 AI agent 访问。
 
 ## AI 编码工具集成
 
