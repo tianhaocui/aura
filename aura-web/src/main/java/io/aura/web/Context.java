@@ -57,7 +57,8 @@ public class Context {
     public <T> T body(Class<T> type) throws IOException {
         if (cachedBody == null) {
             exchange.startBlocking();
-            cachedBody = new String(exchange.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+            long maxSize = app != null ? app.maxBodySize() : 10 * 1024 * 1024;
+            cachedBody = new String(exchange.getInputStream().readNBytes((int) Math.min(maxSize, Integer.MAX_VALUE)), StandardCharsets.UTF_8);
         }
         return JSON.parseObject(cachedBody, type);
     }
@@ -88,6 +89,9 @@ public class Context {
     }
 
     public void redirect(String url) {
+        if (url.indexOf('\r') >= 0 || url.indexOf('\n') >= 0) {
+            throw new IllegalArgumentException("Invalid redirect URL");
+        }
         exchange.setStatusCode(302);
         exchange.getResponseHeaders().put(Headers.LOCATION, url);
         exchange.endExchange();
@@ -102,6 +106,8 @@ public class Context {
         var cookie = new io.undertow.server.handlers.CookieImpl(name, value);
         cookie.setMaxAge(maxAge);
         cookie.setPath("/");
+        cookie.setHttpOnly(true);
+        cookie.setSecure(true);
         exchange.setResponseCookie(cookie);
         return this;
     }
