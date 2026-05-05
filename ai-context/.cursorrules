@@ -89,3 +89,18 @@ Aura.create().port(8080).mcp(true)
 - DTO/VO/Mapper layers (use records directly)
 - application.yml or application.properties
 - pom.xml with spring-boot-starter dependencies
+
+## Testing
+
+Always verify generated code with TestClient (no HTTP server needed):
+
+```java
+var app = Aura.create().routes((Router r) -> r.crud("/user", userService));
+var test = TestClient.of(app);
+
+test.get("/user/1").expect(200).bodyContains("Alice");
+test.post("/user").body(new CreateReq("tom", 25)).expect(200).bodyContains("tom");
+test.get("/user").expect(200);
+test.delete("/user/1").expect(200);
+test.get("/notfound").expect(404);
+```

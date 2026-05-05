@@ -59,10 +59,78 @@ public class McpPackager {
 
     public static void main(String[] args) throws Exception {
         if (args.length < 3) {
-            System.err.println("Usage: McpPackager <app-url> <npm-name> <output-dir>");
+            System.err.println("Usage: McpPackager <app-url> <npm-name> <output-dir> [--publish] [--dry-run]");
             System.err.println("Example: McpPackager http://my-server:8080 @myname/my-app-mcp ./mcp-npm");
             System.exit(1);
         }
+
+        boolean publish = false;
+        boolean dryRun = false;
+        for (String arg : args) {
+            if ("--publish".equals(arg)) publish = true;
+            if ("--dry-run".equals(arg)) dryRun = true;
+        }
+
         generate(args[0], args[1], args[2]);
+
+        if (publish || dryRun) {
+            publish(Path.of(args[2]), dryRun);
+        }
+    }
+
+    private static void publish(Path dir, boolean dryRun) throws Exception {
+        if (!commandExists("npm")) {
+            System.err.println("Error: 'npm' not found. Install Node.js first: https://nodejs.org");
+            System.exit(1);
+        }
+
+        String whoami = exec("npm", "whoami");
+        if (whoami == null || whoami.isBlank()) {
+            System.err.println("Error: Not logged in to npm. Run 'npm login' first.");
+            System.exit(1);
+        }
+        System.out.println("Publishing as: " + whoami.trim());
+
+        if (dryRun) {
+            System.out.println("\n[dry-run] Would publish:");
+            System.out.println("  " + dir.resolve("package.json"));
+            System.out.println("  " + dir.resolve("index.js"));
+            String pkg = Files.readString(dir.resolve("package.json"));
+            System.out.println("\n" + pkg);
+            System.out.println("[dry-run] No changes made. Remove --dry-run to publish.");
+            return;
+        }
+
+        System.out.println("Publishing...");
+        ProcessBuilder pb = new ProcessBuilder("npm", "publish", "--access", "public")
+                .directory(dir.toFile())
+                .inheritIO();
+        int code = pb.start().waitFor();
+        if (code == 0) {
+            System.out.println("Published successfully!");
+        } else {
+            System.err.println("npm publish failed with exit code " + code);
+            System.exit(code);
+        }
+    }
+
+    private static boolean commandExists(String cmd) {
+        try {
+            Process p = new ProcessBuilder("which", cmd).start();
+            return p.waitFor() == 0;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    private static String exec(String... cmd) {
+        try {
+            Process p = new ProcessBuilder(cmd).start();
+            String out = new String(p.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+            p.waitFor();
+            return out;
+        } catch (Exception e) {
+            return null;
+        }
     }
 }

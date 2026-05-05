@@ -15,7 +15,7 @@ Aura.create()
     .port(8080)
     .cors(true)
     .mcp(true)
-    .routes(r -> {
+    .routes((Router r) -> {
         r.crud("/user", new UserService());
         r.get("/health", ctx -> ctx.text("ok"));
     })
@@ -107,3 +107,18 @@ r.exception(Ex.class, (e, ctx) -> ctx.status(400).json(Map.of("error", e.getMess
 - No application.yml / application.properties
 - No Spring Boot starters
 - No XML configuration
+
+## Testing
+
+Always verify generated code with TestClient (in-process, no HTTP server needed):
+
+```java
+var app = Aura.create().routes((Router r) -> r.crud("/user", userService));
+var test = TestClient.of(app);
+
+test.get("/user/1").expect(200).bodyContains("Alice");
+test.post("/user").body(new CreateReq("tom", 25)).expect(200).bodyContains("tom");
+test.get("/user").expect(200);
+test.delete("/user/1").expect(200);
+test.get("/notfound").expect(404);
+```
