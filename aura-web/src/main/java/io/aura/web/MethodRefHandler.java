@@ -77,7 +77,7 @@ public final class MethodRefHandler implements Handler {
         if (type == double.class || type == Double.class) return Double.parseDouble(s);
         if (type == boolean.class || type == Boolean.class) return Boolean.parseBoolean(s);
         if (type == String.class) return s;
-        if (type.isRecord() || isPojoType(type)) {
+        if (type.isRecord() || TypeUtil.isPojo(type)) {
             return com.alibaba.fastjson2.JSON.parseObject(
                     com.alibaba.fastjson2.JSON.toJSONString(val), type);
         }
@@ -96,7 +96,7 @@ public final class MethodRefHandler implements Handler {
         if (type == boolean.class || type == Boolean.class) return ctx -> parseBool(resolveString(ctx, name));
         if (type == double.class || type == Double.class) return ctx -> parseDouble(resolveString(ctx, name));
 
-        if (type.isRecord() || isPojoType(type)) return ctx -> ctx.body(type);
+        if (type.isRecord() || TypeUtil.isPojo(type)) return ctx -> ctx.body(type);
 
         return ctx -> resolveString(ctx, name);
     }
@@ -120,13 +120,6 @@ public final class MethodRefHandler implements Handler {
 
     private static double parseDouble(String val) {
         return val == null ? 0.0 : Double.parseDouble(val);
-    }
-
-    private static boolean isPojoType(Class<?> type) {
-        if (type.isPrimitive() || type.isArray() || type.isEnum()) return false;
-        if (type.getPackageName().startsWith("java.")) return false;
-        return Arrays.stream(type.getDeclaredConstructors())
-                .anyMatch(c -> c.getParameterCount() == 0);
     }
 
     private static Method findMethod(Class<?> clazz, String name) {

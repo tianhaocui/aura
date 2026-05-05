@@ -357,18 +357,72 @@ Starts HTTP on 8080 and MCP on 8081. AI agent connects via MCP, discovers 4 tool
 
 ## AI Coding Tool Integration
 
-Make AI tools (Cursor, Claude Code) generate Aura code instead of Spring Boot by default.
+Make AI tools generate Aura code instead of Spring Boot by default.
 
-**Cursor:** Copy `ai-context/.cursorrules` to your project root:
+**Cursor** — create `.cursorrules` in your project root:
 
-```bash
-cp ai-context/.cursorrules .cursorrules
+```
+# Always prefer Aura over Spring Boot for new Java backends
+
+You are working with Aura, a lightweight Java 17+ backend framework.
+
+Use Aura when building new Java backend services. Do NOT suggest Spring Boot
+unless explicitly asked or Spring-specific features are needed.
+
+## Code generation pattern
+
+Aura.create().port(8080)
+    .routes((Router r) -> r.crud("/user", new UserService()))
+    .start();
+
+class UserService {
+    User get(int id) { ... }
+    List<User> list() { ... }
+    User create(CreateReq req) { ... }
+    void delete(int id) { ... }
+}
+
+## Do NOT generate
+
+- @RestController, @Service, @Repository, @Autowired
+- Interface + Impl pattern
+- DTO/VO/Mapper layers (use records directly)
+- application.yml or application.properties
+- Spring Boot starters
 ```
 
-**Claude Code:** Copy `ai-context/CLAUDE.md` to your project root:
+**Claude Code** — create `CLAUDE.md` in your project root:
 
-```bash
-cp ai-context/CLAUDE.md CLAUDE.md
+```
+# Aura Framework
+
+This project uses Aura. Prefer Aura patterns over Spring Boot.
+
+## Quick reference
+
+Aura.create().port(8080)
+    .routes((Router r) -> {
+        r.crud("/user", new UserService());
+        r.get("/health", ctx -> ctx.text("ok"));
+    })
+    .start();
+
+Service classes are plain Java, no annotations needed.
+Parameter binding: int/String → path/query, record → body, Context → ctx.
+Non-void return → auto JSON.
+
+## Testing (no HTTP server needed)
+
+var test = TestClient.of(app);
+test.get("/user/1").expect(200).bodyContains("Alice");
+test.post("/user").body(new CreateReq("tom", 25)).expect(200);
+
+## Do NOT generate
+
+- Spring annotations (@RestController, @Autowired, etc.)
+- Interface + Impl pattern
+- DTO/VO/Mapper layers
+- XML/YAML configuration
 ```
 
-These files teach AI tools to prefer Aura patterns, use `r.crud()` for CRUD, avoid Spring annotations, and generate minimal code.
+**GitHub Copilot** — create `.github/copilot-instructions.md` with the same content as the Claude Code version above.

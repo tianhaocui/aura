@@ -183,49 +183,19 @@ public class McpServer {
         for (CompiledRoute cr : routes) {
             if (!(cr.handler() instanceof MethodRefHandler mh)) continue;
 
-            String toolName = buildToolName(cr.method(), cr.rawPath());
+            String toolName = McpUtil.buildToolName(cr.method(), cr.rawPath());
             String desc = cr.meta() != null ? cr.meta().description() : null;
-            Map<String, Object> inputSchema = buildInputSchema(mh, cr);
+
+            List<McpUtil.ParamInfo> params = new ArrayList<>();
+            for (var p : mh.resolvedMethod().getParameters()) {
+                if (p.getType().getName().equals("io.aura.web.Context")) continue;
+                params.add(new McpUtil.ParamInfo(p.getName(), p.getType().getSimpleName(), null));
+            }
+            Map<String, Object> inputSchema = McpUtil.buildInputSchema(params);
 
             tools.add(new McpTool(toolName, desc, cr.method(), cr.rawPath(), inputSchema));
             executors.put(toolName, mh::invokeWithArgs);
         }
-    }
-
-    private static String buildToolName(String method, String path) {
-        String clean = path.replaceAll("^/", "")
-                .replaceAll("\\{[a-zA-Z_]+}", "by_id")
-                .replaceAll("/+", "_");
-        if (clean.isEmpty()) clean = "root";
-        return method.toLowerCase() + "_" + clean;
-    }
-
-    private static Map<String, Object> buildInputSchema(MethodRefHandler mh, CompiledRoute cr) {
-        var schema = new LinkedHashMap<String, Object>();
-        schema.put("type", "object");
-        var properties = new LinkedHashMap<String, Object>();
-        var required = new ArrayList<String>();
-
-        for (var p : mh.resolvedMethod().getParameters()) {
-            if (p.getType().getName().equals("io.aura.web.Context")) continue;
-            var prop = new LinkedHashMap<String, Object>();
-            prop.put("type", jsonType(p.getType().getSimpleName()));
-            properties.put(p.getName(), prop);
-            required.add(p.getName());
-        }
-
-        schema.put("properties", properties);
-        if (!required.isEmpty()) schema.put("required", required);
-        return schema;
-    }
-
-    private static String jsonType(String javaType) {
-        return switch (javaType) {
-            case "int", "long", "Integer", "Long" -> "integer";
-            case "double", "float", "Double", "Float" -> "number";
-            case "boolean", "Boolean" -> "boolean";
-            default -> "string";
-        };
     }
 
     @FunctionalInterface

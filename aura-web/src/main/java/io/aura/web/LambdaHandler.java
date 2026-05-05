@@ -45,7 +45,7 @@ public final class LambdaHandler implements Handler {
                 String val = ctx.path(name);
                 if (val == null) val = ctx.query(name);
                 args[i] = "true".equalsIgnoreCase(val);
-            } else if (type.isRecord() || isPojoType(type)) {
+            } else if (type.isRecord() || TypeUtil.isPojo(type)) {
                 args[i] = ctx.body(type);
             } else {
                 String val = ctx.path(name);
@@ -87,10 +87,5 @@ public final class LambdaHandler implements Handler {
             }
         }
         throw new IllegalArgumentException("Cannot find SAM method on " + clazz.getName());
-    }
-
-    private static boolean isPojoType(Class<?> type) {
-        if (type.isPrimitive() || type.isArray() || type.isEnum()) return false;
-        return !type.getPackageName().startsWith("java.");
     }
 }

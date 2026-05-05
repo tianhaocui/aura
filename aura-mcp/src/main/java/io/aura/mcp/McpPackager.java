@@ -22,7 +22,9 @@ public class McpPackager {
             String schema = new String(new URL(appUrl + "/__schema__").openStream().readAllBytes());
             JSONObject obj = JSON.parseObject(schema);
             if (obj.getString("name") != null) appName = obj.getString("name");
-        } catch (Exception ignored) {}
+        } catch (Exception e) {
+            System.err.println("Warning: could not fetch schema from " + appUrl + ": " + e.getMessage());
+        }
 
         // package.json
         String packageJson = """

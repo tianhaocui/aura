@@ -162,42 +162,18 @@ public class McpBridge {
     }
 
     private static String buildToolName(String method, String path) {
-        String name = path.replaceAll("^/", "")
-                .replaceAll("\\{[a-zA-Z_]+}", "by_id")
-                .replaceAll("/+", "_");
-        if (name.isEmpty()) name = "root";
-        return method.toLowerCase() + "_" + name;
+        return McpUtil.buildToolName(method, path);
     }
 
     private static Map<String, Object> buildInputSchema(JSONArray params) {
-        Map<String, Object> schema = new LinkedHashMap<>();
-        schema.put("type", "object");
-        Map<String, Object> properties = new LinkedHashMap<>();
-        List<String> required = new ArrayList<>();
+        List<McpUtil.ParamInfo> list = new ArrayList<>();
         if (params != null) {
             for (int i = 0; i < params.size(); i++) {
                 JSONObject p = params.getJSONObject(i);
-                String name = p.getString("name");
-                Map<String, Object> prop = new LinkedHashMap<>();
-                prop.put("type", jsonType(p.getString("type")));
-                if (p.getString("description") != null) prop.put("description", p.getString("description"));
-                properties.put(name, prop);
-                required.add(name);
+                list.add(new McpUtil.ParamInfo(p.getString("name"), p.getString("type"), p.getString("description")));
             }
         }
-        schema.put("properties", properties);
-        if (!required.isEmpty()) schema.put("required", required);
-        return schema;
-    }
-
-    private static String jsonType(String javaType) {
-        if (javaType == null) return "string";
-        return switch (javaType) {
-            case "int", "long", "Integer", "Long" -> "integer";
-            case "double", "float" -> "number";
-            case "boolean", "Boolean" -> "boolean";
-            default -> "string";
-        };
+        return McpUtil.buildInputSchema(list);
     }
 
     public static void main(String[] args) throws Exception {

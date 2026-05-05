@@ -48,10 +48,19 @@ class UserService {
 ```java
 Db db = Db.create(url, user, pass);
 
-// Query builder (preferred — no SQL typos)
+// Dynamic SQL with directives (recommended for complex queries)
+// Null/blank params are auto-skipped — no if/else needed
+String sql = "SELECT * FROM user #where(name, '=', name) #and(age, '>', age) #orderBy(created)";
+db.find(sql, filterMap);                        // List<Row>
+db.paginate(sql, filterMap, pageNum, pageSize); // Page<Row>
+
+// Directives: #where(field, op, paramKey) #and(...) #or(...) #orderBy(field1, field2)
+// filterMap = Map.of("name", "tom", "age", 18) → WHERE name = ? AND age > ?
+// filterMap = Map.of("name", "tom")            → WHERE name = ? (age skipped)
+
+// Query builder (simple CRUD shortcut)
 db.table("user").where("age", ">", 18).find();
 db.table("user").where("id", 1).findOne();
-db.table("user").where("status", "active").paginate(1, 20);
 
 // Shortcuts
 db.findById("user", id);
@@ -61,10 +70,7 @@ db.deleteById("user", id);
 Row.of("user").set("name", "tom").set("age", 25).insert(db);
 
 // Transaction
-db.transaction(() -> {
-    db.execute("UPDATE ...", args);
-    db.execute("UPDATE ...", args);
-});
+db.transaction(() -> { db.execute(sql, args); });
 ```
 
 ## Middleware and Error Handling

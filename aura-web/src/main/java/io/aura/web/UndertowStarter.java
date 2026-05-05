@@ -266,7 +266,7 @@ public class UndertowStarter implements AuraStarter {
                 param.put("type", p.getType().getSimpleName());
 
                 // determine source
-                if (p.getType().isRecord() || isPojoType(p.getType())) {
+                if (p.getType().isRecord() || TypeUtil.isPojo(p.getType())) {
                     param.put("source", "body");
                 } else if (cr.paramNames().contains(p.getName())) {
                     param.put("source", "path");
@@ -291,11 +291,6 @@ public class UndertowStarter implements AuraStarter {
             }
         }
         return params;
-    }
-
-    private static boolean isPojoType(Class<?> type) {
-        if (type.isPrimitive() || type.isArray() || type.isEnum()) return false;
-        return !type.getPackageName().startsWith("java.");
     }
 
     private void runAfterHandlers(List<Handler> afterHandlers, Context ctx) {
