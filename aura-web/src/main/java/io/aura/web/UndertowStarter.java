@@ -325,6 +325,10 @@ public class UndertowStarter implements AuraStarter {
         ctx.status(500).text("Internal Server Error");
     }
 
+    static List<CompiledRoute> compileRoutes(Router router) {
+        return new UndertowStarter().compile(router, "", new ArrayList<>(), new ArrayList<>());
+    }
+
     private List<CompiledRoute> compile(Router router, String prefix,
                                          List<Handler> parentBefore, List<Handler> parentAfter) {
         List<CompiledRoute> result = new ArrayList<>();
