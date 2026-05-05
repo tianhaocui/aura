@@ -315,6 +315,10 @@ public class UndertowStarter implements AuraStarter {
                 return;
             }
         }
+        if (e instanceof IllegalArgumentException) {
+            ctx.status(400).text("Bad Request: " + e.getMessage());
+            return;
+        }
         log.error("Unhandled exception", e);
         ctx.status(500).text("Internal Server Error");
     }

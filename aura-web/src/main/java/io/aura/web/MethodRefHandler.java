@@ -107,11 +107,15 @@ public final class MethodRefHandler implements Handler {
     }
 
     private static int parseInt(String val) {
-        return val == null ? 0 : Integer.parseInt(val);
+        if (val == null) return 0;
+        try { return Integer.parseInt(val); }
+        catch (NumberFormatException e) { throw new IllegalArgumentException("Invalid integer: " + val); }
     }
 
     private static long parseLong(String val) {
-        return val == null ? 0L : Long.parseLong(val);
+        if (val == null) return 0L;
+        try { return Long.parseLong(val); }
+        catch (NumberFormatException e) { throw new IllegalArgumentException("Invalid long: " + val); }
     }
 
     private static boolean parseBool(String val) {
@@ -119,7 +123,9 @@ public final class MethodRefHandler implements Handler {
     }
 
     private static double parseDouble(String val) {
-        return val == null ? 0.0 : Double.parseDouble(val);
+        if (val == null) return 0.0;
+        try { return Double.parseDouble(val); }
+        catch (NumberFormatException e) { throw new IllegalArgumentException("Invalid number: " + val); }
     }
 
     private static Method findMethod(Class<?> clazz, String name) {

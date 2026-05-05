@@ -17,17 +17,19 @@ public class Query {
 
     Query(Db db, String table) {
         this.db = db;
-        this.table = table;
+        this.table = SqlSafe.identifier(table);
     }
 
     public Query select(String columns) {
-        this.select = columns;
+        this.select = SqlSafe.columns(columns);
         return this;
     }
 
     public Query where(String field, String op, Object value) {
         if (value == null) return this;
         if (value instanceof String s && s.isBlank()) return this;
+        SqlSafe.qualifiedIdentifier(field);
+        SqlSafe.operator(op);
         conditions.add(field + " " + op + " ?");
         params.add(value);
         return this;
@@ -82,6 +84,7 @@ public class Query {
         var setCols = new ArrayList<String>();
         var allParams = new ArrayList<>();
         for (var entry : row.entrySet()) {
+            SqlSafe.identifier(entry.getKey());
             setCols.add(entry.getKey() + " = ?");
             allParams.add(entry.getValue());
         }

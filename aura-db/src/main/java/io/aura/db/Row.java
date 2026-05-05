@@ -12,18 +12,21 @@ public class Row extends LinkedHashMap<String, Object> {
 
     public static Row of(String table) {
         Row row = new Row();
-        row.table = table;
+        if (table != null && !table.isEmpty()) {
+            row.table = SqlSafe.identifier(table);
+        }
         return row;
     }
 
     public static Row of(String table, String primaryKey) {
         Row row = new Row();
-        row.table = table;
-        row.primaryKey = primaryKey;
+        row.table = SqlSafe.identifier(table);
+        row.primaryKey = SqlSafe.identifier(primaryKey);
         return row;
     }
 
     public Row set(String key, Object value) {
+        SqlSafe.identifier(key);
         put(key, value);
         return this;
     }
@@ -72,6 +75,7 @@ public class Row extends LinkedHashMap<String, Object> {
     public Row insert(Db db) {
         if (table == null) throw new IllegalStateException("Table name not set");
         var cols = new java.util.ArrayList<>(keySet());
+        cols.forEach(SqlSafe::identifier);
         var vals = cols.stream().map(this::get).toArray();
         String colStr = String.join(", ", cols);
         String placeholders = String.join(", ", cols.stream().map(c -> "?").toList());
@@ -88,6 +92,7 @@ public class Row extends LinkedHashMap<String, Object> {
         var params = new java.util.ArrayList<>();
         for (var entry : entrySet()) {
             if (!entry.getKey().equals(primaryKey)) {
+                SqlSafe.identifier(entry.getKey());
                 setCols.add(entry.getKey() + " = ?");
                 params.add(entry.getValue());
             }

@@ -34,14 +34,22 @@ public class Db implements AutoCloseable {
     // --- typed query ---
 
     public <T> List<T> query(String sql, Object[] params, RowMapper<T> mapper) {
-        try (Connection conn = getConnection();
-             PreparedStatement ps = prepare(conn, sql, params);
-             ResultSet rs = ps.executeQuery()) {
-            List<T> result = new ArrayList<>();
-            while (rs.next()) result.add(mapper.map(rs));
-            return result;
+        boolean inTx = TX_CONN.get() != null;
+        Connection conn = null;
+        try {
+            conn = getConnection();
+            try (PreparedStatement ps = prepare(conn, sql, params);
+                 ResultSet rs = ps.executeQuery()) {
+                List<T> result = new ArrayList<>();
+                while (rs.next()) result.add(mapper.map(rs));
+                return result;
+            }
         } catch (SQLException e) {
             throw new DbException(e);
+        } finally {
+            if (!inTx && conn != null) {
+                try { conn.close(); } catch (SQLException ignored) {}
+            }
         }
     }
 
@@ -62,18 +70,23 @@ public class Db implements AutoCloseable {
     }
 
     public Row findById(String table, Object id) {
+        SqlSafe.identifier(table);
         return findOne("SELECT * FROM " + table + " WHERE id = ?", id);
     }
 
     public Row findById(String table, String primaryKey, Object id) {
+        SqlSafe.identifier(table);
+        SqlSafe.identifier(primaryKey);
         return findOne("SELECT * FROM " + table + " WHERE " + primaryKey + " = ?", id);
     }
 
     public List<Row> findBy(String table, String where, Object... params) {
+        SqlSafe.identifier(table);
         return find("SELECT * FROM " + table + " WHERE " + where, params);
     }
 
     public int deleteById(String table, Object id) {
+        SqlSafe.identifier(table);
         return execute("DELETE FROM " + table + " WHERE id = ?", id);
     }
 
@@ -97,7 +110,7 @@ public class Db implements AutoCloseable {
         long total = queryOne(countSql, params, rs -> rs.getLong(1));
         if (total == 0) return Page.empty(pageNum, pageSize);
 
-        int offset = (pageNum - 1) * pageSize;
+        long offset = (long) (pageNum - 1) * pageSize;
         String pageSql = sql + " LIMIT ? OFFSET ?";
         Object[] pageParams = new Object[params.length + 2];
         System.arraycopy(params, 0, pageParams, 0, params.length);
@@ -115,11 +128,19 @@ public class Db implements AutoCloseable {
     // --- execute ---
 
     public int execute(String sql, Object... params) {
-        try (Connection conn = getConnection();
-             PreparedStatement ps = prepare(conn, sql, params)) {
-            return ps.executeUpdate();
+        boolean inTx = TX_CONN.get() != null;
+        Connection conn = null;
+        try {
+            conn = getConnection();
+            try (PreparedStatement ps = prepare(conn, sql, params)) {
+                return ps.executeUpdate();
+            }
         } catch (SQLException e) {
             throw new DbException(e);
+        } finally {
+            if (!inTx && conn != null) {
+                try { conn.close(); } catch (SQLException ignored) {}
+            }
         }
     }
 

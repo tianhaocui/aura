@@ -70,6 +70,9 @@ public final class SqlKit {
         String op = parts[1].trim().replace("'", "").replace("\"", "");
         String paramName = parts[2].trim();
 
+        SqlSafe.qualifiedIdentifier(field);
+        SqlSafe.operator(op);
+
         Object value = data.get(paramName);
         if (value == null || (value instanceof String s && s.isBlank())) return null;
 
