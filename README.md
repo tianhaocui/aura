@@ -98,7 +98,9 @@ r.get("/user/{id}", userService, "get")
 
 ## MCP Server
 
-Add `aura-mcp` dependency and one line to expose all routes as MCP tools:
+Three deployment modes for AI agent integration:
+
+### Mode 1: SSE (built-in, for network-accessible agents)
 
 ```xml
 <dependency>
@@ -116,11 +118,66 @@ Aura.create()
     .start();
 ```
 
-AI agent workflow:
-1. Connect SSE: `GET :8081/sse`
-2. `initialize` → handshake
-3. `tools/list` → discover tools (get_user_by_id, list_user, create_user, ...)
-4. `tools/call` → invoke service method directly, no HTTP
+AI agent connects via SSE:
+1. `GET :8081/sse` → establish connection, receive messages endpoint
+2. `POST :8081/messages` → send JSON-RPC (`initialize`, `tools/list`, `tools/call`)
+3. Responses arrive via SSE stream
+
+### Mode 2: stdio Bridge (for Claude Desktop, Cursor, etc.)
+
+Build the bridge jar:
+
+```bash
+mvn package -pl aura-mcp
+# produces: aura-mcp/target/aura-mcp-bridge.jar (5.5MB)
+```
+
+Configure in Claude Desktop (`claude_desktop_config.json`):
+
+```json
+{
+  "mcpServers": {
+    "my-app": {
+      "command": "java",
+      "args": ["-jar", "/path/to/aura-mcp-bridge.jar", "http://localhost:8080"]
+    }
+  }
+}
+```
+
+The bridge reads `/__schema__` from your running app and exposes all routes as MCP tools over stdio.
+
+### Mode 3: npm Package (for distribution)
+
+Generate a publishable npm package that wraps the bridge:
+
+```java
+McpPackager.generate(
+    "http://your-app-url:8080",  // app URL baked into package
+    "@yourname/my-app-mcp",       // npm package name
+    "./mcp-npm"                   // output directory
+);
+```
+
+```bash
+cd mcp-npm && npm publish --access public
+```
+
+Users install with:
+
+```bash
+npx @yourname/my-app-mcp
+```
+
+### Tool naming convention
+
+Routes are auto-converted to tool names:
+- `GET /user/{id}` → `get_user_by_id`
+- `GET /user` → `list_user`
+- `POST /user` → `post_user`
+- `DELETE /user/{id}` → `delete_user_by_id`
+
+Tool calls invoke Service methods directly (SSE mode) or via HTTP (bridge mode).
 
 ## Middleware
 
@@ -227,11 +284,13 @@ Aura.create()
     .prop("db.url", "jdbc:...")    // custom properties
     .onStart(a -> { /* init */ })  // lifecycle hook
     .onStop(a -> { /* cleanup */ })
-    .start();
+    .start(args);                  // supports --port=N --env=X
 
-// Read properties (priority: code > env var > config file)
-String url = app.prop("db.url");
+// Read properties (priority: env var > code > aura.properties)
+String url = app.prop("db.url");       // also checks env var DB_URL
 int timeout = app.prop("timeout", 3000);
+
+// Environment variables auto-mapped: AURA_PORT, AURA_ENV, or key.name → KEY_NAME
 
 // Registry — type-safe Map for sharing objects
 app.register(db);                  // store

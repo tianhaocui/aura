@@ -23,6 +23,16 @@ public class AuraMcpStarter implements McpStarter {
     }
 
     @Override
+    public void startStdio(Aura app) {
+        try {
+            java.io.PrintStream out = app.mcpStdout() != null ? app.mcpStdout() : System.out;
+            new McpBridge("http://localhost:" + app.port(), out).run();
+        } catch (Exception e) {
+            throw new RuntimeException("MCP stdio failed", e);
+        }
+    }
+
+    @Override
     public void stop() {
         if (server != null) {
             server.stop();

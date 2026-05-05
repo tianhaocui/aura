@@ -32,6 +32,7 @@ public class Aura {
     private long maxBodySize = 10 * 1024 * 1024; // 10MB default
     private int shutdownTimeout = 30;
     private int mcpPort = -1;
+    private java.io.PrintStream mcpStdout;
     private AuraStarter starter;
     private McpStarter mcpStarter;
     private Object compiledRoutesRef;
@@ -179,6 +180,7 @@ public class Aura {
     // --- lifecycle ---
 
     public void start(String[] args) {
+        boolean mcpStdio = false;
         for (String arg : args) {
             if (arg.startsWith("--config=")) {
                 loadExternalConfig(arg.substring(9));
@@ -186,7 +188,14 @@ public class Aura {
                 this.port = Integer.parseInt(arg.substring(7));
             } else if (arg.startsWith("--env=")) {
                 this.env = arg.substring(6);
+            } else if ("--mcp-stdio".equals(arg)) {
+                mcpStdio = true;
             }
+        }
+        if (mcpStdio) {
+            this.mcpPort = -2;
+            this.mcpStdout = System.out; // save real stdout before redirect
+            System.setOut(System.err);
         }
         start();
     }
@@ -210,6 +219,16 @@ public class Aura {
         }
 
         Runtime.getRuntime().addShutdownHook(new Thread(this::stop));
+
+        if (mcpPort == -2) {
+            ServiceLoader<McpStarter> mcpLoader = ServiceLoader.load(McpStarter.class);
+            mcpStarter = mcpLoader.findFirst().orElse(null);
+            if (mcpStarter != null) {
+                mcpStarter.startStdio(this);
+            } else {
+                log.error("--mcp-stdio requires aura-mcp dependency.");
+            }
+        }
     }
 
     public void stop() {
@@ -237,6 +256,7 @@ public class Aura {
     public long maxBodySize() { return maxBodySize; }
     public int shutdownTimeout() { return shutdownTimeout; }
     public int mcpPort() { return mcpPort; }
+    public java.io.PrintStream mcpStdout() { return mcpStdout; }
 
     public void setCompiledRoutes(Object routes) { this.compiledRoutesRef = routes; }
     public Object getCompiledRoutes() { return compiledRoutesRef; }

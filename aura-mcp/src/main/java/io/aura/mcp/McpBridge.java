@@ -13,10 +13,16 @@ import java.util.*;
 public class McpBridge {
 
     private final String baseUrl;
+    private final PrintStream out;
     private JSONArray routes;
 
     public McpBridge(String baseUrl) {
+        this(baseUrl, System.out);
+    }
+
+    public McpBridge(String baseUrl, PrintStream out) {
         this.baseUrl = baseUrl.endsWith("/") ? baseUrl.substring(0, baseUrl.length() - 1) : baseUrl;
+        this.out = out;
     }
 
     public void run() throws Exception {
@@ -28,8 +34,8 @@ public class McpBridge {
             JSONObject request = JSON.parseObject(line);
             JSONObject response = handle(request);
             if (response != null) {
-                System.out.println(response.toJSONString());
-                System.out.flush();
+                out.println(response.toJSONString());
+                out.flush();
             }
         }
     }
