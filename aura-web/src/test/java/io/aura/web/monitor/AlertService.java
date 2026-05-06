@@ -83,7 +83,7 @@ public class AlertService {
                         rule.severity(), Instant.now().toString()
                 );
                 alerts.add(alert);
-                while (alerts.size() > MAX_ALERTS) alerts.removeFirst();
+                while (alerts.size() > MAX_ALERTS) alerts.remove(0);
             }
         }
     }

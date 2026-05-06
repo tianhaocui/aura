@@ -37,7 +37,7 @@ public class Context {
 
     public String query(String name) {
         Deque<String> values = exchange.getQueryParameters().get(name);
-        return values == null || values.isEmpty() ? null : values.getFirst();
+        return values == null || values.isEmpty() ? null : values.peek();
     }
 
     public String query(String name, String defaultValue) {

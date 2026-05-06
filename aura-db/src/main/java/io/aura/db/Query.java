@@ -67,7 +67,7 @@ public class Query {
     public Row findOne() {
         this.limit = 1;
         List<Row> list = find();
-        return list.isEmpty() ? null : list.getFirst();
+        return list.isEmpty() ? null : list.get(0);
     }
 
     public Page<Row> paginate(int pageNum, int pageSize) {

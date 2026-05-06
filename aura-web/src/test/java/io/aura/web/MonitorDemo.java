@@ -86,7 +86,7 @@ public class MonitorDemo {
                         "path", ctx.url(),
                         "error", e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName()
                 ));
-                if (recentErrors.size() > 50) recentErrors.removeFirst();
+                if (recentErrors.size() > 50) recentErrors.remove(0);
                 ctx.status(500).json(Map.of("error", e.getMessage()));
             });
 

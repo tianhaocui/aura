@@ -55,7 +55,7 @@ public class Db implements AutoCloseable {
 
     public <T> T queryOne(String sql, Object[] params, RowMapper<T> mapper) {
         List<T> list = query(sql, params, mapper);
-        return list.isEmpty() ? null : list.getFirst();
+        return list.isEmpty() ? null : list.get(0);
     }
 
     // --- Row query ---
@@ -66,7 +66,7 @@ public class Db implements AutoCloseable {
 
     public Row findOne(String sql, Object... params) {
         List<Row> list = find(sql, params);
-        return list.isEmpty() ? null : list.getFirst();
+        return list.isEmpty() ? null : list.get(0);
     }
 
     public Row findById(String table, Object id) {
