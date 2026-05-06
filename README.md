@@ -31,7 +31,7 @@ Add to your Claude Desktop / Cursor MCP config:
 }
 ```
 
-AI agent gets 7 tools (create/list/get/update/delete/search/stats todos). Live demo at https://aura-demo.299.uk
+AI agent gets 7 tools (create/list/get/update/delete/search/stats todos). [Source code](https://github.com/tianhaocui/aura-demo)
 
 ## Quick Start
 
