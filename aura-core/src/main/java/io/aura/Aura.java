@@ -45,6 +45,15 @@ public class Aura {
         return new Aura();
     }
 
+    public static Aura run(String... args) {
+        String callerClass = new Throwable().getStackTrace()[1].getClassName();
+        String pkg = callerClass.contains(".") ? callerClass.substring(0, callerClass.lastIndexOf('.')) : "";
+        Aura app = new Aura();
+        if (!pkg.isEmpty()) app.scan(pkg);
+        app.start(args);
+        return app;
+    }
+
     // --- builder ---
 
     public Aura port(int port) {
