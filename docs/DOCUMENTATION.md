@@ -146,6 +146,21 @@ r.crud("/user", userService);
 // Missing methods are skipped.
 ```
 
+`crud()` and manual routes can be mixed freely. Use `crud()` for standard CRUD, add custom routes for anything else:
+
+```java
+r.crud("/user", userService);
+
+// Custom routes beyond CRUD
+r.get("/user/search", userService, "search");
+r.get("/user/{id}/orders", userService, "getOrders");
+r.post("/user/{id}/avatar", userService, "uploadAvatar");
+r.put("/user/{id}/password", userService, "changePassword");
+r.get("/user/export", userService, "exportCsv");
+```
+
+There is no limit on route count or path format. Any HTTP method + any path pattern works.
+
 ### Service Registration (annotation-based)
 
 ```java
