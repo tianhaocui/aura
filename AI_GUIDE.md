@@ -2,6 +2,30 @@
 
 You are developing with Aura, a lightweight Java 17+ backend framework.
 
+## Project Setup (pom.xml)
+
+```xml
+<parent>
+    <groupId>io.github.tianhaocui</groupId>
+    <artifactId>aura-parent</artifactId>
+    <version>0.1.0</version>
+</parent>
+
+<dependencies>
+    <dependency>
+        <groupId>io.github.tianhaocui</groupId>
+        <artifactId>aura-web</artifactId>
+    </dependency>
+    <!-- Optional: database -->
+    <dependency>
+        <groupId>io.github.tianhaocui</groupId>
+        <artifactId>aura-db</artifactId>
+    </dependency>
+</dependencies>
+```
+
+Always inherit `aura-parent`. It provides `-parameters` compiler flag, Java 17, and dependency version management.
+
 ## Minimal App
 
 ```java
