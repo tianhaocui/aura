@@ -16,6 +16,23 @@ AI-native Java backend framework. **AI writes it → AI tests it → AI uses it.
 | **AI Tests** | AI verifies its own code instantly, no HTTP server needed | Built-in TestClient with in-memory routing |
 | **AI Uses** | AI agents discover and call your API as tools | MCP native + `/__schema__` auto-discovery |
 
+## Try It Now
+
+Add to your Claude Desktop / Cursor MCP config:
+
+```json
+{
+  "mcpServers": {
+    "aura-demo": {
+      "command": "npx",
+      "args": ["aura-demo-mcp@0.1.1"]
+    }
+  }
+}
+```
+
+AI agent gets 7 tools (create/list/get/update/delete/search/stats todos). Live demo at https://aura-demo.299.uk
+
 ## Quick Start
 
 ```xml
