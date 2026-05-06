@@ -68,6 +68,50 @@ String url = app.prop("db.url");      // also checks env var DB_URL
 int timeout = app.prop("timeout", 3000); // with int default
 ```
 
+### Environment Variables
+
+Property keys are auto-mapped to environment variables: `key.name` → `KEY_NAME`
+
+| Property | Env Var | Description |
+|----------|---------|-------------|
+| `port` | `AURA_PORT` | HTTP port |
+| `env` | `AURA_ENV` | Environment label |
+| `db.url` | `DB_URL` | Database URL |
+| `db.user` | `DB_USER` | Database user |
+| `db.password` | `DB_PASSWORD` | Database password |
+| Any custom | `KEY_NAME` | dot → underscore, uppercase |
+
+Environment variables always take priority over code and config file.
+
+### Configuration File (optional)
+
+Place `aura.properties` in classpath root (e.g. `src/main/resources/aura.properties`):
+
+```properties
+port=8080
+env=prod
+db.url=jdbc:mysql://prod-server/mydb
+db.user=app
+db.password=secret
+```
+
+Priority: **env var > code `.prop()` > `aura.properties`**
+
+The config file is optional. If not present, no error. All configuration can be done purely in code + env vars.
+
+### CLI Arguments
+
+```bash
+java -jar app.jar --port=9090 --env=prod --mcp-stdio --scan=com.example
+```
+
+| Argument | Description |
+|----------|-------------|
+| `--port=N` | Override HTTP port |
+| `--env=X` | Override environment |
+| `--mcp-stdio` | Enable MCP stdio mode |
+| `--scan=pkg` | Package to scan for @Path classes |
+
 ### Registry
 
 ```java
