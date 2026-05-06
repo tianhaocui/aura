@@ -113,6 +113,11 @@ public class TestClient {
                     return;
                 }
             }
+            if (e instanceof IllegalArgumentException || e instanceof io.aura.Validate.ValidationException) {
+                ctx.status = 400;
+                ctx.responseBody = "Bad Request: " + e.getMessage();
+                return;
+            }
             if (ctx.status == 0) ctx.status = 500;
             ctx.responseBody = JSON.toJSONString(Map.of("error",
                     e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName()));

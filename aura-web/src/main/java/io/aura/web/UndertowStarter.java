@@ -65,6 +65,10 @@ public class UndertowStarter implements AuraStarter {
             ServiceRegistrar.register(service, router);
         }
 
+        if (!app.scanPackages().isEmpty()) {
+            PackageScanner.scan(app.scanPackages(), router);
+        }
+
         compiledRoutes = compile(router, "", new ArrayList<>(), new ArrayList<>());
 
         String staticPath = app.staticFilesPath();
@@ -315,7 +319,7 @@ public class UndertowStarter implements AuraStarter {
                 return;
             }
         }
-        if (e instanceof IllegalArgumentException) {
+        if (e instanceof IllegalArgumentException || e instanceof io.aura.Validate.ValidationException) {
             ctx.status(400).text("Bad Request: " + e.getMessage());
             return;
         }

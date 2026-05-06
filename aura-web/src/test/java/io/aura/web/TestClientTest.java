@@ -1,6 +1,7 @@
 package io.aura.web;
 
 import io.aura.Aura;
+import io.aura.Validate;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.*;
@@ -80,8 +81,33 @@ class TestClientTest {
     @Test
     void expect_onResponse_passesWhenStatusMatches() {
         TestClient client = clientWithRoutes();
-        // should not throw
         assertThatCode(() -> client.get("/hello").execute().expect(200))
                 .doesNotThrowAnyException();
+    }
+
+    @Test
+    void validationException_returns400() {
+        Aura app = Aura.create();
+        Router router = new Router();
+        router.get("/validate", ctx -> {
+            Validate.notBlank("", "name is required");
+        });
+        TestClient client = new TestClient(app, router);
+        TestClient.Response resp = client.get("/validate").execute();
+        assertThat(resp.status()).isEqualTo(400);
+        assertThat(resp.body()).contains("name is required");
+    }
+
+    @Test
+    void illegalArgumentException_returns400() {
+        Aura app = Aura.create();
+        Router router = new Router();
+        router.get("/bad-param", ctx -> {
+            throw new IllegalArgumentException("Invalid integer: abc");
+        });
+        TestClient client = new TestClient(app, router);
+        TestClient.Response resp = client.get("/bad-param").execute();
+        assertThat(resp.status()).isEqualTo(400);
+        assertThat(resp.body()).contains("Invalid integer");
     }
 }

@@ -27,6 +27,7 @@ public class Aura {
     private Consumer<?> routeConfig;
     private final List<Object> services = new ArrayList<>();
     private final List<RouteEntry> directRoutes = new ArrayList<>();
+    private final List<String> scanPackages = new ArrayList<>();
     private String staticFilesPath;
     private String corsOrigin;
     private long maxBodySize = 10 * 1024 * 1024; // 10MB default
@@ -113,6 +114,13 @@ public class Aura {
         return this;
     }
 
+    public Aura scan(String... packages) {
+        for (String pkg : packages) {
+            this.scanPackages.add(pkg);
+        }
+        return this;
+    }
+
     // --- direct routes (simplified API) ---
 
     public Aura get(String path, Object handler) {
@@ -187,6 +195,8 @@ public class Aura {
                 this.port = Integer.parseInt(arg.substring(7));
             } else if (arg.startsWith("--env=")) {
                 this.env = arg.substring(6);
+            } else if (arg.startsWith("--scan=")) {
+                scan(arg.substring(7).split(","));
             } else if ("--mcp-stdio".equals(arg)) {
                 mcpStdio = true;
             }
@@ -250,6 +260,7 @@ public class Aura {
     public Consumer<?> routeConfig() { return routeConfig; }
     public List<Object> services() { return services; }
     public List<RouteEntry> directRoutes() { return directRoutes; }
+    public List<String> scanPackages() { return scanPackages; }
     public String staticFilesPath() { return staticFilesPath; }
     public String corsOrigin() { return corsOrigin; }
     public long maxBodySize() { return maxBodySize; }
