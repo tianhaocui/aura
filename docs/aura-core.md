@@ -1,0 +1,171 @@
+# aura-core
+
+Application lifecycle, configuration, validation, and annotations.
+
+## Aura
+
+Main entry point. Fluent builder for configuring and starting the application.
+
+### Quick Start
+
+```java
+// One-line startup (auto-scans caller's package)
+Aura.run(args);
+
+// With configuration
+Aura.create()
+    .port(8080)
+    .cors(true)
+    .mcp(true)
+    .scan("com.example")
+    .start(args);
+```
+
+### Builder Methods
+
+| Method | Description | Default |
+|--------|-------------|---------|
+| `port(int)` | HTTP port | 8080 |
+| `env(String)` | Environment label | "dev" |
+| `workers(int)` | Undertow worker threads | 200 |
+| `cors(boolean)` | Enable CORS (allow all origins) | false |
+| `cors(String)` | Enable CORS with specific origin | - |
+| `maxBodySize(long)` | Request body limit in bytes | 10MB |
+| `shutdownTimeout(int)` | Graceful shutdown wait in seconds | 30 |
+| `staticFiles(String)` | Serve static files from classpath path | - |
+| `mcp(boolean)` | Enable MCP Server | false |
+| `mcp(int)` | Enable MCP on specific port | - |
+| `prop(String, String)` | Set custom property | - |
+| `onStart(Consumer<Aura>)` | Lifecycle hook (runs after server starts) | - |
+| `onStop(Consumer<Aura>)` | Lifecycle hook (runs before shutdown, reverse order) | - |
+
+### Route Registration
+
+```java
+// Direct on Aura (simple endpoints)
+app.get("/path", () -> result);
+app.post("/path", (ReqBody req) -> result);
+
+// Via Router (full control)
+app.routes((Router r) -> {
+    r.get("/path", handler);
+    r.crud("/path", service);
+});
+
+// Via service scan
+app.service(new UserService());
+app.scan("com.example");
+```
+
+### Properties
+
+```java
+// Set
+app.prop("db.url", "jdbc:mysql://...");
+
+// Read (priority: env var > code > aura.properties)
+String url = app.prop("db.url");      // also checks env var DB_URL
+int timeout = app.prop("timeout", 3000); // with int default
+```
+
+### Registry
+
+```java
+app.register(db);                  // store by type
+Db db = app.get(Db.class);        // retrieve by type
+```
+
+### Startup
+
+```java
+app.start();          // start without CLI args
+app.start(args);      // supports --port=N --env=X --mcp-stdio --scan=pkg
+Aura.run(args);       // auto-detect package, scan, start
+```
+
+---
+
+## Validate
+
+Input validation utility. All methods throw `ValidationException` on failure (auto-returns HTTP 400).
+
+```java
+Validate.notNull(value, "field is required");
+Validate.notBlank(str, "name is required");
+Validate.range(age, 0, 150, "invalid age");
+Validate.range(longVal, 0L, 1000L, "out of range");
+Validate.minLength(str, 3, "too short");
+Validate.maxLength(str, 200, "too long");
+Validate.matches(email, "^.+@.+\\..+$", "invalid email");
+Validate.isTrue(condition, "condition failed");
+```
+
+### ValidationException
+
+```java
+public class ValidationException extends RuntimeException
+```
+
+Framework catches this and returns HTTP 400 with the message.
+
+---
+
+## Annotations
+
+| Annotation | Target | Purpose |
+|------------|--------|---------|
+| `@Path("/prefix")` | Class | Base path for service routes |
+| `@Get("/path")` | Method | GET endpoint |
+| `@Post("/path")` | Method | POST endpoint |
+| `@Put("/path")` | Method | PUT endpoint |
+| `@Delete("/path")` | Method | DELETE endpoint |
+| `@Desc("description")` | Class, Method, Parameter | Documentation for schema/MCP |
+
+### Convention-based routing (no annotations needed)
+
+Methods named `get`, `list`, `create`, `update`, `delete` are auto-mapped:
+
+| Method name | HTTP | Path |
+|-------------|------|------|
+| `get(int id)` | GET | `/{id}` |
+| `list()` | GET | `/` |
+| `create(Req req)` | POST | `/` |
+| `update(int id, Req req)` | PUT | `/{id}` |
+| `delete(int id)` | DELETE | `/{id}` |
+
+---
+
+## RouteEntry
+
+```java
+public record RouteEntry(String method, String path, Object handler, String description)
+```
+
+Internal record for direct routes registered on Aura.
+
+---
+
+## SPI Interfaces
+
+### AuraStarter
+
+```java
+public interface AuraStarter {
+    void start(Aura app);
+    void stop();
+}
+```
+
+Implemented by `aura-web` (UndertowStarter). Discovered via ServiceLoader.
+
+### McpStarter
+
+```java
+public interface McpStarter {
+    void start(Aura app);
+    void startStdio(Aura app);
+    void stop();
+}
+```
+
+Implemented by `aura-mcp` (AuraMcpStarter). Discovered via ServiceLoader.
