@@ -45,7 +45,7 @@ final class ServiceRegistrar {
         RouteInfo info = resolveRoute(m, prefix);
         if (info == null) return;
 
-        RouteBuilder rb = switch (info.httpMethod) {
+        BaseRouteBuilder rb = switch (info.httpMethod) {
             case "GET" -> router.get(info.path, service, m.getName());
             case "POST" -> router.post(info.path, service, m.getName());
             case "PUT" -> router.put(info.path, service, m.getName());

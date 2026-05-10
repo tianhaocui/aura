@@ -44,7 +44,7 @@ class RouterTest {
     @Test
     void before_addsToBeforeHandlers() {
         Router router = new Router();
-        Handler h = ctx -> {};
+        BaseHandler h = ctx -> {};
         router.before(h);
         assertThat(router.beforeHandlers).containsExactly(h);
     }
@@ -52,7 +52,7 @@ class RouterTest {
     @Test
     void after_addsToAfterHandlers() {
         Router router = new Router();
-        Handler h = ctx -> {};
+        BaseHandler h = ctx -> {};
         router.after(h);
         assertThat(router.afterHandlers).containsExactly(h);
     }
@@ -70,7 +70,7 @@ class RouterTest {
     @Test
     void exception_registersHandler() {
         Router router = new Router();
-        ExceptionHandler<IllegalArgumentException> handler = (e, ctx) -> {};
+        BaseExceptionHandler<IllegalArgumentException> handler = (e, ctx) -> {};
         router.exception(IllegalArgumentException.class, handler);
         assertThat(router.exceptionHandlers).containsKey(IllegalArgumentException.class);
         assertThat(router.exceptionHandlers.get(IllegalArgumentException.class)).isSameAs(handler);

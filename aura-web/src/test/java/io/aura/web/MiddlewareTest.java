@@ -12,7 +12,7 @@ public class MiddlewareTest {
     public static void main(String[] args) throws Exception {
         Aura app = Aura.create()
             .port(8081)
-            .routes((Router r) -> {
+            .routes((BaseRouter r) -> {
                 r.before(ctx -> log.add("global-before"));
                 r.after(ctx -> log.add("global-after"));
 

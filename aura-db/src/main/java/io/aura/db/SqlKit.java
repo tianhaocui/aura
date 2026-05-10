@@ -80,7 +80,7 @@ public final class SqlKit {
         return field + " " + op + " ? ";
     }
 
-    // #orderBy(field1, field2, ...) — whitelist: only allow fields present in data
+    // #orderBy(field1 ASC, field2 DESC, ...) — static ORDER BY, validates field name format only
     private static String buildOrderBy(String argsStr, Map<?, ?> data) {
         String[] fields = splitArgs(argsStr);
         List<String> valid = new ArrayList<>();
@@ -88,7 +88,7 @@ public final class SqlKit {
             String field = f.trim();
             if (field.isEmpty()) continue;
             // only allow alphanumeric + underscore to prevent SQL injection
-            if (field.matches("[a-zA-Z_][a-zA-Z0-9_]*")) {
+            if (field.matches("[a-zA-Z_][a-zA-Z0-9_]*(\\s+(ASC|DESC|asc|desc))?")) {
                 valid.add(field);
             }
         }

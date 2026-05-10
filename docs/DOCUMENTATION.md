@@ -32,23 +32,23 @@ What Aura deliberately does NOT do:
 ```xml
 <!-- Minimum: HTTP routing -->
 <dependency>
-    <groupId>io.aura</groupId>
+    <groupId>io.github.tianhaocui</groupId>
     <artifactId>aura-web</artifactId>
-    <version>0.1.0-SNAPSHOT</version>
+    <version>0.1.1</version>
 </dependency>
 
 <!-- Optional: Database -->
 <dependency>
-    <groupId>io.aura</groupId>
+    <groupId>io.github.tianhaocui</groupId>
     <artifactId>aura-db</artifactId>
-    <version>0.1.0-SNAPSHOT</version>
+    <version>0.1.1</version>
 </dependency>
 
 <!-- Optional: MCP for AI agents -->
 <dependency>
-    <groupId>io.aura</groupId>
+    <groupId>io.github.tianhaocui</groupId>
     <artifactId>aura-mcp</artifactId>
-    <version>0.1.0-SNAPSHOT</version>
+    <version>0.1.1</version>
 </dependency>
 ```
 
@@ -122,12 +122,12 @@ app.get("/health", () -> "ok");
 app.get("/time", () -> System.currentTimeMillis());
 
 // Style 2: Lambda with Context (when you need request details)
-app.routes((Router r) -> {
+app.routes(r -> {
     r.get("/echo", ctx -> ctx.json(ctx.body(Map.class)));
 });
 
 // Style 3: Method reference (recommended for business logic)
-app.routes((Router r) -> {
+app.routes(r -> {
     r.get("/user/{id}", userService, "get");
     r.post("/user", userService, "create");
 });
@@ -207,7 +207,7 @@ Metadata feeds into `/__schema__` and MCP tool descriptions.
 ## Middleware
 
 ```java
-app.routes((Router r) -> {
+app.routes(r -> {
     // Global middleware
     r.before(ctx -> { /* runs before every handler */ });
     r.after(ctx -> { /* runs after every handler, even on error */ });

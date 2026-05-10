@@ -20,9 +20,9 @@ AI 原生 Java 后端框架。**AI 开发 → AI 测试 → AI 使用。**
 
 ```xml
 <dependency>
-    <groupId>io.aura</groupId>
+    <groupId>io.github.tianhaocui</groupId>
     <artifactId>aura-web</artifactId>
-    <version>0.1.0-SNAPSHOT</version>
+    <version>0.1.1</version>
 </dependency>
 ```
 
@@ -108,7 +108,7 @@ db.table("user").where("id", 1).findOne();
 db.findById("user", id);
 db.deleteById("user", id);
 
-// Row CRUD
+// Row CRUD — insert() 返回自身，并填充生成的主键
 Row.of("user").set("name", "tom").set("age", 25).insert(db);
 
 // 事务
@@ -121,7 +121,7 @@ db.transaction(() -> {
 ## 中间件
 
 ```java
-app.routes((Router r) -> {
+app.routes(r -> {
     r.before(ctx -> { /* 认证、日志 */ });
     r.after(ctx -> { /* 计时 */ });
     r.group("/api", api -> {
@@ -169,7 +169,7 @@ public class App {
             .onStart(a -> a.register(db))
             .onStop(a -> db.close())
             .service(new UserService(db))
-            .routes((Router r) -> {
+            .routes(r -> {
                 r.get("/health", ctx -> ctx.text("ok"));
                 r.exception(Exception.class, (e, ctx) ->
                     ctx.status(500).json(Map.of("error", e.getMessage())));

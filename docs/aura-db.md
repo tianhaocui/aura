@@ -147,7 +147,7 @@ Object pk = row.id();                         // get primary key value
 ### CRUD
 
 ```java
-row.insert(db);    // INSERT, returns self
+row.insert(db);    // INSERT, returns self with generated primary key populated
 row.update(db);    // UPDATE by primary key, returns boolean
 row.delete(db);    // DELETE by primary key, returns boolean
 ```
@@ -156,7 +156,8 @@ row.delete(db);    // DELETE by primary key, returns boolean
 
 ```java
 // Create
-Row.of("user").set("name", "tom").set("age", 25).insert(db);
+Row row = Row.of("user").set("name", "tom").set("age", 25).insert(db);
+Object id = row.id(); // generated ID
 
 // Read
 Row user = db.findById("user", 1);

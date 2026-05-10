@@ -8,7 +8,7 @@ You are developing with Aura, a lightweight Java 17+ backend framework.
 <parent>
     <groupId>io.github.tianhaocui</groupId>
     <artifactId>aura-parent</artifactId>
-    <version>0.1.0</version>
+    <version>0.1.1</version>
 </parent>
 
 <dependencies>
@@ -66,6 +66,7 @@ class UserService {
 - Return non-void → auto JSON response
 - Return String → auto text response
 - Return void → no response body
+- Boxed types (`Integer`/`Long`/`Boolean`) → return `null` when absent; primitives (`int`/`long`/`boolean`) return `0`/`false` when absent
 
 ## Database
 
@@ -90,8 +91,9 @@ db.table("user").where("id", 1).findOne();
 db.findById("user", id);
 db.deleteById("user", id);
 
-// Row CRUD
-Row.of("user").set("name", "tom").set("age", 25).insert(db);
+// Row CRUD — insert() returns self with generated primary key populated
+Row row = Row.of("user").set("name", "tom").set("age", 25).insert(db);
+Object id = row.id(); // generated ID
 
 // Transaction
 db.transaction(() -> { db.execute(sql, args); });
@@ -123,6 +125,8 @@ Aura.create()
     .onStart(a -> a.register(Db.create(...)))
     .onStop(a -> a.get(Db.class).close())
     .start(args);         // supports --config=file --port=N --env=X
+
+In dev mode (AURA_ENV=dev, default), unhandled 500 errors include full stack trace in response body. Production (AURA_ENV=prod) shows only the message.
 ```
 
 Properties read: env var > code .prop() > aura.properties file.

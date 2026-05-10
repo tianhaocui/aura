@@ -42,7 +42,7 @@ public class Query {
     public Query orderBy(String... fields) {
         StringJoiner sj = new StringJoiner(", ");
         for (String f : fields) {
-            if (f.matches("[a-zA-Z_][a-zA-Z0-9_]*( (ASC|DESC|asc|desc))?")) {
+            if (f.matches("[a-zA-Z_][a-zA-Z0-9_]*(\\s+(ASC|DESC|asc|desc))?")) {
                 sj.add(f);
             }
         }

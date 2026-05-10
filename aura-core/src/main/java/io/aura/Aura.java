@@ -111,7 +111,7 @@ public class Aura {
         return this;
     }
 
-    public <R> Aura routes(Consumer<R> routeConfig) {
+    public Aura routes(Consumer<io.aura.web.BaseRouter> routeConfig) {
         this.routeConfig = routeConfig;
         return this;
     }

@@ -5,9 +5,9 @@
     <modelVersion>4.0.0</modelVersion>
 
     <parent>
-        <groupId>io.aura</groupId>
+        <groupId>io.github.tianhaocui</groupId>
         <artifactId>aura-parent</artifactId>
-        <version>0.1.0-SNAPSHOT</version>
+        <version>0.1.1</version>
     </parent>
 
     <artifactId>aura-mcp</artifactId>
@@ -24,7 +24,7 @@
             <scope>test</scope>
         </dependency>
         <dependency>
-            <groupId>io.aura</groupId>
+            <groupId>io.github.tianhaocui</groupId>
             <artifactId>aura-web</artifactId>
         </dependency>
     </dependencies>

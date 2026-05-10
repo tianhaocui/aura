@@ -114,8 +114,8 @@ ctx.app().get(Db.class);       // access registry
 
 ```java
 @FunctionalInterface
-public interface Handler {
-    void handle(Context ctx) throws Exception;
+public interface BaseHandler {
+    void handle(BaseContext ctx) throws Exception;
 }
 ```
 
@@ -125,10 +125,16 @@ public interface Handler {
 
 ```java
 @FunctionalInterface
-public interface ExceptionHandler<T extends Exception> {
-    void handle(T exception, Context ctx);
+public interface BaseExceptionHandler<T extends Exception> {
+    void handle(T exception, BaseContext ctx);
 }
 ```
+
+---
+
+## Error Handling (devMode)
+
+Unhandled exceptions return 500 with the exception message. In dev mode (`AURA_ENV=dev`, default), the full stack trace is included in the response body. In production (`AURA_ENV=prod`), only the message is shown.
 
 ---
 
@@ -190,6 +196,7 @@ Wraps a service method for automatic parameter binding.
 |---|---|---|
 | `int`, `long`, `String` | Path param by name, then query param | `get(int id)` |
 | `double`, `boolean` | Path param by name, then query param | `filter(boolean active)` |
+| `Integer`, `Long`, `Boolean` | Path param by name, then query param; returns `null` when absent | `filter(Boolean active)` |
 | `record` or POJO | Request body (JSON) | `create(CreateReq req)` |
 | `Context` | Framework context | `handle(Context ctx)` |
 

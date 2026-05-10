@@ -1,73 +1,24 @@
 package io.aura.web;
 
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
+public class Router extends BaseRouter {
 
-public class Router {
-
-    final List<RouteBuilder> routeBuilders = new ArrayList<>();
-    final List<Handler> beforeHandlers = new ArrayList<>();
-    final List<Handler> afterHandlers = new ArrayList<>();
-    final List<Group> groups = new ArrayList<>();
-    final Map<Class<? extends Exception>, ExceptionHandler<?>> exceptionHandlers = new LinkedHashMap<>();
-
-    public RouteBuilder get(String path, Handler handler) {
-        return addRoute("GET", path, handler);
+    public BaseRouteBuilder get(String path, Object target, String method) {
+        return addMethodRoute("GET", path, new MethodRefHandler(target, method));
     }
 
-    public RouteBuilder get(String path, Object target, String method) {
-        return addRoute("GET", path, new MethodRefHandler(target, method));
+    public BaseRouteBuilder post(String path, Object target, String method) {
+        return addMethodRoute("POST", path, new MethodRefHandler(target, method));
     }
 
-    public RouteBuilder post(String path, Handler handler) {
-        return addRoute("POST", path, handler);
+    public BaseRouteBuilder put(String path, Object target, String method) {
+        return addMethodRoute("PUT", path, new MethodRefHandler(target, method));
     }
 
-    public RouteBuilder post(String path, Object target, String method) {
-        return addRoute("POST", path, new MethodRefHandler(target, method));
+    public BaseRouteBuilder delete(String path, Object target, String method) {
+        return addMethodRoute("DELETE", path, new MethodRefHandler(target, method));
     }
 
-    public RouteBuilder put(String path, Handler handler) {
-        return addRoute("PUT", path, handler);
-    }
-
-    public RouteBuilder put(String path, Object target, String method) {
-        return addRoute("PUT", path, new MethodRefHandler(target, method));
-    }
-
-    public RouteBuilder delete(String path, Handler handler) {
-        return addRoute("DELETE", path, handler);
-    }
-
-    public RouteBuilder delete(String path, Object target, String method) {
-        return addRoute("DELETE", path, new MethodRefHandler(target, method));
-    }
-
-    public Router before(Handler handler) {
-        beforeHandlers.add(handler);
-        return this;
-    }
-
-    public Router after(Handler handler) {
-        afterHandlers.add(handler);
-        return this;
-    }
-
-    public <T extends Exception> Router exception(Class<T> type, ExceptionHandler<T> handler) {
-        exceptionHandlers.put(type, handler);
-        return this;
-    }
-
-    public Router group(String prefix, java.util.function.Consumer<Router> block) {
-        Router sub = new Router();
-        block.accept(sub);
-        groups.add(new Group(prefix, sub));
-        return this;
-    }
-
-    public Router crud(String path, Object service) {
+    public BaseRouter crud(String path, Object service) {
         var clazz = service.getClass();
         for (var m : clazz.getDeclaredMethods()) {
             if (!java.lang.reflect.Modifier.isPublic(m.getModifiers())) continue;
@@ -82,6 +33,15 @@ public class Router {
         return this;
     }
 
+    private BaseRouteBuilder addMethodRoute(String method, String path, MethodRefHandler handler) {
+        BaseRouteBuilder rb = addRoute(method, path, handler);
+        var m = handler.resolvedMethod();
+        if (m.getReturnType() != void.class) {
+            rb.returnType = m.getReturnType().getSimpleName();
+        }
+        return rb;
+    }
+
     private static String firstParamName(java.lang.reflect.Method m) {
         var params = m.getParameters();
         for (var p : params) {
@@ -93,13 +53,4 @@ public class Router {
         }
         return "id";
     }
-
-    private RouteBuilder addRoute(String method, String path, Handler handler) {
-        var rb = new RouteBuilder(new Route(method, path, handler));
-        routeBuilders.add(rb);
-        return rb;
-    }
-
-    record Route(String method, String path, Handler handler) {}
-    record Group(String prefix, Router router) {}
 }

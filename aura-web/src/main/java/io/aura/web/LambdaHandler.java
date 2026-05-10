@@ -4,7 +4,7 @@ package io.aura.web;
 import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
 
-public final class LambdaHandler implements Handler {
+public final class LambdaHandler implements BaseHandler {
 
     private final Object lambda;
     private final Method samMethod;
@@ -17,7 +17,7 @@ public final class LambdaHandler implements Handler {
     }
 
     @Override
-    public void handle(Context ctx) throws Exception {
+    public void handle(BaseContext ctx) throws Exception {
         Parameter[] params = samMethod.getParameters();
         Object[] args = new Object[params.length];
 
@@ -25,23 +25,35 @@ public final class LambdaHandler implements Handler {
             Class<?> type = params[i].getType();
             String name = params[i].getName();
 
-            if (type == Context.class) {
+            if (type == Context.class || type == BaseContext.class) {
                 args[i] = ctx;
             } else if (type == String.class) {
                 String val = ctx.path(name);
                 args[i] = val != null ? val : ctx.query(name);
-            } else if (type == int.class || type == Integer.class) {
+            } else if (type == int.class) {
                 String val = ctx.path(name);
                 if (val == null) val = ctx.query(name);
                 args[i] = val != null ? Integer.parseInt(val) : 0;
-            } else if (type == long.class || type == Long.class) {
+            } else if (type == Integer.class) {
+                String val = ctx.path(name);
+                if (val == null) val = ctx.query(name);
+                args[i] = val != null ? Integer.parseInt(val) : null;
+            } else if (type == long.class) {
                 String val = ctx.path(name);
                 if (val == null) val = ctx.query(name);
                 args[i] = val != null ? Long.parseLong(val) : 0L;
-            } else if (type == boolean.class || type == Boolean.class) {
+            } else if (type == Long.class) {
+                String val = ctx.path(name);
+                if (val == null) val = ctx.query(name);
+                args[i] = val != null ? Long.parseLong(val) : null;
+            } else if (type == boolean.class) {
                 String val = ctx.path(name);
                 if (val == null) val = ctx.query(name);
                 args[i] = "true".equalsIgnoreCase(val);
+            } else if (type == Boolean.class) {
+                String val = ctx.path(name);
+                if (val == null) val = ctx.query(name);
+                args[i] = val != null ? "true".equalsIgnoreCase(val) : null;
             } else if (type.isRecord() || TypeUtil.isPojo(type)) {
                 args[i] = ctx.body(type);
             } else {

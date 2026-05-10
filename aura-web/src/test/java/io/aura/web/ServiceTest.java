@@ -58,7 +58,7 @@ public class ServiceTest {
             .port(9092)
             .prop("app.name", "Service Test")
             .service(new UserService())
-            .routes((Router r) -> {
+            .routes((BaseRouter r) -> {
                 r.get("/health", ctx -> ctx.text("ok"));
             });
         app.start();

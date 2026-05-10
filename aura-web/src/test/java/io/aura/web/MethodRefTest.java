@@ -26,10 +26,11 @@ public class MethodRefTest {
 
         Aura.create()
             .port(9173)
-            .routes((Router r) -> {
-                r.get("/user/search", userService, "search");
-                r.get("/user/{id}", userService, "get");
-                r.post("/user", userService, "create");
+            .routes(r -> {
+                Router router = (Router) r;
+                router.get("/user/search", userService, "search");
+                router.get("/user/{id}", userService, "get");
+                router.post("/user", userService, "create");
 
                 r.get("/health", ctx -> ctx.text("ok"));
             })

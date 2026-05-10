@@ -77,7 +77,7 @@ public class MonitorDemo {
         });
 
         // 请求计数中间件
-        app.routes((Router r) -> {
+        app.routes((BaseRouter r) -> {
             r.before(ctx -> requestCount.incrementAndGet());
             r.exception(Exception.class, (e, ctx) -> {
                 errorCount.incrementAndGet();

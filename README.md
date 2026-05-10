@@ -37,9 +37,9 @@ AI agent gets 7 tools (create/list/get/update/delete/search/stats todos). [Sourc
 
 ```xml
 <dependency>
-    <groupId>io.aura</groupId>
+    <groupId>io.github.tianhaocui</groupId>
     <artifactId>aura-web</artifactId>
-    <version>0.1.0-SNAPSHOT</version>
+    <version>0.1.1</version>
 </dependency>
 ```
 
@@ -125,7 +125,7 @@ db.table("user").where("id", 1).findOne();
 db.findById("user", id);
 db.deleteById("user", id);
 
-// Row CRUD
+// Row CRUD — insert() returns self with generated primary key populated
 Row.of("user").set("name", "tom").set("age", 25).insert(db);
 
 // Transaction
@@ -138,7 +138,7 @@ db.transaction(() -> {
 ## Middleware
 
 ```java
-app.routes((Router r) -> {
+app.routes(r -> {
     r.before(ctx -> { /* auth, logging */ });
     r.after(ctx -> { /* timing */ });
     r.group("/api", api -> {
@@ -186,7 +186,7 @@ public class App {
             .onStart(a -> a.register(db))
             .onStop(a -> db.close())
             .service(new UserService(db))
-            .routes((Router r) -> {
+            .routes(r -> {
                 r.get("/health", ctx -> ctx.text("ok"));
                 r.exception(Exception.class, (e, ctx) ->
                     ctx.status(500).json(Map.of("error", e.getMessage())));
