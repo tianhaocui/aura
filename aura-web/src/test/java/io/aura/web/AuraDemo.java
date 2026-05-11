@@ -26,7 +26,7 @@ public class AuraDemo {
             .staticFiles("/public")
             .onStart(a -> System.out.println("App: " + a.prop("app.name")))
             .onStop(a -> System.out.println("Shutting down..."))
-            .routes((Router r) -> {
+            .routes((BaseRouter r) -> {
                 // global logging middleware
                 r.before(ctx -> ctx.set("startTime", System.currentTimeMillis()));
                 r.after(ctx -> {

@@ -1,7 +1,7 @@
 package io.aura.web.monitor;
 
 import io.aura.Aura;
-import io.aura.web.Router;
+import io.aura.web.BaseRouter;
 
 import java.util.Map;
 import java.util.concurrent.Executors;
@@ -42,7 +42,7 @@ public class MonitorApp {
                 .cors(true)
                 .mcp(true)
                 .service(serverService, alertService)
-                .routes((Router r) -> {
+                .routes((BaseRouter r) -> {
                     r.before(ctx -> ctx.set("startTime", System.currentTimeMillis()));
                     r.after(ctx -> {
                         long start = ctx.get("startTime", Long.class);

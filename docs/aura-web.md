@@ -21,6 +21,9 @@ r.post("/user", userService, "create");
 r.crud("/user", userService);
 ```
 
+**Route priority**: exact paths always beat parameterized paths regardless of registration order.
+`/api/items/search` matches before `/api/items/{id}` even if `{id}` was registered first.
+
 ### RouteBuilder (chaining after route registration)
 
 ```java
@@ -82,6 +85,9 @@ Request/response wrapper passed to handlers.
 | `header(String name)` | String | Request header |
 | `cookie(String name)` | String | Cookie value |
 | `body(Class<T> type)` | T | JSON-deserialized request body |
+| `pageNum()` | int | `?page=` parsed as int (default 1, min 1) |
+| `pageSize()` | int | `?pageSize=` parsed as int (default 20, max 500) |
+| `file(String field)` | UploadedFile | Multipart file upload field |
 | `method()` | String | HTTP method (GET, POST, ...) |
 | `url()` | String | Request URI |
 
@@ -110,12 +116,27 @@ ctx.app().get(Db.class);       // access registry
 
 ---
 
+## File Upload
+
+```java
+UploadedFile f = ctx.file("avatar"); // multipart/form-data field
+f.name()        // original filename
+f.data()        // byte[]
+f.contentType() // MIME type, e.g. "image/png"
+f.size()        // bytes
+
+// Increase limit for large files (default 10MB):
+Aura.create().maxBodySize(500 * 1024 * 1024L)
+```
+
+---
+
 ## Handler
 
 ```java
 @FunctionalInterface
-public interface Handler {
-    void handle(Context ctx) throws Exception;
+public interface BaseHandler {
+    void handle(BaseContext ctx) throws Exception;
 }
 ```
 
@@ -125,10 +146,20 @@ public interface Handler {
 
 ```java
 @FunctionalInterface
-public interface ExceptionHandler<T extends Exception> {
-    void handle(T exception, Context ctx);
+public interface BaseExceptionHandler<T extends Exception> {
+    void handle(T exception, BaseContext ctx);
 }
 ```
+
+---
+
+## Error Handling
+
+Unhandled exceptions always return JSON `{"error": "message"}`.
+- `IllegalArgumentException` and `ValidationException` → 400
+- All other unhandled exceptions → 500
+- Dev mode (`AURA_ENV=dev`): response includes `"trace"` field with full stack trace
+- Production (`AURA_ENV=prod`): only the message is shown
 
 ---
 
@@ -157,6 +188,12 @@ test.get("/api/data").header("Authorization", "Bearer token").expect(200);
 
 // 404
 test.get("/notfound").expect(404);
+
+// PUT with body
+test.put("/user/1").body(Map.of("name", "updated")).expect(200);
+
+// DELETE
+test.delete("/user/1").expect(204);
 ```
 
 ### Request
@@ -190,6 +227,7 @@ Wraps a service method for automatic parameter binding.
 |---|---|---|
 | `int`, `long`, `String` | Path param by name, then query param | `get(int id)` |
 | `double`, `boolean` | Path param by name, then query param | `filter(boolean active)` |
+| `Integer`, `Long`, `Boolean` | Path param by name, then query param; returns `null` when absent | `filter(Boolean active)` |
 | `record` or POJO | Request body (JSON) | `create(CreateReq req)` |
 | `Context` | Framework context | `handle(Context ctx)` |
 
@@ -234,7 +272,8 @@ Returns full API structure as JSON:
 
 | Feature | How |
 |---------|-----|
-| CORS | `app.cors(true)` — handles OPTIONS preflight |
-| Static files | `app.staticFiles("/public")` — serves from classpath |
+| CORS | `app.cors(true)` — CORS allow all origins, includes `Access-Control-Max-Age: 86400` |
+| Static files | `app.staticFiles("/public")` — Serve from classpath with `Cache-Control` + `ETag` (86400s) |
+| SPA mode | `app.spa(true)` — SPA mode: unknown paths fall back to `/index.html` |
 | Body size limit | `app.maxBodySize(bytes)` — default 10MB |
 | Graceful shutdown | `app.shutdownTimeout(seconds)` — default 30s |

@@ -110,4 +110,144 @@ class TestClientTest {
         assertThat(resp.status()).isEqualTo(400);
         assertThat(resp.body()).contains("Invalid integer");
     }
+
+    // --- PUT / DELETE ---
+
+    @Test
+    void put_routeHandled() {
+        Aura app = Aura.create();
+        Router router = new Router();
+        router.put("/item/{id}", ctx -> ctx.text("updated " + ctx.path("id")));
+        TestClient client = new TestClient(app, router);
+        TestClient.Response resp = client.put("/item/42").execute();
+        assertThat(resp.status()).isEqualTo(200);
+        assertThat(resp.body()).isEqualTo("updated 42");
+    }
+
+    @Test
+    void delete_routeHandled() {
+        Aura app = Aura.create();
+        Router router = new Router();
+        router.delete("/item/{id}", ctx -> ctx.status(204).text(""));
+        TestClient client = new TestClient(app, router);
+        TestClient.Response resp = client.delete("/item/7").execute();
+        assertThat(resp.status()).isEqualTo(204);
+    }
+
+    // --- route priority: exact path beats param path ---
+
+    @Test
+    void exactPath_beatsParamPath_regardlessOfRegistrationOrder() {
+        Aura app = Aura.create();
+        Router router = new Router();
+        // register param route first — exact should still win
+        router.get("/item/{id}", ctx -> ctx.text("param:" + ctx.path("id")));
+        router.get("/item/search", ctx -> ctx.text("exact:search"));
+        TestClient client = new TestClient(app, router);
+
+        TestClient.Response exact = client.get("/item/search").execute();
+        assertThat(exact.body()).isEqualTo("exact:search");
+
+        TestClient.Response param = client.get("/item/123").execute();
+        assertThat(param.body()).isEqualTo("param:123");
+    }
+
+    // --- error response is JSON ---
+
+    @Test
+    void unhandledException_returnsJsonError() {
+        Aura app = Aura.create();
+        Router router = new Router();
+        router.get("/crash", ctx -> { throw new RuntimeException("boom"); });
+        TestClient client = new TestClient(app, router);
+        TestClient.Response resp = client.get("/crash").execute();
+        assertThat(resp.status()).isEqualTo(500);
+        assertThat(resp.body()).contains("\"error\"");
+        assertThat(resp.body()).contains("boom");
+    }
+
+    @Test
+    void validationError_returnsJsonWithErrorKey() {
+        Aura app = Aura.create();
+        Router router = new Router();
+        router.get("/v", ctx -> { throw new IllegalArgumentException("bad input"); });
+        TestClient client = new TestClient(app, router);
+        TestClient.Response resp = client.get("/v").execute();
+        assertThat(resp.status()).isEqualTo(400);
+        assertThat(resp.body()).contains("\"error\"");
+        assertThat(resp.body()).contains("bad input");
+    }
+
+    // --- redirect CRLF guard ---
+
+    @Test
+    void redirect_crlf_throwsIllegalArgument() {
+        Aura app = Aura.create();
+        Router router = new Router();
+        router.get("/redir", ctx -> ctx.redirect("/safe\r\nX-Injected: evil"));
+        TestClient client = new TestClient(app, router);
+        // MockContext.redirect doesn't validate — test the Context guard directly
+        assertThatThrownBy(() -> {
+            Context ctx = new Context(null, java.util.Map.of(), app);
+            ctx.redirect("/safe\r\nX-Injected: evil");
+        }).isInstanceOf(IllegalArgumentException.class)
+          .hasMessageContaining("Invalid redirect URL");
+    }
+
+    // --- pagination helpers ---
+
+    @Test
+    void pageNum_defaultsTo1_whenAbsent() {
+        Aura app = Aura.create();
+        Router router = new Router();
+        router.get("/page", ctx -> ctx.text(String.valueOf(ctx.pageNum())));
+        TestClient client = new TestClient(app, router);
+        assertThat(client.get("/page").execute().body()).isEqualTo("1");
+    }
+
+    @Test
+    void pageNum_clampedToMin1() {
+        Aura app = Aura.create();
+        Router router = new Router();
+        router.get("/page", ctx -> ctx.text(String.valueOf(ctx.pageNum())));
+        TestClient client = new TestClient(app, router);
+        assertThat(client.get("/page?page=0").execute().body()).isEqualTo("1");
+        assertThat(client.get("/page?page=-5").execute().body()).isEqualTo("1");
+    }
+
+    @Test
+    void pageNum_invalidString_defaultsTo1() {
+        Aura app = Aura.create();
+        Router router = new Router();
+        router.get("/page", ctx -> ctx.text(String.valueOf(ctx.pageNum())));
+        TestClient client = new TestClient(app, router);
+        assertThat(client.get("/page?page=abc").execute().body()).isEqualTo("1");
+    }
+
+    @Test
+    void pageSize_defaultsTo20_whenAbsent() {
+        Aura app = Aura.create();
+        Router router = new Router();
+        router.get("/page", ctx -> ctx.text(String.valueOf(ctx.pageSize())));
+        TestClient client = new TestClient(app, router);
+        assertThat(client.get("/page").execute().body()).isEqualTo("20");
+    }
+
+    @Test
+    void pageSize_clampedToMax500() {
+        Aura app = Aura.create();
+        Router router = new Router();
+        router.get("/page", ctx -> ctx.text(String.valueOf(ctx.pageSize())));
+        TestClient client = new TestClient(app, router);
+        assertThat(client.get("/page?pageSize=9999").execute().body()).isEqualTo("500");
+    }
+
+    @Test
+    void pageSize_clampedToMin1() {
+        Aura app = Aura.create();
+        Router router = new Router();
+        router.get("/page", ctx -> ctx.text(String.valueOf(ctx.pageSize())));
+        TestClient client = new TestClient(app, router);
+        assertThat(client.get("/page?pageSize=0").execute().body()).isEqualTo("1");
+    }
 }

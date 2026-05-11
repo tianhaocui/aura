@@ -29,18 +29,19 @@ public class SchemaTest {
         Aura app = Aura.create()
             .port(9091)
             .prop("app.name", "Schema Test App")
-            .routes((Router r) -> {
+            .routes(r -> {
+                Router router = (Router) r;
                 r.get("/health", ctx -> ctx.text("ok"))
                     .describe("Health check endpoint");
 
-                r.get("/user/{id}", userService, "get")
+                router.get("/user/{id}", userService, "get")
                     .describe("Get user by ID")
                     .param("id", "User ID");
 
-                r.post("/user", userService, "create")
+                router.post("/user", userService, "create")
                     .describe("Create a new user");
 
-                r.get("/user/search", userService, "search")
+                router.get("/user/search", userService, "search")
                     .describe("Search users by name")
                     .param("name", "Search keyword")
                     .param("page", "Page number");

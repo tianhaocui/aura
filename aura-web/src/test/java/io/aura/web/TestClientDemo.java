@@ -19,10 +19,11 @@ public class TestClientDemo {
 
         var app = Aura.create()
             .port(8080)
-            .routes((Router r) -> {
+            .routes(r -> {
+                Router router = (Router) r;
                 r.get("/health", ctx -> ctx.text("ok"));
-                r.get("/user/{id}", userService, "get");
-                r.get("/user", userService, "list");
+                router.get("/user/{id}", userService, "get");
+                router.get("/user", userService, "list");
                 r.post("/echo", ctx -> ctx.json(ctx.body(Map.class)));
                 r.get("/search", ctx -> ctx.json(Map.of(
                         "q", ctx.query("q", ""),

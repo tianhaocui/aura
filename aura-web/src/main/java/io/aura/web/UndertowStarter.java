@@ -17,6 +17,7 @@ import org.slf4j.LoggerFactory;
 import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -30,6 +31,7 @@ public class UndertowStarter implements AuraStarter {
     private Aura app;
     private Router router;
     private ResourceHandler staticHandler;
+    private ClassPathResourceManager resourceManager;
     private List<CompiledRoute> compiledRoutes;
 
     @Override
@@ -42,8 +44,8 @@ public class UndertowStarter implements AuraStarter {
 
         // direct routes from app.get/post/put/delete
         for (var entry : app.directRoutes()) {
-            Handler handler;
-            if (entry.handler() instanceof Handler h) {
+            BaseHandler handler;
+            if (entry.handler() instanceof BaseHandler h) {
                 handler = h;
             } else {
                 handler = new LambdaHandler(entry.handler());
@@ -58,7 +60,7 @@ public class UndertowStarter implements AuraStarter {
 
         Consumer<?> config = app.routeConfig();
         if (config != null) {
-            ((Consumer<Router>) config).accept(router);
+            ((Consumer<BaseRouter>) config).accept(router);
         }
 
         for (Object service : app.services()) {
@@ -70,12 +72,14 @@ public class UndertowStarter implements AuraStarter {
         }
 
         compiledRoutes = compile(router, "", new ArrayList<>(), new ArrayList<>());
+        compiledRoutes.sort(Comparator.comparingInt(r -> r.paramNames().size()));
 
         String staticPath = app.staticFilesPath();
         if (staticPath != null) {
             String prefix = staticPath.startsWith("/") ? staticPath.substring(1) : staticPath;
-            staticHandler = new ResourceHandler(
-                    new ClassPathResourceManager(Thread.currentThread().getContextClassLoader(), prefix));
+            resourceManager = new ClassPathResourceManager(Thread.currentThread().getContextClassLoader(), prefix);
+            staticHandler = new ResourceHandler(resourceManager)
+                    .setCacheTime(86400);
         }
 
         shutdownHandler = new GracefulShutdownHandler(exchange -> {
@@ -128,6 +132,7 @@ public class UndertowStarter implements AuraStarter {
             exchange.getResponseHeaders().put(new HttpString("Access-Control-Allow-Origin"), corsOrigin);
             exchange.getResponseHeaders().put(new HttpString("Access-Control-Allow-Methods"), "GET, POST, PUT, DELETE, OPTIONS");
             exchange.getResponseHeaders().put(new HttpString("Access-Control-Allow-Headers"), "Content-Type, Authorization");
+            exchange.getResponseHeaders().put(new HttpString("Access-Control-Max-Age"), "86400");
             if ("OPTIONS".equals(method)) {
                 exchange.setStatusCode(204);
                 exchange.endExchange();
@@ -147,8 +152,9 @@ public class UndertowStarter implements AuraStarter {
             if (params == null) continue;
 
             Context ctx = new Context(exchange, params, app);
+            long start = System.currentTimeMillis();
             try {
-                for (Handler mw : route.beforeHandlers()) {
+                for (BaseHandler mw : route.beforeHandlers()) {
                     mw.handle(ctx);
                 }
                 route.handler().handle(ctx);
@@ -156,15 +162,27 @@ public class UndertowStarter implements AuraStarter {
                 handleException(e, ctx);
             } finally {
                 runAfterHandlers(route.afterHandlers(), ctx);
+                log.info("{} {} {} {}ms", method, path, exchange.getStatusCode(), System.currentTimeMillis() - start);
             }
             return;
         }
 
         if (staticHandler != null) {
             try {
-                staticHandler.handleRequest(exchange);
-                return;
+                io.undertow.server.handlers.resource.Resource res =
+                        resourceManager.getResource(exchange.getRelativePath());
+                if (res != null && !res.isDirectory()) {
+                    staticHandler.handleRequest(exchange);
+                    return;
+                }
             } catch (Exception ignored) {}
+            if (app.spa()) {
+                try {
+                    exchange.setRelativePath("/index.html");
+                    staticHandler.handleRequest(exchange);
+                    return;
+                } catch (Exception ignored) {}
+            }
         }
         exchange.setStatusCode(404);
         exchange.getResponseSender().send("Not Found");
@@ -296,8 +314,8 @@ public class UndertowStarter implements AuraStarter {
         return params;
     }
 
-    private void runAfterHandlers(List<Handler> afterHandlers, Context ctx) {
-        for (Handler h : afterHandlers) {
+    private void runAfterHandlers(List<BaseHandler> afterHandlers, Context ctx) {
+        for (BaseHandler h : afterHandlers) {
             try {
                 h.handle(ctx);
             } catch (Exception e) {
@@ -308,40 +326,52 @@ public class UndertowStarter implements AuraStarter {
 
     @SuppressWarnings({"unchecked", "rawtypes"})
     private void handleException(Exception e, Context ctx) {
+        Throwable cause = e instanceof java.lang.reflect.InvocationTargetException ? e.getCause() : e;
+        if (cause == null) cause = e;
+        if (cause instanceof Error err) throw err;
         for (var entry : router.exceptionHandlers.entrySet()) {
-            if (entry.getKey().isAssignableFrom(e.getClass())) {
+            if (entry.getKey().isAssignableFrom(cause.getClass())) {
                 try {
-                    ((ExceptionHandler) entry.getValue()).handle(e, ctx);
+                    ((BaseExceptionHandler) entry.getValue()).handle((Exception) cause, ctx);
                 } catch (Exception inner) {
                     log.error("Error in exception handler", inner);
-                    ctx.status(500).text("Internal Server Error");
+                    ctx.status(500).json(java.util.Map.of("error", "Internal Server Error"));
                 }
                 return;
             }
         }
-        if (e instanceof IllegalArgumentException || e instanceof io.aura.Validate.ValidationException) {
-            ctx.status(400).text("Bad Request: " + e.getMessage());
+        if (cause instanceof IllegalArgumentException || cause instanceof io.aura.Validate.ValidationException) {
+            ctx.status(400).json(java.util.Map.of("error", cause.getMessage() != null ? cause.getMessage() : "Bad Request"));
             return;
         }
-        log.error("Unhandled exception", e);
-        ctx.status(500).text("Internal Server Error");
+        log.error("Unhandled exception", cause);
+        String msg = cause.getMessage() != null ? cause.getMessage() : cause.getClass().getSimpleName();
+        if ("dev".equals(app.env())) {
+            java.io.StringWriter sw = new java.io.StringWriter();
+            cause.printStackTrace(new java.io.PrintWriter(sw));
+            ctx.status(500).json(java.util.Map.of("error", msg, "trace", sw.toString()));
+        } else {
+            ctx.status(500).json(java.util.Map.of("error", msg));
+        }
     }
 
-    static List<CompiledRoute> compileRoutes(Router router) {
-        return new UndertowStarter().compile(router, "", new ArrayList<>(), new ArrayList<>());
+    static List<CompiledRoute> compileRoutes(BaseRouter router) {
+        List<CompiledRoute> routes = new UndertowStarter().compile(router, "", new ArrayList<>(), new ArrayList<>());
+        routes.sort(Comparator.comparingInt(r -> r.paramNames().size()));
+        return routes;
     }
 
-    private List<CompiledRoute> compile(Router router, String prefix,
-                                         List<Handler> parentBefore, List<Handler> parentAfter) {
+    private List<CompiledRoute> compile(BaseRouter router, String prefix,
+                                         List<BaseHandler> parentBefore, List<BaseHandler> parentAfter) {
         List<CompiledRoute> result = new ArrayList<>();
 
-        List<Handler> before = new ArrayList<>(parentBefore);
+        List<BaseHandler> before = new ArrayList<>(parentBefore);
         before.addAll(router.beforeHandlers);
 
-        List<Handler> after = new ArrayList<>(parentAfter);
+        List<BaseHandler> after = new ArrayList<>(parentAfter);
         after.addAll(router.afterHandlers);
 
-        for (RouteBuilder rb : router.routeBuilders) {
+        for (BaseRouteBuilder rb : router.routeBuilders) {
             var route = rb.route;
             var meta = new CompiledRoute.RouteMeta(
                     rb.description, rb.returnType, rb.paramDescriptions);
@@ -349,7 +379,7 @@ public class UndertowStarter implements AuraStarter {
                     before, route.handler(), after, meta));
         }
 
-        for (Router.Group group : router.groups) {
+        for (BaseRouter.Group group : router.groups) {
             result.addAll(compile(group.router(), prefix + group.prefix(), before, after));
         }
 

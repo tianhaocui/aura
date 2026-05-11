@@ -7,3 +7,6 @@ target/
 *.iml
 dependency-reduced-pom.xml
 CLAUDE.md
+.config/
+.local/
+.codepilot-uploads/

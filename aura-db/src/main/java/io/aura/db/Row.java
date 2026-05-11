@@ -7,6 +7,7 @@ public class Row extends LinkedHashMap<String, Object> {
 
     private String table;
     private String primaryKey = "id";
+    private final java.util.Set<String> excluded = new java.util.HashSet<>();
 
     private Row() {}
 
@@ -25,9 +26,14 @@ public class Row extends LinkedHashMap<String, Object> {
         return row;
     }
 
+    public Row exclude(String... cols) {
+        for (String col : cols) excluded.add(col.toLowerCase());
+        return this;
+    }
+
     public Row set(String key, Object value) {
         SqlSafe.identifier(key);
-        put(key, value);
+        put(key.toLowerCase(), value);
         return this;
     }
 
@@ -38,7 +44,7 @@ public class Row extends LinkedHashMap<String, Object> {
 
     @SuppressWarnings("unchecked")
     public <T> T id() {
-        return (T) get(primaryKey);
+        return (T) idValue();
     }
 
     public String getStr(String key) {
@@ -80,18 +86,31 @@ public class Row extends LinkedHashMap<String, Object> {
         String colStr = String.join(", ", cols);
         String placeholders = String.join(", ", cols.stream().map(c -> "?").toList());
         String sql = "INSERT INTO " + table + " (" + colStr + ") VALUES (" + placeholders + ")";
-        db.execute(sql, vals);
+        Object generatedKey = db.executeAndReturnKey(sql, vals);
+        if (generatedKey != null) {
+            put(primaryKey, generatedKey);
+        }
+        return this;
+    }
+
+    public Row insertFull(Db db) {
+        insert(db);
+        Object id = idValue();
+        if (id != null) {
+            Row fetched = db.findById(table, primaryKey, id);
+            if (fetched != null) putAll(fetched);
+        }
         return this;
     }
 
     public boolean update(Db db) {
         if (table == null) throw new IllegalStateException("Table name not set");
-        Object idVal = get(primaryKey);
+        Object idVal = idValue();
         if (idVal == null) throw new IllegalStateException("Primary key value not set");
         var setCols = new java.util.ArrayList<String>();
         var params = new java.util.ArrayList<>();
         for (var entry : entrySet()) {
-            if (!entry.getKey().equals(primaryKey)) {
+            if (!entry.getKey().equals(primaryKey) && !excluded.contains(entry.getKey())) {
                 SqlSafe.identifier(entry.getKey());
                 setCols.add(entry.getKey() + " = ?");
                 params.add(entry.getValue());
@@ -106,9 +125,13 @@ public class Row extends LinkedHashMap<String, Object> {
 
     public boolean delete(Db db) {
         if (table == null) throw new IllegalStateException("Table name not set");
-        Object idVal = get(primaryKey);
+        Object idVal = idValue();
         if (idVal == null) throw new IllegalStateException("Primary key value not set");
         String sql = "DELETE FROM " + table + " WHERE " + primaryKey + " = ?";
         return db.execute(sql, idVal) > 0;
+    }
+
+    private Object idValue() {
+        return get(primaryKey);
     }
 }

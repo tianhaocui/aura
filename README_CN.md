@@ -20,10 +20,11 @@ AI 原生 Java 后端框架。**AI 开发 → AI 测试 → AI 使用。**
 
 ```xml
 <dependency>
-    <groupId>io.aura</groupId>
+    <groupId>io.github.tianhaocui</groupId>
     <artifactId>aura-web</artifactId>
-    <version>0.1.0-SNAPSHOT</version>
+    <version>0.1.1</version>
 </dependency>
+<!-- 需要添加 SLF4J 实现，如 logback-classic -->
 ```
 
 ```java
@@ -99,6 +100,7 @@ Db db = Db.create(url, user, pass);
 String sql = "SELECT * FROM user #where(name, '=', name) #and(age, '>', age) #orderBy(created)";
 db.find(sql, filterMap);
 db.paginate(sql, filterMap, pageNum, pageSize);
+// ctx.pageNum() 和 ctx.pageSize() 解析 ?page= 和 ?pageSize=，带安全默认值
 
 // Query builder — 简单 CRUD 快捷方式
 db.table("user").where("age", ">", 18).orderBy("name").find();
@@ -108,8 +110,18 @@ db.table("user").where("id", 1).findOne();
 db.findById("user", id);
 db.deleteById("user", id);
 
-// Row CRUD
+// Row CRUD — insert() 返回自身，并填充生成的主键
 Row.of("user").set("name", "tom").set("age", 25).insert(db);
+
+// insertFull() — insert + re-fetch including server-generated columns (e.g. created_at)
+Row full = Row.of("user").set("name", "tom").insertFull(db);
+
+// findById → modify → update roundtrip (timestamp columns preserved as LocalDateTime)
+Row found = db.findById("user", id);
+found.set("name", "updated").update(db);
+
+// exclude server-managed columns from update
+found.exclude("created_at").set("name", "updated").update(db);
 
 // 事务
 db.transaction(() -> {
@@ -118,10 +130,21 @@ db.transaction(() -> {
 });
 ```
 
+## 文件上传
+
+```java
+// multipart/form-data
+UploadedFile f = ctx.file("avatar");
+f.name()        // 原始文件名
+f.data()        // byte[]
+f.contentType() // MIME 类型
+f.size()        // 字节数
+```
+
 ## 中间件
 
 ```java
-app.routes((Router r) -> {
+app.routes(r -> {
     r.before(ctx -> { /* 认证、日志 */ });
     r.after(ctx -> { /* 计时 */ });
     r.group("/api", api -> {
@@ -138,6 +161,8 @@ app.routes((Router r) -> {
 Aura.create()
     .port(8080)              // HTTP 端口
     .cors(true)              // CORS 允许所有来源
+    .maxBodySize(10 * 1024 * 1024L) // 请求体大小限制（默认 10MB）
+    .spa(true)               // SPA 模式：未知路径回退到 /index.html
     .mcp(true)               // 启用 --mcp-stdio 模式
     .staticFiles("/public")  // 静态文件
     .prop("db.url", "...")   // 自定义属性（环境变量 DB_URL 优先）
@@ -169,7 +194,7 @@ public class App {
             .onStart(a -> a.register(db))
             .onStop(a -> db.close())
             .service(new UserService(db))
-            .routes((Router r) -> {
+            .routes(r -> {
                 r.get("/health", ctx -> ctx.text("ok"));
                 r.exception(Exception.class, (e, ctx) ->
                     ctx.status(500).json(Map.of("error", e.getMessage())));

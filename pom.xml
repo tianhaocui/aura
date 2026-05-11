@@ -4,9 +4,9 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
-    <groupId>io.aura</groupId>
+    <groupId>io.github.tianhaocui</groupId>
     <artifactId>aura-parent</artifactId>
-    <version>0.1.0-SNAPSHOT</version>
+    <version>0.1.1</version>
     <packaging>pom</packaging>
 
     <name>Aura</name>
@@ -33,12 +33,12 @@
     <dependencyManagement>
         <dependencies>
             <dependency>
-                <groupId>io.aura</groupId>
+                <groupId>io.github.tianhaocui</groupId>
                 <artifactId>aura-core</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
-                <groupId>io.aura</groupId>
+                <groupId>io.github.tianhaocui</groupId>
                 <artifactId>aura-web</artifactId>
                 <version>${project.version}</version>
             </dependency>

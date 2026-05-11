@@ -37,10 +37,11 @@ AI agent gets 7 tools (create/list/get/update/delete/search/stats todos). [Sourc
 
 ```xml
 <dependency>
-    <groupId>io.aura</groupId>
+    <groupId>io.github.tianhaocui</groupId>
     <artifactId>aura-web</artifactId>
-    <version>0.1.0-SNAPSHOT</version>
+    <version>0.1.1</version>
 </dependency>
+<!-- Add an SLF4J provider, e.g. logback-classic -->
 ```
 
 ```java
@@ -116,6 +117,7 @@ Db db = Db.create(url, user, pass);
 String sql = "SELECT * FROM user #where(name, '=', name) #and(age, '>', age) #orderBy(created)";
 db.find(sql, filterMap);
 db.paginate(sql, filterMap, pageNum, pageSize);
+// ctx.pageNum() and ctx.pageSize() parse ?page= and ?pageSize= with safe defaults
 
 // Query builder — simple CRUD shortcut
 db.table("user").where("age", ">", 18).orderBy("name").find();
@@ -125,8 +127,18 @@ db.table("user").where("id", 1).findOne();
 db.findById("user", id);
 db.deleteById("user", id);
 
-// Row CRUD
+// Row CRUD — insert() returns self with generated primary key populated
 Row.of("user").set("name", "tom").set("age", 25).insert(db);
+
+// insertFull() — insert + re-fetch including server-generated columns (e.g. created_at)
+Row full = Row.of("user").set("name", "tom").insertFull(db);
+
+// findById → modify → update roundtrip (timestamp columns preserved as LocalDateTime)
+Row found = db.findById("user", id);
+found.set("name", "updated").update(db);
+
+// exclude server-managed columns from update
+found.exclude("created_at").set("name", "updated").update(db);
 
 // Transaction
 db.transaction(() -> {
@@ -135,10 +147,21 @@ db.transaction(() -> {
 });
 ```
 
+## File Upload
+
+```java
+// multipart/form-data
+UploadedFile f = ctx.file("avatar");
+f.name()        // original filename
+f.data()        // byte[]
+f.contentType() // MIME type
+f.size()        // bytes
+```
+
 ## Middleware
 
 ```java
-app.routes((Router r) -> {
+app.routes(r -> {
     r.before(ctx -> { /* auth, logging */ });
     r.after(ctx -> { /* timing */ });
     r.group("/api", api -> {
@@ -155,6 +178,8 @@ app.routes((Router r) -> {
 Aura.create()
     .port(8080)              // HTTP port
     .cors(true)              // CORS allow all
+    .maxBodySize(10 * 1024 * 1024L) // request body limit (default: 10MB)
+    .spa(true)               // SPA mode: unknown paths → /index.html
     .mcp(true)               // enable --mcp-stdio mode
     .staticFiles("/public")  // serve static files
     .prop("db.url", "...")   // custom property (env var DB_URL overrides)
@@ -186,7 +211,7 @@ public class App {
             .onStart(a -> a.register(db))
             .onStop(a -> db.close())
             .service(new UserService(db))
-            .routes((Router r) -> {
+            .routes(r -> {
                 r.get("/health", ctx -> ctx.text("ok"));
                 r.exception(Exception.class, (e, ctx) ->
                     ctx.status(500).json(Map.of("error", e.getMessage())));

@@ -44,6 +44,7 @@ db.findOne("SELECT * FROM user WHERE id = ?", 1);          // Row
 db.findById("user", 123);                                   // Row
 db.findById("user", "user_id", 123);                       // custom PK
 db.findBy("user", "age > ? AND status = ?", 18, "active"); // List<Row>
+// Rows returned by findById/findBy carry the table name — .update()/.delete() work directly
 ```
 
 ### Dynamic SQL
@@ -132,6 +133,7 @@ Row row = Row.of("user", "user_id");         // custom primary key
 ```java
 row.set("name", "tom").set("age", 25);
 row.id(123);                                  // set primary key value
+row.exclude("created_at", "updated_at"); // skip these columns in update()
 ```
 
 ### Get Values
@@ -147,7 +149,8 @@ Object pk = row.id();                         // get primary key value
 ### CRUD
 
 ```java
-row.insert(db);    // INSERT, returns self
+row.insert(db);    // INSERT, returns self with generated primary key populated
+row.insertFull(db); // INSERT + re-fetch full row (server-generated columns populated)
 row.update(db);    // UPDATE by primary key, returns boolean
 row.delete(db);    // DELETE by primary key, returns boolean
 ```
@@ -156,18 +159,44 @@ row.delete(db);    // DELETE by primary key, returns boolean
 
 ```java
 // Create
-Row.of("user").set("name", "tom").set("age", 25).insert(db);
+Row row = Row.of("user").set("name", "tom").set("age", 25).insert(db);
+Object id = row.id(); // generated ID
+
+// insertFull — insert + re-fetch including server-generated columns
+Row full = Row.of("user").set("name", "tom").insertFull(db);
+full.get("created_at"); // LocalDateTime — populated from DB
 
 // Read
 Row user = db.findById("user", 1);
 String name = user.getStr("name");
 
-// Update
+// findById → modify → update roundtrip (no type conversion needed)
+Row found = db.findById("user", id);
+found.set("name", "updated");
+found.update(db); // LocalDateTime columns written back natively via JDBC
+
+// Exclude server-managed columns from update
+found.exclude("created_at", "updated_at").set("name", "updated").update(db);
+
+// Targeted update (only set changed fields)
 Row.of("user").id(1).set("name", "updated").update(db);
 
 // Delete
 Row.of("user").id(1).delete(db);
 ```
+
+### Type Mapping
+
+`rsToRow` preserves JDBC types — values are stored as Java types, not Strings:
+
+| JDBC type | Java type stored in Row |
+|-----------|------------------------|
+| `TIMESTAMP` | `java.time.LocalDateTime` |
+| `DATE` | `java.time.LocalDate` |
+| `TIME` | `java.time.LocalTime` |
+
+`row.getStr("created_at")` calls `.toString()` and works fine.
+`ctx.json(row)` serializes date/time to ISO 8601 automatically.
 
 ---
 

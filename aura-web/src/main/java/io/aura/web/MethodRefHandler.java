@@ -5,7 +5,7 @@ import com.alibaba.fastjson2.JSON;
 import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
 
-public final class MethodRefHandler implements Handler {
+public final class MethodRefHandler implements BaseHandler {
 
     private final Object target;
     private final Method method;
@@ -26,7 +26,7 @@ public final class MethodRefHandler implements Handler {
     }
 
     @Override
-    public void handle(Context ctx) throws Exception {
+    public void handle(BaseContext ctx) throws Exception {
         Object[] args = new Object[binders.length];
         for (int i = 0; i < binders.length; i++) {
             args[i] = binders[i].resolve(ctx);
@@ -86,20 +86,24 @@ public final class MethodRefHandler implements Handler {
         Class<?> type = param.getType();
         String name = param.getName();
 
-        if (type == Context.class) return ctx -> ctx;
+        if (type == Context.class || type == BaseContext.class) return ctx -> ctx;
 
         if (type == String.class) return ctx -> resolveString(ctx, name);
-        if (type == int.class || type == Integer.class) return ctx -> parseInt(resolveString(ctx, name));
-        if (type == long.class || type == Long.class) return ctx -> parseLong(resolveString(ctx, name));
-        if (type == boolean.class || type == Boolean.class) return ctx -> parseBool(resolveString(ctx, name));
-        if (type == double.class || type == Double.class) return ctx -> parseDouble(resolveString(ctx, name));
+        if (type == int.class) return ctx -> parseInt(resolveString(ctx, name));
+        if (type == Integer.class) return ctx -> parseIntBoxed(resolveString(ctx, name));
+        if (type == long.class) return ctx -> parseLong(resolveString(ctx, name));
+        if (type == Long.class) return ctx -> parseLongBoxed(resolveString(ctx, name));
+        if (type == boolean.class) return ctx -> parseBool(resolveString(ctx, name));
+        if (type == Boolean.class) return ctx -> parseBoolBoxed(resolveString(ctx, name));
+        if (type == double.class) return ctx -> parseDouble(resolveString(ctx, name));
+        if (type == Double.class) return ctx -> parseDoubleBoxed(resolveString(ctx, name));
 
         if (type.isRecord() || TypeUtil.isPojo(type)) return ctx -> ctx.body(type);
 
         return ctx -> resolveString(ctx, name);
     }
 
-    private static String resolveString(Context ctx, String name) {
+    private static String resolveString(BaseContext ctx, String name) {
         String val = ctx.path(name);
         return val != null ? val : ctx.query(name);
     }
@@ -118,6 +122,29 @@ public final class MethodRefHandler implements Handler {
 
     private static boolean parseBool(String val) {
         return "true".equalsIgnoreCase(val);
+    }
+
+    private static Integer parseIntBoxed(String val) {
+        if (val == null) return null;
+        try { return Integer.parseInt(val); }
+        catch (NumberFormatException e) { throw new IllegalArgumentException("Invalid integer: " + val); }
+    }
+
+    private static Long parseLongBoxed(String val) {
+        if (val == null) return null;
+        try { return Long.parseLong(val); }
+        catch (NumberFormatException e) { throw new IllegalArgumentException("Invalid long: " + val); }
+    }
+
+    private static Boolean parseBoolBoxed(String val) {
+        if (val == null) return null;
+        return "true".equalsIgnoreCase(val);
+    }
+
+    private static Double parseDoubleBoxed(String val) {
+        if (val == null) return null;
+        try { return Double.parseDouble(val); }
+        catch (NumberFormatException e) { throw new IllegalArgumentException("Invalid number: " + val); }
     }
 
     private static double parseDouble(String val) {
@@ -151,6 +178,6 @@ public final class MethodRefHandler implements Handler {
 
     @FunctionalInterface
     private interface ParamBinder {
-        Object resolve(Context ctx) throws Exception;
+        Object resolve(BaseContext ctx) throws Exception;
     }
 }

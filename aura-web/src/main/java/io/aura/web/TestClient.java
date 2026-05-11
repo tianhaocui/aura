@@ -23,8 +23,8 @@ public class TestClient {
         Router router = new Router();
         // replay direct routes
         for (var entry : app.directRoutes()) {
-            Handler handler;
-            if (entry.handler() instanceof Handler h) {
+            BaseHandler handler;
+            if (entry.handler() instanceof BaseHandler h) {
                 handler = h;
             } else {
                 handler = new LambdaHandler(entry.handler());
@@ -38,11 +38,14 @@ public class TestClient {
         }
         // replay routes config
         @SuppressWarnings("unchecked")
-        var config = (java.util.function.Consumer<Router>) app.routeConfig();
+        var config = (java.util.function.Consumer<BaseRouter>) app.routeConfig();
         if (config != null) config.accept(router);
         // replay services
         for (Object service : app.services()) {
             ServiceRegistrar.register(service, router);
+        }
+        if (!app.scanPackages().isEmpty()) {
+            PackageScanner.scan(app.scanPackages(), router);
         }
         return new TestClient(app, router);
     }
@@ -85,14 +88,14 @@ public class TestClient {
 
                 var mockCtx = new MockContext(params, queryParams, headers, body, app);
                 try {
-                    for (Handler mw : route.beforeHandlers()) {
+                    for (BaseHandler mw : route.beforeHandlers()) {
                         mw.handle(mockCtx);
                     }
                     route.handler().handle(mockCtx);
                 } catch (Exception e) {
                     handleException(e, mockCtx);
                 } finally {
-                    for (Handler h : route.afterHandlers()) {
+                    for (BaseHandler h : route.afterHandlers()) {
                         try { h.handle(mockCtx); } catch (Exception ignored) {}
                     }
                 }
@@ -103,24 +106,28 @@ public class TestClient {
 
         @SuppressWarnings({"unchecked", "rawtypes"})
         private void handleException(Exception e, MockContext ctx) {
+            Throwable cause = e instanceof java.lang.reflect.InvocationTargetException ? e.getCause() : e;
+            if (cause == null) cause = e;
+            if (cause instanceof Error err) throw err;
             for (var entry : router.exceptionHandlers.entrySet()) {
-                if (entry.getKey().isAssignableFrom(e.getClass())) {
+                if (entry.getKey().isAssignableFrom(cause.getClass())) {
                     try {
-                        ((ExceptionHandler) entry.getValue()).handle(e, ctx);
+                        ((BaseExceptionHandler) entry.getValue()).handle((Exception) cause, ctx);
                     } catch (Exception inner) {
                         if (ctx.status == 0) ctx.status = 500;
                     }
                     return;
                 }
             }
-            if (e instanceof IllegalArgumentException || e instanceof io.aura.Validate.ValidationException) {
+            if (cause instanceof IllegalArgumentException || cause instanceof io.aura.Validate.ValidationException) {
                 ctx.status = 400;
-                ctx.responseBody = "Bad Request: " + e.getMessage();
+                ctx.responseBody = JSON.toJSONString(Map.of("error",
+                        cause.getMessage() != null ? cause.getMessage() : "Bad Request"));
                 return;
             }
             if (ctx.status == 0) ctx.status = 500;
             ctx.responseBody = JSON.toJSONString(Map.of("error",
-                    e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName()));
+                    cause.getMessage() != null ? cause.getMessage() : cause.getClass().getSimpleName()));
         }
 
         private static Map<String, String> parseQueryString(String path) {

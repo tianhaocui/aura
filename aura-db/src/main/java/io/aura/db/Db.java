@@ -71,18 +71,18 @@ public class Db implements AutoCloseable {
 
     public Row findById(String table, Object id) {
         SqlSafe.identifier(table);
-        return findOne("SELECT * FROM " + table + " WHERE id = ?", id);
+        return queryOne("SELECT * FROM " + table + " WHERE id = ?", new Object[]{id}, rs -> rsToRow(rs, table));
     }
 
     public Row findById(String table, String primaryKey, Object id) {
         SqlSafe.identifier(table);
         SqlSafe.identifier(primaryKey);
-        return findOne("SELECT * FROM " + table + " WHERE " + primaryKey + " = ?", id);
+        return queryOne("SELECT * FROM " + table + " WHERE " + primaryKey + " = ?", new Object[]{id}, rs -> rsToRow(rs, table, primaryKey));
     }
 
     public List<Row> findBy(String table, String where, Object... params) {
         SqlSafe.identifier(table);
-        return find("SELECT * FROM " + table + " WHERE " + where, params);
+        return query("SELECT * FROM " + table + " WHERE " + where, params, rs -> rsToRow(rs, table));
     }
 
     public int deleteById(String table, Object id) {
@@ -144,18 +144,49 @@ public class Db implements AutoCloseable {
         }
     }
 
+    public Object executeAndReturnKey(String sql, Object... params) {
+        boolean inTx = TX_CONN.get() != null;
+        Connection conn = null;
+        try {
+            conn = getConnection();
+            try (PreparedStatement ps = conn.prepareStatement(sql, java.sql.Statement.RETURN_GENERATED_KEYS)) {
+                if (params != null) {
+                    for (int i = 0; i < params.length; i++) ps.setObject(i + 1, params[i]);
+                }
+                ps.executeUpdate();
+                try (java.sql.ResultSet keys = ps.getGeneratedKeys()) {
+                    return keys.next() ? keys.getObject(1) : null;
+                }
+            }
+        } catch (SQLException e) {
+            throw new DbException(e);
+        } finally {
+            if (!inTx && conn != null) {
+                try { conn.close(); } catch (SQLException ignored) {}
+            }
+        }
+    }
+
     // --- batch ---
 
     public int[] batch(String sql, List<Object[]> paramsList) {
-        try (Connection conn = getConnection();
-             PreparedStatement ps = conn.prepareStatement(sql)) {
-            for (Object[] params : paramsList) {
-                for (int i = 0; i < params.length; i++) ps.setObject(i + 1, params[i]);
-                ps.addBatch();
+        boolean inTx = TX_CONN.get() != null;
+        Connection conn = null;
+        try {
+            conn = getConnection();
+            try (PreparedStatement ps = conn.prepareStatement(sql)) {
+                for (Object[] params : paramsList) {
+                    for (int i = 0; i < params.length; i++) ps.setObject(i + 1, params[i]);
+                    ps.addBatch();
+                }
+                return ps.executeBatch();
             }
-            return ps.executeBatch();
         } catch (SQLException e) {
             throw new DbException(e);
+        } finally {
+            if (!inTx && conn != null) {
+                try { conn.close(); } catch (SQLException ignored) {}
+            }
         }
     }
 
@@ -172,7 +203,7 @@ public class Db implements AutoCloseable {
                 block.run();
                 conn.commit();
             } catch (Exception e) {
-                conn.rollback();
+                try { conn.rollback(); } catch (SQLException rollbackEx) { e.addSuppressed(rollbackEx); }
                 throw e instanceof RuntimeException re ? re : new DbException(e);
             } finally {
                 TX_CONN.remove();
@@ -203,11 +234,27 @@ public class Db implements AutoCloseable {
     }
 
     private static Row rsToRow(ResultSet rs) throws SQLException {
+        return rsToRow(rs, null, "id");
+    }
+
+    private static Row rsToRow(ResultSet rs, String table) throws SQLException {
+        return rsToRow(rs, table, "id");
+    }
+
+    private static Row rsToRow(ResultSet rs, String table, String primaryKey) throws SQLException {
         ResultSetMetaData meta = rs.getMetaData();
         int cols = meta.getColumnCount();
-        Row row = Row.of("");
+        Row row = table != null ? Row.of(table, primaryKey) : Row.of("");
         for (int i = 1; i <= cols; i++) {
-            row.put(meta.getColumnLabel(i), rs.getObject(i));
+            Object val = rs.getObject(i);
+            if (val instanceof java.sql.Timestamp ts) {
+                val = ts.toLocalDateTime();
+            } else if (val instanceof java.sql.Date d) {
+                val = d.toLocalDate();
+            } else if (val instanceof java.sql.Time t) {
+                val = t.toLocalTime();
+            }
+            row.put(meta.getColumnLabel(i).toLowerCase(), val);
         }
         return row;
     }

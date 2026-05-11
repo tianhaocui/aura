@@ -8,8 +8,8 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public record CompiledRoute(String method, String rawPath, Pattern pattern, List<String> paramNames,
-                     List<Handler> beforeHandlers, Handler handler,
-                     List<Handler> afterHandlers, RouteMeta meta) {
+                     List<BaseHandler> beforeHandlers, BaseHandler handler,
+                     List<BaseHandler> afterHandlers, RouteMeta meta) {
 
     Map<String, String> match(String path) {
         Matcher m = pattern.matcher(path);
@@ -22,11 +22,16 @@ public record CompiledRoute(String method, String rawPath, Pattern pattern, List
     }
 
     static CompiledRoute compile(String method, String prefix, String path,
-                                  List<Handler> beforeHandlers, Handler handler,
-                                  List<Handler> afterHandlers, RouteMeta meta) {
+                                  List<BaseHandler> beforeHandlers, BaseHandler handler,
+                                  List<BaseHandler> afterHandlers, RouteMeta meta) {
         String fullPath = prefix + path;
         List<String> paramNames = new ArrayList<>();
-        String regex = fullPath.replaceAll("\\{([a-zA-Z_][a-zA-Z0-9_]*)}", "([^/]+)");
+        // escape regex metacharacters in literal segments, then replace {param} placeholders
+        String regex = fullPath
+                .replace(".", "\\.")
+                .replace("+", "\\+")
+                .replaceAll("\\\\\\.(\\{[a-zA-Z_][a-zA-Z0-9_]*})", ".$1") // undo escaping inside {}
+                .replaceAll("\\{([a-zA-Z_][a-zA-Z0-9_]*)}", "([^/]+)");
         Pattern paramPattern = Pattern.compile("\\{([a-zA-Z_][a-zA-Z0-9_]*)}");
         Matcher m = paramPattern.matcher(fullPath);
         while (m.find()) {

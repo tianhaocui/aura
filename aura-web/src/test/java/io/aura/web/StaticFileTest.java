@@ -7,7 +7,7 @@ public class StaticFileTest {
         Aura app = Aura.create()
             .port(9090)
             .staticFiles("/public")
-            .routes((Router r) -> {
+            .routes((BaseRouter r) -> {
                 r.get("/api/hello", ctx -> ctx.text("api response"));
             });
         app.start();
