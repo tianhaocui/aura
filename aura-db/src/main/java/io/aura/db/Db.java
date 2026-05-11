@@ -248,11 +248,11 @@ public class Db implements AutoCloseable {
         for (int i = 1; i <= cols; i++) {
             Object val = rs.getObject(i);
             if (val instanceof java.sql.Timestamp ts) {
-                val = ts.toLocalDateTime().toString();
+                val = ts.toLocalDateTime();
             } else if (val instanceof java.sql.Date d) {
-                val = d.toLocalDate().toString();
+                val = d.toLocalDate();
             } else if (val instanceof java.sql.Time t) {
-                val = t.toLocalTime().toString();
+                val = t.toLocalTime();
             }
             row.put(meta.getColumnLabel(i).toLowerCase(), val);
         }

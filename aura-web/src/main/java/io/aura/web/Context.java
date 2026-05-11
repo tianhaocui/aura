@@ -87,7 +87,7 @@ public class Context implements BaseContext {
 
     @Override public void json(Object obj) {
         exchange.getResponseHeaders().put(Headers.CONTENT_TYPE, "application/json; charset=utf-8");
-        exchange.getResponseSender().send(JSON.toJSONString(obj));
+        exchange.getResponseSender().send(JSON.toJSONString(obj, "yyyy-MM-dd'T'HH:mm:ss.SSS"));
     }
 
     @Override public void text(String text) {

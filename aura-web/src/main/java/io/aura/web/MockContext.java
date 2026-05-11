@@ -40,7 +40,7 @@ class MockContext extends Context {
     @Override public int statusCode() { return status == 0 ? 200 : status; }
 
     @Override public Context status(int code) { this.status = code; return this; }
-    @Override public void json(Object obj) { responseBody = JSON.toJSONString(obj); }
+    @Override public void json(Object obj) { responseBody = JSON.toJSONString(obj, "yyyy-MM-dd'T'HH:mm:ss.SSS"); }
     @Override public void text(String text) { responseBody = text; }
     @Override public void redirect(String url) { status = 302; }
     @Override public Context header(String name, String value) { return this; }

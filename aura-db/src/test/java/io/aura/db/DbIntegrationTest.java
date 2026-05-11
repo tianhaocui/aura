@@ -89,20 +89,24 @@ class DbIntegrationTest {
         assertThat(row.get("created_at")).isNotNull();
     }
 
-    // --- Timestamp serialization ---
+    // --- Timestamp preserved as LocalDateTime (JDBC type, not String) ---
 
     @Test
-    void timestamp_serializedAsLocalDateTime_noZSuffix() {
+    void timestamp_preservedAsLocalDateTime() {
         Row.of("users").set("name", "TimestampTest").set("active", true).insert(db);
         Row row = db.findOne("SELECT * FROM users WHERE name = ?", "TimestampTest");
         assertThat(row).isNotNull();
         Object createdAt = row.get("created_at");
-        assertThat(createdAt).isInstanceOf(String.class);
-        String ts = (String) createdAt;
-        // must not end with Z (UTC marker)
-        assertThat(ts).doesNotEndWith("Z");
-        // must look like a local datetime: 2024-01-15T10:30:00
-        assertThat(ts).matches("\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}.*");
+        // stored as LocalDateTime so update() can write it back via JDBC
+        assertThat(createdAt).isInstanceOf(java.time.LocalDateTime.class);
+    }
+
+    @Test
+    void timestamp_getStr_returnsReadableString() {
+        Row.of("users").set("name", "StrTest").set("active", true).insert(db);
+        Row row = db.findOne("SELECT * FROM users WHERE name = ?", "StrTest");
+        String ts = row.getStr("created_at");
+        assertThat(ts).isNotNull().isNotBlank();
     }
 
     // --- Row.insert returns generated key ---
@@ -111,6 +115,24 @@ class DbIntegrationTest {
     void insert_setsGeneratedId() {
         Row row = Row.of("users").set("name", "KeyTest").set("active", false).insert(db);
         assertThat((Object) row.id()).isNotNull();
+    }
+
+    // --- Row.exclude ---
+
+    @Test
+    void exclude_preventsColumnFromBeingUpdated() {
+        Row inserted = Row.of("users").set("name", "ExcludeTest").set("active", true).insertFull(db);
+        Object id = inserted.id();
+        String originalCreatedAt = inserted.getStr("created_at");
+
+        // simulate read-modify-write: exclude server-managed column
+        Row found = db.findById("users", id);
+        found.exclude("created_at").set("name", "Updated");
+        found.update(db);
+
+        Row refetched = db.findById("users", id);
+        assertThat(refetched.getStr("name")).isEqualTo("Updated");
+        assertThat(refetched.getStr("created_at")).isEqualTo(originalCreatedAt);
     }
 
     // --- Row.update / delete without table throws ---

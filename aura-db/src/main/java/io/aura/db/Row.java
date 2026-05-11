@@ -7,6 +7,7 @@ public class Row extends LinkedHashMap<String, Object> {
 
     private String table;
     private String primaryKey = "id";
+    private final java.util.Set<String> excluded = new java.util.HashSet<>();
 
     private Row() {}
 
@@ -23,6 +24,11 @@ public class Row extends LinkedHashMap<String, Object> {
         row.table = SqlSafe.identifier(table);
         row.primaryKey = SqlSafe.identifier(primaryKey);
         return row;
+    }
+
+    public Row exclude(String... cols) {
+        for (String col : cols) excluded.add(col.toLowerCase());
+        return this;
     }
 
     public Row set(String key, Object value) {
@@ -104,7 +110,7 @@ public class Row extends LinkedHashMap<String, Object> {
         var setCols = new java.util.ArrayList<String>();
         var params = new java.util.ArrayList<>();
         for (var entry : entrySet()) {
-            if (!entry.getKey().equals(primaryKey)) {
+            if (!entry.getKey().equals(primaryKey) && !excluded.contains(entry.getKey())) {
                 SqlSafe.identifier(entry.getKey());
                 setCols.add(entry.getKey() + " = ?");
                 params.add(entry.getValue());
