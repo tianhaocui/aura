@@ -87,6 +87,16 @@ public class Row extends LinkedHashMap<String, Object> {
         return this;
     }
 
+    public Row insertFull(Db db) {
+        insert(db);
+        Object id = idValue();
+        if (id != null) {
+            Row fetched = db.findById(table, primaryKey, id);
+            if (fetched != null) putAll(fetched);
+        }
+        return this;
+    }
+
     public boolean update(Db db) {
         if (table == null) throw new IllegalStateException("Table name not set");
         Object idVal = idValue();

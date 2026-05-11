@@ -17,6 +17,7 @@ import org.slf4j.LoggerFactory;
 import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -30,6 +31,7 @@ public class UndertowStarter implements AuraStarter {
     private Aura app;
     private Router router;
     private ResourceHandler staticHandler;
+    private ClassPathResourceManager resourceManager;
     private List<CompiledRoute> compiledRoutes;
 
     @Override
@@ -70,12 +72,13 @@ public class UndertowStarter implements AuraStarter {
         }
 
         compiledRoutes = compile(router, "", new ArrayList<>(), new ArrayList<>());
+        compiledRoutes.sort(Comparator.comparingInt(r -> r.paramNames().size()));
 
         String staticPath = app.staticFilesPath();
         if (staticPath != null) {
             String prefix = staticPath.startsWith("/") ? staticPath.substring(1) : staticPath;
-            staticHandler = new ResourceHandler(
-                    new ClassPathResourceManager(Thread.currentThread().getContextClassLoader(), prefix));
+            resourceManager = new ClassPathResourceManager(Thread.currentThread().getContextClassLoader(), prefix);
+            staticHandler = new ResourceHandler(resourceManager);
         }
 
         shutdownHandler = new GracefulShutdownHandler(exchange -> {
@@ -164,9 +167,20 @@ public class UndertowStarter implements AuraStarter {
 
         if (staticHandler != null) {
             try {
-                staticHandler.handleRequest(exchange);
-                return;
+                io.undertow.server.handlers.resource.Resource res =
+                        resourceManager.getResource(exchange.getRelativePath());
+                if (res != null && !res.isDirectory()) {
+                    staticHandler.handleRequest(exchange);
+                    return;
+                }
             } catch (Exception ignored) {}
+            if (app.spa()) {
+                try {
+                    exchange.setRelativePath("/index.html");
+                    staticHandler.handleRequest(exchange);
+                    return;
+                } catch (Exception ignored) {}
+            }
         }
         exchange.setStatusCode(404);
         exchange.getResponseSender().send("Not Found");
@@ -319,13 +333,13 @@ public class UndertowStarter implements AuraStarter {
                     ((BaseExceptionHandler) entry.getValue()).handle((Exception) cause, ctx);
                 } catch (Exception inner) {
                     log.error("Error in exception handler", inner);
-                    ctx.status(500).text("Internal Server Error");
+                    ctx.status(500).json(java.util.Map.of("error", "Internal Server Error"));
                 }
                 return;
             }
         }
         if (cause instanceof IllegalArgumentException || cause instanceof io.aura.Validate.ValidationException) {
-            ctx.status(400).text("Bad Request: " + cause.getMessage());
+            ctx.status(400).json(java.util.Map.of("error", cause.getMessage() != null ? cause.getMessage() : "Bad Request"));
             return;
         }
         log.error("Unhandled exception", cause);
@@ -333,9 +347,9 @@ public class UndertowStarter implements AuraStarter {
         if ("dev".equals(app.env())) {
             java.io.StringWriter sw = new java.io.StringWriter();
             cause.printStackTrace(new java.io.PrintWriter(sw));
-            ctx.status(500).text("Internal Server Error: " + msg + "\n\n" + sw);
+            ctx.status(500).json(java.util.Map.of("error", msg, "trace", sw.toString()));
         } else {
-            ctx.status(500).text("Internal Server Error: " + msg);
+            ctx.status(500).json(java.util.Map.of("error", msg));
         }
     }
 

@@ -238,7 +238,15 @@ public class Db implements AutoCloseable {
         int cols = meta.getColumnCount();
         Row row = Row.of("");
         for (int i = 1; i <= cols; i++) {
-            row.put(meta.getColumnLabel(i).toLowerCase(), rs.getObject(i));
+            Object val = rs.getObject(i);
+            if (val instanceof java.sql.Timestamp ts) {
+                val = ts.toInstant().toString();
+            } else if (val instanceof java.sql.Date d) {
+                val = d.toLocalDate().toString();
+            } else if (val instanceof java.sql.Time t) {
+                val = t.toLocalTime().toString();
+            }
+            row.put(meta.getColumnLabel(i).toLowerCase(), val);
         }
         return row;
     }

@@ -29,6 +29,7 @@ public class Aura {
     private final List<RouteEntry> directRoutes = new ArrayList<>();
     private final List<String> scanPackages = new ArrayList<>();
     private String staticFilesPath;
+    private boolean spaMode;
     private String corsOrigin;
     private long maxBodySize = 10 * 1024 * 1024; // 10MB default
     private int shutdownTimeout = 30;
@@ -78,6 +79,11 @@ public class Aura {
 
     public Aura staticFiles(String path) {
         this.staticFilesPath = path;
+        return this;
+    }
+
+    public Aura spa(boolean enabled) {
+        this.spaMode = enabled;
         return this;
     }
 
@@ -271,6 +277,7 @@ public class Aura {
     public List<RouteEntry> directRoutes() { return directRoutes; }
     public List<String> scanPackages() { return scanPackages; }
     public String staticFilesPath() { return staticFilesPath; }
+    public boolean spa() { return spaMode; }
     public String corsOrigin() { return corsOrigin; }
     public long maxBodySize() { return maxBodySize; }
     public int shutdownTimeout() { return shutdownTimeout; }

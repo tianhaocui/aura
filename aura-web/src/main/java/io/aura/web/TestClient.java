@@ -121,7 +121,8 @@ public class TestClient {
             }
             if (cause instanceof IllegalArgumentException || cause instanceof io.aura.Validate.ValidationException) {
                 ctx.status = 400;
-                ctx.responseBody = "Bad Request: " + cause.getMessage();
+                ctx.responseBody = JSON.toJSONString(Map.of("error",
+                        cause.getMessage() != null ? cause.getMessage() : "Bad Request"));
                 return;
             }
             if (ctx.status == 0) ctx.status = 500;

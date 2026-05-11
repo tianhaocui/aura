@@ -3,6 +3,9 @@ package io.aura.web;
 import com.alibaba.fastjson2.JSON;
 import io.aura.Aura;
 import io.undertow.server.HttpServerExchange;
+import io.undertow.server.handlers.form.FormData;
+import io.undertow.server.handlers.form.FormDataParser;
+import io.undertow.server.handlers.form.FormParserFactory;
 import io.undertow.util.Headers;
 import io.undertow.util.HttpString;
 
@@ -28,6 +31,23 @@ public class Context implements BaseContext {
     }
 
     public Aura app() { return app; }
+
+    @Override
+    public UploadedFile file(String field) throws Exception {
+        FormDataParser parser = FormParserFactory.builder().build().createParser(exchange);
+        if (parser == null) return null;
+        try (parser) {
+            FormData formData = parser.parseBlocking();
+            FormData.FormValue value = formData.getFirst(field);
+            if (value == null || !value.isFileItem()) return null;
+            FormData.FileItem item = value.getFileItem();
+            byte[] data = item.getInputStream().readAllBytes();
+            String contentType = value.getHeaders() != null
+                    ? value.getHeaders().getFirst(Headers.CONTENT_TYPE)
+                    : null;
+            return new UploadedFile(value.getFileName(), data, contentType);
+        }
+    }
 
     @Override public String path(String name) { return pathParams.get(name); }
 
