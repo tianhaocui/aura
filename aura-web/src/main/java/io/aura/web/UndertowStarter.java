@@ -356,7 +356,9 @@ public class UndertowStarter implements AuraStarter {
     }
 
     static List<CompiledRoute> compileRoutes(BaseRouter router) {
-        return new UndertowStarter().compile(router, "", new ArrayList<>(), new ArrayList<>());
+        List<CompiledRoute> routes = new UndertowStarter().compile(router, "", new ArrayList<>(), new ArrayList<>());
+        routes.sort(Comparator.comparingInt(r -> r.paramNames().size()));
+        return routes;
     }
 
     private List<CompiledRoute> compile(BaseRouter router, String prefix,

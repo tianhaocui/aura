@@ -71,18 +71,18 @@ public class Db implements AutoCloseable {
 
     public Row findById(String table, Object id) {
         SqlSafe.identifier(table);
-        return findOne("SELECT * FROM " + table + " WHERE id = ?", id);
+        return queryOne("SELECT * FROM " + table + " WHERE id = ?", new Object[]{id}, rs -> rsToRow(rs, table));
     }
 
     public Row findById(String table, String primaryKey, Object id) {
         SqlSafe.identifier(table);
         SqlSafe.identifier(primaryKey);
-        return findOne("SELECT * FROM " + table + " WHERE " + primaryKey + " = ?", id);
+        return queryOne("SELECT * FROM " + table + " WHERE " + primaryKey + " = ?", new Object[]{id}, rs -> rsToRow(rs, table, primaryKey));
     }
 
     public List<Row> findBy(String table, String where, Object... params) {
         SqlSafe.identifier(table);
-        return find("SELECT * FROM " + table + " WHERE " + where, params);
+        return query("SELECT * FROM " + table + " WHERE " + where, params, rs -> rsToRow(rs, table));
     }
 
     public int deleteById(String table, Object id) {
@@ -234,9 +234,17 @@ public class Db implements AutoCloseable {
     }
 
     private static Row rsToRow(ResultSet rs) throws SQLException {
+        return rsToRow(rs, null, "id");
+    }
+
+    private static Row rsToRow(ResultSet rs, String table) throws SQLException {
+        return rsToRow(rs, table, "id");
+    }
+
+    private static Row rsToRow(ResultSet rs, String table, String primaryKey) throws SQLException {
         ResultSetMetaData meta = rs.getMetaData();
         int cols = meta.getColumnCount();
-        Row row = Row.of("");
+        Row row = table != null ? Row.of(table, primaryKey) : Row.of("");
         for (int i = 1; i <= cols; i++) {
             Object val = rs.getObject(i);
             if (val instanceof java.sql.Timestamp ts) {
