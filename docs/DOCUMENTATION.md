@@ -318,10 +318,24 @@ db.paginate(sql, filter, pageNum, pageSize); // Page<Row>
 ### Row Object
 
 ```java
-// Create
-Row.of("user").set("name", "tom").set("age", 25).insert(db);
+// Create — insert() returns self with generated primary key populated
+Row row = Row.of("user").set("name", "tom").set("age", 25).insert(db);
+Object id = row.id(); // generated ID
 
-// Update
+// insertFull() — insert + re-fetch including server-generated columns (created_at, etc.)
+Row full = Row.of("user").set("name", "tom").insertFull(db);
+full.get("created_at"); // java.time.LocalDateTime — populated from DB
+
+// findById → modify → update roundtrip (no type conversion needed)
+// Rows from findById/findBy carry the table name and preserve JDBC types
+Row found = db.findById("user", id);
+found.set("name", "updated");
+found.update(db); // LocalDateTime columns written back natively via JDBC
+
+// Exclude server-managed columns from update (e.g. set by DB trigger/default)
+found.exclude("created_at", "updated_at").set("name", "updated").update(db);
+
+// Targeted update — only set the fields you want to change
 Row.of("user").id(123).set("name", "new name").update(db);
 
 // Delete
@@ -329,9 +343,11 @@ Row.of("user").id(123).delete(db);
 
 // Read fields
 Row user = db.findById("user", 1);
-String name = user.getStr("name");
-Integer age = user.getInt("age");
+String name = user.getStr("name");   // .toString() on any type — always works
+Integer age  = user.getInt("age");
 ```
+
+**Type mapping**: `rsToRow` preserves JDBC types — `TIMESTAMP` → `LocalDateTime`, `DATE` → `LocalDate`, `TIME` → `LocalTime`. Values are never silently converted to String internally.
 
 ### Shortcuts
 
@@ -508,6 +524,8 @@ var test = TestClient.of(app);
 // Basic assertions
 test.get("/user/1").expect(200).bodyContains("Alice");
 test.post("/user").body(new CreateReq("tom", 25)).expect(200);
+test.put("/user/1").body(Map.of("name", "updated")).expect(200);
+test.delete("/user/1").expect(204);
 test.get("/notfound").expect(404);
 
 // Full response access
@@ -530,11 +548,12 @@ Aura.create()
     .port(8080)              // HTTP port (default: 8080)
     .env("dev")              // environment label
     .workers(200)            // Undertow worker threads
-    .cors(true)              // CORS: true = allow all origins
+    .cors(true)              // CORS: true = allow all origins (includes Max-Age: 86400)
     .cors("https://x.com")  // or specific origin
-    .maxBodySize(10_000_000) // request body limit (default: 10MB)
+    .maxBodySize(10_000_000) // request body limit (default: 10MB); increase for file uploads
     .shutdownTimeout(30)     // graceful shutdown seconds (default: 30)
-    .staticFiles("/public")  // serve classpath:/public
+    .staticFiles("/public")  // serve classpath:/public with Cache-Control + ETag (86400s)
+    .spa(true)               // SPA mode: unknown paths fall back to /index.html
     .mcp(true)               // enable MCP (default port: 8081)
     .prop("db.url", "...")   // custom property
     .onStart(a -> { ... })   // lifecycle hook (receives Aura instance)
