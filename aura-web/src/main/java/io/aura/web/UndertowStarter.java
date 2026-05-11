@@ -78,7 +78,8 @@ public class UndertowStarter implements AuraStarter {
         if (staticPath != null) {
             String prefix = staticPath.startsWith("/") ? staticPath.substring(1) : staticPath;
             resourceManager = new ClassPathResourceManager(Thread.currentThread().getContextClassLoader(), prefix);
-            staticHandler = new ResourceHandler(resourceManager);
+            staticHandler = new ResourceHandler(resourceManager)
+                    .setCacheTime(86400);
         }
 
         shutdownHandler = new GracefulShutdownHandler(exchange -> {
@@ -131,6 +132,7 @@ public class UndertowStarter implements AuraStarter {
             exchange.getResponseHeaders().put(new HttpString("Access-Control-Allow-Origin"), corsOrigin);
             exchange.getResponseHeaders().put(new HttpString("Access-Control-Allow-Methods"), "GET, POST, PUT, DELETE, OPTIONS");
             exchange.getResponseHeaders().put(new HttpString("Access-Control-Allow-Headers"), "Content-Type, Authorization");
+            exchange.getResponseHeaders().put(new HttpString("Access-Control-Max-Age"), "86400");
             if ("OPTIONS".equals(method)) {
                 exchange.setStatusCode(204);
                 exchange.endExchange();

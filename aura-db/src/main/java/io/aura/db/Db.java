@@ -240,7 +240,7 @@ public class Db implements AutoCloseable {
         for (int i = 1; i <= cols; i++) {
             Object val = rs.getObject(i);
             if (val instanceof java.sql.Timestamp ts) {
-                val = ts.toInstant().toString();
+                val = ts.toLocalDateTime().toString();
             } else if (val instanceof java.sql.Date d) {
                 val = d.toLocalDate().toString();
             } else if (val instanceof java.sql.Time t) {

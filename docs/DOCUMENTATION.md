@@ -247,6 +247,17 @@ ctx.cookie("token")
 ctx.body(User.class)        // JSON deserialization
 ctx.method()                // GET, POST, ...
 ctx.url()                   // request URI
+ctx.pageNum()               // ?page= (default 1, min 1)
+ctx.pageSize()              // ?pageSize= (default 20, max 500)
+
+// --- File Upload (multipart/form-data) ---
+UploadedFile f = ctx.file("avatar");
+f.name()        // original filename
+f.data()        // byte[]
+f.contentType() // MIME type
+f.size()        // bytes
+// Increase limit for large files (default 10MB):
+// Aura.create().maxBodySize(500 * 1024 * 1024L)
 
 // --- Response ---
 ctx.status(201)             // set status code (chainable)
