@@ -1,0 +1,12 @@
+target/
+*/target/
+*.class
+*.jar
+!aura-mcp-npm/bridge.jar
+.idea/
+*.iml
+dependency-reduced-pom.xml
+CLAUDE.md
+.config/
+.local/
+.codepilot-uploads/
