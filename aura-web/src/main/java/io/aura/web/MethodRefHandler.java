@@ -1,6 +1,7 @@
 package io.aura.web;
 
 import com.alibaba.fastjson2.JSON;
+import io.aura.BeanValidator;
 
 import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
@@ -98,7 +99,11 @@ public final class MethodRefHandler implements BaseHandler {
         if (type == double.class) return ctx -> parseDouble(resolveString(ctx, name));
         if (type == Double.class) return ctx -> parseDoubleBoxed(resolveString(ctx, name));
 
-        if (type.isRecord() || TypeUtil.isPojo(type)) return ctx -> ctx.body(type);
+        if (type.isRecord() || TypeUtil.isPojo(type)) return ctx -> {
+            Object obj = ctx.body(type);
+            BeanValidator.validate(obj);
+            return obj;
+        };
 
         return ctx -> resolveString(ctx, name);
     }

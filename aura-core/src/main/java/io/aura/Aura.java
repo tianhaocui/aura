@@ -28,6 +28,7 @@ public class Aura {
     private final List<Object> services = new ArrayList<>();
     private final List<RouteEntry> directRoutes = new ArrayList<>();
     private final List<String> scanPackages = new ArrayList<>();
+    private final List<AuraPlugin> plugins = new ArrayList<>();
     private String staticFilesPath;
     private boolean spaMode;
     private String corsOrigin;
@@ -136,6 +137,11 @@ public class Aura {
         return this;
     }
 
+    public Aura plugin(AuraPlugin plugin) {
+        this.plugins.add(plugin);
+        return this;
+    }
+
     // --- direct routes (simplified API) ---
 
     public Aura get(String path, Object handler) {
@@ -225,6 +231,9 @@ public class Aura {
     }
 
     public void start() {
+        for (AuraPlugin plugin : plugins) {
+            plugin.install(this);
+        }
         ServiceLoader<AuraStarter> loader = ServiceLoader.load(AuraStarter.class);
         starter = loader.findFirst()
                 .orElseThrow(() -> new IllegalStateException(

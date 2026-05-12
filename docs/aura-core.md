@@ -35,6 +35,8 @@ Aura.create()
 | `staticFiles(String)` | Serve static files from classpath path | - |
 | `mcp(boolean)` | Enable MCP Server | false |
 | `mcp(int)` | Enable MCP on specific port | - |
+| `plugin(AuraPlugin)` | Register a plugin (called before start) | - |
+| `corsHeaders(String)` | CORS allowed headers | "Content-Type, Authorization" |
 | `prop(String, String)` | Set custom property | - |
 | `onStart(Consumer<Aura>)` | Lifecycle hook (runs after server starts) | - |
 | `onStop(Consumer<Aura>)` | Lifecycle hook (runs before shutdown, reverse order) | - |
@@ -154,6 +156,79 @@ Framework catches this and returns HTTP 400 with the message.
 
 ---
 
+## Validation Annotations
+
+Auto-validate record fields when used as request body parameters. Framework calls `BeanValidator.validate()` automatically after JSON deserialization.
+
+```java
+public record CreateUser(
+    @NotBlank String name,
+    @Min(0) @Max(150) int age,
+    @Size(min = 11, max = 11) String phone,
+    @Pattern("[a-z]+@[a-z]+\\.[a-z]+") String email
+) {}
+```
+
+| Annotation | Target | Validation |
+|------------|--------|------------|
+| `@NotNull` | Any field | value != null |
+| `@NotBlank` | String | not null and not blank |
+| `@Min(value)` | Number | >= value |
+| `@Max(value)` | Number | <= value |
+| `@Size(min, max)` | String | length between min and max |
+| `@Pattern(regex)` | String | matches regex |
+
+All annotations support a custom `message` attribute. Multiple violations are reported together.
+
+Validation failure throws `ValidationException` → HTTP 400.
+
+### Manual Validation
+
+```java
+BeanValidator.validate(myRecord); // throws ValidationException if invalid
+```
+
+---
+
+## Plugin Mechanism
+
+Extend Aura with reusable plugins. A plugin is a single-method interface.
+
+```java
+public interface AuraPlugin {
+    void install(Aura app);
+}
+```
+
+### Usage
+
+```java
+Aura.create()
+    .plugin(new RedisPlugin("localhost:6379"))
+    .plugin(new JwtAuthPlugin("my-secret"))
+    .start();
+```
+
+### Writing a Plugin
+
+```java
+public class RedisPlugin implements AuraPlugin {
+    private final String host;
+    public RedisPlugin(String host) { this.host = host; }
+
+    @Override
+    public void install(Aura app) {
+        RedisClient client = new RedisClient(host);
+        app.register(client);
+        app.onStop(a -> client.close());
+    }
+}
+```
+
+Plugins are installed in order before the server starts. They can register services, add hooks, set properties, or configure routes.
+
+---
+
 ## Annotations
 
 | Annotation | Target | Purpose |
@@ -164,6 +239,12 @@ Framework catches this and returns HTTP 400 with the message.
 | `@Put("/path")` | Method | PUT endpoint |
 | `@Delete("/path")` | Method | DELETE endpoint |
 | `@Desc("description")` | Class, Method, Parameter | Documentation for schema/MCP |
+| `@NotNull` | Record field | Validates not null |
+| `@NotBlank` | Record field | Validates not null/blank |
+| `@Min(value)` | Record field | Validates >= value |
+| `@Max(value)` | Record field | Validates <= value |
+| `@Size(min, max)` | Record field | Validates string length |
+| `@Pattern(regex)` | Record field | Validates regex match |
 
 ### Convention-based routing (no annotations needed)
 

@@ -73,7 +73,7 @@ class UserService {
 ## Parameter Binding Rules
 
 - `int/long/String` → from path param first, then query param (matched by name)
-- `record/POJO` → from request body (JSON)
+- `record/POJO` → from request body (JSON), auto-validated if annotations present
 - `Context` → framework context object
 - Return non-void → auto JSON response
 - Return String → auto text response
@@ -168,6 +168,33 @@ app.routes(r -> {
 Unhandled exceptions always return JSON `{"error": "message"}`.
 In dev mode (`AURA_ENV=dev`), a `"trace"` field with the full stack trace is added.
 `IllegalArgumentException` and `ValidationException` automatically return 400.
+
+## Validation Annotations
+
+```java
+// Add to record fields — auto-validated when used as request body
+public record CreateUser(
+    @NotBlank String name,
+    @Min(0) @Max(150) int age,
+    @Size(min = 11, max = 11) String phone,
+    @Pattern("[a-z]+@[a-z]+\\.[a-z]+") String email
+) {}
+// Validation failure → 400 with field-level error messages
+```
+
+Annotations: `@NotNull`, `@NotBlank`, `@Min`, `@Max`, `@Size`, `@Pattern`
+
+## Plugins
+
+```java
+Aura.create()
+    .plugin(app -> app.register(new RedisClient("localhost")))
+    .plugin(new JwtAuthPlugin("secret"))
+    .start();
+
+// Plugin interface: single method
+public interface AuraPlugin { void install(Aura app); }
+```
 
 ## Configuration
 
