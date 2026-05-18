@@ -193,6 +193,11 @@ public class Db implements AutoCloseable {
     // --- transaction ---
 
     public void transaction(Runnable block) {
+        transaction(() -> { block.run(); return null; });
+    }
+
+    @SuppressWarnings("unchecked")
+    public <T> T transaction(java.util.function.Supplier<T> block) {
         if (TX_CONN.get() != null) {
             throw new IllegalStateException("Nested transactions are not supported");
         }
@@ -200,8 +205,9 @@ public class Db implements AutoCloseable {
             conn.setAutoCommit(false);
             TX_CONN.set(conn);
             try {
-                block.run();
+                T result = block.get();
                 conn.commit();
+                return result;
             } catch (Exception e) {
                 try { conn.rollback(); } catch (SQLException rollbackEx) { e.addSuppressed(rollbackEx); }
                 throw e instanceof RuntimeException re ? re : new DbException(e);
