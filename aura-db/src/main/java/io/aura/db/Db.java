@@ -7,6 +7,7 @@ import java.sql.*;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Supplier;
 
 public class Db implements AutoCloseable {
 
@@ -197,7 +198,7 @@ public class Db implements AutoCloseable {
     }
 
     @SuppressWarnings("unchecked")
-    public <T> T transaction(java.util.function.Supplier<T> block) {
+    public <T> T transaction(Supplier<T> block) {
         if (TX_CONN.get() != null) {
             throw new IllegalStateException("Nested transactions are not supported");
         }
