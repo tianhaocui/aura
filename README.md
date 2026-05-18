@@ -199,6 +199,13 @@ Aura.create()
 
 Minimum: `aura-web` (brings `aura-core`).
 
+## Ecosystem
+
+| Project | Description |
+|---------|-------------|
+| [aura-demo](https://github.com/tianhaocui/aura-demo) | Full CRUD demo app with MCP, published as npm package |
+| [aura-skill](https://github.com/tianhaocui/aura-skill) | AI skill generation — turn Aura APIs into Claude Code skills |
+
 ## Complete Example
 
 ```java

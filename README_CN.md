@@ -182,6 +182,13 @@ Aura.create()
 
 最小依赖：`aura-web`（自动引入 `aura-core`）。
 
+## 生态
+
+| 项目 | 说明 |
+|------|------|
+| [aura-demo](https://github.com/tianhaocui/aura-demo) | 完整 CRUD 示例，带 MCP，已发布为 npm 包 |
+| [aura-skill](https://github.com/tianhaocui/aura-skill) | AI 技能生成 — 将 Aura API 转为 Claude Code skills |
+
 ## 完整示例
 
 ```java
