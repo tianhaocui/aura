@@ -25,7 +25,7 @@ public class Context implements BaseContext {
     private final Map<Class<?>, Object> attrs = new ConcurrentHashMap<>();
     private final Map<String, Object> namedAttrs = new ConcurrentHashMap<>();
     private String cachedBody;
-    private boolean aborted;
+    private volatile boolean aborted;
 
     Context(HttpServerExchange exchange, Map<String, String> pathParams, Aura app) {
         this.exchange = exchange;
@@ -148,22 +148,35 @@ public class Context implements BaseContext {
         return new SseEmitter() {
             @Override
             public void send(String data) throws Exception {
-                write("data: " + data + "\n\n");
+                write(formatData(data));
             }
 
             @Override
             public void send(String event, String data) throws Exception {
-                write("event: " + event + "\ndata: " + data + "\n\n");
+                write("event: " + sanitize(event) + "\n" + formatData(data));
             }
 
             @Override
             public void send(String event, String data, String id) throws Exception {
-                write("id: " + id + "\nevent: " + event + "\ndata: " + data + "\n\n");
+                write("id: " + sanitize(id) + "\nevent: " + sanitize(event) + "\n" + formatData(data));
             }
 
             @Override
             public void close() {
                 try { out.close(); } catch (IOException ignored) {}
+            }
+
+            private String formatData(String data) {
+                StringBuilder sb = new StringBuilder();
+                for (String line : data.split("\n", -1)) {
+                    sb.append("data: ").append(line).append("\n");
+                }
+                sb.append("\n");
+                return sb.toString();
+            }
+
+            private String sanitize(String value) {
+                return value.replaceAll("[\\r\\n]", "");
             }
 
             private void write(String text) throws IOException {

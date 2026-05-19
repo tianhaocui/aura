@@ -300,4 +300,61 @@ class TestClientTest {
         assertThat(resp.body()).contains("event: update");
         assertThat(resp.body()).contains("data: content");
     }
+
+    // --- abort ---
+
+    @Test
+    void abort_inBeforeMiddleware_skipsHandler() {
+        Aura app = Aura.create();
+        Router router = new Router();
+        router.before(ctx -> { ctx.status(403); ctx.text("forbidden"); ctx.abort(); });
+        router.get("/secret", ctx -> ctx.text("should not reach"));
+        TestClient client = new TestClient(app, router);
+        TestClient.Response resp = client.get("/secret").execute();
+        assertThat(resp.status()).isEqualTo(403);
+        assertThat(resp.body()).isEqualTo("forbidden");
+    }
+
+    @Test
+    void abort_afterHandlersStillRun() {
+        Aura app = Aura.create();
+        Router router = new Router();
+        var ran = new boolean[]{false};
+        router.before(ctx -> { ctx.status(401); ctx.text("no"); ctx.abort(); });
+        router.after(ctx -> ran[0] = true);
+        router.get("/x", ctx -> ctx.text("nope"));
+        TestClient client = new TestClient(app, router);
+        client.get("/x").execute();
+        assertThat(ran[0]).isTrue();
+    }
+
+    // --- crud selective ---
+
+    @Test
+    void crud_selective_onlyRegistersSpecifiedMethods() {
+        Aura app = Aura.create();
+        Router router = new Router();
+        router.crud("/item", new CrudService(), "get", "list");
+        TestClient client = new TestClient(app, router);
+        assertThat(client.get("/item").execute().status()).isEqualTo(200);
+        assertThat(client.get("/item/1").execute().status()).isEqualTo(200);
+        assertThat(client.post("/item").body("{}").execute().status()).isEqualTo(404);
+        assertThat(client.delete("/item/1").execute().status()).isEqualTo(404);
+    }
+
+    @Test
+    void crud_invalidMethodName_throws() {
+        Aura app = Aura.create();
+        Router router = new Router();
+        assertThatThrownBy(() -> router.crud("/item", new CrudService(), "get", "patch"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("patch");
+    }
+
+    static class CrudService {
+        public String get(int id) { return "item-" + id; }
+        public java.util.List<String> list() { return java.util.List.of("a", "b"); }
+        public String create(String body) { return "created"; }
+        public void delete(int id) {}
+    }
 }

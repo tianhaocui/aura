@@ -63,15 +63,28 @@ class MockContext extends Context {
     public SseEmitter sse() {
         return new SseEmitter() {
             @Override public void send(String data) {
-                append("data: " + data + "\n\n");
+                append(formatData(data));
             }
             @Override public void send(String event, String data) {
-                append("event: " + event + "\ndata: " + data + "\n\n");
+                append("event: " + sanitize(event) + "\n" + formatData(data));
             }
             @Override public void send(String event, String data, String id) {
-                append("id: " + id + "\nevent: " + event + "\ndata: " + data + "\n\n");
+                append("id: " + sanitize(id) + "\nevent: " + sanitize(event) + "\n" + formatData(data));
             }
             @Override public void close() {}
+
+            private String formatData(String data) {
+                StringBuilder sb = new StringBuilder();
+                for (String line : data.split("\n", -1)) {
+                    sb.append("data: ").append(line).append("\n");
+                }
+                sb.append("\n");
+                return sb.toString();
+            }
+
+            private String sanitize(String value) {
+                return value.replaceAll("[\\r\\n]", "");
+            }
 
             private void append(String chunk) {
                 responseBody = responseBody == null ? chunk : responseBody + chunk;
