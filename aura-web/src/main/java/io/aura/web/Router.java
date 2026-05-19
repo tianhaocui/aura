@@ -19,9 +19,15 @@ public class Router extends BaseRouter {
     }
 
     public BaseRouter crud(String path, Object service) {
+        return crud(path, service, "get", "list", "create", "update", "delete");
+    }
+
+    public BaseRouter crud(String path, Object service, String... methods) {
         var clazz = service.getClass();
+        var allowed = java.util.Set.of(methods);
         for (var m : clazz.getDeclaredMethods()) {
             if (!java.lang.reflect.Modifier.isPublic(m.getModifiers())) continue;
+            if (!allowed.contains(m.getName())) continue;
             switch (m.getName()) {
                 case "get" -> get(path + "/{" + firstParamName(m) + "}", service, "get");
                 case "list" -> get(path, service, "list");

@@ -158,6 +158,27 @@ f.contentType() // MIME type
 f.size()        // bytes
 ```
 
+## SSE (Server-Sent Events)
+
+```java
+r.get("/stream", ctx -> {
+    SseEmitter sse = ctx.sse();
+    sse.send("hello");                       // data: hello
+    sse.send("message", "payload");          // named event
+    sse.send("update", "content", "msg-1"); // with id
+    sse.close();
+});
+
+// AI streaming — stream tokens from an AI model
+r.post("/chat", ctx -> {
+    ChatReq req = ctx.body(ChatReq.class);
+    SseEmitter sse = ctx.sse();
+    aiClient.streamChat(req.message(), token -> sse.send("token", token));
+    sse.send("done", "");
+    sse.close();
+});
+```
+
 ## Middleware
 
 ```java

@@ -58,4 +58,24 @@ class MockContext extends Context {
     @Override @SuppressWarnings("unchecked")
     public <T> T get(String key, Class<T> type) { return (T) namedAttrs.get(key); }
     @Override public Aura app() { return app; }
+
+    @Override
+    public SseEmitter sse() {
+        return new SseEmitter() {
+            @Override public void send(String data) {
+                append("data: " + data + "\n\n");
+            }
+            @Override public void send(String event, String data) {
+                append("event: " + event + "\ndata: " + data + "\n\n");
+            }
+            @Override public void send(String event, String data, String id) {
+                append("id: " + id + "\nevent: " + event + "\ndata: " + data + "\n\n");
+            }
+            @Override public void close() {}
+
+            private void append(String chunk) {
+                responseBody = responseBody == null ? chunk : responseBody + chunk;
+            }
+        };
+    }
 }

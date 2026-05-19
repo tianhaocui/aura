@@ -90,8 +90,11 @@ public class TestClient {
                 try {
                     for (BaseHandler mw : route.beforeHandlers()) {
                         mw.handle(mockCtx);
+                        if (mockCtx.isAborted()) break;
                     }
-                    route.handler().handle(mockCtx);
+                    if (!mockCtx.isAborted()) {
+                        route.handler().handle(mockCtx);
+                    }
                 } catch (Exception e) {
                     handleException(e, mockCtx);
                 } finally {
