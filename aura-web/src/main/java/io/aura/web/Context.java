@@ -2,6 +2,7 @@ package io.aura.web;
 
 import com.alibaba.fastjson2.JSON;
 import io.aura.Aura;
+import io.aura.web.SseEmitter;
 import io.undertow.server.HttpServerExchange;
 import io.undertow.server.handlers.form.FormData;
 import io.undertow.server.handlers.form.FormDataParser;
@@ -10,6 +11,7 @@ import io.undertow.util.Headers;
 import io.undertow.util.HttpString;
 
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.Deque;
 import java.util.Map;
@@ -23,6 +25,7 @@ public class Context implements BaseContext {
     private final Map<Class<?>, Object> attrs = new ConcurrentHashMap<>();
     private final Map<String, Object> namedAttrs = new ConcurrentHashMap<>();
     private String cachedBody;
+    private volatile boolean aborted;
 
     Context(HttpServerExchange exchange, Map<String, String> pathParams, Aura app) {
         this.exchange = exchange;
@@ -133,5 +136,60 @@ public class Context implements BaseContext {
 
     @Override @SuppressWarnings("unchecked")
     public <T> T get(String key, Class<T> type) { return (T) namedAttrs.get(key); }
+
+    @Override
+    public SseEmitter sse() {
+        exchange.getResponseHeaders().put(Headers.CONTENT_TYPE, "text/event-stream; charset=utf-8");
+        exchange.getResponseHeaders().put(new HttpString("Cache-Control"), "no-cache");
+        exchange.getResponseHeaders().put(new HttpString("X-Accel-Buffering"), "no");
+        exchange.setPersistent(false);
+        exchange.startBlocking();
+        var out = exchange.getOutputStream();
+        return new SseEmitter() {
+            @Override
+            public void send(String data) throws Exception {
+                write(formatData(data));
+            }
+
+            @Override
+            public void send(String event, String data) throws Exception {
+                write("event: " + sanitize(event) + "\n" + formatData(data));
+            }
+
+            @Override
+            public void send(String event, String data, String id) throws Exception {
+                write("id: " + sanitize(id) + "\nevent: " + sanitize(event) + "\n" + formatData(data));
+            }
+
+            @Override
+            public void close() {
+                try { out.close(); } catch (IOException ignored) {}
+            }
+
+            private String formatData(String data) {
+                StringBuilder sb = new StringBuilder();
+                for (String line : data.split("\n", -1)) {
+                    sb.append("data: ").append(line).append("\n");
+                }
+                sb.append("\n");
+                return sb.toString();
+            }
+
+            private String sanitize(String value) {
+                return value.replaceAll("[\\r\\n]", "");
+            }
+
+            private void write(String text) throws IOException {
+                out.write(text.getBytes(StandardCharsets.UTF_8));
+                out.flush();
+            }
+        };
+    }
+
+    @Override
+    public void abort() { this.aborted = true; }
+
+    @Override
+    public boolean isAborted() { return aborted; }
 }
 

@@ -11,6 +11,7 @@
     </parent>
 
     <artifactId>aura-mcp</artifactId>
+    <name>aura-mcp</name>
 
     <dependencies>
         <dependency>

@@ -141,6 +141,27 @@ f.contentType() // MIME 类型
 f.size()        // 字节数
 ```
 
+## SSE（服务器推送事件）
+
+```java
+r.get("/stream", ctx -> {
+    SseEmitter sse = ctx.sse();
+    sse.send("hello");                       // data: hello
+    sse.send("message", "payload");          // 命名事件
+    sse.send("update", "content", "msg-1"); // 带 id
+    sse.close();
+});
+
+// AI 流式输出示例
+r.post("/chat", ctx -> {
+    ChatReq req = ctx.body(ChatReq.class);
+    SseEmitter sse = ctx.sse();
+    aiClient.streamChat(req.message(), token -> sse.send("token", token));
+    sse.send("done", "");
+    sse.close();
+});
+```
+
 ## 中间件
 
 ```java

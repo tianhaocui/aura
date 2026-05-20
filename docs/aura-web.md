@@ -101,6 +101,47 @@ Request/response wrapper passed to handlers.
 | `redirect(String url)` | void | 302 redirect |
 | `header(String name, String value)` | Context | Set response header |
 | `cookie(String name, String value, int maxAge)` | Context | Set cookie (HttpOnly + Secure) |
+| `sse()` | SseEmitter | Open SSE stream (text/event-stream) |
+
+---
+
+## SSE (Server-Sent Events)
+
+```java
+r.get("/stream", ctx -> {
+    SseEmitter sse = ctx.sse();
+    sse.send("hello");                          // data: hello
+    sse.send("message", "payload");             // named event
+    sse.send("update", "content", "msg-1");     // with id
+    sse.close();
+});
+```
+
+`ctx.sse()` sets `Content-Type: text/event-stream`, disables buffering, and returns an `SseEmitter`.
+
+### SseEmitter
+
+| Method | Description |
+|--------|-------------|
+| `send(String data)` | Send `data:` event |
+| `send(String event, String data)` | Send named event |
+| `send(String event, String data, String id)` | Send named event with id |
+| `close()` | Close the stream |
+
+**AI streaming example:**
+
+```java
+r.post("/chat", ctx -> {
+    ChatReq req = ctx.body(ChatReq.class);
+    SseEmitter sse = ctx.sse();
+    // stream tokens from AI model
+    aiClient.streamChat(req.message(), token -> {
+        sse.send("token", token);
+    });
+    sse.send("done", "");
+    sse.close();
+});
+```
 
 ### Attributes
 

@@ -224,6 +224,28 @@ ctx.body(T.class)  ctx.cookie("name")  ctx.method()  ctx.url()
 ctx.pageNum()    ctx.pageSize()       ctx.file("field")   // UploadedFile
 ctx.status(201)  ctx.json(obj)        ctx.text("ok")  ctx.redirect("/")
 ctx.set(user)    ctx.get(User.class)  ctx.app().get(Db.class)
+ctx.sse()        // SseEmitter — opens text/event-stream response
+```
+
+## SSE (Server-Sent Events)
+
+```java
+r.get("/stream", ctx -> {
+    SseEmitter sse = ctx.sse();
+    sse.send("hello");                       // data: hello
+    sse.send("message", "payload");          // named event
+    sse.send("update", "content", "msg-1"); // with id
+    sse.close();
+});
+
+// AI streaming example
+r.post("/chat", ctx -> {
+    ChatReq req = ctx.body(ChatReq.class);
+    SseEmitter sse = ctx.sse();
+    aiClient.streamChat(req.message(), token -> sse.send("token", token));
+    sse.send("done", "");
+    sse.close();
+});
 ```
 
 ## Testing

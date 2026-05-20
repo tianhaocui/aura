@@ -19,9 +19,21 @@ public class Router extends BaseRouter {
     }
 
     public BaseRouter crud(String path, Object service) {
+        return crud(path, service, "get", "list", "create", "update", "delete");
+    }
+
+    public BaseRouter crud(String path, Object service, String... methods) {
+        var allowed = java.util.Set.of("get", "list", "create", "update", "delete");
+        for (String m : methods) {
+            if (!allowed.contains(m)) {
+                throw new IllegalArgumentException("Unknown crud method: '" + m + "'. Allowed: " + allowed);
+            }
+        }
+        var selected = java.util.Set.of(methods);
         var clazz = service.getClass();
         for (var m : clazz.getDeclaredMethods()) {
             if (!java.lang.reflect.Modifier.isPublic(m.getModifiers())) continue;
+            if (!selected.contains(m.getName())) continue;
             switch (m.getName()) {
                 case "get" -> get(path + "/{" + firstParamName(m) + "}", service, "get");
                 case "list" -> get(path, service, "list");

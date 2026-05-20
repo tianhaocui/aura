@@ -1,18 +1,43 @@
 #!/usr/bin/env node
 
 const http = require('http');
+const https = require('https');
 const readline = require('readline');
 
-const url = "__API_URL_PLACEHOLDER__";
+const fs = require('fs');
+const path = require('path');
 
-const baseUrl = url.endsWith('/') ? url.slice(0, -1) : url;
+function resolveUrl() {
+  if (process.env.AURA_API_URL) return process.env.AURA_API_URL;
+  const configPaths = [
+    path.join(process.cwd(), 'aura.properties'),
+    path.join(require('os').homedir(), 'aura.properties')
+  ];
+  for (const p of configPaths) {
+    try {
+      const content = fs.readFileSync(p, 'utf8');
+      const match = content.match(/^api[._]url\s*=\s*(.+)$/m);
+      if (match) return match[1].trim();
+    } catch (e) {
+      if (e.code !== 'ENOENT') process.stderr.write('Warning: could not read ' + p + ': ' + e.message + '\n');
+    }
+  }
+  return "__API_URL_PLACEHOLDER__";
+}
+
+const baseUrl = resolveUrl().replace(/\/+$/, '');
+if (!/^https?:\/\//i.test(baseUrl)) {
+  process.stderr.write('Invalid AURA_API_URL: must start with http:// or https://\n');
+  process.exit(1);
+}
 let routes = null;
 
-function httpRequest(method, path, body) {
+function httpRequest(method, reqPath, body) {
   return new Promise((resolve, reject) => {
-    const u = new URL(path, baseUrl);
+    const u = new URL(reqPath, baseUrl);
+    const transport = u.protocol === 'https:' ? https : http;
     const opts = { method, hostname: u.hostname, port: u.port, path: u.pathname + u.search };
-    const req = http.request(opts, res => {
+    const req = transport.request(opts, res => {
       let data = '';
       res.on('data', chunk => data += chunk);
       res.on('end', () => resolve(data));
@@ -72,17 +97,17 @@ async function handleToolsCall(params) {
   const route = routes.find(r => buildToolName(r.method, r.path) === toolName);
   if (!route) return { isError: true, content: [{ type: 'text', text: 'Tool not found: ' + toolName }] };
 
-  let path = route.path;
+  let routePath = route.path;
   let query = [];
 
   (route.params || []).forEach(p => {
     const val = args[p.name];
     if (val === undefined) return;
-    if (p.source === 'path') path = path.replace(`{${p.name}}`, val);
+    if (p.source === 'path') routePath = routePath.replace(`{${p.name}}`, val);
     else if (p.source === 'query') query.push(`${p.name}=${encodeURIComponent(val)}`);
   });
 
-  const fullPath = baseUrl + path + (query.length ? '?' + query.join('&') : '');
+  const fullPath = baseUrl + routePath + (query.length ? '?' + query.join('&') : '');
   const body = (route.params || []).find(p => p.source === 'body') ? args : null;
 
   try {

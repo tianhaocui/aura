@@ -42,4 +42,13 @@ public interface BaseContext {
 
     // --- file upload ---
     default UploadedFile file(String field) throws Exception { return null; }
+
+    // --- SSE ---
+    default SseEmitter sse() throws Exception {
+        throw new UnsupportedOperationException("SSE not supported in this context");
+    }
+
+    // --- flow control ---
+    void abort();
+    boolean isAborted();
 }

@@ -11,6 +11,7 @@
     </parent>
 
     <artifactId>aura-db</artifactId>
+    <name>aura-db</name>
 
     <dependencies>
         <dependency>

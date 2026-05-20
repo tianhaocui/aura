@@ -156,8 +156,11 @@ public class UndertowStarter implements AuraStarter {
             try {
                 for (BaseHandler mw : route.beforeHandlers()) {
                     mw.handle(ctx);
+                    if (ctx.isAborted()) break;
                 }
-                route.handler().handle(ctx);
+                if (!ctx.isAborted()) {
+                    route.handler().handle(ctx);
+                }
             } catch (Exception e) {
                 handleException(e, ctx);
             } finally {
@@ -341,7 +344,9 @@ public class UndertowStarter implements AuraStarter {
             }
         }
         if (cause instanceof IllegalArgumentException || cause instanceof io.aura.Validate.ValidationException) {
-            ctx.status(400).json(java.util.Map.of("error", cause.getMessage() != null ? cause.getMessage() : "Bad Request"));
+            ctx.status(400).json(ApiError.of(
+                    cause.getMessage() != null ? cause.getMessage() : "Bad Request",
+                    "VALIDATION_ERROR"));
             return;
         }
         log.error("Unhandled exception", cause);
@@ -349,9 +354,9 @@ public class UndertowStarter implements AuraStarter {
         if ("dev".equals(app.env())) {
             java.io.StringWriter sw = new java.io.StringWriter();
             cause.printStackTrace(new java.io.PrintWriter(sw));
-            ctx.status(500).json(java.util.Map.of("error", msg, "trace", sw.toString()));
+            ctx.status(500).json(java.util.Map.of("error", msg, "code", "INTERNAL_ERROR", "trace", sw.toString()));
         } else {
-            ctx.status(500).json(java.util.Map.of("error", msg));
+            ctx.status(500).json(ApiError.of(msg, "INTERNAL_ERROR"));
         }
     }
 
