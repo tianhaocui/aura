@@ -1,18 +1,37 @@
 #!/usr/bin/env node
 
 const http = require('http');
+const https = require('https');
 const readline = require('readline');
 
-const url = "__API_URL_PLACEHOLDER__";
+const fs = require('fs');
+const path = require('path');
 
-const baseUrl = url.endsWith('/') ? url.slice(0, -1) : url;
+function resolveUrl() {
+  if (process.env.AURA_API_URL) return process.env.AURA_API_URL;
+  const configPaths = [
+    path.join(process.cwd(), 'aura.properties'),
+    path.join(require('os').homedir(), 'aura.properties')
+  ];
+  for (const p of configPaths) {
+    try {
+      const content = fs.readFileSync(p, 'utf8');
+      const match = content.match(/^api[._]url\s*=\s*(.+)$/m);
+      if (match) return match[1].trim();
+    } catch (_) {}
+  }
+  return "__API_URL_PLACEHOLDER__";
+}
+
+const baseUrl = resolveUrl().replace(/\/+$/, '');
 let routes = null;
 
-function httpRequest(method, path, body) {
+function httpRequest(method, reqPath, body) {
   return new Promise((resolve, reject) => {
-    const u = new URL(path, baseUrl);
+    const u = new URL(reqPath, baseUrl);
+    const transport = u.protocol === 'https:' ? https : http;
     const opts = { method, hostname: u.hostname, port: u.port, path: u.pathname + u.search };
-    const req = http.request(opts, res => {
+    const req = transport.request(opts, res => {
       let data = '';
       res.on('data', chunk => data += chunk);
       res.on('end', () => resolve(data));
