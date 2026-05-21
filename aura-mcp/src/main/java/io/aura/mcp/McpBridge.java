@@ -31,10 +31,19 @@ public class McpBridge {
         String line;
         while ((line = in.readLine()) != null) {
             if (line.isBlank()) continue;
-            JSONObject request = JSON.parseObject(line);
-            JSONObject response = handle(request);
-            if (response != null) {
-                out.println(response.toJSONString());
+            try {
+                JSONObject request = JSON.parseObject(line);
+                JSONObject response = handle(request);
+                if (response != null) {
+                    out.println(response.toJSONString());
+                    out.flush();
+                }
+            } catch (Exception e) {
+                JSONObject err = new JSONObject();
+                err.put("jsonrpc", "2.0");
+                err.put("id", (Object) null);
+                err.put("error", Map.of("code", -32700, "message", "Parse error: " + e.getMessage()));
+                out.println(err.toJSONString());
                 out.flush();
             }
         }

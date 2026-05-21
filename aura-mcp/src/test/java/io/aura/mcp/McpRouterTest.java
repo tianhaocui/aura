@@ -19,6 +19,8 @@ class McpRouterTest {
     static class UserService {
         public String get(int id) { return "user-" + id; }
         public List<String> list() { return List.of("alice", "bob"); }
+        public String check(boolean active) { return "active=" + active; }
+        public String rate(double value) { return "rate=" + value; }
     }
 
     @Test
@@ -183,6 +185,24 @@ class McpRouterTest {
 
         Object result = mcp.invoke("inc", Map.of());
         assertThat(result).isEqualTo(1);
+    }
+
+    @Test
+    void tool_serviceMethod_missingBooleanParam_returnsFalse() throws Exception {
+        McpRouter mcp = new McpRouter();
+        mcp.tool("check", new UserService(), "check", "检查");
+
+        Object result = mcp.invoke("check", Map.of());
+        assertThat(result).isEqualTo("active=false");
+    }
+
+    @Test
+    void tool_serviceMethod_missingDoubleParam_returnsZero() throws Exception {
+        McpRouter mcp = new McpRouter();
+        mcp.tool("rate", new UserService(), "rate", "费率");
+
+        Object result = mcp.invoke("rate", Map.of());
+        assertThat(result).isEqualTo("rate=0.0");
     }
 
     @Test

@@ -26,14 +26,9 @@ public class AuraMcpStarter implements McpStarter {
     public void startStdio(Aura app) {
         try {
             PrintStream out = app.mcpStdout() != null ? app.mcpStdout() : System.out;
-            Object router = app.mcpRouter();
-            if (router instanceof McpRouter mcpRouter) {
+            if (app.mcpRouter() instanceof McpRouter mcpRouter) {
                 new McpRouterBridge(mcpRouter, out).run();
             } else {
-                if (router != null) {
-                    log.warn("mcpRouter is not an instance of McpRouter (got {}), falling back to HTTP bridge",
-                            router.getClass().getName());
-                }
                 new McpBridge("http://localhost:" + app.port(), out).run();
             }
         } catch (Exception e) {
@@ -58,13 +53,23 @@ public class AuraMcpStarter implements McpStarter {
             String line;
             while ((line = in.readLine()) != null) {
                 if (line.isBlank()) continue;
-                JSONObject request = JSON.parseObject(line);
-                JSONObject response = handle(request);
-                if (response != null) {
-                    out.println(response.toJSONString());
+                try {
+                    JSONObject request = JSON.parseObject(line);
+                    JSONObject response = handle(request);
+                    if (response != null) {
+                        out.println(response.toJSONString());
+                        out.flush();
+                    }
+                } catch (Exception e) {
+                    JSONObject err = new JSONObject();
+                    err.put("jsonrpc", "2.0");
+                    err.put("id", (Object) null);
+                    err.put("error", Map.of("code", -32700, "message", "Parse error: " + e.getMessage()));
+                    out.println(err.toJSONString());
                     out.flush();
                 }
             }
+            log.info("MCP stdio stream closed");
         }
 
         private JSONObject handle(JSONObject request) {

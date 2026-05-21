@@ -36,7 +36,7 @@ public class Aura {
     private int shutdownTimeout = 30;
     private int mcpPort = -1;
     private java.io.PrintStream mcpStdout;
-    private Object mcpRouter;
+    private McpRouterSpec mcpRouter;
     private AuraStarter starter;
     private McpStarter mcpStarter;
 
@@ -119,7 +119,7 @@ public class Aura {
         return this;
     }
 
-    public Aura mcp(Object mcpRouter) {
+    public Aura mcp(McpRouterSpec mcpRouter) {
         this.mcpRouter = mcpRouter;
         return this;
     }
@@ -298,7 +298,7 @@ public class Aura {
     public int shutdownTimeout() { return shutdownTimeout; }
     public int mcpPort() { return mcpPort; }
     public java.io.PrintStream mcpStdout() { return mcpStdout; }
-    public Object mcpRouter() { return mcpRouter; }
+    public McpRouterSpec mcpRouter() { return mcpRouter; }
 
     private void fireStart() {
         for (Consumer<Aura> hook : startHooks) {
