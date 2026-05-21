@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
 import java.util.List;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.*;
 
@@ -170,5 +171,63 @@ class QueryBuildTest {
 
         assertThat(buildSql(q))
                 .isEqualTo("SELECT * FROM products WHERE category = ? AND price > ? ORDER BY price DESC LIMIT 5");
+    }
+
+    // --- IN operator ---
+
+    @Test
+    void where_inList_expandsPlaceholders() throws Exception {
+        Query q = newQuery("users");
+        q.where("id", "IN", List.of(1, 2, 3));
+
+        assertThat(buildSql(q)).isEqualTo("SELECT * FROM users WHERE id IN (?,?,?)");
+    }
+
+    @Test
+    void where_notInList_expandsPlaceholders() throws Exception {
+        Query q = newQuery("users");
+        q.where("status", "NOT IN", List.of("banned", "deleted"));
+
+        assertThat(buildSql(q)).isEqualTo("SELECT * FROM users WHERE status NOT IN (?,?)");
+    }
+
+    @Test
+    void where_inSingleElement_works() throws Exception {
+        Query q = newQuery("users");
+        q.where("id", "IN", List.of(42));
+
+        assertThat(buildSql(q)).isEqualTo("SELECT * FROM users WHERE id IN (?)");
+    }
+
+    @Test
+    void where_inEmptyList_addsFalseCondition() throws Exception {
+        Query q = newQuery("users");
+        q.where("id", "IN", List.of());
+
+        assertThat(buildSql(q)).isEqualTo("SELECT * FROM users WHERE 1 = 0");
+    }
+
+    @Test
+    void where_inWithOtherConditions_combinesCorrectly() throws Exception {
+        Query q = newQuery("users");
+        q.where("status", "active")
+         .where("id", "IN", List.of(1, 2, 3));
+
+        assertThat(buildSql(q)).isEqualTo("SELECT * FROM users WHERE status = ? AND id IN (?,?,?)");
+    }
+
+    // --- Db.in() helper ---
+
+    @Test
+    void dbIn_generatesCorrectPlaceholders() {
+        assertThat(Db.in(List.of(1, 2, 3))).isEqualTo("?,?,?");
+        assertThat(Db.in(List.of("a"))).isEqualTo("?");
+        assertThat(Db.in(List.of(1, 2))).isEqualTo("?,?");
+    }
+
+    @Test
+    void dbIn_emptyList_throws() {
+        assertThatThrownBy(() -> Db.in(List.of()))
+                .isInstanceOf(IllegalArgumentException.class);
     }
 }

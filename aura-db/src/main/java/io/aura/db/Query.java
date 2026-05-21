@@ -1,6 +1,7 @@
 package io.aura.db;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.StringJoiner;
 
@@ -30,8 +31,21 @@ public class Query {
         if (value instanceof String s && s.isBlank()) return this;
         SqlSafe.qualifiedIdentifier(field);
         SqlSafe.operator(op);
-        conditions.add(field + " " + op + " ?");
-        params.add(value);
+        String upperOp = op.toUpperCase();
+        if ((upperOp.equals("IN") || upperOp.equals("NOT IN")) && value instanceof Collection<?> col) {
+            if (col.isEmpty()) {
+                // IN () is invalid SQL — add always-false condition
+                conditions.add("1 = 0");
+                return this;
+            }
+            String placeholders = "?,".repeat(col.size());
+            placeholders = placeholders.substring(0, placeholders.length() - 1);
+            conditions.add(field + " " + op + " (" + placeholders + ")");
+            params.addAll(col);
+        } else {
+            conditions.add(field + " " + op + " ?");
+            params.add(value);
+        }
         return this;
     }
 
