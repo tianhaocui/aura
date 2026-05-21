@@ -31,6 +31,9 @@ public final class BeanValidator {
         if (!errors.isEmpty()) {
             throw new Validate.ValidationException(String.join("; ", errors));
         }
+        if (obj instanceof Validatable v) {
+            v.validate();
+        }
     }
 
     private static String check(Annotation ann, String name, Object value) {

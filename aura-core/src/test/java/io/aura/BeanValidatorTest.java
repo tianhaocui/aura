@@ -99,4 +99,55 @@ class BeanValidatorTest {
                 .hasMessageContaining("name")
                 .hasMessageContaining("age");
     }
+
+    // --- Validatable ---
+
+    record DateRange(String start, String end) implements Validatable {
+        public void validate() {
+            if (start != null && end != null && end.compareTo(start) < 0)
+                throw new Validate.ValidationException("end must be after start");
+        }
+    }
+
+    record PasswordConfirm(@NotBlank String password, @NotBlank String confirm) implements Validatable {
+        public void validate() {
+            if (password != null && !password.equals(confirm))
+                throw new Validate.ValidationException("passwords do not match");
+        }
+    }
+
+    @Test
+    void validatable_crossField_passes() {
+        assertThatCode(() -> BeanValidator.validate(new DateRange("2024-01-01", "2024-12-31")))
+                .doesNotThrowAnyException();
+    }
+
+    @Test
+    void validatable_crossField_fails() {
+        assertThatThrownBy(() -> BeanValidator.validate(new DateRange("2024-12-31", "2024-01-01")))
+                .isInstanceOf(Validate.ValidationException.class)
+                .hasMessageContaining("end must be after start");
+    }
+
+    @Test
+    void validatable_annotationFailsFirst_validateNotCalled() {
+        // @NotBlank fails before validate() — passwords do not match error should NOT appear
+        assertThatThrownBy(() -> BeanValidator.validate(new PasswordConfirm("", "other")))
+                .isInstanceOf(Validate.ValidationException.class)
+                .hasMessageContaining("password")
+                .hasMessageNotContaining("do not match");
+    }
+
+    @Test
+    void validatable_annotationPasses_validateCalled() {
+        assertThatThrownBy(() -> BeanValidator.validate(new PasswordConfirm("abc", "xyz")))
+                .isInstanceOf(Validate.ValidationException.class)
+                .hasMessageContaining("do not match");
+    }
+
+    @Test
+    void validatable_null_skipped() {
+        assertThatCode(() -> BeanValidator.validate(null))
+                .doesNotThrowAnyException();
+    }
 }
