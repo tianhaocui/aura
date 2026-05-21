@@ -68,6 +68,15 @@ public class McpToolBuilder {
     }
 
     private static String extractLabel(Object enumConstant) {
+        // prefer label() method (interface or duck-typed)
+        try {
+            var method = enumConstant.getClass().getMethod("label");
+            return (String) method.invoke(enumConstant);
+        } catch (NoSuchMethodException ignored) {
+        } catch (Exception e) {
+            return null;
+        }
+        // fallback to label field
         try {
             var field = enumConstant.getClass().getDeclaredField("label");
             field.setAccessible(true);

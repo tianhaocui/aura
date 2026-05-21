@@ -1,9 +1,11 @@
 package io.aura.mcp;
 
+import io.aura.McpRouterSpec;
+
 import java.lang.reflect.Method;
 import java.util.*;
 
-public class McpRouter {
+public class McpRouter implements McpRouterSpec {
 
     private final List<McpTool> tools = new ArrayList<>();
 
@@ -118,7 +120,13 @@ public class McpRouter {
     }
 
     private static Object coerce(Object val, Class<?> target) {
-        if (val == null) return target.isPrimitive() ? 0 : null;
+        if (val == null) {
+            if (!target.isPrimitive()) return null;
+            if (target == boolean.class) return false;
+            if (target == double.class) return 0.0;
+            if (target == long.class) return 0L;
+            return 0;
+        }
         String s = val.toString();
         if (target == int.class || target == Integer.class) return Integer.parseInt(s);
         if (target == long.class || target == Long.class) return Long.parseLong(s);
