@@ -5,6 +5,7 @@ import com.zaxxer.hikari.HikariDataSource;
 
 import java.sql.*;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Supplier;
@@ -46,6 +47,15 @@ public class Db implements AutoCloseable {
 
     public String name() {
         return name;
+    }
+
+    /**
+     * Generates IN-clause placeholders for raw SQL.
+     * Usage: db.find("SELECT * FROM user WHERE id IN (" + Db.in(ids) + ")", ids.toArray())
+     */
+    public static String in(Collection<?> values) {
+        if (values.isEmpty()) throw new IllegalArgumentException("IN list must not be empty");
+        return "?,".repeat(values.size()).substring(0, values.size() * 2 - 1);
     }
 
     // --- query builder ---
