@@ -91,6 +91,23 @@ MCP 部署方式：
 - **stdio** — `java -jar app.jar --mcp-stdio`，用于 Claude Desktop / Cursor
 - **npm 发布** — `McpPackager` 生成可分发的 npm 包，`--publish` 直接发布到 registry
 
+### 选择性暴露（McpRouter）
+
+不是所有 API 都该做成 MCP 工具。McpRouter 让你精确控制：
+
+```java
+McpRouter mcp = new McpRouter();
+mcp.tool("get_user", userService, "get", "获取用户");
+mcp.tool("create_order", "创建订单")
+   .param("product", String.class, "商品名")
+   .param("status", OrderStatus.class, "订单状态")  // 枚举自动映射
+   .handler(ctx -> orderService.create(ctx.getString("product"), ctx.getEnum("status", OrderStatus.class)));
+
+Aura.create().mcp(mcp).start(args);
+```
+
+特性：枚举自动映射（label→code）、Map 映射、多 API 聚合。详见 [docs/aura-mcp.md](docs/aura-mcp.md)。
+
 ## 数据库
 
 ```java
