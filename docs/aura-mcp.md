@@ -13,6 +13,93 @@ Aura.create()
 // HTTP on :8080, MCP available via --mcp-stdio
 ```
 
+## McpRouter (Selective Tool Exposure)
+
+Not all APIs should be MCP tools. McpRouter lets you explicitly choose which operations to expose, with AI-friendly parameter mapping.
+
+```java
+McpRouter mcp = new McpRouter();
+
+// Expose a service method directly
+mcp.tool("get_user", userService, "get", "Get user by ID");
+mcp.tool("list_users", userService, "list", "List all users");
+
+// Custom handler with explicit parameters
+mcp.tool("create_order", "Create a new order")
+   .param("product", String.class, "Product name")
+   .param("quantity", int.class, "Quantity")
+   .handler(ctx -> orderService.create(ctx.getString("product"), ctx.getInt("quantity")));
+
+Aura.create()
+    .mcp(mcp)  // pass McpRouter instead of boolean
+    .start(args);
+```
+
+When McpRouter is provided, MCP runs in-process (no HTTP roundtrip). Only registered tools are exposed.
+
+### Enum Auto-Mapping
+
+Java enums with a `label` field are automatically converted to AI-friendly descriptions:
+
+```java
+enum OrderStatus {
+    NEW(1, "新建"), PAID(2, "已支付"), CANCEL(9, "已取消");
+    final int code;
+    final String label;
+    OrderStatus(int code, String label) { this.code = code; this.label = label; }
+}
+
+mcp.tool("query_orders", "Query orders by status")
+   .param("status", OrderStatus.class, "Order status")
+   .handler(ctx -> {
+       OrderStatus s = ctx.getEnum("status", OrderStatus.class);
+       return orderService.findByStatus(s.code);
+   });
+```
+
+Generated schema shows: `"enum": ["NEW(新建)", "PAID(已支付)", "CANCEL(已取消)"]`
+AI sends `"PAID"` → `ctx.getEnum()` resolves to `OrderStatus.PAID`.
+
+### Map Mapping (Label → Code)
+
+For non-enum parameters where AI should see friendly labels but code needs internal values:
+
+```java
+mcp.tool("query_city", "Query city info")
+   .param("city", String.class, "City name", Map.of("北京", "010", "上海", "021", "广州", "020"))
+   .handler(ctx -> cityService.findByCode(ctx.getString("city")));
+```
+
+AI sees: `"enum": ["北京", "上海", "广州"]`
+AI sends `"北京"` → `ctx.getString("city")` returns `"010"`.
+Unknown labels pass through unchanged.
+
+### Multi-API Aggregation
+
+One MCP tool can orchestrate multiple services:
+
+```java
+mcp.tool("full_order_detail", "Get order with user and payment info")
+   .param("orderId", int.class, "Order ID")
+   .handler(ctx -> {
+       int id = ctx.getInt("orderId");
+       var order = orderService.get(id);
+       var user = userService.get(order.userId());
+       var payment = paymentService.getByOrder(id);
+       return Map.of("order", order, "user", user, "payment", payment);
+   });
+```
+
+### McpContext API
+
+| Method | Description |
+|--------|-------------|
+| `getString(name)` | Get param as String (with mapping applied) |
+| `getInt(name)` | Get param as int (0 if absent) |
+| `getLong(name)` | Get param as long (0 if absent) |
+| `getEnum(name, type)` | Get param as enum constant |
+| `get(name)` | Get raw value (with mapping applied) |
+
 ---
 
 ## Deployment Modes
@@ -123,6 +210,23 @@ mcp-output/
 ```bash
 java -cp aura-mcp.jar io.aura.mcp.McpPackager http://app:8080 @name/pkg ./out
 ```
+
+### URL Configuration (npm bridge)
+
+The generated npm bridge resolves the API URL at runtime:
+
+1. **Environment variable**: `AURA_API_URL=http://prod-server:8080`
+2. **Config file**: `aura.properties` in CWD or `$HOME` with `api.url=http://...`
+3. **Baked default**: URL passed to `McpPackager.generate()`
+
+Priority: env var > config file > baked default.
+
+```properties
+# aura.properties
+api.url=http://localhost:8080
+```
+
+The bridge validates the URL starts with `http://` or `https://` and exits with an error otherwise.
 
 ---
 

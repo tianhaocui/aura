@@ -102,6 +102,17 @@ class McpRouterTest {
     }
 
     @Test
+    void tool_mapMapping_getInt_resolvesBeforeParsing() throws Exception {
+        McpRouter mcp = new McpRouter();
+        mcp.tool("query_zone", "查询区号")
+           .param("zone", int.class, "区号", Map.of("北京", 10, "上海", 21))
+           .handler(ctx -> ctx.getInt("zone"));
+
+        Object result = mcp.invoke("query_zone", Map.of("zone", "北京"));
+        assertThat(result).isEqualTo(10);
+    }
+
+    @Test
     void invoke_unknownTool_throws() {
         McpRouter mcp = new McpRouter();
         assertThatThrownBy(() -> mcp.invoke("nope", Map.of()))
@@ -247,5 +258,27 @@ class McpRouterTest {
         McpParam param = mcp.tools().get(0).params().get(0);
         assertThat(param.isEnum()).isTrue();
         assertThat(param.enumValues().get(0).label()).isEqualTo("A");
+    }
+
+    @Test
+    void tool_mapMapping_getLong_resolvesBeforeParsing() throws Exception {
+        McpRouter mcp = new McpRouter();
+        mcp.tool("query_pop", "查询人口")
+           .param("pop", long.class, "人口", Map.of("北京", 21000000L, "上海", 24000000L))
+           .handler(ctx -> ctx.getLong("pop"));
+
+        Object result = mcp.invoke("query_pop", Map.of("pop", "北京"));
+        assertThat(result).isEqualTo(21000000L);
+    }
+
+    @Test
+    void tool_missingLongParam_returnsZero() throws Exception {
+        McpRouter mcp = new McpRouter();
+        mcp.tool("ts", "时间戳")
+           .param("t", long.class, "时间")
+           .handler(ctx -> ctx.getLong("t"));
+
+        Object result = mcp.invoke("ts", Map.of());
+        assertThat(result).isEqualTo(0L);
     }
 }

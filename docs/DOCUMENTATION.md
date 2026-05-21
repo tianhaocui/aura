@@ -443,7 +443,7 @@ public record CreateReq(String name, int age) {
 
 Every Aura app can be consumed by AI agents via MCP (Model Context Protocol).
 
-### Enable
+### Enable (All Routes)
 
 ```java
 Aura.create()
@@ -452,6 +452,81 @@ Aura.create()
     .service(new UserService())
     .start(args);
 ```
+
+### Selective Exposure (McpRouter)
+
+Not all APIs should be MCP tools. Use McpRouter to explicitly choose:
+
+```java
+McpRouter mcp = new McpRouter();
+
+// Bind service methods
+mcp.tool("get_user", userService, "get", "Get user by ID");
+mcp.tool("list_users", userService, "list", "List all users");
+
+// Custom handler with typed params
+mcp.tool("create_order", "Create a new order")
+   .param("product", String.class, "Product name")
+   .param("quantity", int.class, "Quantity")
+   .handler(ctx -> orderService.create(ctx.getString("product"), ctx.getInt("quantity")));
+
+Aura.create().mcp(mcp).start(args);
+```
+
+When McpRouter is provided, MCP runs in-process (no HTTP roundtrip to self).
+
+### Enum Auto-Mapping
+
+Enums with a `label` field get AI-friendly descriptions automatically:
+
+```java
+enum OrderStatus {
+    NEW(1, "新建"), PAID(2, "已支付"), CANCEL(9, "已取消");
+    final int code; final String label;
+    OrderStatus(int code, String label) { this.code = code; this.label = label; }
+}
+
+mcp.tool("query_orders", "Query orders by status")
+   .param("status", OrderStatus.class, "Order status")
+   .handler(ctx -> orderService.findByStatus(ctx.getEnum("status", OrderStatus.class).code));
+```
+
+Schema output: `"enum": ["NEW(新建)", "PAID(已支付)", "CANCEL(已取消)"]`
+
+### Map Mapping
+
+For label→code conversion without enums:
+
+```java
+mcp.tool("query_city", "Query city info")
+   .param("city", String.class, "City", Map.of("北京", "010", "上海", "021"))
+   .handler(ctx -> cityService.findByCode(ctx.getString("city")));
+// AI sees ["北京", "上海"], ctx.getString("city") returns "010" when AI sends "北京"
+```
+
+### Multi-API Aggregation
+
+One MCP tool can call multiple services:
+
+```java
+mcp.tool("order_detail", "Full order with user and payment")
+   .param("orderId", int.class, "Order ID")
+   .handler(ctx -> {
+       var order = orderService.get(ctx.getInt("orderId"));
+       var user = userService.get(order.userId());
+       return Map.of("order", order, "user", user);
+   });
+```
+
+### McpContext
+
+| Method | Returns | Absent |
+|--------|---------|--------|
+| `getString(name)` | String (mapping applied) | null |
+| `getInt(name)` | int | 0 |
+| `getLong(name)` | long | 0 |
+| `getEnum(name, T.class)` | enum constant | null |
+| `get(name)` | Object (mapping applied) | null |
 
 ### Deployment Modes
 

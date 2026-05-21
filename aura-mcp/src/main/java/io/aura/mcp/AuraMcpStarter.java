@@ -10,7 +10,12 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 public class AuraMcpStarter implements McpStarter {
+
+    private static final Logger log = LoggerFactory.getLogger(AuraMcpStarter.class);
 
     @Override
     public void start(Aura app) {
@@ -25,6 +30,10 @@ public class AuraMcpStarter implements McpStarter {
             if (router instanceof McpRouter mcpRouter) {
                 new McpRouterBridge(mcpRouter, out).run();
             } else {
+                if (router != null) {
+                    log.warn("mcpRouter is not an instance of McpRouter (got {}), falling back to HTTP bridge",
+                            router.getClass().getName());
+                }
                 new McpBridge("http://localhost:" + app.port(), out).run();
             }
         } catch (Exception e) {
@@ -61,6 +70,8 @@ public class AuraMcpStarter implements McpStarter {
         private JSONObject handle(JSONObject request) {
             String method = request.getString("method");
             Object id = request.get("id");
+
+            if (method == null) return null;
 
             Object result = switch (method) {
                 case "initialize" -> Map.of(

@@ -108,6 +108,23 @@ MCP deployment modes:
 - **stdio** — `java -jar app.jar --mcp-stdio`, for Claude Desktop / Cursor
 - **npm publish** — `McpPackager` generates distributable npm package, `--publish` to registry
 
+### Selective MCP (McpRouter)
+
+Not all APIs should be AI tools. McpRouter gives you control:
+
+```java
+McpRouter mcp = new McpRouter();
+mcp.tool("get_user", userService, "get", "Get user by ID");
+mcp.tool("create_order", "Create order")
+   .param("product", String.class, "Product name")
+   .param("status", OrderStatus.class, "Order status")  // enum auto-mapped
+   .handler(ctx -> orderService.create(ctx.getString("product"), ctx.getEnum("status", OrderStatus.class)));
+
+Aura.create().mcp(mcp).start(args);
+```
+
+Features: enum auto-mapping (label→code), Map mapping, multi-API aggregation. See [docs/aura-mcp.md](docs/aura-mcp.md).
+
 ## Database
 
 ```java
