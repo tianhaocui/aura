@@ -53,6 +53,14 @@ public class Query {
         return where(field, "=", value);
     }
 
+    public Query whereIf(boolean condition, String field, Object value) {
+        return condition ? where(field, value) : this;
+    }
+
+    public Query whereIf(boolean condition, String field, String op, Object value) {
+        return condition ? where(field, op, value) : this;
+    }
+
     public Query orderBy(String... fields) {
         StringJoiner sj = new StringJoiner(", ");
         for (String f : fields) {
