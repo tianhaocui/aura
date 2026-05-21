@@ -83,6 +83,31 @@ class AuraBuilderTest {
         assertThat(app.get(java.util.List.class)).isSameAs(list);
     }
 
+    // --- named registry ---
+
+    @Test
+    void registerNamed_andGetByName() {
+        Aura app = Aura.create();
+        StringBuilder main = new StringBuilder("main");
+        StringBuilder log = new StringBuilder("log");
+        app.register("main", main).register("log", log);
+        assertThat(app.get("main", StringBuilder.class)).isSameAs(main);
+        assertThat(app.get("log", StringBuilder.class)).isSameAs(log);
+    }
+
+    @Test
+    void getNamed_returnsNullForUnregisteredName() {
+        Aura app = Aura.create();
+        assertThat(app.get("nope", StringBuilder.class)).isNull();
+    }
+
+    @Test
+    void getNamed_returnsNullForTypeMismatch() {
+        Aura app = Aura.create();
+        app.register("x", "hello");
+        assertThat(app.get("x", Integer.class)).isNull();
+    }
+
     // --- cors ---
 
     @Test

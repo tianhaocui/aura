@@ -12,18 +12,40 @@ import java.util.function.Supplier;
 public class Db implements AutoCloseable {
 
     private final HikariDataSource ds;
+    private final String name;
     private static final ThreadLocal<Connection> TX_CONN = new ThreadLocal<>();
 
-    private Db(HikariDataSource ds) {
+    private Db(String name, HikariDataSource ds) {
+        this.name = name;
         this.ds = ds;
     }
 
     public static Db create(String url, String user, String password) {
+        return create("default", url, user, password);
+    }
+
+    public static Db create(String name, String url, String user, String password) {
         HikariConfig config = new HikariConfig();
         config.setJdbcUrl(url);
         config.setUsername(user);
         config.setPassword(password);
-        return new Db(new HikariDataSource(config));
+        config.setPoolName("aura-" + name);
+        return new Db(name, new HikariDataSource(config));
+    }
+
+    public static Db create(javax.sql.DataSource dataSource) {
+        return create("default", dataSource);
+    }
+
+    public static Db create(String name, javax.sql.DataSource dataSource) {
+        HikariConfig config = new HikariConfig();
+        config.setDataSource(dataSource);
+        config.setPoolName("aura-" + name);
+        return new Db(name, new HikariDataSource(config));
+    }
+
+    public String name() {
+        return name;
     }
 
     // --- query builder ---

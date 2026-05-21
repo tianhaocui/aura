@@ -184,6 +184,28 @@ public record CreateUser(
 
 Annotations: `@NotNull`, `@NotBlank`, `@Min`, `@Max`, `@Size`, `@Pattern`
 
+For cross-field validation, implement `Validatable` — called automatically after annotation checks pass:
+
+```java
+record DateRange(
+    @NotNull LocalDate start,
+    @NotNull LocalDate end
+) implements Validatable {
+    public void validate() {
+        Validate.isTrue(!end.isBefore(start), "end must be after start");
+    }
+}
+
+record PasswordConfirm(
+    @NotBlank String password,
+    @NotBlank String confirm
+) implements Validatable {
+    public void validate() {
+        Validate.isTrue(password.equals(confirm), "passwords do not match");
+    }
+}
+```
+
 ## Plugins
 
 ```java
@@ -309,3 +331,36 @@ URL config (npm bridge): env `AURA_API_URL` > `aura.properties` (`api.url=...`) 
 - One `Aura.create()...start()` is a complete app
 - `aura.properties` in classpath is auto-loaded if present
 - Row type roundtrip: insert with `LocalDateTime` → `findById` returns `LocalDateTime` → `update` writes back without conversion
+
+## Packaging (Fat Jar)
+
+```xml
+<!-- In your pom.xml, set main class -->
+<properties>
+    <main.class>com.example.App</main.class>
+</properties>
+```
+
+```bash
+mvn package -Pfat-jar
+java -jar target/your-app-1.0.jar
+java -jar target/your-app-1.0.jar --mcp-stdio
+```
+
+Produces a single executable jar with all dependencies. The `fat-jar` profile is inherited from `aura-parent`.
+
+## Multi-DataSource
+
+```java
+Db main = Db.create("main", "jdbc:mysql://host/main", user, pass);
+Db log  = Db.create("log", "jdbc:mysql://host/log", user, pass);
+
+app.register("main", main).register("log", log);
+
+// Retrieve by name
+Db logDb = app.get("log", Db.class);
+
+// Or just pass directly to services — no registry needed
+new OrderService(main);
+new AuditService(log);
+```

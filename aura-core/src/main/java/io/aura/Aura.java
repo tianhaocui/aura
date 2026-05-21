@@ -22,6 +22,7 @@ public class Aura {
     private int workers = 200;
     private final Map<String, String> props = new ConcurrentHashMap<>();
     private final Map<Class<?>, Object> registry = new ConcurrentHashMap<>();
+    private final Map<String, Object> namedRegistry = new ConcurrentHashMap<>();
     private final List<Consumer<Aura>> startHooks = new ArrayList<>();
     private final List<Consumer<Aura>> stopHooks = new ArrayList<>();
     private Consumer<?> routeConfig;
@@ -201,12 +202,26 @@ public class Aura {
         return this;
     }
 
+    public <T> Aura register(String name, T instance) {
+        namedRegistry.put(name, instance);
+        return this;
+    }
+
     @SuppressWarnings("unchecked")
     public <T> T get(Class<T> type) {
         for (Map.Entry<Class<?>, Object> entry : registry.entrySet()) {
             if (type.isAssignableFrom(entry.getKey())) {
                 return (T) entry.getValue();
             }
+        }
+        return null;
+    }
+
+    @SuppressWarnings("unchecked")
+    public <T> T get(String name, Class<T> type) {
+        Object obj = namedRegistry.get(name);
+        if (obj != null && type.isAssignableFrom(obj.getClass())) {
+            return (T) obj;
         }
         return null;
     }
