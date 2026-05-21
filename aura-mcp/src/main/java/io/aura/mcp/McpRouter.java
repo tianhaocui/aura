@@ -6,7 +6,6 @@ import java.util.*;
 public class McpRouter {
 
     private final List<McpTool> tools = new ArrayList<>();
-    private final Map<String, Map<String, Object>> toolMappings = new LinkedHashMap<>();
 
     public McpToolBuilder tool(String name, String description) {
         return new McpToolBuilder(this, name, description);
@@ -26,11 +25,6 @@ public class McpRouter {
 
     void register(McpTool tool) {
         tools.add(tool);
-    }
-
-    void registerMappings(String toolName, Map<String, Map<String, Object>> mappings) {
-        toolMappings.put(toolName, new LinkedHashMap<>());
-        mappings.forEach((paramName, map) -> toolMappings.get(toolName).putAll(map));
     }
 
     public Map<String, Object> buildSchema() {

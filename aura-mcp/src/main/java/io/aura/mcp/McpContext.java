@@ -24,13 +24,13 @@ public class McpContext {
     }
 
     public int getInt(String name) {
-        Object val = args.get(name);
+        Object val = get(name);
         if (val instanceof Number n) return n.intValue();
         return val == null ? 0 : Integer.parseInt(val.toString());
     }
 
     public long getLong(String name) {
-        Object val = args.get(name);
+        Object val = get(name);
         if (val instanceof Number n) return n.longValue();
         return val == null ? 0L : Long.parseLong(val.toString());
     }

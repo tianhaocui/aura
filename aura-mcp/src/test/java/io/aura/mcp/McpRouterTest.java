@@ -102,6 +102,17 @@ class McpRouterTest {
     }
 
     @Test
+    void tool_mapMapping_getInt_resolvesBeforeParsing() throws Exception {
+        McpRouter mcp = new McpRouter();
+        mcp.tool("query_zone", "查询区号")
+           .param("zone", int.class, "区号", Map.of("北京", 10, "上海", 21))
+           .handler(ctx -> ctx.getInt("zone"));
+
+        Object result = mcp.invoke("query_zone", Map.of("zone", "北京"));
+        assertThat(result).isEqualTo(10);
+    }
+
+    @Test
     void invoke_unknownTool_throws() {
         McpRouter mcp = new McpRouter();
         assertThatThrownBy(() -> mcp.invoke("nope", Map.of()))

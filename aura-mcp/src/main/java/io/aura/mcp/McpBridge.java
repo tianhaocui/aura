@@ -44,6 +44,8 @@ public class McpBridge {
         String method = request.getString("method");
         Object id = request.get("id");
 
+        if (method == null) return null;
+
         Object result = switch (method) {
             case "initialize" -> handleInitialize();
             case "notifications/initialized" -> null;
