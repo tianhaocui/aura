@@ -11,6 +11,10 @@ import java.nio.file.*;
 public class McpPackager {
 
     public static void generate(String appUrl, String npmName, String outputDir) throws Exception {
+        generate(appUrl, npmName, outputDir, null);
+    }
+
+    public static void generate(String appUrl, String npmName, String outputDir, McpRouter router) throws Exception {
         Path out = Path.of(outputDir);
         Files.createDirectories(out);
 
@@ -18,12 +22,14 @@ public class McpPackager {
         String version = "0.1.0";
 
         String appName = binName;
-        try {
-            String schema = new String(new URL(appUrl + "/__schema__").openStream().readAllBytes());
-            JSONObject obj = JSON.parseObject(schema);
-            if (obj.getString("name") != null) appName = obj.getString("name");
-        } catch (Exception e) {
-            System.err.println("Warning: could not fetch schema from " + appUrl + ": " + e.getMessage());
+        if (router == null) {
+            try {
+                String schema = new String(new URL(appUrl + "/__schema__").openStream().readAllBytes());
+                JSONObject obj = JSON.parseObject(schema);
+                if (obj.getString("name") != null) appName = obj.getString("name");
+            } catch (Exception e) {
+                System.err.println("Warning: could not fetch schema from " + appUrl + ": " + e.getMessage());
+            }
         }
 
         // package.json
@@ -43,12 +49,18 @@ public class McpPackager {
                 """.formatted(npmName, version, appName, binName);
         Files.writeString(out.resolve("package.json"), packageJson);
 
-        // read the Node.js bridge template and bake in the URL
-        String template = new String(
-                McpPackager.class.getResourceAsStream("/mcp-bridge-template.js").readAllBytes(),
-                StandardCharsets.UTF_8);
-        String indexJs = template.replace("__API_URL_PLACEHOLDER__", appUrl);
-        Files.writeString(out.resolve("index.js"), indexJs);
+        if (router != null) {
+            String schemaJson = JSON.toJSONString(router.buildSchema());
+            String template = loadTemplate();
+            String indexJs = template
+                    .replace("__API_URL_PLACEHOLDER__", appUrl)
+                    .replace("__SCHEMA_PLACEHOLDER__", schemaJson);
+            Files.writeString(out.resolve("index.js"), indexJs);
+        } else {
+            String template = loadTemplate();
+            String indexJs = template.replace("__API_URL_PLACEHOLDER__", appUrl);
+            Files.writeString(out.resolve("index.js"), indexJs);
+        }
 
         System.out.println("MCP npm package generated at: " + out.toAbsolutePath());
         System.out.println("To publish:");
@@ -57,6 +69,13 @@ public class McpPackager {
         System.out.println();
         System.out.println("Users configure:");
         System.out.println("  { \"command\": \"npx\", \"args\": [\"" + npmName + "\"] }");
+    }
+
+    private static String loadTemplate() throws IOException {
+        try (InputStream is = McpPackager.class.getResourceAsStream("/mcp-bridge-template.js")) {
+            if (is == null) throw new IOException("mcp-bridge-template.js not found in classpath");
+            return new String(is.readAllBytes(), StandardCharsets.UTF_8);
+        }
     }
 
     public static void main(String[] args) throws Exception {

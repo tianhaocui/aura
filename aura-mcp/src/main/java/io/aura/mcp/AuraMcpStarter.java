@@ -1,7 +1,14 @@
 package io.aura.mcp;
 
+import com.alibaba.fastjson2.JSON;
+import com.alibaba.fastjson2.JSONObject;
 import io.aura.Aura;
 import io.aura.McpStarter;
+
+import java.io.*;
+import java.nio.charset.StandardCharsets;
+import java.util.List;
+import java.util.Map;
 
 public class AuraMcpStarter implements McpStarter {
 
@@ -13,8 +20,13 @@ public class AuraMcpStarter implements McpStarter {
     @Override
     public void startStdio(Aura app) {
         try {
-            java.io.PrintStream out = app.mcpStdout() != null ? app.mcpStdout() : System.out;
-            new McpBridge("http://localhost:" + app.port(), out).run();
+            PrintStream out = app.mcpStdout() != null ? app.mcpStdout() : System.out;
+            Object router = app.mcpRouter();
+            if (router instanceof McpRouter mcpRouter) {
+                new McpRouterBridge(mcpRouter, out).run();
+            } else {
+                new McpBridge("http://localhost:" + app.port(), out).run();
+            }
         } catch (Exception e) {
             throw new RuntimeException("MCP stdio failed", e);
         }
@@ -22,4 +34,66 @@ public class AuraMcpStarter implements McpStarter {
 
     @Override
     public void stop() {}
+
+    private static class McpRouterBridge {
+        private final McpRouter router;
+        private final PrintStream out;
+
+        McpRouterBridge(McpRouter router, PrintStream out) {
+            this.router = router;
+            this.out = out;
+        }
+
+        void run() throws Exception {
+            BufferedReader in = new BufferedReader(new InputStreamReader(System.in, StandardCharsets.UTF_8));
+            String line;
+            while ((line = in.readLine()) != null) {
+                if (line.isBlank()) continue;
+                JSONObject request = JSON.parseObject(line);
+                JSONObject response = handle(request);
+                if (response != null) {
+                    out.println(response.toJSONString());
+                    out.flush();
+                }
+            }
+        }
+
+        private JSONObject handle(JSONObject request) {
+            String method = request.getString("method");
+            Object id = request.get("id");
+
+            Object result = switch (method) {
+                case "initialize" -> Map.of(
+                    "protocolVersion", "2024-11-05",
+                    "capabilities", Map.of("tools", Map.of()),
+                    "serverInfo", Map.of("name", "aura-mcp", "version", "0.1.0")
+                );
+                case "notifications/initialized" -> null;
+                case "tools/list" -> router.buildSchema();
+                case "tools/call" -> handleCall(request.getJSONObject("params"));
+                default -> null;
+            };
+
+            if (id == null || result == null) return null;
+            JSONObject resp = new JSONObject();
+            resp.put("jsonrpc", "2.0");
+            resp.put("id", id);
+            resp.put("result", result);
+            return resp;
+        }
+
+        private Map<String, Object> handleCall(JSONObject params) {
+            String toolName = params.getString("name");
+            JSONObject args = params.getJSONObject("arguments");
+            Map<String, Object> argsMap = args != null ? args.toJavaObject(Map.class) : Map.of();
+            try {
+                Object result = router.invoke(toolName, argsMap);
+                String text = result instanceof String s ? s : JSON.toJSONString(result);
+                return Map.of("content", List.of(Map.of("type", "text", "text", text)));
+            } catch (Exception e) {
+                return Map.of("isError", true,
+                    "content", List.of(Map.of("type", "text", "text", "Error: " + e.getMessage())));
+            }
+        }
+    }
 }
