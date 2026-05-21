@@ -22,7 +22,7 @@ AI 原生 Java 后端框架。**AI 开发 → AI 测试 → AI 使用。**
 <dependency>
     <groupId>io.github.tianhaocui</groupId>
     <artifactId>aura-web</artifactId>
-    <version>0.1.1</version>
+    <version>0.2.1</version>
 </dependency>
 <!-- 需要添加 SLF4J 实现，如 logback-classic -->
 ```
