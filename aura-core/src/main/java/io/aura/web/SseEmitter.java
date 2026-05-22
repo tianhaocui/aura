@@ -17,15 +17,11 @@ import java.io.Closeable;
  */
 public interface SseEmitter extends Closeable {
 
-    /** Send a plain data event. */
     void send(String data) throws Exception;
 
-    /** Send a named event with data. */
     void send(String event, String data) throws Exception;
 
-    /** Send a named event with data and id. */
     void send(String event, String data, String id) throws Exception;
 
-    /** Close the SSE stream. */
     void close();
 }

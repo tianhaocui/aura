@@ -22,7 +22,7 @@ public class AuraDemo {
             .port(8080)
             .env("dev")
             .workers(200)
-            .prop("app.name", "Aura Demo")
+            .set("app.name", "Aura Demo")
             .staticFiles("/public")
             .onStart(a -> System.out.println("App: " + a.prop("app.name")))
             .onStop(a -> System.out.println("Shutting down..."))

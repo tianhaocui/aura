@@ -28,7 +28,7 @@ public class SchemaTest {
 
         Aura app = Aura.create()
             .port(9091)
-            .prop("app.name", "Schema Test App")
+            .set("app.name", "Schema Test App")
             .routes(r -> {
                 Router router = (Router) r;
                 r.get("/health", ctx -> ctx.text("ok"))

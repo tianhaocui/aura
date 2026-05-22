@@ -71,7 +71,7 @@ class DbIntegrationTest {
         Row.of("users").set("name", "Alice").set("active", true).insert(db);
         Row.of("users").set("name", "Bob").set("active", true).insert(db);
 
-        List<Row> rows = db.findBy("users", "active = ?", true);
+        List<Row> rows = db.findWhere("users", "active = ?", true);
         assertThat(rows).hasSize(2);
         for (Row row : rows) {
             assertThat(row.table()).isEqualTo("users");
@@ -201,10 +201,10 @@ class DbIntegrationTest {
     }
 
     @Test
-    void transactionNew_independentFromOuter() {
+    void transactionIndependent_independentFromOuter() {
         assertThatThrownBy(() -> db.transaction(() -> {
             Row.of("users").set("name", "OuterNew").set("active", true).insert(db);
-            db.transactionNew(() -> {
+            db.transactionIndependent(() -> {
                 Row.of("users").set("name", "InnerNew").set("active", true).insert(db);
             });
             throw new RuntimeException("rollback outer");

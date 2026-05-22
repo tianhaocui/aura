@@ -58,7 +58,6 @@ public class Aura {
         return app;
     }
 
-    // --- builder ---
 
     public Aura port(int port) {
         this.port = port;
@@ -75,7 +74,7 @@ public class Aura {
         return this;
     }
 
-    public Aura prop(String key, String value) {
+    public Aura set(String key, String value) {
         props.put(key, value);
         return this;
     }
@@ -181,7 +180,6 @@ public class Aura {
         return this;
     }
 
-    // --- props ---
 
     public String prop(String key) {
         String envVal = System.getenv(key.replace('.', '_').toUpperCase());
@@ -195,7 +193,6 @@ public class Aura {
         return Integer.parseInt(val);
     }
 
-    // --- registry ---
 
     public <T> Aura register(T instance) {
         registry.put(instance.getClass(), instance);
@@ -226,7 +223,6 @@ public class Aura {
         return null;
     }
 
-    // --- lifecycle ---
 
     public void start(String[] args) {
         boolean mcpStdio = false;
@@ -297,7 +293,6 @@ public class Aura {
         fireStop();
     }
 
-    // --- accessors for starter ---
 
     public int port() { return port; }
     public String env() { return env; }

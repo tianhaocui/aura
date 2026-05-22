@@ -22,8 +22,8 @@ class AuraPluginTest {
     @Test
     void plugin_fluent_api() {
         Aura app = Aura.create()
-                .plugin(a -> a.prop("test.key", "value1"))
-                .plugin(a -> a.prop("test.key2", "value2"));
+                .plugin(a -> a.set("test.key", "value1"))
+                .plugin(a -> a.set("test.key2", "value2"));
         // plugins not yet installed (need start()), but builder works
         assertThat(app).isNotNull();
     }

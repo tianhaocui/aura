@@ -34,7 +34,7 @@ class AuraBuilderTest {
 
     @Test
     void prop_setsAndReads() {
-        Aura app = Aura.create().prop("db.url", "jdbc:h2:mem:test");
+        Aura app = Aura.create().set("db.url", "jdbc:h2:mem:test");
         assertThat(app.prop("db.url")).isEqualTo("jdbc:h2:mem:test");
     }
 
@@ -54,7 +54,7 @@ class AuraBuilderTest {
 
     @Test
     void propWithDefault_returnsParsedValueWhenSet() {
-        Aura app = Aura.create().prop("pool.size", "10");
+        Aura app = Aura.create().set("pool.size", "10");
         assertThat(app.prop("pool.size", 5)).isEqualTo(10);
     }
 

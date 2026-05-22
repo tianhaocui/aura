@@ -76,7 +76,6 @@ public class Row extends LinkedHashMap<String, Object> {
     public String table() { return table; }
     public String primaryKey() { return primaryKey; }
 
-    // --- CRUD shortcuts (require Db instance) ---
 
     public Row insert(Db db) {
         if (table == null) throw new IllegalStateException("Table name not set");
@@ -86,7 +85,7 @@ public class Row extends LinkedHashMap<String, Object> {
         String colStr = String.join(", ", cols);
         String placeholders = String.join(", ", cols.stream().map(c -> "?").toList());
         String sql = "INSERT INTO " + table + " (" + colStr + ") VALUES (" + placeholders + ")";
-        Object generatedKey = db.executeAndReturnKey(sql, vals);
+        Object generatedKey = db.insertAndReturnId(sql, vals);
         if (generatedKey != null) {
             put(primaryKey, generatedKey);
         }

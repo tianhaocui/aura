@@ -113,7 +113,7 @@ public class Db implements AutoCloseable {
         return queryOne("SELECT * FROM " + table + " WHERE " + primaryKey + " = ?", new Object[]{id}, rs -> rsToRow(rs, table, primaryKey));
     }
 
-    public List<Row> findBy(String table, String where, Object... params) {
+    public List<Row> findWhere(String table, String where, Object... params) {
         SqlSafe.identifier(table);
         return query("SELECT * FROM " + table + " WHERE " + where, params, rs -> rsToRow(rs, table));
     }
@@ -125,12 +125,12 @@ public class Db implements AutoCloseable {
 
     // --- dynamic SQL ---
 
-    public List<Row> find(String template, Map<?, ?> data) {
+    public List<Row> findDynamic(String template, Map<?, ?> data) {
         SqlKit.Parsed p = SqlKit.parse(template, data);
         return find(p.sql(), p.params());
     }
 
-    public Page<Row> paginate(String template, Map<?, ?> data, int pageNum, int pageSize) {
+    public Page<Row> paginateDynamic(String template, Map<?, ?> data, int pageNum, int pageSize) {
         SqlKit.Parsed p = SqlKit.parse(template, data);
         return paginate(p.sql(), p.params(), pageNum, pageSize);
     }
@@ -177,7 +177,7 @@ public class Db implements AutoCloseable {
         }
     }
 
-    public Object executeAndReturnKey(String sql, Object... params) {
+    public Object insertAndReturnId(String sql, Object... params) {
         boolean inTx = TX_CONN.get() != null;
         Connection conn = null;
         try {
@@ -248,11 +248,11 @@ public class Db implements AutoCloseable {
      * <p>Typical use case: audit logs or operation records that must commit
      * independently and not be rolled back if the outer transaction fails.
      */
-    public void transactionNew(Runnable block) {
-        transactionNew(() -> { block.run(); return null; });
+    public void transactionIndependent(Runnable block) {
+        transactionIndependent(() -> { block.run(); return null; });
     }
 
-    public <T> T transactionNew(Supplier<T> block) {
+    public <T> T transactionIndependent(Supplier<T> block) {
         var future = new java.util.concurrent.CompletableFuture<T>();
         new Thread(() -> {
             try {
@@ -272,7 +272,7 @@ public class Db implements AutoCloseable {
     /** Manual transaction control. Caller is responsible for commit/rollback/close. */
     public Transaction beginTransaction() {
         if (TX_CONN.get() != null) {
-            throw new IllegalStateException("Already in a transaction; use transaction() to reuse or transactionNew() for independent transaction");
+            throw new IllegalStateException("Already in a transaction; use transaction() to reuse or transactionIndependent() for independent transaction");
         }
         try {
             Connection conn = ds.getConnection();

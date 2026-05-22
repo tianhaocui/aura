@@ -56,7 +56,7 @@ public class ServiceTest {
     public static void main(String[] args) throws Exception {
         Aura app = Aura.create()
             .port(9092)
-            .prop("app.name", "Service Test")
+            .set("app.name", "Service Test")
             .service(new UserService())
             .routes((BaseRouter r) -> {
                 r.get("/health", ctx -> ctx.text("ok"));

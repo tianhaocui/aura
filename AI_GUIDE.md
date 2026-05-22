@@ -88,8 +88,8 @@ Db db = Db.create(url, user, pass);
 // Dynamic SQL with directives (recommended for complex queries)
 // Null/blank params are auto-skipped — no if/else needed
 String sql = "SELECT * FROM user #where(name, '=', name) #and(age, '>', age) #orderBy(created)";
-db.find(sql, filterMap);                        // List<Row>
-db.paginate(sql, filterMap, pageNum, pageSize); // Page<Row>
+db.findDynamic(sql, filterMap);                        // List<Row>
+db.paginateDynamic(sql, filterMap, pageNum, pageSize); // Page<Row>
 
 // Directives: #where(field, op, paramKey) #and(...) #or(...) #orderBy(field1, field2)
 // filterMap = Map.of("name", "tom", "age", 18) → WHERE name = ? AND age > ?
@@ -100,8 +100,8 @@ db.table("user").where("age", ">", 18).find();
 db.table("user").where("id", 1).findOne();
 
 // Shortcuts
-db.findById("user", id);   // returns Row with table set — can call .update()/.delete()
-db.findBy("user", "active = ?", true);
+db.findById("user", id);              // returns Row with table set — can call .update()/.delete()
+db.findWhere("user", "active = ?", true); // table-level conditional query
 db.deleteById("user", id);
 
 // Row CRUD — insert() returns self with generated primary key populated
@@ -122,6 +122,57 @@ found.exclude("created_at", "updated_at").set("name", "updated").update(db);
 
 // Transaction
 db.transaction(() -> { db.execute(sql, args); });
+
+// Nested transaction — inner reuses outer connection, outer rollback rolls both back
+db.transaction(() -> {
+    db.execute(sql1, args1);
+    db.transaction(() -> db.execute(sql2, args2)); // reuses outer
+});
+
+// Independent transaction (REQUIRES_NEW) — runs in new thread, commits independently
+// WARNING: ThreadLocal state (request context, user info) is NOT inherited by the new thread
+db.transactionIndependent(() -> db.execute(auditSql, args)); // commits even if outer rolls back
+
+// Manual transaction control
+try (var tx = db.beginTransaction()) {
+    db.execute(sql1, args1);
+    db.execute(sql2, args2);
+    tx.commit();   // explicit commit
+    // tx.rollback() to abort; close() without commit auto-rolls back
+}
+
+// Batch insert/update
+db.batch("INSERT INTO user(name, age) VALUES(?, ?)", List.of(
+    new Object[]{"alice", 25},
+    new Object[]{"bob", 30}
+));
+
+// IN query — Query builder auto-expands Collection
+db.table("user").where("id", "IN", List.of(1, 2, 3)).find();       // id IN (?,?,?)
+db.table("user").where("status", "NOT IN", List.of("banned")).find(); // status NOT IN (?)
+// Empty list produces WHERE 1=0 (always false, no results)
+
+// Db.in() helper for raw SQL
+db.find("SELECT * FROM user WHERE id IN (" + Db.in(ids) + ")", ids.toArray());
+// Db.in() throws IllegalArgumentException on empty list — check before calling
+
+// Conditional query — whereIf skips condition when boolean is false
+db.table("user")
+  .whereIf(name != null, "name", name)
+  .whereIf(!ids.isEmpty(), "id", "IN", ids)
+  .find();
+
+// Count
+int total = db.table("user").where("active", true).count();
+
+// Page<T> structure
+Page<Row> page = db.table("user").limit(20).paginate(1, 20);
+page.list()      // List<Row> — current page items
+page.total()     // long — total matching rows
+page.pageNum()   // int — current page (1-based)
+page.pageSize()  // int — page size
+page.pages()     // int — total pages
+page.hasNext()   // boolean
 ```
 
 **Type mapping**: `rsToRow` preserves JDBC types — `Timestamp` → `LocalDateTime`, `Date` → `LocalDate`, `Time` → `LocalTime`.
@@ -231,13 +282,13 @@ Aura.create()
     .spa(true)                     // SPA mode: unknown paths fall back to /index.html
     .mcp(true)                     // MCP Server for AI agents (all routes)
     .mcp(mcpRouter)                // MCP with selective tool exposure
-    .prop("db.url", "jdbc:mysql://...")
+    .set("db.url", "jdbc:mysql://...")
     .onStart(a -> a.register(Db.create(...)))
-    .onStop(a -> a.get(Db.class).close())
+    .onStop(a -> a.getBean(Db.class).close())
     .start(args);                  // supports --config=file --port=N --env=X
 ```
 
-Properties read: env var > code `.prop()` > `aura.properties` file.
+Properties read: env var > code `.set()` > `aura.properties` file.
 
 ## Context API (when needed)
 
@@ -246,7 +297,7 @@ ctx.path("id")   ctx.query("page")   ctx.header("Authorization")
 ctx.body(T.class)  ctx.cookie("name")  ctx.method()  ctx.url()
 ctx.pageNum()    ctx.pageSize()       ctx.file("field")   // UploadedFile
 ctx.status(201)  ctx.json(obj)        ctx.text("ok")  ctx.redirect("/")
-ctx.set(user)    ctx.get(User.class)  ctx.app().get(Db.class)
+ctx.set(user)    ctx.get(User.class)  ctx.app().getBean(Db.class)
 ctx.sse()        // SseEmitter — opens text/event-stream response
 ```
 
@@ -358,7 +409,7 @@ Db log  = Db.create("log", "jdbc:mysql://host/log", user, pass);
 app.register("main", main).register("log", log);
 
 // Retrieve by name
-Db logDb = app.get("log", Db.class);
+Db logDb = app.getBean("log", Db.class);
 
 // Or just pass directly to services — no registry needed
 new OrderService(main);
