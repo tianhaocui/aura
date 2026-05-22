@@ -166,7 +166,7 @@ db.table("user")
 int total = db.table("user").where("active", true).count();
 
 // Page<T> structure
-Page<Row> page = db.table("user").limit(20).paginate(1, 20);
+Page<Row> page = db.table("user").where("active", true).paginate(1, 20);
 page.list()      // List<Row> — current page items
 page.total()     // long — total matching rows
 page.pageNum()   // int — current page (1-based)
