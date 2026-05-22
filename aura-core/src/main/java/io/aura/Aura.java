@@ -208,7 +208,7 @@ public class Aura {
     }
 
     @SuppressWarnings("unchecked")
-    public <T> T get(Class<T> type) {
+    public <T> T getBean(Class<T> type) {
         for (Map.Entry<Class<?>, Object> entry : registry.entrySet()) {
             if (type.isAssignableFrom(entry.getKey())) {
                 return (T) entry.getValue();
@@ -218,7 +218,7 @@ public class Aura {
     }
 
     @SuppressWarnings("unchecked")
-    public <T> T get(String name, Class<T> type) {
+    public <T> T getBean(String name, Class<T> type) {
         Object obj = namedRegistry.get(name);
         if (obj != null && type.isAssignableFrom(obj.getClass())) {
             return (T) obj;

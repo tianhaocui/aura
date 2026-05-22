@@ -65,13 +65,13 @@ class AuraBuilderTest {
         Aura app = Aura.create();
         StringBuilder sb = new StringBuilder("hello");
         app.register(sb);
-        assertThat(app.get(StringBuilder.class)).isSameAs(sb);
+        assertThat(app.getBean(StringBuilder.class)).isSameAs(sb);
     }
 
     @Test
     void get_returnsNullForUnregisteredType() {
         Aura app = Aura.create();
-        assertThat(app.get(StringBuilder.class)).isNull();
+        assertThat(app.getBean(StringBuilder.class)).isNull();
     }
 
     @Test
@@ -80,7 +80,7 @@ class AuraBuilderTest {
         // Register a concrete type, retrieve by interface
         java.util.ArrayList<String> list = new java.util.ArrayList<>();
         app.register(list);
-        assertThat(app.get(java.util.List.class)).isSameAs(list);
+        assertThat(app.getBean(java.util.List.class)).isSameAs(list);
     }
 
     // --- named registry ---
@@ -91,21 +91,21 @@ class AuraBuilderTest {
         StringBuilder main = new StringBuilder("main");
         StringBuilder log = new StringBuilder("log");
         app.register("main", main).register("log", log);
-        assertThat(app.get("main", StringBuilder.class)).isSameAs(main);
-        assertThat(app.get("log", StringBuilder.class)).isSameAs(log);
+        assertThat(app.getBean("main", StringBuilder.class)).isSameAs(main);
+        assertThat(app.getBean("log", StringBuilder.class)).isSameAs(log);
     }
 
     @Test
     void getNamed_returnsNullForUnregisteredName() {
         Aura app = Aura.create();
-        assertThat(app.get("nope", StringBuilder.class)).isNull();
+        assertThat(app.getBean("nope", StringBuilder.class)).isNull();
     }
 
     @Test
     void getNamed_returnsNullForTypeMismatch() {
         Aura app = Aura.create();
         app.register("x", "hello");
-        assertThat(app.get("x", Integer.class)).isNull();
+        assertThat(app.getBean("x", Integer.class)).isNull();
     }
 
     // --- cors ---
