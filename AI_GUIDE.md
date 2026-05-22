@@ -288,7 +288,19 @@ Aura.create()
     .start(args);                  // supports --config=file --port=N --env=X
 ```
 
-Properties read: env var > code `.set()` > `aura.properties` file.
+Properties read: env var > `aura.properties` > code default.
+
+Framework keys in `aura.properties`:
+```properties
+aura.port=8080
+aura.env=dev
+aura.workers=200
+aura.cors=true
+aura.max-body-size=10485760
+aura.shutdown-timeout=30
+```
+
+Custom keys follow the same rule — `db.url=...` in `aura.properties` is overridden by env var `DB_URL`.
 
 ## Context API (when needed)
 
