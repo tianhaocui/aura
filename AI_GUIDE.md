@@ -288,7 +288,9 @@ Aura.create()
     .start(args);                  // supports --config=file --port=N --env=X
 ```
 
-Properties read: env var > `aura.properties` > code default.
+Properties read: startup args > env var > `aura.properties` > code default.
+
+Startup args override any key: `--aura.port=9090 --db.url=jdbc:mysql://...`
 
 Framework keys in `aura.properties`:
 ```properties
