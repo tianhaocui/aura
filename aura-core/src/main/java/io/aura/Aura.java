@@ -228,19 +228,22 @@ public class Aura {
         for (String arg : args) {
             if (arg.startsWith("--config=")) {
                 loadExternalConfig(arg.substring(9));
-            } else if (arg.startsWith("--port=")) {
-                this.port = Integer.parseInt(arg.substring(7));
-            } else if (arg.startsWith("--env=")) {
-                this.env = arg.substring(6);
             } else if (arg.startsWith("--scan=")) {
                 scan(arg.substring(7).split(","));
             } else if ("--mcp-stdio".equals(arg)) {
                 mcpStdio = true;
+            } else if (arg.startsWith("--") && arg.contains("=")) {
+                // --key=value → props, then re-apply framework settings
+                int eq = arg.indexOf('=');
+                String key = arg.substring(2, eq);
+                String val = arg.substring(eq + 1);
+                props.put(key, val);
             }
         }
+        applyFrameworkProps();
         if (mcpStdio) {
             this.mcpPort = -2;
-            this.mcpStdout = System.out; // save real stdout before redirect
+            this.mcpStdout = System.out;
             System.setOut(System.err);
         }
         start();
