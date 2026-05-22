@@ -17,8 +17,8 @@ public class Aura {
 
     private static final Logger log = LoggerFactory.getLogger(Aura.class);
 
-    private int port = Integer.parseInt(System.getenv().getOrDefault("AURA_PORT", "8080"));
-    private String env = System.getenv().getOrDefault("AURA_ENV", "dev");
+    private int port = 8080;
+    private String env = "dev";
     private int workers = 200;
     private final Map<String, String> props = new ConcurrentHashMap<>();
     private final Map<Class<?>, Object> registry = new ConcurrentHashMap<>();
@@ -43,6 +43,7 @@ public class Aura {
 
     private Aura() {
         loadConfig("aura.properties");
+        applyFrameworkProps(); // apply env vars even if no config file
     }
 
     public static Aura create() {
@@ -182,9 +183,7 @@ public class Aura {
 
 
     public String prop(String key) {
-        String envVal = System.getenv(key.replace('.', '_').toUpperCase());
-        if (envVal != null) return envVal;
-        return props.get(key);
+        return resolve(key, key.replace('.', '_').toUpperCase());
     }
 
     public int prop(String key, int defaultValue) {
@@ -337,9 +336,34 @@ public class Aura {
         Properties p = new Properties();
         p.load(is);
         p.forEach((k, v) -> props.put(k.toString(), v.toString()));
-        if (props.containsKey("port")) this.port = Integer.parseInt(props.get("port"));
-        if (props.containsKey("env")) this.env = props.get("env");
-        if (props.containsKey("workers")) this.workers = Integer.parseInt(props.get("workers"));
+        applyFrameworkProps();
+    }
+
+    private void applyFrameworkProps() {
+        // env var > config file; helper reads env first, falls back to props map
+        String port = resolve("aura.port", "AURA_PORT");
+        if (port != null) this.port = Integer.parseInt(port);
+
+        String env = resolve("aura.env", "AURA_ENV");
+        if (env != null) this.env = env;
+
+        String workers = resolve("aura.workers", "AURA_WORKERS");
+        if (workers != null) this.workers = Integer.parseInt(workers);
+
+        String cors = resolve("aura.cors", "AURA_CORS");
+        if (cors != null) this.corsOrigin = cors.equals("true") ? "*" : cors;
+
+        String maxBody = resolve("aura.max-body-size", "AURA_MAX_BODY_SIZE");
+        if (maxBody != null) this.maxBodySize = Long.parseLong(maxBody);
+
+        String shutdown = resolve("aura.shutdown-timeout", "AURA_SHUTDOWN_TIMEOUT");
+        if (shutdown != null) this.shutdownTimeout = Integer.parseInt(shutdown);
+    }
+
+    private String resolve(String propKey, String envKey) {
+        String envVal = System.getenv(envKey);
+        if (envVal != null) return envVal;
+        return props.get(propKey);
     }
 
     private void fireStop() {
