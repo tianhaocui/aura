@@ -18,16 +18,40 @@ public class BaseRouter {
         return addRoute("GET", path, handler);
     }
 
+    public BaseRouteBuilder get(String path, Object target, String method) {
+        throw new UnsupportedOperationException("Service method routing requires aura-web");
+    }
+
     public BaseRouteBuilder post(String path, BaseHandler handler) {
         return addRoute("POST", path, handler);
+    }
+
+    public BaseRouteBuilder post(String path, Object target, String method) {
+        throw new UnsupportedOperationException("Service method routing requires aura-web");
     }
 
     public BaseRouteBuilder put(String path, BaseHandler handler) {
         return addRoute("PUT", path, handler);
     }
 
+    public BaseRouteBuilder put(String path, Object target, String method) {
+        throw new UnsupportedOperationException("Service method routing requires aura-web");
+    }
+
     public BaseRouteBuilder delete(String path, BaseHandler handler) {
         return addRoute("DELETE", path, handler);
+    }
+
+    public BaseRouteBuilder delete(String path, Object target, String method) {
+        throw new UnsupportedOperationException("Service method routing requires aura-web");
+    }
+
+    public BaseRouter crud(String path, Object service) {
+        throw new UnsupportedOperationException("crud() requires aura-web");
+    }
+
+    public BaseRouter crud(String path, Object service, String... methods) {
+        throw new UnsupportedOperationException("crud() requires aura-web");
     }
 
     public BaseRouter before(BaseHandler handler) {

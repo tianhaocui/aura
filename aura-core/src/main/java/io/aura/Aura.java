@@ -23,8 +23,8 @@ public class Aura {
     private final Map<String, String> props = new ConcurrentHashMap<>();
     private final Map<Class<?>, Object> registry = new ConcurrentHashMap<>();
     private final Map<String, Object> namedRegistry = new ConcurrentHashMap<>();
-    private final List<Consumer<Aura>> startHooks = new ArrayList<>();
-    private final List<Consumer<Aura>> stopHooks = new ArrayList<>();
+    private final List<Consumer<Aura>> startHooks = new java.util.concurrent.CopyOnWriteArrayList<>();
+    private final List<Consumer<Aura>> stopHooks = new java.util.concurrent.CopyOnWriteArrayList<>();
     private Consumer<?> routeConfig;
     private final List<Object> services = new ArrayList<>();
     private final List<RouteEntry> directRoutes = new ArrayList<>();
@@ -38,6 +38,8 @@ public class Aura {
     private int mcpPort = -1;
     private java.io.PrintStream mcpStdout;
     private McpRouterSpec mcpRouter;
+    private final java.util.concurrent.atomic.AtomicBoolean stopped = new java.util.concurrent.atomic.AtomicBoolean(false);
+
     private AuraStarter starter;
     private McpStarter mcpStarter;
 
@@ -284,6 +286,7 @@ public class Aura {
     }
 
     public void stop() {
+        if (!stopped.compareAndSet(false, true)) return;
         if (mcpStarter != null) {
             mcpStarter.stop();
             mcpStarter = null;

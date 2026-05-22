@@ -132,8 +132,8 @@ Db db = Db.create(url, user, pass);
 
 // Dynamic SQL — null/blank params auto-skipped (recommended for complex queries)
 String sql = "SELECT * FROM user #where(name, '=', name) #and(age, '>', age) #orderBy(created)";
-db.find(sql, filterMap);
-db.paginate(sql, filterMap, pageNum, pageSize);
+db.findDynamic(sql, filterMap);
+db.paginateDynamic(sql, filterMap, pageNum, pageSize);
 // ctx.pageNum() and ctx.pageSize() parse ?page= and ?pageSize= with safe defaults
 
 // Query builder — simple CRUD shortcut

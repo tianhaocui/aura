@@ -118,6 +118,7 @@ public class Context implements BaseContext {
         cookie.setPath("/");
         cookie.setHttpOnly(true);
         cookie.setSecure(true);
+        cookie.setSameSiteMode("Lax");
         exchange.setResponseCookie(cookie);
         return this;
     }

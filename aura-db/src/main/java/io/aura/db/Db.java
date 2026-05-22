@@ -15,6 +15,12 @@ public class Db implements AutoCloseable {
     private final HikariDataSource ds;
     private final String name;
     private static final ThreadLocal<Connection> TX_CONN = new ThreadLocal<>();
+    private static final java.util.concurrent.ExecutorService INDEPENDENT_TX_POOL =
+            java.util.concurrent.Executors.newCachedThreadPool(r -> {
+                Thread t = new Thread(r, "aura-tx-independent");
+                t.setDaemon(true);
+                return t;
+            });
 
     private Db(String name, HikariDataSource ds) {
         this.name = name;
@@ -254,13 +260,13 @@ public class Db implements AutoCloseable {
 
     public <T> T transactionIndependent(Supplier<T> block) {
         var future = new java.util.concurrent.CompletableFuture<T>();
-        new Thread(() -> {
+        INDEPENDENT_TX_POOL.submit(() -> {
             try {
                 future.complete(doTransaction(block));
             } catch (Exception e) {
                 future.completeExceptionally(e);
             }
-        }).start();
+        });
         try {
             return future.join();
         } catch (java.util.concurrent.CompletionException e) {
