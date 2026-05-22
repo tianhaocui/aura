@@ -236,7 +236,18 @@ public class Db implements AutoCloseable {
         return doTransaction(block);
     }
 
-    /** Always starts a new independent transaction, even if already inside one. */
+    /**
+     * Always starts a new independent transaction, even if already inside one.
+     * Runs the block in a new thread so it gets its own DB connection.
+     * The caller blocks until the inner transaction commits or rolls back.
+     *
+     * <p><b>Warning:</b> the block runs in a separate thread — any ThreadLocal state
+     * from the caller (request context, user info, MDC, etc.) is NOT inherited.
+     * If you need that state inside the block, pass it explicitly as a parameter.
+     *
+     * <p>Typical use case: audit logs or operation records that must commit
+     * independently and not be rolled back if the outer transaction fails.
+     */
     public void transactionNew(Runnable block) {
         transactionNew(() -> { block.run(); return null; });
     }
