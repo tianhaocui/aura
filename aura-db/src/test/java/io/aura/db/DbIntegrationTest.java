@@ -174,4 +174,71 @@ class DbIntegrationTest {
         Row found = db.findOne("SELECT * FROM users WHERE name = ?", "TxCommit");
         assertThat(found).isNotNull();
     }
+
+    @Test
+    void transaction_nested_reusesOuter() {
+        db.transaction(() -> {
+            Row.of("users").set("name", "Outer").set("active", true).insert(db);
+            db.transaction(() -> {
+                Row.of("users").set("name", "Inner").set("active", true).insert(db);
+            });
+        });
+        assertThat(db.findOne("SELECT * FROM users WHERE name = ?", "Outer")).isNotNull();
+        assertThat(db.findOne("SELECT * FROM users WHERE name = ?", "Inner")).isNotNull();
+    }
+
+    @Test
+    void transaction_nested_outerRollbackRollsBothBack() {
+        assertThatThrownBy(() -> db.transaction(() -> {
+            Row.of("users").set("name", "Outer2").set("active", true).insert(db);
+            db.transaction(() -> {
+                Row.of("users").set("name", "Inner2").set("active", true).insert(db);
+            });
+            throw new RuntimeException("rollback outer");
+        }));
+        assertThat(db.findOne("SELECT * FROM users WHERE name = ?", "Outer2")).isNull();
+        assertThat(db.findOne("SELECT * FROM users WHERE name = ?", "Inner2")).isNull();
+    }
+
+    @Test
+    void transactionNew_independentFromOuter() {
+        assertThatThrownBy(() -> db.transaction(() -> {
+            Row.of("users").set("name", "OuterNew").set("active", true).insert(db);
+            db.transactionNew(() -> {
+                Row.of("users").set("name", "InnerNew").set("active", true).insert(db);
+            });
+            throw new RuntimeException("rollback outer");
+        }));
+        // outer rolled back
+        assertThat(db.findOne("SELECT * FROM users WHERE name = ?", "OuterNew")).isNull();
+        // inner committed independently
+        assertThat(db.findOne("SELECT * FROM users WHERE name = ?", "InnerNew")).isNotNull();
+    }
+
+    @Test
+    void beginTransaction_manualCommit() {
+        try (var tx = db.beginTransaction()) {
+            Row.of("users").set("name", "Manual").set("active", true).insert(db);
+            tx.commit();
+        }
+        assertThat(db.findOne("SELECT * FROM users WHERE name = ?", "Manual")).isNotNull();
+    }
+
+    @Test
+    void beginTransaction_manualRollback() {
+        try (var tx = db.beginTransaction()) {
+            Row.of("users").set("name", "ManualRollback").set("active", true).insert(db);
+            tx.rollback();
+        }
+        assertThat(db.findOne("SELECT * FROM users WHERE name = ?", "ManualRollback")).isNull();
+    }
+
+    @Test
+    void beginTransaction_autoCloseRollsBack() {
+        try (var tx = db.beginTransaction()) {
+            Row.of("users").set("name", "AutoClose").set("active", true).insert(db);
+            // no commit — close() should rollback
+        }
+        assertThat(db.findOne("SELECT * FROM users WHERE name = ?", "AutoClose")).isNull();
+    }
 }

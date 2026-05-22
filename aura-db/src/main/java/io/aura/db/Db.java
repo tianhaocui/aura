@@ -229,11 +229,91 @@ public class Db implements AutoCloseable {
         transaction(() -> { block.run(); return null; });
     }
 
-    @SuppressWarnings("unchecked")
     public <T> T transaction(Supplier<T> block) {
         if (TX_CONN.get() != null) {
-            throw new IllegalStateException("Nested transactions are not supported");
+            return block.get();  // already in transaction, reuse
         }
+        return doTransaction(block);
+    }
+
+    /** Always starts a new independent transaction, even if already inside one. */
+    public void transactionNew(Runnable block) {
+        transactionNew(() -> { block.run(); return null; });
+    }
+
+    public <T> T transactionNew(Supplier<T> block) {
+        var future = new java.util.concurrent.CompletableFuture<T>();
+        new Thread(() -> {
+            try {
+                future.complete(doTransaction(block));
+            } catch (Exception e) {
+                future.completeExceptionally(e);
+            }
+        }).start();
+        try {
+            return future.join();
+        } catch (java.util.concurrent.CompletionException e) {
+            Throwable cause = e.getCause();
+            throw cause instanceof RuntimeException re ? re : new DbException(cause);
+        }
+    }
+
+    /** Manual transaction control. Caller is responsible for commit/rollback/close. */
+    public Transaction beginTransaction() {
+        if (TX_CONN.get() != null) {
+            throw new IllegalStateException("Already in a transaction; use transaction() to reuse or transactionNew() for independent transaction");
+        }
+        try {
+            Connection conn = ds.getConnection();
+            conn.setAutoCommit(false);
+            TX_CONN.set(conn);
+            return new Transaction(conn);
+        } catch (SQLException e) {
+            throw new DbException(e);
+        }
+    }
+
+    public class Transaction implements AutoCloseable {
+        private final Connection conn;
+        private boolean done = false;
+
+        private Transaction(Connection conn) {
+            this.conn = conn;
+        }
+
+        public void commit() {
+            if (done) throw new IllegalStateException("Transaction already completed");
+            try {
+                conn.commit();
+            } catch (SQLException e) {
+                throw new DbException(e);
+            } finally {
+                done = true;
+                TX_CONN.remove();
+                try { conn.close(); } catch (SQLException ignored) {}
+            }
+        }
+
+        public void rollback() {
+            if (done) return;
+            try {
+                conn.rollback();
+            } catch (SQLException e) {
+                throw new DbException(e);
+            } finally {
+                done = true;
+                TX_CONN.remove();
+                try { conn.close(); } catch (SQLException ignored) {}
+            }
+        }
+
+        @Override
+        public void close() {
+            rollback();  // no-op if already committed
+        }
+    }
+
+    private <T> T doTransaction(Supplier<T> block) {
         try (Connection conn = ds.getConnection()) {
             conn.setAutoCommit(false);
             TX_CONN.set(conn);
