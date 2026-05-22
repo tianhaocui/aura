@@ -34,21 +34,21 @@ What Aura deliberately does NOT do:
 <dependency>
     <groupId>io.github.tianhaocui</groupId>
     <artifactId>aura-web</artifactId>
-    <version>0.2.1</version>
+    <version>0.3.0</version>
 </dependency>
 
 <!-- Optional: Database -->
 <dependency>
     <groupId>io.github.tianhaocui</groupId>
     <artifactId>aura-db</artifactId>
-    <version>0.2.1</version>
+    <version>0.3.0</version>
 </dependency>
 
 <!-- Optional: MCP for AI agents -->
 <dependency>
     <groupId>io.github.tianhaocui</groupId>
     <artifactId>aura-mcp</artifactId>
-    <version>0.2.1</version>
+    <version>0.3.0</version>
 </dependency>
 ```
 

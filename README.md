@@ -25,7 +25,7 @@ Add to your Claude Desktop / Cursor MCP config:
   "mcpServers": {
     "aura-demo": {
       "command": "npx",
-      "args": ["aura-demo-mcp@0.2.1"]
+      "args": ["aura-demo-mcp@0.3.0"]
     }
   }
 }
@@ -39,7 +39,7 @@ AI agent gets 7 tools (create/list/get/update/delete/search/stats todos). [Sourc
 <dependency>
     <groupId>io.github.tianhaocui</groupId>
     <artifactId>aura-web</artifactId>
-    <version>0.2.1</version>
+    <version>0.3.0</version>
 </dependency>
 <!-- Add an SLF4J provider, e.g. logback-classic -->
 ```

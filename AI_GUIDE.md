@@ -8,7 +8,7 @@ You are developing with Aura, a lightweight Java 17+ backend framework.
 <parent>
     <groupId>io.github.tianhaocui</groupId>
     <artifactId>aura-parent</artifactId>
-    <version>0.2.1</version>
+    <version>0.3.0</version>
 </parent>
 
 <dependencies>

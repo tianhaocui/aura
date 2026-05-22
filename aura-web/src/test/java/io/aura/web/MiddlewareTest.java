@@ -1,17 +1,23 @@
 package io.aura.web;
 
 import io.aura.Aura;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.List;
 
-public class MiddlewareTest {
+import static org.assertj.core.api.Assertions.*;
 
-    static final List<String> log = new ArrayList<>();
+class MiddlewareTest {
 
-    public static void main(String[] args) throws Exception {
+    private final List<String> log = new ArrayList<>();
+    private TestClient client;
+
+    @BeforeEach
+    void setup() {
+        log.clear();
         Aura app = Aura.create()
-            .port(8081)
             .routes((BaseRouter r) -> {
                 r.before(ctx -> log.add("global-before"));
                 r.after(ctx -> log.add("global-after"));
@@ -39,53 +45,36 @@ public class MiddlewareTest {
                     throw new RuntimeException("boom");
                 });
             });
-        app.start();
-
-        Thread.sleep(1000);
-
-        // Test 1: basic route with global middleware
-        log.clear();
-        String r1 = httpGet("http://localhost:8081/hello");
-        System.out.println("Test 1 - /hello: " + r1);
-        System.out.println("  Middleware order: " + log);
-        assert "hi".equals(r1) : "Expected 'hi', got: " + r1;
-        assert log.equals(List.of("global-before", "handler", "global-after")) :
-                "Wrong order: " + log;
-
-        // Test 2: group route with group + global middleware
-        log.clear();
-        String r2 = httpGet("http://localhost:8081/api/test");
-        System.out.println("Test 2 - /api/test: " + r2);
-        System.out.println("  Middleware order: " + log);
-        assert "api ok".equals(r2) : "Expected 'api ok', got: " + r2;
-        assert log.equals(List.of("global-before", "api-before", "api-handler", "global-after", "api-after")) :
-                "Wrong order: " + log;
-
-        // Test 3: exception handler
-        log.clear();
-        String r3 = httpGet("http://localhost:8081/fail");
-        System.out.println("Test 3 - /fail: " + r3);
-        assert "error: boom".equals(r3) : "Expected 'error: boom', got: " + r3;
-
-        // Test 4: 404
-        String r4 = httpGet("http://localhost:8081/notfound");
-        System.out.println("Test 4 - /notfound: " + r4);
-        assert "Not Found".equals(r4) : "Expected 'Not Found', got: " + r4;
-
-        System.out.println("\nAll tests passed!");
-        app.stop();
+        client = TestClient.of(app);
     }
 
-    static String httpGet(String url) throws Exception {
-        var conn = new java.net.URL(url).openConnection();
-        conn.setConnectTimeout(3000);
-        conn.setReadTimeout(3000);
-        try (var is = conn.getInputStream()) {
-            return new String(is.readAllBytes());
-        } catch (java.io.IOException e) {
-            try (var es = ((java.net.HttpURLConnection) conn).getErrorStream()) {
-                return es != null ? new String(es.readAllBytes()) : e.getMessage();
-            }
-        }
+    @Test
+    void globalMiddleware_executesInOrder() {
+        var resp = client.get("/hello").execute();
+        assertThat(resp.status()).isEqualTo(200);
+        assertThat(resp.body()).isEqualTo("hi");
+        assertThat(log).containsExactly("global-before", "handler", "global-after");
+    }
+
+    @Test
+    void groupMiddleware_executesWithGlobal() {
+        var resp = client.get("/api/test").execute();
+        assertThat(resp.status()).isEqualTo(200);
+        assertThat(resp.body()).isEqualTo("api ok");
+        assertThat(log).containsExactly("global-before", "api-before", "api-handler", "global-after", "api-after");
+    }
+
+    @Test
+    void exceptionHandler_catches() {
+        var resp = client.get("/fail").execute();
+        assertThat(resp.status()).isEqualTo(400);
+        assertThat(resp.body()).isEqualTo("error: boom");
+    }
+
+    @Test
+    void notFound_returns404() {
+        var resp = client.get("/notfound").execute();
+        assertThat(resp.status()).isEqualTo(404);
+        assertThat(resp.body()).isEqualTo("Not Found");
     }
 }
