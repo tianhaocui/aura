@@ -39,7 +39,7 @@ AI agent 获得 7 个工具（创建/列表/获取/更新/删除/搜索/统计 t
 <dependency>
     <groupId>io.github.tianhaocui</groupId>
     <artifactId>aura-web</artifactId>
-    <version>0.3.0</version>
+    <version>0.4.0</version>
 </dependency>
 <!-- 需要添加 SLF4J 实现，如 logback-classic -->
 ```

@@ -46,6 +46,7 @@
         <maven.compiler.source>${java.version}</maven.compiler.source>
         <maven.compiler.target>${java.version}</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <aura.version>0.4.0</aura.version>
         <undertow.version>2.3.12.Final</undertow.version>
         <fastjson2.version>2.0.47</fastjson2.version>
         <hikaricp.version>5.1.0</hikaricp.version>
@@ -57,12 +58,12 @@
             <dependency>
                 <groupId>io.github.tianhaocui</groupId>
                 <artifactId>aura-core</artifactId>
-                <version>${project.version}</version>
+                <version>${aura.version}</version>
             </dependency>
             <dependency>
                 <groupId>io.github.tianhaocui</groupId>
                 <artifactId>aura-web</artifactId>
-                <version>${project.version}</version>
+                <version>${aura.version}</version>
             </dependency>
             <dependency>
                 <groupId>io.undertow</groupId>

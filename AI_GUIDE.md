@@ -5,21 +5,17 @@ You are developing with Aura, a lightweight Java 17+ backend framework.
 ## Project Setup (pom.xml)
 
 ```xml
-<parent>
-    <groupId>io.github.tianhaocui</groupId>
-    <artifactId>aura-parent</artifactId>
-    <version>0.3.0</version>
-</parent>
-
 <dependencies>
     <dependency>
         <groupId>io.github.tianhaocui</groupId>
         <artifactId>aura-web</artifactId>
+        <version>0.4.0</version>
     </dependency>
     <!-- Optional: database -->
     <dependency>
         <groupId>io.github.tianhaocui</groupId>
         <artifactId>aura-db</artifactId>
+        <version>0.4.0</version>
     </dependency>
     <!-- Required: add your own SLF4J provider (aura-web uses slf4j-api) -->
     <dependency>
@@ -28,9 +24,25 @@ You are developing with Aura, a lightweight Java 17+ backend framework.
         <version>1.5.6</version>
     </dependency>
 </dependencies>
+
+<!-- Required: enables parameter name reflection for route binding -->
+<build>
+    <plugins>
+        <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-compiler-plugin</artifactId>
+            <version>3.13.0</version>
+            <configuration>
+                <source>17</source>
+                <target>17</target>
+                <parameters>true</parameters>
+            </configuration>
+        </plugin>
+    </plugins>
+</build>
 ```
 
-Always inherit `aura-parent`. It provides `-parameters` compiler flag, Java 17, and dependency version management.
+The `-parameters` compiler flag is required — Aura uses parameter names for route binding (path params, query params, body).
 Aura does not bundle an SLF4J implementation — add logback, log4j2, or slf4j-simple yourself.
 
 ## Minimal App
@@ -412,7 +424,39 @@ java -jar target/your-app-1.0.jar
 java -jar target/your-app-1.0.jar --mcp-stdio
 ```
 
-Produces a single executable jar with all dependencies. The `fat-jar` profile is inherited from `aura-parent`.
+To use `fat-jar`, add this profile to your project's pom.xml:
+
+```xml
+<profiles>
+    <profile>
+        <id>fat-jar</id>
+        <build>
+            <plugins>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-shade-plugin</artifactId>
+                    <version>3.5.2</version>
+                    <executions>
+                        <execution>
+                            <phase>package</phase>
+                            <goals><goal>shade</goal></goals>
+                            <configuration>
+                                <createDependencyReducedPom>false</createDependencyReducedPom>
+                                <transformers>
+                                    <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
+                                        <mainClass>${main.class}</mainClass>
+                                    </transformer>
+                                    <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
+                                </transformers>
+                            </configuration>
+                        </execution>
+                    </executions>
+                </plugin>
+            </plugins>
+        </build>
+    </profile>
+</profiles>
+```
 
 ## Multi-DataSource
 
