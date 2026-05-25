@@ -12,6 +12,7 @@ public class BaseRouter {
     public final List<BaseHandler> beforeHandlers = new ArrayList<>();
     public final List<BaseHandler> afterHandlers = new ArrayList<>();
     public final List<Group> groups = new ArrayList<>();
+    public final List<WsRoute> wsRoutes = new ArrayList<>();
     public final Map<Class<? extends Exception>, BaseExceptionHandler<?>> exceptionHandlers = new LinkedHashMap<>();
 
     public BaseRouteBuilder get(String path, BaseHandler handler) {
@@ -76,6 +77,13 @@ public class BaseRouter {
         return this;
     }
 
+    public BaseRouter ws(String path, Consumer<WsHandler> config) {
+        WsHandler handler = new WsHandler();
+        config.accept(handler);
+        wsRoutes.add(new WsRoute(path, handler));
+        return this;
+    }
+
     public BaseRouteBuilder addRoute(String method, String path, BaseHandler handler) {
         var rb = new BaseRouteBuilder(new Route(method, path, handler));
         routeBuilders.add(rb);
@@ -84,4 +92,5 @@ public class BaseRouter {
 
     public record Route(String method, String path, BaseHandler handler) {}
     public record Group(String prefix, BaseRouter router) {}
+    public record WsRoute(String path, WsHandler handler) {}
 }
