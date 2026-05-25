@@ -113,6 +113,7 @@ java -jar app.jar --port=9090 --env=prod --mcp-stdio --scan=com.example
 | `--env=X` | Override environment |
 | `--mcp-stdio` | Enable MCP stdio mode |
 | `--scan=pkg` | Package to scan for @Path classes |
+| `--key=value` | Override any property key (e.g. `--db.url=jdbc:...`) |
 
 ### Registry
 
@@ -186,6 +187,20 @@ Validation failure throws `ValidationException` → HTTP 400.
 
 ```java
 BeanValidator.validate(myRecord); // throws ValidationException if invalid
+```
+
+### Cross-Field Validation (Validatable)
+
+```java
+record DateRange(
+    @NotNull LocalDate start,
+    @NotNull LocalDate end
+) implements Validatable {
+    public void validate() {
+        Validate.isTrue(!end.isBefore(start), "end must be after start");
+    }
+}
+// validate() is called automatically after annotation checks pass
 ```
 
 ---
@@ -294,3 +309,40 @@ public interface McpStarter {
 ```
 
 Implemented by `aura-mcp` (AuraMcpStarter). Discovered via ServiceLoader.
+
+---
+
+## Fat Jar Packaging
+
+```xml
+<!-- In your pom.xml, set main class -->
+<properties>
+    <main.class>com.example.App</main.class>
+</properties>
+```
+
+```bash
+mvn package -Pfat-jar
+java -jar target/your-app-1.0.jar
+java -jar target/your-app-1.0.jar --mcp-stdio
+```
+
+The `fat-jar` profile is inherited from `aura-parent`. Produces a single executable jar with all dependencies.
+
+---
+
+## Multi-DataSource
+
+```java
+Db main = Db.create("main", "jdbc:mysql://host/main", user, pass);
+Db log  = Db.create("log", "jdbc:mysql://host/log", user, pass);
+
+app.register("main", main).register("log", log);
+
+// Retrieve by name
+Db logDb = app.getBean("log", Db.class);
+
+// Or just pass directly to services
+new OrderService(main);
+new AuditService(log);
+```

@@ -33,6 +33,7 @@ public class UndertowStarter implements AuraStarter {
     private ResourceHandler staticHandler;
     private ClassPathResourceManager resourceManager;
     private List<CompiledRoute> compiledRoutes;
+    private List<CompiledWsRoute> compiledWsRoutes;
 
     @Override
     @SuppressWarnings("unchecked")
@@ -73,6 +74,8 @@ public class UndertowStarter implements AuraStarter {
 
         compiledRoutes = compile(router, "", new ArrayList<>(), new ArrayList<>());
         compiledRoutes.sort(Comparator.comparingInt(r -> r.paramNames().size()));
+
+        compiledWsRoutes = compileWsRoutes(router);
 
         String staticPath = app.staticFilesPath();
         if (staticPath != null) {
@@ -144,6 +147,37 @@ public class UndertowStarter implements AuraStarter {
         if ("GET".equals(method) && "/__schema__".equals(path)) {
             serveSchema(exchange);
             return;
+        }
+
+        // WebSocket upgrade
+        if ("GET".equals(method) && isWebSocketUpgrade(exchange)) {
+            if (!checkWsOrigin(exchange)) {
+                exchange.setStatusCode(403);
+                exchange.endExchange();
+                return;
+            }
+            for (CompiledWsRoute wsRoute : compiledWsRoutes) {
+                Map<String, String> params = wsRoute.match(path);
+                if (params == null) continue;
+
+                Context ctx = new Context(exchange, params, app);
+                try {
+                    for (BaseHandler mw : wsRoute.beforeHandlers()) {
+                        mw.handle(ctx);
+                        if (ctx.isAborted()) break;
+                    }
+                    if (ctx.isAborted()) {
+                        if (exchange.getStatusCode() == 200) exchange.setStatusCode(403);
+                        exchange.endExchange();
+                        return;
+                    }
+                    wsRoute.upgrade(exchange, params);
+                } catch (Exception e) {
+                    exchange.setStatusCode(500);
+                    exchange.endExchange();
+                }
+                return;
+            }
         }
 
         for (CompiledRoute route : compiledRoutes) {
@@ -388,6 +422,40 @@ public class UndertowStarter implements AuraStarter {
             result.addAll(compile(group.router(), prefix + group.prefix(), before, after));
         }
 
+        return result;
+    }
+
+    private static boolean isWebSocketUpgrade(HttpServerExchange exchange) {
+        String upgrade = exchange.getRequestHeaders().getFirst("Upgrade");
+        return "websocket".equalsIgnoreCase(upgrade);
+    }
+
+    private boolean checkWsOrigin(HttpServerExchange exchange) {
+        String corsOrigin = app.corsOrigin();
+        if (corsOrigin == null) return true;
+        String origin = exchange.getRequestHeaders().getFirst("Origin");
+        if (origin == null) return true;
+        if ("*".equals(corsOrigin)) return true;
+        return corsOrigin.equals(origin);
+    }
+
+    private List<CompiledWsRoute> compileWsRoutes(BaseRouter router) {
+        return compileWsRoutes(router, "", new ArrayList<>());
+    }
+
+    private List<CompiledWsRoute> compileWsRoutes(BaseRouter router, String prefix,
+                                                   List<BaseHandler> parentBefore) {
+        List<CompiledWsRoute> result = new ArrayList<>();
+        List<BaseHandler> before = new ArrayList<>(parentBefore);
+        before.addAll(router.beforeHandlers);
+
+        for (BaseRouter.WsRoute ws : router.wsRoutes) {
+            String fullPath = prefix + ws.path();
+            result.add(CompiledWsRoute.compile(fullPath, before, ws.handler()));
+        }
+        for (BaseRouter.Group group : router.groups) {
+            result.addAll(compileWsRoutes(group.router(), prefix + group.prefix(), before));
+        }
         return result;
     }
 }

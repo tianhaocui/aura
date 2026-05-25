@@ -10,6 +10,8 @@ import static org.assertj.core.api.Assertions.*;
 
 class LambdaHandlerTest {
 
+    private static final Aura APP = Aura.create();
+
     @Test
     void noParams_returnsString() throws Exception {
         var handler = new LambdaHandler(new NoParamHandler());
@@ -227,7 +229,64 @@ class LambdaHandlerTest {
             new HashMap<>(queryParams),
             new HashMap<>(),
             body,
-            Aura.create()
+            APP
         );
+    }
+
+    // --- additional edge cases ---
+
+    @Test
+    void booleanParam_fromPathParam() throws Exception {
+        var handler = new LambdaHandler(new BoolHandler());
+        var ctx = mockCtx(Map.of("active", "TRUE"), Map.of(), null);
+        handler.handle(ctx);
+        assertThat(ctx.responseBody).isEqualTo("active=true");
+    }
+
+    @Test
+    void boxedBoolean_present_true() throws Exception {
+        var handler = new LambdaHandler(new BoxedBoolHandler());
+        var ctx = mockCtx(Map.of(), Map.of("active", "true"), null);
+        handler.handle(ctx);
+        assertThat(ctx.responseBody).isEqualTo("active=true");
+    }
+
+    @Test
+    void boxedBoolean_present_false() throws Exception {
+        var handler = new LambdaHandler(new BoxedBoolHandler());
+        var ctx = mockCtx(Map.of(), Map.of("active", "no"), null);
+        handler.handle(ctx);
+        assertThat(ctx.responseBody).isEqualTo("active=false");
+    }
+
+    @Test
+    void longParam_fromQuery() throws Exception {
+        var handler = new LambdaHandler(new LongParamHandler());
+        var ctx = mockCtx(Map.of(), Map.of("id", "123456"), null);
+        handler.handle(ctx);
+        assertThat(ctx.responseBody).isEqualTo("item-123456");
+    }
+
+    @Test
+    void boxedLong_present() throws Exception {
+        var handler = new LambdaHandler(new BoxedLongHandler());
+        var ctx = mockCtx(Map.of("id", "77"), Map.of(), null);
+        handler.handle(ctx);
+        assertThat(ctx.responseBody).isEqualTo("val=77");
+    }
+
+    @Test
+    void emptyBody_recordIsNull() throws Exception {
+        var handler = new LambdaHandler(new RecordBodyHandler());
+        var ctx = mockCtx(Map.of(), Map.of(), "");
+        handler.handle(ctx);
+        assertThat(ctx.responseBody).isEqualTo("created:null");
+    }
+
+    @Test
+    void samMethod_isAccessible() {
+        var handler = new LambdaHandler(new NoParamHandler());
+        assertThat(handler.samMethod()).isNotNull();
+        assertThat(handler.samMethod().getName()).isEqualTo("apply");
     }
 }
