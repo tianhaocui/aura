@@ -354,6 +354,10 @@ public class Db implements AutoCloseable {
         ds.close();
     }
 
+    public static void shutdownPool() {
+        INDEPENDENT_TX_POOL.shutdownNow();
+    }
+
     // --- internal ---
 
     private Connection getConnection() throws SQLException {

@@ -14,6 +14,23 @@ Db db = Db.create("jdbc:mysql://localhost/mydb", "user", "pass");
 Db db = Db.create("jdbc:h2:mem:test;DB_CLOSE_DELAY=-1", "sa", "");
 ```
 
+### Named DataSource
+
+```java
+Db main = Db.create("main", "jdbc:mysql://host/main", user, pass);
+Db log  = Db.create("log", "jdbc:mysql://host/log", user, pass);
+
+// Or wrap an existing DataSource
+Db analytics = Db.create("analytics", existingDataSource);
+```
+
+### Cleanup
+
+```java
+// Shutdown the independent transaction thread pool (call on app stop)
+Db.shutdownPool();
+```
+
 ### Query Builder
 
 ```java
@@ -34,6 +51,29 @@ db.table("user")
   .count();                       // int
   .delete();                      // int (affected rows)
   .update(Row.of("").set("status", "banned")); // int
+```
+
+### Conditional Queries
+
+```java
+// whereIf — skip condition when boolean is false
+db.table("user")
+  .whereIf(name != null, "name", name)
+  .whereIf(!ids.isEmpty(), "id", "IN", ids)
+  .find();
+```
+
+### IN / NOT IN
+
+```java
+// Query builder auto-expands Collections
+db.table("user").where("id", "IN", List.of(1, 2, 3)).find();       // id IN (?,?,?)
+db.table("user").where("status", "NOT IN", List.of("banned")).find(); // status NOT IN (?)
+// Empty list produces WHERE 1=0 (always false, no results)
+
+// Db.in() helper for raw SQL
+db.find("SELECT * FROM user WHERE id IN (" + Db.in(ids) + ")", ids.toArray());
+// Db.in() throws IllegalArgumentException on empty list
 ```
 
 ### Row Queries
@@ -89,6 +129,34 @@ db.transaction(() -> {
     // Rolls back on any exception
 });
 // Nested transactions throw IllegalStateException
+```
+
+### Independent Transaction
+
+```java
+// Always starts a new transaction, even if already inside one.
+// Runs in a separate thread — ThreadLocal state is NOT inherited.
+db.transactionIndependent(() -> db.execute(auditSql, args));
+// Commits independently — survives outer transaction rollback
+```
+
+### Manual Transaction Control
+
+```java
+try (var tx = db.beginTransaction()) {
+    db.execute(sql1, args1);
+    db.execute(sql2, args2);
+    tx.commit();   // explicit commit
+    // tx.rollback() to abort; close() without commit auto-rolls back
+}
+// Throws IllegalStateException if already in a transaction
+```
+
+### Insert and Return ID
+
+```java
+Object generatedId = db.insertAndReturnId(
+    "INSERT INTO user(name, age) VALUES(?, ?)", "alice", 25);
 ```
 
 ### Pagination

@@ -69,6 +69,27 @@ r.crud("/user", userService);
 // Missing methods are skipped.
 ```
 
+### Selective CRUD
+
+```java
+// Only register specific methods
+r.crud("/user", userService, "get", "list");
+// Valid method names: get, list, create, update, delete
+// Invalid names throw IllegalArgumentException at startup
+```
+
+### Abort
+
+```java
+r.before(ctx -> {
+    if (!isAuthenticated(ctx)) {
+        ctx.status(401).text("Unauthorized");
+        ctx.abort(); // skip handler, after-middleware still runs
+    }
+});
+// ctx.isAborted() returns true after abort() is called
+```
+
 ---
 
 ## Context
@@ -90,6 +111,10 @@ Request/response wrapper passed to handlers.
 | `file(String field)` | UploadedFile | Multipart file upload field |
 | `method()` | String | HTTP method (GET, POST, ...) |
 | `url()` | String | Request URI |
+| `abort()` | void | Skip handler execution (before-middleware only) |
+| `isAborted()` | boolean | Whether abort() was called |
+| `set(String key, Object value)` | void | Store named attribute |
+| `get(String key, Class<T> type)` | T | Retrieve named attribute |
 
 ### Response
 
@@ -99,6 +124,8 @@ Request/response wrapper passed to handlers.
 | `json(Object obj)` | void | Send JSON response |
 | `text(String text)` | void | Send plain text response |
 | `redirect(String url)` | void | 302 redirect |
+
+**Security**: `redirect(url)` throws `IllegalArgumentException` if the URL contains `\r` or `\n` (CRLF injection prevention).
 | `header(String name, String value)` | Context | Set response header |
 | `cookie(String name, String value, int maxAge)` | Context | Set cookie (HttpOnly + Secure) |
 | `sse()` | SseEmitter | Open SSE stream (text/event-stream) |
@@ -127,6 +154,8 @@ r.get("/stream", ctx -> {
 | `send(String event, String data)` | Send named event |
 | `send(String event, String data, String id)` | Send named event with id |
 | `close()` | Close the stream |
+
+**Security**: Event names and IDs are automatically sanitized — `\r` and `\n` characters are stripped to prevent SSE injection. Multiline data is split into multiple `data:` lines per the SSE spec.
 
 **AI streaming example:**
 

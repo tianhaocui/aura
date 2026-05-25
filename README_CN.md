@@ -16,6 +16,23 @@ AI 原生 Java 后端框架。**AI 开发 → AI 测试 → AI 使用。**
 | **AI 测试** | AI 立即验证自己写的代码，不需要启动 HTTP 服务器 | 内置 TestClient，内存级路由测试 |
 | **AI 使用** | AI agent 自动发现并调用你的 API | MCP 原生支持 + `/__schema__` 自描述 |
 
+## 立即体验
+
+添加到你的 Claude Desktop / Cursor MCP 配置：
+
+```json
+{
+  "mcpServers": {
+    "aura-demo": {
+      "command": "npx",
+      "args": ["aura-demo-mcp@0.3.0"]
+    }
+  }
+}
+```
+
+AI agent 获得 7 个工具（创建/列表/获取/更新/删除/搜索/统计 todos）。[源码](https://github.com/tianhaocui/aura-demo)
+
 ## 快速开始
 
 ```xml

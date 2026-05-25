@@ -294,7 +294,7 @@ Aura MCP implements [Model Context Protocol](https://modelcontextprotocol.io/) v
 {
   "protocolVersion": "2024-11-05",
   "capabilities": {"tools": {}},
-  "serverInfo": {"name": "aura-mcp", "version": "0.1.0"}
+  "serverInfo": {"name": "aura-mcp", "version": "0.3.0"}
 }
 ```
 

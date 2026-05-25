@@ -144,6 +144,10 @@ r.crud("/user", userService);
 // PUT    /user/{id}  → update(int id, ...)
 // DELETE /user/{id}  → delete(int id)
 // Missing methods are skipped.
+
+// Selective CRUD — only register specific operations
+r.crud("/user", userService, "get", "list");   // read-only: GET /user/{id} and GET /user
+r.crud("/user", userService, "create");        // write-only: POST /user
 ```
 
 `crud()` and manual routes can be mixed freely. Use `crud()` for standard CRUD, add custom routes for anything else:
@@ -233,6 +237,26 @@ app.routes(r -> {
 Execution order: global before → group before → handler → group after → global after.
 After handlers run even if the handler throws.
 
+### Aborting the Request in Middleware
+
+```java
+r.before(ctx -> {
+    if (!isValid(ctx.header("Authorization"))) {
+        ctx.status(401).json(Map.of("error", "Unauthorized"));
+        ctx.abort(); // stop processing — handler and after-middleware are skipped
+    }
+});
+
+// Check abort state in after-middleware if needed
+r.after(ctx -> {
+    if (!ctx.isAborted()) {
+        // only runs when request was not aborted
+    }
+});
+```
+
+`abort()` stops the middleware chain immediately. The response already written by the before-handler is sent as-is.
+
 ---
 
 ## Context API
@@ -275,6 +299,31 @@ ctx.app().get(Db.class);    // access registry
 
 ---
 
+## SSE (Server-Sent Events)
+
+```java
+r.get("/stream", ctx -> {
+    SseEmitter sse = ctx.sse();
+    sse.send("hello");                        // data: hello
+    sse.send("message", "payload");           // named event
+    sse.send("update", "content", "msg-1");  // with id
+    sse.close();
+});
+
+// AI streaming example
+r.post("/chat", ctx -> {
+    ChatReq req = ctx.body(ChatReq.class);
+    SseEmitter sse = ctx.sse();
+    aiClient.streamChat(req.message(), token -> sse.send("token", token));
+    sse.send("done", "");
+    sse.close();
+});
+```
+
+Event names and IDs are CRLF-sanitized automatically — `\r` and `\n` are stripped to prevent header injection.
+
+---
+
 ## Database
 
 ### Setup
@@ -282,6 +331,13 @@ ctx.app().get(Db.class);    // access registry
 ```java
 Db db = Db.create("jdbc:mysql://localhost/mydb", "user", "pass");
 // Uses HikariCP connection pool internally
+
+// Named datasource (for multi-datasource setups)
+Db main = Db.create("main", "jdbc:mysql://host/main", user, pass);
+Db log  = Db.create("log",  "jdbc:mysql://host/log",  user, pass);
+
+// Shutdown pool when done (e.g. in onStop hook)
+db.shutdownPool();
 ```
 
 ### Query Builder (recommended for simple queries)
@@ -292,6 +348,17 @@ db.table("user").where("age", ">", 18).orderBy("name").find();       // List<Row
 db.table("user").where("id", 1).findOne();                            // Row or null
 db.table("user").where("status", "active").paginate(1, 20);           // Page<Row>
 db.table("user").where("status", "active").count();                   // int
+
+// Conditional query — whereIf skips the condition when boolean is false
+db.table("user")
+  .whereIf(name != null, "name", name)
+  .whereIf(!ids.isEmpty(), "id", "IN", ids)
+  .find();
+
+// IN / NOT IN — Collection is auto-expanded to (?,?,?)
+db.table("user").where("id", "IN", List.of(1, 2, 3)).find();          // id IN (?,?,?)
+db.table("user").where("status", "NOT IN", List.of("banned")).find(); // status NOT IN (?)
+// Empty list produces WHERE 1=0 (always false, returns no rows)
 
 // Update
 db.table("user").where("id", 1).update(Row.of("").set("name", "new"));
@@ -308,11 +375,15 @@ db.table("user").where("status", "deleted").delete();
 String sql = "SELECT * FROM user #where(name, '=', name) #and(age, '>', age) #orderBy(created)";
 
 Map<String, Object> filter = Map.of("name", "tom", "age", 18);
-db.find(sql, filter);                        // List<Row>
-db.paginate(sql, filter, pageNum, pageSize); // Page<Row>
+db.findDynamic(sql, filter);                        // List<Row>
+db.paginateDynamic(sql, filter, pageNum, pageSize); // Page<Row>
 
 // If filter only has "name" → generates: WHERE name = ? (age condition skipped)
 // If filter is empty → generates: SELECT * FROM user (no WHERE at all)
+
+// Db.in() helper for raw SQL with IN clauses
+db.find("SELECT * FROM user WHERE id IN (" + Db.in(ids) + ")", ids.toArray());
+// Db.in(ids) returns "?,?,?" — throws IllegalArgumentException on empty list
 ```
 
 ### Row Object
@@ -321,6 +392,9 @@ db.paginate(sql, filter, pageNum, pageSize); // Page<Row>
 // Create — insert() returns self with generated primary key populated
 Row row = Row.of("user").set("name", "tom").set("age", 25).insert(db);
 Object id = row.id(); // generated ID
+
+// insertAndReturnId() — convenience shortcut when you only need the generated ID
+long newId = Row.of("user").set("name", "tom").set("age", 25).insertAndReturnId(db);
 
 // insertFull() — insert + re-fetch including server-generated columns (created_at, etc.)
 Row full = Row.of("user").set("name", "tom").insertFull(db);
@@ -366,7 +440,20 @@ db.transaction(() -> {
     db.execute("UPDATE account SET balance = balance + ? WHERE id = ?", 100, 2);
     // Rolls back on any exception
 });
-// Nested transactions throw IllegalStateException
+// Nested transactions reuse the outer connection — outer rollback rolls both back
+
+// Independent transaction (REQUIRES_NEW) — runs in a new thread, commits independently
+// WARNING: ThreadLocal state (request context, user info) is NOT inherited by the new thread
+db.transactionIndependent(() -> db.execute(auditSql, args));
+// Commits even if the outer transaction rolls back
+
+// Manual transaction control
+try (var tx = db.beginTransaction()) {
+    db.execute(sql1, args1);
+    db.execute(sql2, args2);
+    tx.commit();   // explicit commit
+    // tx.rollback() to abort; close() without commit auto-rolls back
+}
 ```
 
 ### Batch
@@ -435,6 +522,30 @@ public record CreateReq(String name, int age) {
     }
 }
 // Validation runs automatically on deserialization
+```
+
+### Cross-Field Validation (Validatable)
+
+For validation that spans multiple fields, implement `Validatable`. It is called automatically after annotation checks pass:
+
+```java
+record DateRange(
+    @NotNull LocalDate start,
+    @NotNull LocalDate end
+) implements Validatable {
+    public void validate() {
+        Validate.isTrue(!end.isBefore(start), "end must be after start");
+    }
+}
+
+record PasswordConfirm(
+    @NotBlank String password,
+    @NotBlank String confirm
+) implements Validatable {
+    public void validate() {
+        Validate.isTrue(password.equals(confirm), "passwords do not match");
+    }
+}
 ```
 
 ---
@@ -638,7 +749,7 @@ Aura.create()
 
 ### Property Resolution
 
-Priority: environment variable > code `.prop()` > `aura.properties` file
+Priority: startup args > environment variable > code `.prop()` > `aura.properties` file
 
 ```java
 // In code
@@ -758,6 +869,9 @@ java -jar app.jar --port=9090 --env=prod --mcp-stdio --config=/etc/myapp/custom.
 | `--env=X` | Override environment label |
 | `--mcp-stdio` | Enable MCP stdio mode |
 | `--config=path` | Load additional properties file (absolute path) |
+| `--key=value` | Override **any** property key (e.g. `--db.url=jdbc:mysql://...`) |
+
+Startup args have the highest priority — they override environment variables, code `.prop()`, and `aura.properties`.
 
 ### Registry
 
@@ -773,6 +887,45 @@ Db db = app.get(Db.class);
 ctx.app().get(Db.class);
 ```
 
+### Multi-DataSource
+
+```java
+// Named datasources
+Db main = Db.create("main", "jdbc:mysql://host/main", user, pass);
+Db log  = Db.create("log",  "jdbc:mysql://host/log",  user, pass);
+
+// Register by name
+app.register("main", main).register("log", log);
+
+// Retrieve by name
+Db logDb = app.getBean("log", Db.class);
+
+// Or pass directly to services — no registry needed
+new OrderService(main);
+new AuditService(log);
+```
+
+---
+
+## Packaging
+
+### Fat Jar
+
+```xml
+<!-- In your pom.xml, set main class -->
+<properties>
+    <main.class>com.example.App</main.class>
+</properties>
+```
+
+```bash
+mvn package -Pfat-jar
+java -jar target/your-app-1.0.jar
+java -jar target/your-app-1.0.jar --mcp-stdio
+```
+
+The `fat-jar` profile is inherited from `aura-parent`. It produces a single executable jar with all dependencies bundled.
+
 ---
 
 ## Security
@@ -782,8 +935,9 @@ ctx.app().get(Db.class);
 | Protection | Location | Behavior |
 |------------|----------|----------|
 | SQL injection | SqlSafe.java | Whitelist operators, validate identifiers |
-| CRLF injection | Context.redirect() | Rejects URLs with \r\n |
-| Cookie security | Context.cookie() | HttpOnly + Secure by default |
+| CRLF injection (redirect) | Context.redirect() | Rejects URLs containing `\r` or `\n` |
+| CRLF injection (SSE) | SseEmitter | Strips `\r` and `\n` from event names and IDs |
+| Cookie security | Context.cookie() | HttpOnly + Secure + SameSite=Lax by default |
 | Body size limit | Context.body() | readNBytes(maxSize), not readAllBytes() |
 | Parameter parsing | MethodRefHandler | NumberFormatException → 400, not 500 |
 | Graceful shutdown | UndertowStarter | Waits for in-flight requests |
