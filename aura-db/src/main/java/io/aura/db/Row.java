@@ -1,6 +1,7 @@
 package io.aura.db;
 
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 public class Row extends LinkedHashMap<String, Object> {
@@ -76,6 +77,13 @@ public class Row extends LinkedHashMap<String, Object> {
     public String table() { return table; }
     public String primaryKey() { return primaryKey; }
 
+
+    public static int batchInsert(Db db, List<Row> rows) {
+        if (rows == null || rows.isEmpty()) return 0;
+        String table = rows.get(0).table();
+        if (table == null) throw new IllegalStateException("Table name not set on first row");
+        return db.batchInsert(table, rows);
+    }
 
     public Row insert(Db db) {
         if (table == null) throw new IllegalStateException("Table name not set");

@@ -27,6 +27,25 @@ public interface BaseContext {
     void set(String key, Object value);
     <T> T get(String key, Class<T> type);
 
+    // --- typed query params ---
+    default int queryInt(String name, int defaultValue) {
+        String v = query(name);
+        if (v == null || v.isBlank()) return defaultValue;
+        try { return Integer.parseInt(v.trim()); } catch (NumberFormatException e) { return defaultValue; }
+    }
+
+    default long queryLong(String name, long defaultValue) {
+        String v = query(name);
+        if (v == null || v.isBlank()) return defaultValue;
+        try { return Long.parseLong(v.trim()); } catch (NumberFormatException e) { return defaultValue; }
+    }
+
+    default boolean queryBool(String name, boolean defaultValue) {
+        String v = query(name);
+        if (v == null || v.isBlank()) return defaultValue;
+        return "true".equalsIgnoreCase(v.trim());
+    }
+
     // --- pagination helpers ---
     default int pageNum() {
         String v = query("page");

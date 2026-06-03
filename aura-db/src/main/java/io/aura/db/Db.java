@@ -141,6 +141,25 @@ public class Db implements AutoCloseable {
         return paginate(p.sql(), p.params(), pageNum, pageSize);
     }
 
+    // null in data map means "skip this field", not "set to NULL". Use Row.update() for explicit nulls.
+    public int updateDynamic(String table, Map<String, Object> data, String primaryKey, Object pkValue) {
+        SqlSafe.identifier(table);
+        SqlSafe.identifier(primaryKey);
+        var setCols = new ArrayList<String>();
+        var params = new ArrayList<>();
+        for (var entry : data.entrySet()) {
+            if (entry.getValue() != null) {
+                SqlSafe.identifier(entry.getKey());
+                setCols.add(entry.getKey() + " = ?");
+                params.add(entry.getValue());
+            }
+        }
+        if (setCols.isEmpty()) return 0;
+        params.add(pkValue);
+        String sql = "UPDATE " + table + " SET " + String.join(", ", setCols) + " WHERE " + primaryKey + " = ?";
+        return execute(sql, params.toArray());
+    }
+
     // --- pagination ---
 
     public <T> Page<T> paginate(String sql, Object[] params, int pageNum, int pageSize,
@@ -207,6 +226,34 @@ public class Db implements AutoCloseable {
     }
 
     // --- batch ---
+
+    public int batchInsert(String table, List<Row> rows) {
+        if (rows == null || rows.isEmpty()) return 0;
+        SqlSafe.identifier(table);
+        java.util.LinkedHashSet<String> allCols = new java.util.LinkedHashSet<>();
+        for (Row row : rows) {
+            for (String key : row.keySet()) {
+                SqlSafe.identifier(key);
+                allCols.add(key);
+            }
+        }
+        List<String> cols = new ArrayList<>(allCols);
+        String colStr = String.join(", ", cols);
+        String placeholders = String.join(", ", cols.stream().map(c -> "?").toList());
+        String sql = "INSERT INTO " + table + " (" + colStr + ") VALUES (" + placeholders + ")";
+        List<Object[]> paramsList = new ArrayList<>(rows.size());
+        for (Row row : rows) {
+            Object[] params = new Object[cols.size()];
+            for (int i = 0; i < cols.size(); i++) {
+                params[i] = row.get(cols.get(i));
+            }
+            paramsList.add(params);
+        }
+        int[] results = batch(sql, paramsList);
+        int total = 0;
+        for (int r : results) total += Math.max(r, 0);
+        return total;
+    }
 
     public int[] batch(String sql, List<Object[]> paramsList) {
         boolean inTx = TX_CONN.get() != null;
