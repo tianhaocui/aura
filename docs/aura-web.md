@@ -125,15 +125,15 @@ Request/response wrapper passed to handlers.
 |--------|---------|-------------|
 | `status(int code)` | Context | Set status code (chainable) |
 | `json(Object obj)` | void | Send JSON response |
-
-**Note**: `ctx.json(row)` works directly — Row extends LinkedHashMap and serializes as a JSON object. No manual Map conversion needed. Use `.select("col1, col2")` in the query to control which fields appear in the output.
 | `text(String text)` | void | Send plain text response |
 | `redirect(String url)` | void | 302 redirect |
-
-**Security**: `redirect(url)` throws `IllegalArgumentException` if the URL contains `\r` or `\n` (CRLF injection prevention).
 | `header(String name, String value)` | Context | Set response header |
 | `cookie(String name, String value, int maxAge)` | Context | Set cookie (HttpOnly + Secure) |
 | `sse()` | SseEmitter | Open SSE stream (text/event-stream) |
+
+**Note**: `ctx.json(row)` works directly — Row extends LinkedHashMap and serializes as a JSON object. No manual Map conversion needed. Use `.select("col1, col2")` in the query to control which fields appear in the output.
+
+**Security**: `redirect(url)` throws `IllegalArgumentException` if the URL contains `\r` or `\n` (CRLF injection prevention).
 
 ---
 
