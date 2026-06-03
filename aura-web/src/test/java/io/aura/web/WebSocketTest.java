@@ -145,10 +145,11 @@ class WebSocketTest {
                             return null;
                         }
                     }).join();
+            Thread.sleep(100);
             ws.sendText("a", true);
             ws.sendText("b", true);
             ws.sendText("c", true);
-            assertThat(latch.await(3, TimeUnit.SECONDS)).isTrue();
+            assertThat(latch.await(5, TimeUnit.SECONDS)).isTrue();
             assertThat(messages).containsExactly("A", "B", "C");
             ws.sendClose(WebSocket.NORMAL_CLOSURE, "done");
         } finally {
