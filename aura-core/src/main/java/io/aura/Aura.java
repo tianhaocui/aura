@@ -35,6 +35,8 @@ public class Aura {
     private String corsOrigin;
     private long maxBodySize = 10 * 1024 * 1024; // 10MB default
     private int shutdownTimeout = 30;
+    private boolean accessLog;
+    private JsonConfig jsonConfig = new JsonConfig();
     private int mcpPort = -1;
     private java.io.PrintStream mcpStdout;
     private McpRouterSpec mcpRouter;
@@ -109,6 +111,16 @@ public class Aura {
 
     public Aura shutdownTimeout(int seconds) {
         this.shutdownTimeout = seconds;
+        return this;
+    }
+
+    public Aura accessLog(boolean enabled) {
+        this.accessLog = enabled;
+        return this;
+    }
+
+    public Aura jsonConfig(java.util.function.Consumer<JsonConfig> config) {
+        config.accept(this.jsonConfig);
         return this;
     }
 
@@ -311,6 +323,8 @@ public class Aura {
     public String corsOrigin() { return corsOrigin; }
     public long maxBodySize() { return maxBodySize; }
     public int shutdownTimeout() { return shutdownTimeout; }
+    public boolean accessLog() { return accessLog; }
+    public JsonConfig jsonConfig() { return jsonConfig; }
     public int mcpPort() { return mcpPort; }
     public java.io.PrintStream mcpStdout() { return mcpStdout; }
     public McpRouterSpec mcpRouter() { return mcpRouter; }
@@ -364,6 +378,9 @@ public class Aura {
 
         String shutdown = resolve("aura.shutdown-timeout", "AURA_SHUTDOWN_TIMEOUT");
         if (shutdown != null) this.shutdownTimeout = Integer.parseInt(shutdown);
+
+        String accessLog = resolve("aura.access-log", "AURA_ACCESS_LOG");
+        if (accessLog != null) this.accessLog = "true".equalsIgnoreCase(accessLog);
     }
 
     private String resolve(String propKey, String envKey) {

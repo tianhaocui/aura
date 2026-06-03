@@ -210,6 +210,42 @@ class AuraConfigTest {
         assertThat(app.getBean(StringBuilder.class)).isSameAs(second);
     }
 
+    // --- accessLog ---
+
+    @Test
+    void accessLog_defaultIsFalse() {
+        Aura app = Aura.create();
+        assertThat(app.accessLog()).isFalse();
+    }
+
+    @Test
+    void accessLog_canBeEnabled() {
+        Aura app = Aura.create().accessLog(true);
+        assertThat(app.accessLog()).isTrue();
+    }
+
+    @Test
+    void accessLog_canBeDisabledAfterEnabled() {
+        Aura app = Aura.create().accessLog(true).accessLog(false);
+        assertThat(app.accessLog()).isFalse();
+    }
+
+    // --- jsonConfig ---
+
+    @Test
+    void jsonConfig_defaultDateFormat() {
+        Aura app = Aura.create();
+        assertThat(app.jsonConfig()).isNotNull();
+        assertThat(app.jsonConfig().dateFormat()).isEqualTo("yyyy-MM-dd'T'HH:mm:ss.SSS");
+    }
+
+    @Test
+    void jsonConfig_canBeCustomized() {
+        Aura app = Aura.create().jsonConfig(cfg -> cfg.dateFormat("yyyy-MM-dd").writeNulls(true));
+        assertThat(app.jsonConfig().dateFormat()).isEqualTo("yyyy-MM-dd");
+        assertThat(app.jsonConfig().writeNulls()).isTrue();
+    }
+
     // --- named registry type check ---
 
     @Test

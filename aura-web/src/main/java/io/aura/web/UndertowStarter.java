@@ -73,7 +73,8 @@ public class UndertowStarter implements AuraStarter {
         }
 
         compiledRoutes = compile(router, "", new ArrayList<>(), new ArrayList<>());
-        compiledRoutes.sort(Comparator.comparingInt(r -> r.paramNames().size()));
+        compiledRoutes.sort(Comparator.comparingInt((CompiledRoute r) -> r.paramNames().size())
+                .thenComparing(Comparator.comparingLong((CompiledRoute r) -> r.rawPath().chars().filter(c -> c == '/').count()).reversed()));
 
         compiledWsRoutes = compileWsRoutes(router);
 
@@ -199,7 +200,9 @@ public class UndertowStarter implements AuraStarter {
                 handleException(e, ctx);
             } finally {
                 runAfterHandlers(route.afterHandlers(), ctx);
-                log.info("{} {} {} {}ms", method, path, exchange.getStatusCode(), System.currentTimeMillis() - start);
+                if (app.accessLog()) {
+                    log.info("{} {} → {} ({}ms)", method, path, exchange.getStatusCode(), System.currentTimeMillis() - start);
+                }
             }
             return;
         }
@@ -396,7 +399,8 @@ public class UndertowStarter implements AuraStarter {
 
     static List<CompiledRoute> compileRoutes(BaseRouter router) {
         List<CompiledRoute> routes = new UndertowStarter().compile(router, "", new ArrayList<>(), new ArrayList<>());
-        routes.sort(Comparator.comparingInt(r -> r.paramNames().size()));
+        routes.sort(Comparator.comparingInt((CompiledRoute r) -> r.paramNames().size())
+                .thenComparing(Comparator.comparingLong((CompiledRoute r) -> r.rawPath().chars().filter(c -> c == '/').count()).reversed()));
         return routes;
     }
 

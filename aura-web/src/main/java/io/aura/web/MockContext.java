@@ -40,7 +40,14 @@ class MockContext extends Context {
     @Override public int statusCode() { return status == 0 ? 200 : status; }
 
     @Override public Context status(int code) { this.status = code; return this; }
-    @Override public void json(Object obj) { responseBody = JSON.toJSONString(obj, "yyyy-MM-dd'T'HH:mm:ss.SSS"); }
+    @Override public void json(Object obj) {
+        io.aura.JsonConfig cfg = app != null ? app.jsonConfig() : null;
+        String dateFormat = cfg != null ? cfg.dateFormat() : "yyyy-MM-dd'T'HH:mm:ss.SSS";
+        com.alibaba.fastjson2.JSONWriter.Feature[] features = cfg != null && cfg.writeNulls()
+                ? new com.alibaba.fastjson2.JSONWriter.Feature[]{com.alibaba.fastjson2.JSONWriter.Feature.WriteNulls}
+                : new com.alibaba.fastjson2.JSONWriter.Feature[0];
+        responseBody = JSON.toJSONString(obj, dateFormat, features);
+    }
     @Override public void text(String text) { responseBody = text; }
     @Override public void redirect(String url) { status = 302; }
     @Override public Context header(String name, String value) { return this; }

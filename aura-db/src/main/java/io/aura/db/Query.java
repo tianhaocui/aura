@@ -83,7 +83,7 @@ public class Query {
     }
 
     public List<Row> find() {
-        return db.find(buildSql(), params.toArray());
+        return db.query(buildSql(), params.toArray(), rs -> Db.rsToRow(rs, table));
     }
 
     public Row findOne() {

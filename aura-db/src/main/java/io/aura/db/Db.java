@@ -373,15 +373,15 @@ public class Db implements AutoCloseable {
         return ps;
     }
 
-    private static Row rsToRow(ResultSet rs) throws SQLException {
+    static Row rsToRow(ResultSet rs) throws SQLException {
         return rsToRow(rs, null, "id");
     }
 
-    private static Row rsToRow(ResultSet rs, String table) throws SQLException {
+    static Row rsToRow(ResultSet rs, String table) throws SQLException {
         return rsToRow(rs, table, "id");
     }
 
-    private static Row rsToRow(ResultSet rs, String table, String primaryKey) throws SQLException {
+    static Row rsToRow(ResultSet rs, String table, String primaryKey) throws SQLException {
         ResultSetMetaData meta = rs.getMetaData();
         int cols = meta.getColumnCount();
         Row row = table != null ? Row.of(table, primaryKey) : Row.of("");

@@ -1,8 +1,9 @@
 package io.aura.web;
 
 import com.alibaba.fastjson2.JSON;
+import com.alibaba.fastjson2.JSONWriter;
 import io.aura.Aura;
-import io.aura.web.SseEmitter;
+import io.aura.JsonConfig;
 import io.undertow.server.HttpServerExchange;
 import io.undertow.server.handlers.form.FormData;
 import io.undertow.server.handlers.form.FormDataParser;
@@ -90,7 +91,12 @@ public class Context implements BaseContext {
 
     @Override public void json(Object obj) {
         exchange.getResponseHeaders().put(Headers.CONTENT_TYPE, "application/json; charset=utf-8");
-        exchange.getResponseSender().send(JSON.toJSONString(obj, "yyyy-MM-dd'T'HH:mm:ss.SSS"));
+        JsonConfig cfg = app != null ? app.jsonConfig() : null;
+        String dateFormat = cfg != null ? cfg.dateFormat() : "yyyy-MM-dd'T'HH:mm:ss.SSS";
+        JSONWriter.Feature[] features = cfg != null && cfg.writeNulls()
+                ? new JSONWriter.Feature[]{JSONWriter.Feature.WriteNulls}
+                : new JSONWriter.Feature[0];
+        exchange.getResponseSender().send(JSON.toJSONString(obj, dateFormat, features));
     }
 
     @Override public void text(String text) {
