@@ -181,6 +181,39 @@ class ContextTest {
     }
 
     // -------------------------------------------------------------------------
+    // json(Object) serialization respects JsonConfig
+    // -------------------------------------------------------------------------
+
+    @Test
+    void json_writesNulls_whenJsonConfigEnabled() {
+        Aura a = Aura.create().jsonConfig(cfg -> cfg.writeNulls(true));
+        MockContext ctx = new MockContext(Map.of(), Map.of(), Map.of(), null, a);
+        ctx.json(new NullableObj("hello", null));
+        assertThat(ctx.responseBody).contains("\"name\"");
+        assertThat(ctx.responseBody).contains("\"hello\"");
+        assertThat(ctx.responseBody).contains("\"value\":null");
+    }
+
+    @Test
+    void json_omitsNulls_whenWriteNullsDisabled() {
+        Aura a = Aura.create(); // writeNulls defaults to false
+        MockContext ctx = new MockContext(Map.of(), Map.of(), Map.of(), null, a);
+        ctx.json(new NullableObj("hello", null));
+        assertThat(ctx.responseBody).contains("\"name\"");
+        assertThat(ctx.responseBody).doesNotContain("\"value\"");
+    }
+
+    @Test
+    void json_respectsCustomDateFormat_viaTestClient() {
+        Aura a = Aura.create().jsonConfig(cfg -> cfg.dateFormat("yyyy-MM-dd"));
+        Router router = new Router();
+        router.get("/date", ctx -> ctx.json(Map.of("d", java.time.LocalDate.of(2025, 1, 15))));
+        TestClient client = new TestClient(a, router);
+        String body = client.get("/date").execute().body();
+        assertThat(body).contains("2025-01-15");
+    }
+
+    // -------------------------------------------------------------------------
     // json(Object) serialization format
     // -------------------------------------------------------------------------
 
@@ -368,6 +401,7 @@ class ContextTest {
     // -------------------------------------------------------------------------
 
     record User(String name, int age) {}
+    record NullableObj(String name, String value) {}
 
     static abstract class AbstractService {}
     static class ConcreteService extends AbstractService {}

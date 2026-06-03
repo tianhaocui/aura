@@ -2,6 +2,14 @@ package io.aura.web;
 
 public class Router extends BaseRouter {
 
+    @Override
+    public BaseRouter group(String prefix, java.util.function.Consumer<BaseRouter> block) {
+        Router sub = new Router();
+        block.accept(sub);
+        groups.add(new Group(prefix, sub));
+        return this;
+    }
+
     public BaseRouteBuilder get(String path, Object target, String method) {
         return addMethodRoute("GET", path, new MethodRefHandler(target, method));
     }

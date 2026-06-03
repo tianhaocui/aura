@@ -81,6 +81,12 @@ class UserService {
 
 **Route priority**: exact paths always beat parameterized paths regardless of registration order.
 `/api/items/search` will always match before `/api/items/{id}` even if `{id}` was registered first.
+Among routes with the same number of path parameters, longer paths (more segments) take priority:
+`/api/rides/{id}/gpx` (4 segments) beats `/api/rides/{id}` (3 segments).
+
+**`@Path` annotation**: only works with `.service()` registration. Inside a `routes()` lambda, `@Path` annotations are ignored — register paths explicitly via `r.get(path, ...)`.
+
+**`ctx.body()` with empty body**: when the request body is empty/null, the resulting record has all fields at their default values (`null` for objects, `0` for int, etc.). Use `@NotBlank` on required fields to catch this.
 
 ## Parameter Binding Rules
 
@@ -96,6 +102,9 @@ class UserService {
 
 ```java
 Db db = Db.create(url, user, pass);
+
+// db.execute() returns int (affected row count)
+int affected = db.execute("UPDATE user SET active = ? WHERE id = ?", true, id);
 
 // Dynamic SQL with directives (recommended for complex queries)
 // Null/blank params are auto-skipped — no if/else needed
@@ -247,6 +256,8 @@ public record CreateUser(
 
 Annotations: `@NotNull`, `@NotBlank`, `@Min`, `@Max`, `@Size`, `@Pattern`
 
+**Important**: Validation annotations only trigger for record/POJO body parameters. Path/query params (`int`, `String`, etc.) are NOT validated by annotations — use manual checks if needed.
+
 For cross-field validation, implement `Validatable` — called automatically after annotation checks pass:
 
 ```java
@@ -292,6 +303,12 @@ Aura.create()
     .maxBodySize(10 * 1024 * 1024L) // request body limit (default: 10MB)
     .staticFiles("/public")        // serve classpath:/public with Cache-Control + ETag
     .spa(true)                     // SPA mode: unknown paths fall back to /index.html
+    .accessLog(true)               // or env: AURA_ACCESS_LOG=true — logs: GET /path → 200 (12ms)
+    .jsonConfig(c -> {             // global JSON serialization config
+        c.dateFormat("yyyy-MM-dd HH:mm:ss");
+        c.writeNulls(true);        // output null fields in JSON
+    })
+    .shutdownTimeout(30)           // graceful shutdown wait (seconds, default: 30)
     .mcp(true)                     // MCP Server for AI agents (all routes)
     .mcp(mcpRouter)                // MCP with selective tool exposure
     .set("db.url", "jdbc:mysql://...")
@@ -299,6 +316,8 @@ Aura.create()
     .onStop(a -> a.getBean(Db.class).close())
     .start(args);                  // supports --config=file --port=N --env=X
 ```
+
+**Graceful shutdown** is built-in: on SIGTERM/SIGINT, Aura waits up to `shutdownTimeout` seconds for in-flight requests to complete before stopping. No additional code required.
 
 Properties read: startup args > env var > `aura.properties` > code default.
 
@@ -408,6 +427,14 @@ URL config (npm bridge): env `AURA_API_URL` > `aura.properties` (`api.url=...`) 
 - One `Aura.create()...start()` is a complete app
 - `aura.properties` in classpath is auto-loaded if present
 - Row type roundtrip: insert with `LocalDateTime` → `findById` returns `LocalDateTime` → `update` writes back without conversion
+
+## Important Notes
+
+- **Validation annotations only apply to record body parameters** — path/query params (int, String, etc.) are NOT validated by `@NotBlank`, `@Min`, etc. Only record/POJO bodies trigger annotation-based validation.
+- **`db.execute()` returns `int`** — the number of affected rows. Use it to check if an UPDATE/DELETE actually changed anything.
+- **`@Path` annotation only works with `.service()` registration** — routes registered via `routes()` lambda do NOT process `@Path`. Use explicit path strings in the lambda.
+- **Graceful shutdown is built-in** — configure via `shutdownTimeout(seconds)` or env `AURA_SHUTDOWN_TIMEOUT`. Default: 30s. Inflight requests complete before server stops.
+- **`ctx.body()` on empty body gives default values** — when the request body is empty or `{}`, record fields get Java defaults (`null` for objects, `0` for int, `false` for boolean). Use `@NotBlank` on required String fields to reject empty requests.
 
 ## Packaging (Fat Jar)
 
