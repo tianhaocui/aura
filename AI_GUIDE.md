@@ -9,13 +9,13 @@ You are developing with Aura, a lightweight Java 17+ backend framework.
     <dependency>
         <groupId>io.github.tianhaocui</groupId>
         <artifactId>aura-web</artifactId>
-        <version>0.4.0</version>
+        <version>0.4.2</version>
     </dependency>
     <!-- Optional: database -->
     <dependency>
         <groupId>io.github.tianhaocui</groupId>
         <artifactId>aura-db</artifactId>
-        <version>0.4.0</version>
+        <version>0.4.2</version>
     </dependency>
     <!-- Required: add your own SLF4J provider (aura-web uses slf4j-api) -->
     <dependency>
@@ -167,6 +167,18 @@ db.batch("INSERT INTO user(name, age) VALUES(?, ?)", List.of(
     new Object[]{"alice", 25},
     new Object[]{"bob", 30}
 ));
+
+// Batch insert with Row objects (column union — missing fields auto-filled with null)
+db.batchInsert("track_points", List.of(
+    Row.of("track_points").set("lat", 39.9).set("lng", 116.4).set("ts", 1000L),
+    Row.of("track_points").set("lat", 40.0).set("lng", 116.5).set("ts", 2000L)
+));
+// Or via Row static method:
+Row.batchInsert(db, rows);
+
+// Dynamic update — only non-null fields are updated (null = skip, not "set to NULL")
+db.updateDynamic("rides", Map.of("title", "New Title", "status", "published"), "id", rideId);
+// Generates: UPDATE rides SET title=?, status=? WHERE id=?
 
 // IN query — Query builder auto-expands Collection
 db.table("user").where("id", "IN", List.of(1, 2, 3)).find();       // id IN (?,?,?)
@@ -344,7 +356,14 @@ ctx.pageNum()    ctx.pageSize()       ctx.file("field")   // UploadedFile
 ctx.status(201)  ctx.json(obj)        ctx.text("ok")  ctx.redirect("/")
 ctx.set(user)    ctx.get(User.class)  ctx.app().getBean(Db.class)
 ctx.sse()        // SseEmitter — opens text/event-stream response
+
+// Typed query params (return default on null/blank/parse failure)
+ctx.queryInt("page", 1)          // int
+ctx.queryLong("since", 0L)       // long
+ctx.queryBool("active", false)   // boolean — only "true" (case-insensitive) returns true
 ```
+
+**Important**: `ctx.json(row)` works directly — Row extends LinkedHashMap, so it serializes as a JSON object with all fields. No need to manually build a Map. To output only specific columns, use `.select("id, name, status")` in the query instead.
 
 ## SSE (Server-Sent Events)
 
@@ -419,6 +438,51 @@ Aura.create().mcp(mcp).start(args);
 
 McpContext methods: `getString()`, `getInt()`, `getLong()`, `getEnum(name, Type.class)`, `get()`.
 URL config (npm bridge): env `AURA_API_URL` > `aura.properties` (`api.url=...`) > baked default.
+
+## Common Patterns (avoid reinventing these)
+
+```java
+// ❌ WRONG: manually assembling a Map from Row
+Map<String, Object> data = new LinkedHashMap<>();
+data.put("id", row.getStr("id"));
+data.put("name", row.getStr("name"));
+ctx.json(data);
+
+// ✅ RIGHT: Row IS a Map — serialize directly
+ctx.json(row);
+// Or select specific columns at query time:
+ctx.json(db.table("user").select("id, name, status").where("id", id).findOne());
+
+// ❌ WRONG: manual pagination
+int offset = (page - 1) * pageSize;
+int total = db.table("rides").where("user_id", userId).count();
+List<Row> rows = db.find(sql + " LIMIT ? OFFSET ?", userId, pageSize, offset);
+
+// ✅ RIGHT: use Query.paginate()
+Page<Row> page = db.table("rides")
+    .where("user_id", userId)
+    .orderBy("created_at DESC")
+    .paginate(ctx.pageNum(), ctx.pageSize());
+ctx.json(page); // {list: [...], pageNum: 1, pageSize: 20, total: 42, totalPages: 3, ...}
+
+// ❌ WRONG: manual delete with raw SQL
+db.execute("DELETE FROM tournaments WHERE id = ?", id);
+
+// ✅ RIGHT: use Query.delete()
+db.table("tournaments").where("id", id).delete();
+
+// ❌ WRONG: repeating auth in every method
+public List<Ride> list(Context ctx) { jwt.requireAuth(ctx); ... }
+public Ride get(Context ctx) { jwt.requireAuth(ctx); ... }
+
+// ✅ RIGHT: use group + before middleware
+r.group("/api", api -> {
+    api.before(ctx -> jwt.requireAuth(ctx));
+    api.get("/rides", rideService, "list");
+    api.get("/rides/{id}", rideService, "get");
+});
+r.post("/auth/login", authService, "login"); // outside group = no auth
+```
 
 ## Key Principles
 

@@ -103,6 +103,9 @@ Request/response wrapper passed to handlers.
 | `path(String name)` | String | Path parameter value |
 | `query(String name)` | String | Query parameter value |
 | `query(String name, String default)` | String | Query param with default |
+| `queryInt(String name, int default)` | int | Query param as int (null/blank/invalid → default) |
+| `queryLong(String name, long default)` | long | Query param as long (null/blank/invalid → default) |
+| `queryBool(String name, boolean default)` | boolean | Query param as boolean (only "true" → true) |
 | `header(String name)` | String | Request header |
 | `cookie(String name)` | String | Cookie value |
 | `body(Class<T> type)` | T | JSON-deserialized request body |
@@ -122,6 +125,8 @@ Request/response wrapper passed to handlers.
 |--------|---------|-------------|
 | `status(int code)` | Context | Set status code (chainable) |
 | `json(Object obj)` | void | Send JSON response |
+
+**Note**: `ctx.json(row)` works directly — Row extends LinkedHashMap and serializes as a JSON object. No manual Map conversion needed. Use `.select("col1, col2")` in the query to control which fields appear in the output.
 | `text(String text)` | void | Send plain text response |
 | `redirect(String url)` | void | 302 redirect |
 

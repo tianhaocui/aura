@@ -120,6 +120,32 @@ db.batch("INSERT INTO user (name, age) VALUES (?, ?)", List.of(
 ));
 ```
 
+### Batch Insert (Row-based)
+
+```java
+// Insert multiple Rows in one batch — columns are the union of all Rows, missing fields filled with null
+List<Row> points = List.of(
+    Row.of("track_points").set("lat", 39.9).set("lng", 116.4).set("ts", 1000L),
+    Row.of("track_points").set("lat", 40.0).set("lng", 116.5).set("ts", 2000L)
+);
+int count = db.batchInsert("track_points", points); // returns total affected rows
+
+// Or via Row static method (table name taken from first Row):
+Row.batchInsert(db, points);
+```
+
+### Dynamic Update
+
+```java
+// Only updates non-null fields — null means "skip this field", not "set to NULL"
+Map<String, Object> data = Map.of("title", "New Title", "status", "published");
+db.updateDynamic("rides", data, "id", rideId);
+// Generates: UPDATE rides SET title=?, status=? WHERE id=?
+
+// All nulls → returns 0, no SQL executed
+// Use Row.update() if you need to explicitly set a column to NULL
+```
+
 ### Transaction
 
 ```java
