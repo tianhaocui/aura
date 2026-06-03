@@ -2,7 +2,6 @@ package io.aura.mcp;
 
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONObject;
-import io.aura.Aura;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -102,15 +101,24 @@ class McpBridgeProtocolTest {
             ByteArrayOutputStream baos = new ByteArrayOutputStream();
             PrintStream out = new PrintStream(baos, true, StandardCharsets.UTF_8);
 
-            Aura app = Aura.create().port(19999);
-            // Use reflection to access the private McpRouterBridge
-            var bridgeClass = Class.forName("io.aura.mcp.AuraMcpStarter$McpRouterBridge");
-            var constructor = bridgeClass.getDeclaredConstructor(McpRouter.class, PrintStream.class);
-            constructor.setAccessible(true);
-            Object bridge = constructor.newInstance(router, out);
-            var runMethod = bridgeClass.getDeclaredMethod("run");
-            runMethod.setAccessible(true);
-            runMethod.invoke(bridge);
+            McpProtocol protocol = new McpProtocol(out, "aura-mcp", (method, params) -> switch (method) {
+                case "tools/list" -> router.buildSchema();
+                case "tools/call" -> {
+                    String toolName = params.getString("name");
+                    JSONObject args = params.getJSONObject("arguments");
+                    Map<String, Object> argsMap = args != null ? args.toJavaObject(Map.class) : Map.of();
+                    try {
+                        Object result = router.invoke(toolName, argsMap);
+                        String text = result instanceof String s ? s : JSON.toJSONString(result);
+                        yield Map.of("content", List.of(Map.of("type", "text", "text", text)));
+                    } catch (Exception e) {
+                        yield Map.of("isError", true,
+                            "content", List.of(Map.of("type", "text", "text", "Error: " + e.getMessage())));
+                    }
+                }
+                default -> null;
+            });
+            protocol.runStdio();
 
             return baos.toString(StandardCharsets.UTF_8).trim();
         } finally {

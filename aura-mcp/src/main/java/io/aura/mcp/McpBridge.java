@@ -27,57 +27,12 @@ public class McpBridge {
 
     public void run() throws Exception {
         loadSchema();
-        BufferedReader in = new BufferedReader(new InputStreamReader(System.in, StandardCharsets.UTF_8));
-        String line;
-        while ((line = in.readLine()) != null) {
-            if (line.isBlank()) continue;
-            try {
-                JSONObject request = JSON.parseObject(line);
-                JSONObject response = handle(request);
-                if (response != null) {
-                    out.println(response.toJSONString());
-                    out.flush();
-                }
-            } catch (Exception e) {
-                JSONObject err = new JSONObject();
-                err.put("jsonrpc", "2.0");
-                err.put("id", (Object) null);
-                err.put("error", Map.of("code", -32700, "message", "Parse error: " + e.getMessage()));
-                out.println(err.toJSONString());
-                out.flush();
-            }
-        }
-    }
-
-    private JSONObject handle(JSONObject request) {
-        String method = request.getString("method");
-        Object id = request.get("id");
-
-        if (method == null) return null;
-
-        Object result = switch (method) {
-            case "initialize" -> handleInitialize();
-            case "notifications/initialized" -> null;
+        McpProtocol protocol = new McpProtocol(out, "aura-mcp-bridge", (method, params) -> switch (method) {
             case "tools/list" -> handleToolsList();
-            case "tools/call" -> handleToolsCall(request.getJSONObject("params"));
+            case "tools/call" -> handleToolsCall(params);
             default -> null;
-        };
-
-        if (id == null || result == null) return null;
-
-        JSONObject resp = new JSONObject();
-        resp.put("jsonrpc", "2.0");
-        resp.put("id", id);
-        resp.put("result", result);
-        return resp;
-    }
-
-    private Map<String, Object> handleInitialize() {
-        return Map.of(
-                "protocolVersion", "2024-11-05",
-                "capabilities", Map.of("tools", Map.of()),
-                "serverInfo", Map.of("name", "aura-mcp-bridge", "version", "0.1.0")
-        );
+        });
+        protocol.runStdio();
     }
 
     private Map<String, Object> handleToolsList() {

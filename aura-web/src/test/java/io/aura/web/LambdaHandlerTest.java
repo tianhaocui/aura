@@ -137,7 +137,8 @@ class LambdaHandlerTest {
         var handler = new LambdaHandler(new IntParamHandler());
         var ctx = mockCtx(Map.of("id", "abc"), Map.of(), null);
         assertThatThrownBy(() -> handler.handle(ctx))
-            .isInstanceOf(NumberFormatException.class);
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("Invalid integer");
     }
 
     @Test

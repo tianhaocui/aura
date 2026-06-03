@@ -11,7 +11,6 @@ class JsonConfigTest {
         JsonConfig config = new JsonConfig();
         assertThat(config.dateFormat()).isEqualTo("yyyy-MM-dd'T'HH:mm:ss.SSS");
         assertThat(config.writeNulls()).isFalse();
-        assertThat(config.features()).isEmpty();
     }
 
     @Test
@@ -29,21 +28,12 @@ class JsonConfigTest {
     }
 
     @Test
-    void addFeature() {
-        JsonConfig config = new JsonConfig();
-        config.feature("PrettyFormat");
-        assertThat(config.features()).containsExactly("PrettyFormat");
-    }
-
-    @Test
     void fluentApi() {
         JsonConfig config = new JsonConfig()
                 .dateFormat("yyyy-MM-dd")
-                .writeNulls(true)
-                .feature("WriteMapNullValue");
+                .writeNulls(true);
 
         assertThat(config.dateFormat()).isEqualTo("yyyy-MM-dd");
         assertThat(config.writeNulls()).isTrue();
-        assertThat(config.features()).hasSize(1);
     }
 }

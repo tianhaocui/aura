@@ -9,57 +9,24 @@ public final class LambdaHandler implements BaseHandler {
     private final Object lambda;
     private final Method samMethod;
     private final boolean hasReturn;
+    private final ParamResolver.Binder[] binders;
 
     public LambdaHandler(Object lambda) {
         this.lambda = lambda;
         this.samMethod = findSamMethod(lambda);
         this.hasReturn = samMethod.getReturnType() != void.class;
+        Parameter[] params = samMethod.getParameters();
+        this.binders = new ParamResolver.Binder[params.length];
+        for (int i = 0; i < params.length; i++) {
+            binders[i] = ParamResolver.create(params[i]);
+        }
     }
 
     @Override
     public void handle(BaseContext ctx) throws Exception {
-        Parameter[] params = samMethod.getParameters();
-        Object[] args = new Object[params.length];
-
-        for (int i = 0; i < params.length; i++) {
-            Class<?> type = params[i].getType();
-            String name = params[i].getName();
-
-            if (type == Context.class || type == BaseContext.class) {
-                args[i] = ctx;
-            } else if (type == String.class) {
-                String val = ctx.path(name);
-                args[i] = val != null ? val : ctx.query(name);
-            } else if (type == int.class) {
-                String val = ctx.path(name);
-                if (val == null) val = ctx.query(name);
-                args[i] = val != null ? Integer.parseInt(val) : 0;
-            } else if (type == Integer.class) {
-                String val = ctx.path(name);
-                if (val == null) val = ctx.query(name);
-                args[i] = val != null ? Integer.parseInt(val) : null;
-            } else if (type == long.class) {
-                String val = ctx.path(name);
-                if (val == null) val = ctx.query(name);
-                args[i] = val != null ? Long.parseLong(val) : 0L;
-            } else if (type == Long.class) {
-                String val = ctx.path(name);
-                if (val == null) val = ctx.query(name);
-                args[i] = val != null ? Long.parseLong(val) : null;
-            } else if (type == boolean.class) {
-                String val = ctx.path(name);
-                if (val == null) val = ctx.query(name);
-                args[i] = "true".equalsIgnoreCase(val);
-            } else if (type == Boolean.class) {
-                String val = ctx.path(name);
-                if (val == null) val = ctx.query(name);
-                args[i] = val != null ? "true".equalsIgnoreCase(val) : null;
-            } else if (type.isRecord() || TypeUtil.isPojo(type)) {
-                args[i] = ctx.body(type);
-            } else {
-                String val = ctx.path(name);
-                args[i] = val != null ? val : ctx.query(name);
-            }
+        Object[] args = new Object[binders.length];
+        for (int i = 0; i < binders.length; i++) {
+            args[i] = binders[i].resolve(ctx);
         }
 
         Object result = samMethod.invoke(lambda, args);

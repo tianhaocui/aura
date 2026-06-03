@@ -1,7 +1,6 @@
 package io.aura.web;
 
 import io.aura.Aura;
-import io.aura.RouteEntry;
 
 import java.lang.management.ManagementFactory;
 import java.lang.management.MemoryMXBean;
@@ -27,13 +26,13 @@ public class MonitorDemo {
         var app = Aura.create().port(8080).cors(true);
 
         // 健康检查
-        app.get("/health", (RouteEntry.F0<HealthStatus>) () ->
+        app.get("/health", (java.util.function.Supplier<HealthStatus>) () ->
                 new HealthStatus("UP",
                         System.currentTimeMillis() - startTime,
                         Instant.ofEpochMilli(startTime).toString()));
 
         // 系统信息
-        app.get("/status", (RouteEntry.F0<Map<String, Object>>) () -> {
+        app.get("/status", (java.util.function.Supplier<Map<String, Object>>) () -> {
             MemoryMXBean mem = ManagementFactory.getMemoryMXBean();
             ThreadMXBean threads = ManagementFactory.getThreadMXBean();
             RuntimeMXBean runtime = ManagementFactory.getRuntimeMXBean();
@@ -68,10 +67,10 @@ public class MonitorDemo {
         });
 
         // 最近错误
-        app.get("/errors", (RouteEntry.F0<List<Map<String, Object>>>) () -> recentErrors);
+        app.get("/errors", (java.util.function.Supplier<List<Map<String, Object>>>) () -> recentErrors);
 
         // 手动触发 GC
-        app.post("/gc", (RouteEntry.F0<Map<String, String>>) () -> {
+        app.post("/gc", (java.util.function.Supplier<Map<String, String>>) () -> {
             System.gc();
             return Map.of("result", "GC triggered");
         });

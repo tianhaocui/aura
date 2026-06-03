@@ -10,7 +10,7 @@ public final class MethodRefHandler implements BaseHandler {
 
     private final Object target;
     private final Method method;
-    private final ParamBinder[] binders;
+    private final ParamResolver.Binder[] binders;
     private final boolean hasReturnValue;
 
     MethodRefHandler(Object target, String methodName) {
@@ -20,9 +20,9 @@ public final class MethodRefHandler implements BaseHandler {
         this.hasReturnValue = method.getReturnType() != void.class;
 
         Parameter[] params = method.getParameters();
-        this.binders = new ParamBinder[params.length];
+        this.binders = new ParamResolver.Binder[params.length];
         for (int i = 0; i < params.length; i++) {
-            binders[i] = createBinder(params[i]);
+            binders[i] = ParamResolver.create(params[i]);
         }
     }
 
@@ -83,81 +83,6 @@ public final class MethodRefHandler implements BaseHandler {
         return val;
     }
 
-    private static ParamBinder createBinder(Parameter param) {
-        Class<?> type = param.getType();
-        String name = param.getName();
-
-        if (type == Context.class || type == BaseContext.class) return ctx -> ctx;
-
-        if (type == String.class) return ctx -> resolveString(ctx, name);
-        if (type == int.class) return ctx -> parseInt(resolveString(ctx, name));
-        if (type == Integer.class) return ctx -> parseIntBoxed(resolveString(ctx, name));
-        if (type == long.class) return ctx -> parseLong(resolveString(ctx, name));
-        if (type == Long.class) return ctx -> parseLongBoxed(resolveString(ctx, name));
-        if (type == boolean.class) return ctx -> parseBool(resolveString(ctx, name));
-        if (type == Boolean.class) return ctx -> parseBoolBoxed(resolveString(ctx, name));
-        if (type == double.class) return ctx -> parseDouble(resolveString(ctx, name));
-        if (type == Double.class) return ctx -> parseDoubleBoxed(resolveString(ctx, name));
-
-        if (type.isRecord() || TypeUtil.isPojo(type)) return ctx -> {
-            Object obj = ctx.body(type);
-            BeanValidator.validate(obj);
-            return obj;
-        };
-
-        return ctx -> resolveString(ctx, name);
-    }
-
-    private static String resolveString(BaseContext ctx, String name) {
-        String val = ctx.path(name);
-        return val != null ? val : ctx.query(name);
-    }
-
-    private static int parseInt(String val) {
-        if (val == null) return 0;
-        try { return Integer.parseInt(val); }
-        catch (NumberFormatException e) { throw new IllegalArgumentException("Invalid integer: " + val); }
-    }
-
-    private static long parseLong(String val) {
-        if (val == null) return 0L;
-        try { return Long.parseLong(val); }
-        catch (NumberFormatException e) { throw new IllegalArgumentException("Invalid long: " + val); }
-    }
-
-    private static boolean parseBool(String val) {
-        return "true".equalsIgnoreCase(val);
-    }
-
-    private static Integer parseIntBoxed(String val) {
-        if (val == null) return null;
-        try { return Integer.parseInt(val); }
-        catch (NumberFormatException e) { throw new IllegalArgumentException("Invalid integer: " + val); }
-    }
-
-    private static Long parseLongBoxed(String val) {
-        if (val == null) return null;
-        try { return Long.parseLong(val); }
-        catch (NumberFormatException e) { throw new IllegalArgumentException("Invalid long: " + val); }
-    }
-
-    private static Boolean parseBoolBoxed(String val) {
-        if (val == null) return null;
-        return "true".equalsIgnoreCase(val);
-    }
-
-    private static Double parseDoubleBoxed(String val) {
-        if (val == null) return null;
-        try { return Double.parseDouble(val); }
-        catch (NumberFormatException e) { throw new IllegalArgumentException("Invalid number: " + val); }
-    }
-
-    private static double parseDouble(String val) {
-        if (val == null) return 0.0;
-        try { return Double.parseDouble(val); }
-        catch (NumberFormatException e) { throw new IllegalArgumentException("Invalid number: " + val); }
-    }
-
     private static Method findMethod(Class<?> clazz, String name) {
         Method found = null;
         for (Method m : clazz.getDeclaredMethods()) {
@@ -179,10 +104,5 @@ public final class MethodRefHandler implements BaseHandler {
         if (found == null) throw new IllegalArgumentException(
                 "No method '" + name + "' found in " + clazz.getName());
         return found;
-    }
-
-    @FunctionalInterface
-    private interface ParamBinder {
-        Object resolve(BaseContext ctx) throws Exception;
     }
 }

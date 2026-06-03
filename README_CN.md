@@ -6,7 +6,7 @@
 
 AI 原生 Java 后端框架。**AI 开发 → AI 测试 → AI 使用。**
 
-4 个模块，约 4500 行代码。一个依赖启动。无选择、无魔法、无样板代码。
+4 个模块，约 5000 行代码。一个依赖启动。无选择、无魔法、无样板代码。
 
 ## 为什么选 Aura
 
@@ -39,7 +39,7 @@ AI agent 获得 7 个工具（创建/列表/获取/更新/删除/搜索/统计 t
 <dependency>
     <groupId>io.github.tianhaocui</groupId>
     <artifactId>aura-web</artifactId>
-    <version>0.4.0</version>
+    <version>0.4.2</version>
 </dependency>
 <!-- 需要添加 SLF4J 实现，如 logback-classic -->
 ```
@@ -157,6 +157,21 @@ found.set("name", "updated").update(db);
 // exclude server-managed columns from update
 found.exclude("created_at").set("name", "updated").update(db);
 
+// Query builder — 删除和批量更新
+db.table("user").where("status", "inactive").delete();
+db.table("user").where("id", 1).update(Row.of("user").set("name", "new"));
+
+// 批量插入 — 自动合并列，缺失列填 null
+db.batchInsert("points", List.of(
+    Row.of("points").set("lat", 39.9).set("lng", 116.4),
+    Row.of("points").set("lat", 40.0).set("lng", 116.5)
+));
+// 或通过 Row 静态方法
+Row.batchInsert(db, rows);
+
+// 部分更新 — null 值跳过（只更新非 null 字段）
+db.updateDynamic("user", Map.of("name", "tom", "age", 30), "id", 1);
+
 // 事务
 db.transaction(() -> {
     db.execute("UPDATE account SET balance = balance - ? WHERE id = ?", 100, 1);
@@ -203,12 +218,15 @@ app.routes(r -> {
     r.before(ctx -> { /* 认证、日志 */ });
     r.after(ctx -> { /* 计时 */ });
     r.group("/api", api -> {
-        api.before(authMiddleware);
+        api.before(authMiddleware);  // 仅 /api/** 路由需要认证
         api.get("/items", itemService, "list");
+        api.post("/items", itemService, "create");
     });
     r.exception(BizException.class, (e, ctx) -> ctx.status(400).json(Map.of("error", e.getMessage())));
 });
 ```
+
+`group()` + `before()` 是作用域认证的标准模式——公开路由放外面，受保护路由放 group 里面。
 
 ## 配置
 

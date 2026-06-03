@@ -6,7 +6,7 @@
 
 AI-native Java backend framework. **AI writes it → AI tests it → AI uses it.**
 
-4 modules, ~4500 lines. One dependency to start. No choices, no magic, no boilerplate.
+4 modules, ~5000 lines. One dependency to start. No choices, no magic, no boilerplate.
 
 ## Why Aura
 
@@ -39,7 +39,7 @@ AI agent gets 7 tools (create/list/get/update/delete/search/stats todos). [Sourc
 <dependency>
     <groupId>io.github.tianhaocui</groupId>
     <artifactId>aura-web</artifactId>
-    <version>0.3.0</version>
+    <version>0.4.2</version>
 </dependency>
 <!-- Add an SLF4J provider, e.g. logback-classic -->
 ```
@@ -157,6 +157,21 @@ found.set("name", "updated").update(db);
 // exclude server-managed columns from update
 found.exclude("created_at").set("name", "updated").update(db);
 
+// Query builder — delete and update
+db.table("user").where("status", "inactive").delete();
+db.table("user").where("id", 1).update(Row.of("user").set("name", "new"));
+
+// Batch insert — auto column union, missing columns filled with null
+db.batchInsert("points", List.of(
+    Row.of("points").set("lat", 39.9).set("lng", 116.4),
+    Row.of("points").set("lat", 40.0).set("lng", 116.5)
+));
+// or via Row static method
+Row.batchInsert(db, rows);
+
+// Partial update — null values skipped (only update non-null fields)
+db.updateDynamic("user", Map.of("name", "tom", "age", 30), "id", 1);
+
 // Transaction
 db.transaction(() -> {
     db.execute("UPDATE account SET balance = balance - ? WHERE id = ?", 100, 1);
@@ -203,12 +218,15 @@ app.routes(r -> {
     r.before(ctx -> { /* auth, logging */ });
     r.after(ctx -> { /* timing */ });
     r.group("/api", api -> {
-        api.before(authMiddleware);
+        api.before(authMiddleware);  // only /api/** routes require auth
         api.get("/items", itemService, "list");
+        api.post("/items", itemService, "create");
     });
     r.exception(BizException.class, (e, ctx) -> ctx.status(400).json(Map.of("error", e.getMessage())));
 });
 ```
+
+`group()` + `before()` is the standard pattern for scoped authentication — public routes outside, protected routes inside the group.
 
 ## Configuration
 
