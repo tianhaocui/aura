@@ -188,7 +188,7 @@ class TestClientTest {
         TestClient client = new TestClient(app, router);
         // MockContext.redirect doesn't validate — test the Context guard directly
         assertThatThrownBy(() -> {
-            Context ctx = new Context(null, java.util.Map.of(), app);
+            Context ctx = new Context(null, java.util.Map.of(), app, null);
             ctx.redirect("/safe\r\nX-Injected: evil");
         }).isInstanceOf(IllegalArgumentException.class)
           .hasMessageContaining("Invalid redirect URL");

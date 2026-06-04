@@ -4,8 +4,12 @@ import com.alibaba.fastjson2.JSON;
 import io.aura.Aura;
 import io.aura.AuraStarter;
 import io.undertow.Undertow;
+import io.undertow.server.HttpHandler;
 import io.undertow.server.HttpServerExchange;
 import io.undertow.server.handlers.GracefulShutdownHandler;
+import io.undertow.server.handlers.encoding.ContentEncodingRepository;
+import io.undertow.server.handlers.encoding.EncodingHandler;
+import io.undertow.server.handlers.encoding.GzipEncodingProvider;
 import io.undertow.server.handlers.resource.ClassPathResourceManager;
 import io.undertow.server.handlers.resource.ResourceHandler;
 import io.undertow.util.Headers;
@@ -13,6 +17,7 @@ import io.undertow.util.HttpString;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
 
 import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
@@ -21,6 +26,11 @@ import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledThreadPoolExecutor;
+import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 
 public class UndertowStarter implements AuraStarter {
@@ -28,6 +38,7 @@ public class UndertowStarter implements AuraStarter {
     private static final Logger log = LoggerFactory.getLogger(UndertowStarter.class);
     private Undertow server;
     private GracefulShutdownHandler shutdownHandler;
+    private ScheduledExecutorService timeoutScheduler;
     private Aura app;
     private Router router;
     private ResourceHandler staticHandler;
@@ -94,10 +105,34 @@ public class UndertowStarter implements AuraStarter {
             dispatch(exchange);
         });
 
+        HttpHandler rootHandler = shutdownHandler;
+
+        if (app.gzip()) {
+            rootHandler = new EncodingHandler(rootHandler,
+                    new ContentEncodingRepository().addEncodingHandler("gzip",
+                            new GzipEncodingProvider(), 50,
+                            ex -> {
+                                String ct = ex.getResponseHeaders().getFirst(Headers.CONTENT_TYPE);
+                                if (ct == null) return false;
+                                if (ct.contains("text/event-stream")) return false;
+                                if (!ct.contains("text") && !ct.contains("json") && !ct.contains("xml")) return false;
+                                long len = ex.getResponseContentLength();
+                                return len == -1 || len >= app.gzipMinSize();
+                            }));
+        }
+
+        if (app.requestTimeout() > 0) {
+            timeoutScheduler = new ScheduledThreadPoolExecutor(1, r -> {
+                Thread t = new Thread(r, "aura-timeout");
+                t.setDaemon(true);
+                return t;
+            });
+        }
+
         var builder = Undertow.builder()
                 .addHttpListener(app.port(), "0.0.0.0")
                 .setWorkerThreads(app.workers())
-                .setHandler(shutdownHandler);
+                .setHandler(rootHandler);
 
         if (app.maxBodySize() > 0) {
             builder.setServerOption(io.undertow.UndertowOptions.MAX_ENTITY_SIZE, app.maxBodySize());
@@ -112,6 +147,9 @@ public class UndertowStarter implements AuraStarter {
 
     @Override
     public void stop() {
+        if (timeoutScheduler != null) {
+            timeoutScheduler.shutdownNow();
+        }
         if (shutdownHandler != null) {
             shutdownHandler.shutdown();
             try {
@@ -161,7 +199,7 @@ public class UndertowStarter implements AuraStarter {
                 Map<String, String> params = wsRoute.match(path);
                 if (params == null) continue;
 
-                Context ctx = new Context(exchange, params, app);
+                Context ctx = new Context(exchange, params, app, null);
                 try {
                     for (BaseHandler mw : wsRoute.beforeHandlers()) {
                         mw.handle(ctx);
@@ -186,8 +224,25 @@ public class UndertowStarter implements AuraStarter {
             Map<String, String> params = route.match(path);
             if (params == null) continue;
 
-            Context ctx = new Context(exchange, params, app);
+            String reqId = resolveRequestId(exchange);
+            exchange.getResponseHeaders().put(new HttpString("X-Request-Id"), reqId);
+            MDC.put("requestId", reqId);
+
+            Context ctx = new Context(exchange, params, app, reqId);
             long start = System.currentTimeMillis();
+            java.util.concurrent.ScheduledFuture<?> timeoutFuture = null;
+            var responded = new AtomicBoolean(false);
+
+            if (app.requestTimeout() > 0 && timeoutScheduler != null) {
+                timeoutFuture = timeoutScheduler.schedule(() -> {
+                    if (responded.compareAndSet(false, true)) {
+                        exchange.setStatusCode(503);
+                        exchange.getResponseHeaders().put(Headers.CONTENT_TYPE, "application/json; charset=utf-8");
+                        exchange.getResponseSender().send("{\"error\":\"Request timeout\"}");
+                    }
+                }, app.requestTimeout(), TimeUnit.SECONDS);
+            }
+
             try {
                 for (BaseHandler mw : route.beforeHandlers()) {
                     mw.handle(ctx);
@@ -198,11 +253,20 @@ public class UndertowStarter implements AuraStarter {
                 }
             } catch (Exception e) {
                 handleException(e, ctx);
+                long elapsed = System.currentTimeMillis() - start;
+                String clientIp = exchange.getSourceAddress() != null ? exchange.getSourceAddress().getHostString() : "-";
+                Throwable cause = e instanceof java.lang.reflect.InvocationTargetException ? e.getCause() : e;
+                if (cause == null) cause = e;
+                log.error("[{}] {} {} {} {}: {} ({}ms, {})", reqId, method, path,
+                        exchange.getStatusCode(), cause.getClass().getSimpleName(), cause.getMessage(), elapsed, clientIp);
             } finally {
+                responded.set(true);
+                if (timeoutFuture != null) timeoutFuture.cancel(false);
                 runAfterHandlers(route.afterHandlers(), ctx);
                 if (app.accessLog()) {
                     log.info("{} {} → {} ({}ms)", method, path, exchange.getStatusCode(), System.currentTimeMillis() - start);
                 }
+                MDC.remove("requestId");
             }
             return;
         }
@@ -461,5 +525,15 @@ public class UndertowStarter implements AuraStarter {
             result.addAll(compileWsRoutes(group.router(), prefix + group.prefix(), before));
         }
         return result;
+    }
+
+    private static String resolveRequestId(HttpServerExchange exchange) {
+        String existing = exchange.getRequestHeaders().getFirst("X-Request-Id");
+        if (existing != null && !existing.isBlank()) return existing.trim();
+        return generateShortId();
+    }
+
+    private static String generateShortId() {
+        return Long.toHexString(ThreadLocalRandom.current().nextLong() | 0x1000000000000000L).substring(0, 8);
     }
 }

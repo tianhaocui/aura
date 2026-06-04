@@ -36,6 +36,9 @@ public class Aura {
     private long maxBodySize = 10 * 1024 * 1024; // 10MB default
     private int shutdownTimeout = 30;
     private boolean accessLog;
+    private int requestTimeout;
+    private boolean gzip;
+    private int gzipMinSize = 1024;
     private JsonConfig jsonConfig = new JsonConfig();
     private int mcpPort = -1;
     private java.io.PrintStream mcpStdout;
@@ -116,6 +119,21 @@ public class Aura {
 
     public Aura accessLog(boolean enabled) {
         this.accessLog = enabled;
+        return this;
+    }
+
+    public Aura requestTimeout(int seconds) {
+        this.requestTimeout = seconds;
+        return this;
+    }
+
+    public Aura gzip(boolean enabled) {
+        this.gzip = enabled;
+        return this;
+    }
+
+    public Aura gzipMinSize(int bytes) {
+        this.gzipMinSize = bytes;
         return this;
     }
 
@@ -324,6 +342,9 @@ public class Aura {
     public long maxBodySize() { return maxBodySize; }
     public int shutdownTimeout() { return shutdownTimeout; }
     public boolean accessLog() { return accessLog; }
+    public int requestTimeout() { return requestTimeout; }
+    public boolean gzip() { return gzip; }
+    public int gzipMinSize() { return gzipMinSize; }
     public JsonConfig jsonConfig() { return jsonConfig; }
     public int mcpPort() { return mcpPort; }
     public java.io.PrintStream mcpStdout() { return mcpStdout; }
@@ -381,6 +402,15 @@ public class Aura {
 
         String accessLog = resolve("aura.access-log", "AURA_ACCESS_LOG");
         if (accessLog != null) this.accessLog = "true".equalsIgnoreCase(accessLog);
+
+        String requestTimeout = resolve("aura.request-timeout", "AURA_REQUEST_TIMEOUT");
+        if (requestTimeout != null) this.requestTimeout = Integer.parseInt(requestTimeout);
+
+        String gzip = resolve("aura.gzip", "AURA_GZIP");
+        if (gzip != null) this.gzip = "true".equalsIgnoreCase(gzip);
+
+        String gzipMinSize = resolve("aura.gzip-min-size", "AURA_GZIP_MIN_SIZE");
+        if (gzipMinSize != null) this.gzipMinSize = Integer.parseInt(gzipMinSize);
     }
 
     private String resolve(String propKey, String envKey) {

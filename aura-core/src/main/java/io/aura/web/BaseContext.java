@@ -70,4 +70,7 @@ public interface BaseContext {
     // --- flow control ---
     void abort();
     boolean isAborted();
+
+    // --- request id ---
+    default String requestId() { return null; }
 }

@@ -265,7 +265,7 @@ class ContextTest {
 
     @Test
     void redirect_withCarriageReturn_throwsIllegalArgument() {
-        Context ctx = new Context(null, Map.of(), app());
+        Context ctx = new Context(null, Map.of(), app(), null);
         assertThatThrownBy(() -> ctx.redirect("/path\rX-Evil: injected"))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("Invalid redirect URL");
@@ -273,7 +273,7 @@ class ContextTest {
 
     @Test
     void redirect_withNewline_throwsIllegalArgument() {
-        Context ctx = new Context(null, Map.of(), app());
+        Context ctx = new Context(null, Map.of(), app(), null);
         assertThatThrownBy(() -> ctx.redirect("/path\nX-Evil: injected"))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("Invalid redirect URL");
@@ -281,7 +281,7 @@ class ContextTest {
 
     @Test
     void redirect_withCrLf_throwsIllegalArgument() {
-        Context ctx = new Context(null, Map.of(), app());
+        Context ctx = new Context(null, Map.of(), app(), null);
         assertThatThrownBy(() -> ctx.redirect("/path\r\nX-Evil: injected"))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("Invalid redirect URL");

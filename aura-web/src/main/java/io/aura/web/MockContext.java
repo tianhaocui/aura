@@ -21,7 +21,7 @@ class MockContext extends Context {
 
     MockContext(Map<String, String> pathParams, Map<String, String> queryParams,
                 Map<String, String> headers, String body, Aura app) {
-        super(null, pathParams, app);
+        super(null, pathParams, app, null);
         this.pathParams = pathParams;
         this.headers = headers;
         this.body = body;

@@ -23,18 +23,21 @@ public class Context implements BaseContext {
     private final HttpServerExchange exchange;
     private final Map<String, String> pathParams;
     private final Aura app;
+    private final String requestId;
     private final Map<Class<?>, Object> attrs = new ConcurrentHashMap<>();
     private final Map<String, Object> namedAttrs = new ConcurrentHashMap<>();
     private String cachedBody;
     private volatile boolean aborted;
 
-    Context(HttpServerExchange exchange, Map<String, String> pathParams, Aura app) {
+    Context(HttpServerExchange exchange, Map<String, String> pathParams, Aura app, String requestId) {
         this.exchange = exchange;
         this.pathParams = pathParams;
         this.app = app;
+        this.requestId = requestId;
     }
 
     public Aura app() { return app; }
+    @Override public String requestId() { return requestId; }
 
     @Override
     public UploadedFile file(String field) throws Exception {
