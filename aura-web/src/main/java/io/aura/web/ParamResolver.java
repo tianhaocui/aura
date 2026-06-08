@@ -17,6 +17,12 @@ public final class ParamResolver {
 
         if (type == Context.class || type == BaseContext.class) return ctx -> ctx;
 
+        if (name.matches("arg\\d+")) {
+            throw new IllegalStateException(
+                "Missing -parameters compiler flag. Add <parameters>true</parameters> to maven-compiler-plugin. " +
+                "Without it, all route parameters receive null/0.");
+        }
+
         if (type == String.class) return ctx -> resolveString(ctx, name);
         if (type == int.class) return ctx -> parseInt(resolveString(ctx, name));
         if (type == Integer.class) return ctx -> parseIntBoxed(resolveString(ctx, name));
