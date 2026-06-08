@@ -64,9 +64,10 @@ public class Query {
     public Query orderBy(String... fields) {
         StringJoiner sj = new StringJoiner(", ");
         for (String f : fields) {
-            if (f.matches("[a-zA-Z_][a-zA-Z0-9_]*(\\s+(ASC|DESC|asc|desc))?")) {
-                sj.add(f);
+            if (!f.matches("[a-zA-Z_][a-zA-Z0-9_]*(\\.[a-zA-Z_][a-zA-Z0-9_]*)?(\\s+(?i)(ASC|DESC))?")) {
+                throw new IllegalArgumentException("Invalid orderBy field: " + f);
             }
+            sj.add(f);
         }
         this.orderBy = sj.toString();
         return this;

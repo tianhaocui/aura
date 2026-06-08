@@ -111,24 +111,25 @@ class QueryBuildTest {
     }
 
     @Test
-    void orderBy_sqlInjectionAttempt_filtered() throws Exception {
+    void orderBy_qualifiedIdentifier_accepted() throws Exception {
         Query q = newQuery("users");
-        q.orderBy("name; DROP TABLE users--");
+        q.orderBy("t.created_at DESC");
 
-        // invalid field is rejected, no ORDER BY in output
-        assertThat(buildSql(q)).isEqualTo("SELECT * FROM users");
+        assertThat(buildSql(q)).isEqualTo("SELECT * FROM users ORDER BY t.created_at DESC");
     }
 
     @Test
-    void orderBy_mixedValidAndInvalid_onlyValidKept() throws Exception {
+    void orderBy_sqlInjectionAttempt_throws() throws Exception {
         Query q = newQuery("users");
-        q.orderBy("name", "1=1", "age");
+        assertThatThrownBy(() -> q.orderBy("name; DROP TABLE users--"))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
 
-        String sql = buildSql(q);
-        assertThat(sql).contains("ORDER BY");
-        assertThat(sql).contains("name");
-        assertThat(sql).contains("age");
-        assertThat(sql).doesNotContain("1=1");
+    @Test
+    void orderBy_mixedValidAndInvalid_throws() throws Exception {
+        Query q = newQuery("users");
+        assertThatThrownBy(() -> q.orderBy("name", "1=1", "age"))
+                .isInstanceOf(IllegalArgumentException.class);
     }
 
     // --- select ---
