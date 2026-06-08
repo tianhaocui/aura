@@ -328,6 +328,17 @@ class TestClientTest {
         assertThat(ran[0]).isTrue();
     }
 
+    @Test
+    void abort_withoutStatus_defaults403() {
+        Aura app = Aura.create();
+        Router router = new Router();
+        router.before(ctx -> ctx.abort());
+        router.get("/secret", ctx -> ctx.text("should not reach"));
+        TestClient client = new TestClient(app, router);
+        TestClient.Response resp = client.get("/secret").execute();
+        assertThat(resp.status()).isEqualTo(403);
+    }
+
     // --- crud selective ---
 
     @Test

@@ -251,6 +251,8 @@ public class UndertowStarter implements AuraStarter {
                 }
                 if (!ctx.isAborted()) {
                     route.handler().handle(ctx);
+                } else if (exchange.getStatusCode() == 200) {
+                    exchange.setStatusCode(403);
                 }
             } catch (Exception e) {
                 handleException(e, ctx);
@@ -499,7 +501,7 @@ public class UndertowStarter implements AuraStarter {
         for (CompiledRoute route : routes) {
             String key = route.method() + " " + route.rawPath();
             if (!seen.add(key)) {
-                log.warn("Duplicate route: {} (registered twice, first one wins)", key);
+                throw new IllegalStateException("Duplicate route: " + key);
             }
         }
     }

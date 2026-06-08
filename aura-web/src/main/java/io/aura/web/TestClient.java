@@ -94,6 +94,8 @@ public class TestClient {
                     }
                     if (!mockCtx.isAborted()) {
                         route.handler().handle(mockCtx);
+                    } else if (mockCtx.statusCode() == 200) {
+                        mockCtx.status(403);
                     }
                 } catch (Exception e) {
                     handleException(e, mockCtx);

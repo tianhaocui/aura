@@ -43,6 +43,7 @@ You are developing with Aura, a lightweight Java 17+ backend framework.
 ```
 
 The `-parameters` compiler flag is required — Aura uses parameter names for route binding (path params, query params, body).
+**Without this flag**: all route parameters silently receive null/0. The app starts and routes match, but every parameter binding fails silently — handlers get zeroed arguments with no error.
 Aura does not bundle an SLF4J implementation — add logback, log4j2, or slf4j-simple yourself.
 
 ## Minimal App
