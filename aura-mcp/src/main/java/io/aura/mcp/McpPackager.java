@@ -4,7 +4,6 @@ import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONObject;
 
 import java.io.*;
-import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 
@@ -24,7 +23,10 @@ public class McpPackager {
         String appName = binName;
         if (router == null) {
             try {
-                String schema = new String(new URL(appUrl + "/__schema__").openStream().readAllBytes());
+                String schema;
+                try (var is = java.net.URI.create(appUrl + "/__schema__").toURL().openStream()) {
+                    schema = new String(is.readAllBytes());
+                }
                 JSONObject obj = JSON.parseObject(schema);
                 if (obj.getString("name") != null) appName = obj.getString("name");
             } catch (Exception e) {
