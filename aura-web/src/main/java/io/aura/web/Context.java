@@ -83,6 +83,7 @@ public class Context implements BaseContext {
             long maxSize = app != null ? app.maxBodySize() : 10 * 1024 * 1024;
             cachedBody = new String(exchange.getInputStream().readNBytes((int) Math.min(maxSize, Integer.MAX_VALUE)), StandardCharsets.UTF_8);
         }
+        if (cachedBody.isBlank()) return null;
         return JSON.parseObject(cachedBody, type);
     }
 
@@ -199,8 +200,9 @@ public class Context implements BaseContext {
     @Override
     public void sendFile(String filename, byte[] data, String contentType) {
         exchange.getResponseHeaders().put(Headers.CONTENT_TYPE, contentType);
+        String safeName = filename.replaceAll("[\\r\\n\"]", "");
         exchange.getResponseHeaders().put(new HttpString("Content-Disposition"),
-                "attachment; filename=\"" + filename.replace("\"", "\\\"") + "\"");
+                "attachment; filename=\"" + safeName + "\"");
         exchange.setResponseContentLength(data.length);
         exchange.getResponseSender().send(ByteBuffer.wrap(data));
     }

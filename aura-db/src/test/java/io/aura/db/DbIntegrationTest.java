@@ -153,6 +153,44 @@ class DbIntegrationTest {
                 .hasMessageContaining("Table name not set");
     }
 
+    // --- Row dirty update ---
+
+    @Test
+    void update_noDirtyFields_updatesAll_backwardsCompatible() {
+        Row inserted = Row.of("users").set("name", "Alice").set("active", true).insert(db);
+        Row found = db.findById("users", inserted.id());
+        // No .set() call after findById → dirtyKeys is empty → falls through to update all fields
+        // This preserves backwards-compatible behavior for findById → update roundtrip
+        assertThat(found.update(db)).isTrue();
+    }
+
+    @Test
+    void update_onlyDirtyFieldsSent() {
+        Row inserted = Row.of("users").set("name", "Bob").set("active", true).insert(db);
+        Row found = db.findById("users", inserted.id());
+        // Only change name — dirtyKeys now has "name", so only name is in SET clause
+        found.set("name", "Bobby");
+        assertThat(found.update(db)).isTrue();
+
+        Row refetched = db.findById("users", inserted.id());
+        assertThat(refetched.getStr("name")).isEqualTo("Bobby");
+        assertThat(refetched.get("active")).isEqualTo(true);
+    }
+
+    @Test
+    void update_newRow_withSetOnly_sendsOnlyDirtyFields() {
+        // Row.of().set() marks fields dirty — insert doesn't clear them
+        // After insert, if we call update, only dirty fields go into SET
+        Row row = Row.of("users").set("name", "Charlie").set("active", true).insert(db);
+        // dirtyKeys = [name, active], both were .set() before insert
+        // Now set only name
+        row.set("name", "Charles");
+        row.update(db);
+
+        Row refetched = db.findById("users", row.id());
+        assertThat(refetched.getStr("name")).isEqualTo("Charles");
+    }
+
     // --- transaction ---
 
     @Test

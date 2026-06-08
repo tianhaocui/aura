@@ -27,8 +27,8 @@ public class Query {
     }
 
     public Query where(String field, String op, Object value) {
-        if (value == null) return this;
-        if (value instanceof String s && s.isBlank()) return this;
+        if (value == null) throw new IllegalArgumentException("where() value must not be null for field: " + field + ". Use whereIf() for optional conditions.");
+        if (value instanceof String s && s.isBlank()) throw new IllegalArgumentException("where() value must not be blank for field: " + field + ". Use whereIf() for optional conditions.");
         SqlSafe.qualifiedIdentifier(field);
         SqlSafe.operator(op);
         String upperOp = op.toUpperCase();

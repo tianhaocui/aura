@@ -235,7 +235,7 @@ class ContextTest {
     }
 
     // -------------------------------------------------------------------------
-    // body(Class<T>) with null / empty body
+    // body(Class<T>) with null / empty / blank body
     // -------------------------------------------------------------------------
 
     @Test
@@ -248,6 +248,21 @@ class ContextTest {
     void body_returnsNull_whenBodyIsEmpty() {
         MockContext ctx = mockCtxWithBody("");
         assertThat(ctx.body(String.class)).isNull();
+    }
+
+    @Test
+    void body_returnsNull_whenBodyIsWhitespaceOnly() {
+        MockContext ctx = mockCtxWithBody("   \t\n  ");
+        assertThat(ctx.body(User.class)).isNull();
+    }
+
+    @Test
+    void body_parsesEmptyJson_toObjectWithDefaults() {
+        MockContext ctx = mockCtxWithBody("{}");
+        User user = ctx.body(User.class);
+        assertThat(user).isNotNull();
+        assertThat(user.name()).isNull();
+        assertThat(user.age()).isEqualTo(0);
     }
 
     @Test

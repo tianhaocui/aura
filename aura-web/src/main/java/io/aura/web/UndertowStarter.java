@@ -542,7 +542,10 @@ public class UndertowStarter implements AuraStarter {
 
     private static String resolveRequestId(HttpServerExchange exchange) {
         String existing = exchange.getRequestHeaders().getFirst("X-Request-Id");
-        if (existing != null && !existing.isBlank()) return existing.trim();
+        if (existing != null && !existing.isBlank()) {
+            String sanitized = existing.trim().replaceAll("[\\r\\n]", "");
+            return sanitized.length() > 64 ? sanitized.substring(0, 64) : sanitized;
+        }
         return generateShortId();
     }
 

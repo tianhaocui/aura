@@ -34,7 +34,7 @@ class MockContext extends Context {
     @Override public String query(String name, String def) { String v = query(name); return v != null ? v : def; }
     @Override public String header(String name) { return headers.get(name); }
     @Override public String cookie(String name) { return null; }
-    @Override public <T> T body(Class<T> type) { return body == null || body.isEmpty() ? null : JSON.parseObject(body, type); }
+    @Override public <T> T body(Class<T> type) { return body == null || body.isBlank() ? null : JSON.parseObject(body, type); }
     @Override public String method() { return ""; }
     @Override public String url() { return ""; }
     @Override public int statusCode() { return status == 0 ? 200 : status; }

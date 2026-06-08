@@ -9,6 +9,7 @@ public class Row extends LinkedHashMap<String, Object> {
     private String table;
     private String primaryKey = "id";
     private final java.util.Set<String> excluded = new java.util.HashSet<>();
+    private final java.util.Set<String> dirtyKeys = new java.util.LinkedHashSet<>();
 
     private Row() {}
 
@@ -35,6 +36,7 @@ public class Row extends LinkedHashMap<String, Object> {
     public Row set(String key, Object value) {
         SqlSafe.identifier(key);
         put(key.toLowerCase(), value);
+        dirtyKeys.add(key.toLowerCase());
         return this;
     }
 
@@ -117,11 +119,13 @@ public class Row extends LinkedHashMap<String, Object> {
         var setCols = new java.util.ArrayList<String>();
         var params = new java.util.ArrayList<>();
         for (var entry : entrySet()) {
-            if (!entry.getKey().equals(primaryKey) && !excluded.contains(entry.getKey())) {
-                SqlSafe.identifier(entry.getKey());
-                setCols.add(entry.getKey() + " = ?");
-                params.add(entry.getValue());
-            }
+            String key = entry.getKey();
+            if (key.equals(primaryKey)) continue;
+            if (excluded.contains(key)) continue;
+            if (!dirtyKeys.isEmpty() && !dirtyKeys.contains(key)) continue;
+            SqlSafe.identifier(key);
+            setCols.add(key + " = ?");
+            params.add(entry.getValue());
         }
         if (setCols.isEmpty()) return false;
         params.add(idVal);

@@ -25,28 +25,24 @@ class QueryBuildTest {
         return (String) m.invoke(q);
     }
 
-    // --- where with null value is skipped ---
+    // --- where with null value throws ---
 
     @Test
-    void where_nullValue_isSkipped() throws Exception {
+    void where_nullValue_throws() throws Exception {
         Query q = newQuery("users");
-        Query returned = q.where("name", null);
-
-        // returns this (fluent)
-        assertThat(returned).isSameAs(q);
-
-        // no WHERE in generated SQL
-        assertThat(buildSql(q)).isEqualTo("SELECT * FROM users");
+        assertThatThrownBy(() -> q.where("name", null))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("must not be null");
     }
 
-    // --- where with blank string is skipped ---
+    // --- where with blank string throws ---
 
     @Test
-    void where_blankString_isSkipped() throws Exception {
+    void where_blankString_throws() throws Exception {
         Query q = newQuery("users");
-        q.where("name", "   ");
-
-        assertThat(buildSql(q)).isEqualTo("SELECT * FROM users");
+        assertThatThrownBy(() -> q.where("name", "   "))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("must not be blank");
     }
 
     // --- where with valid value adds condition ---
@@ -80,14 +76,29 @@ class QueryBuildTest {
         assertThat(buildSql(q)).isEqualTo("SELECT * FROM users WHERE status = ? AND age > ?");
     }
 
-    // --- null and blank mixed with valid conditions ---
+    // --- null and blank throw, whereIf skips correctly ---
 
     @Test
-    void where_nullAndBlankSkipped_validKept() throws Exception {
+    void whereIf_nullValue_skipped() throws Exception {
         Query q = newQuery("users");
-        q.where("name", null);
-        q.where("email", "  ");
+        q.whereIf(false, "name", null);
         q.where("status", "active");
+
+        assertThat(buildSql(q)).isEqualTo("SELECT * FROM users WHERE status = ?");
+    }
+
+    @Test
+    void whereIf_trueWithNull_throws() throws Exception {
+        Query q = newQuery("users");
+        assertThatThrownBy(() -> q.whereIf(true, "name", null))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("must not be null");
+    }
+
+    @Test
+    void whereIf_trueWithValidValue_addsCondition() throws Exception {
+        Query q = newQuery("users");
+        q.whereIf(true, "status", "active");
 
         assertThat(buildSql(q)).isEqualTo("SELECT * FROM users WHERE status = ?");
     }
