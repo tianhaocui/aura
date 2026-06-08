@@ -86,6 +86,7 @@ public class UndertowStarter implements AuraStarter {
         compiledRoutes = compile(router, "", new ArrayList<>(), new ArrayList<>());
         compiledRoutes.sort(Comparator.comparingInt((CompiledRoute r) -> r.paramNames().size())
                 .thenComparing(Comparator.comparingLong((CompiledRoute r) -> r.rawPath().chars().filter(c -> c == '/').count()).reversed()));
+        detectDuplicateRoutes(compiledRoutes);
 
         compiledWsRoutes = compileWsRoutes(router);
 
@@ -491,6 +492,16 @@ public class UndertowStarter implements AuraStarter {
         }
 
         return result;
+    }
+
+    private void detectDuplicateRoutes(List<CompiledRoute> routes) {
+        var seen = new java.util.HashSet<String>();
+        for (CompiledRoute route : routes) {
+            String key = route.method() + " " + route.rawPath();
+            if (!seen.add(key)) {
+                log.warn("Duplicate route: {} (registered twice, first one wins)", key);
+            }
+        }
     }
 
     private static boolean isWebSocketUpgrade(HttpServerExchange exchange) {

@@ -53,6 +53,16 @@ class MockContext extends Context {
     @Override public Context header(String name, String value) { return this; }
     @Override public Context cookie(String name, String value, int maxAge) { return this; }
 
+    byte[] fileBytes;
+    String fileName;
+    String fileContentType;
+
+    @Override public void sendFile(String filename, byte[] data, String contentType) {
+        this.fileName = filename;
+        this.fileBytes = data;
+        this.fileContentType = contentType;
+    }
+
     @Override public <T> void set(T instance) { attrs.put(instance.getClass(), instance); }
     @Override @SuppressWarnings("unchecked")
     public <T> T get(Class<T> type) {

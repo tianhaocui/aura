@@ -62,6 +62,14 @@ public interface BaseContext {
     // --- file upload ---
     default UploadedFile file(String field) throws Exception { return null; }
 
+    // --- file download ---
+    default void sendFile(String filename, byte[] data) throws Exception {
+        sendFile(filename, data, "application/octet-stream");
+    }
+    default void sendFile(String filename, byte[] data, String contentType) throws Exception {
+        throw new UnsupportedOperationException("sendFile not supported in this context");
+    }
+
     // --- SSE ---
     default SseEmitter sse() throws Exception {
         throw new UnsupportedOperationException("SSE not supported in this context");
