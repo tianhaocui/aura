@@ -267,4 +267,37 @@ class QueryBuildTest {
         assertThatThrownBy(() -> Db.in(List.of()))
                 .isInstanceOf(IllegalArgumentException.class);
     }
+
+    // --- whereNull / whereNotNull ---
+
+    @Test
+    void whereNull_addsIsNullCondition() throws Exception {
+        Query q = newQuery("users");
+        q.whereNull("deleted_at");
+
+        assertThat(buildSql(q)).isEqualTo("SELECT * FROM users WHERE deleted_at IS NULL");
+    }
+
+    @Test
+    void whereNotNull_addsIsNotNullCondition() throws Exception {
+        Query q = newQuery("users");
+        q.whereNotNull("email");
+
+        assertThat(buildSql(q)).isEqualTo("SELECT * FROM users WHERE email IS NOT NULL");
+    }
+
+    @Test
+    void whereNull_combinedWithWhere() throws Exception {
+        Query q = newQuery("categories");
+        q.where("status", "active").whereNull("parent_id");
+
+        assertThat(buildSql(q)).isEqualTo("SELECT * FROM categories WHERE status = ? AND parent_id IS NULL");
+    }
+
+    @Test
+    void whereNull_invalidField_throws() throws Exception {
+        Query q = newQuery("users");
+        assertThatThrownBy(() -> q.whereNull("field; DROP TABLE users--"))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
 }

@@ -39,7 +39,7 @@ AI agent gets 7 tools (create/list/get/update/delete/search/stats todos). [Sourc
 <dependency>
     <groupId>io.github.tianhaocui</groupId>
     <artifactId>aura-web</artifactId>
-    <version>0.4.2</version>
+    <version>0.4.3</version>
 </dependency>
 <!-- Add an SLF4J provider, e.g. logback-classic -->
 ```
@@ -139,6 +139,8 @@ db.paginateDynamic(sql, filterMap, pageNum, pageSize);
 // Query builder — simple CRUD shortcut
 db.table("user").where("age", ">", 18).orderBy("name").find();
 db.table("user").where("id", 1).findOne();
+db.table("user").whereNull("deleted_at").find();       // WHERE deleted_at IS NULL
+db.table("user").whereNotNull("email").find();         // WHERE email IS NOT NULL
 
 // Shortcuts
 db.findById("user", id);
@@ -190,6 +192,15 @@ f.contentType() // MIME type
 f.size()        // bytes
 ```
 
+## File Download
+
+```java
+ctx.sendFile("report.pdf", fileBytes);
+ctx.sendFile("data.csv", csvBytes, "text/csv");
+```
+
+Sets `Content-Disposition: attachment` automatically. Default content type is `application/octet-stream`.
+
 ## SSE (Server-Sent Events)
 
 ```java
@@ -235,6 +246,9 @@ Aura.create()
     .port(8080)              // HTTP port
     .cors(true)              // CORS allow all
     .maxBodySize(10 * 1024 * 1024L) // request body limit (default: 10MB)
+    .requestTimeout(30)      // 503 after 30s (env: AURA_REQUEST_TIMEOUT)
+    .gzip(true)              // response compression (env: AURA_GZIP)
+    .gzipMinSize(1024)       // min bytes to compress (default: 1KB)
     .spa(true)               // SPA mode: unknown paths → /index.html
     .mcp(true)               // enable --mcp-stdio mode
     .staticFiles("/public")  // serve static files
@@ -243,6 +257,8 @@ Aura.create()
     .onStop(a -> { ... })
     .start(args);            // supports --port=N --env=X --mcp-stdio
 ```
+
+Duplicate routes (same method + path) are detected at startup and throw `IllegalStateException`.
 
 ## Modules
 

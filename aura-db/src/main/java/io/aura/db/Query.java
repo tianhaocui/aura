@@ -61,6 +61,18 @@ public class Query {
         return condition ? where(field, op, value) : this;
     }
 
+    public Query whereNull(String field) {
+        SqlSafe.qualifiedIdentifier(field);
+        conditions.add(field + " IS NULL");
+        return this;
+    }
+
+    public Query whereNotNull(String field) {
+        SqlSafe.qualifiedIdentifier(field);
+        conditions.add(field + " IS NOT NULL");
+        return this;
+    }
+
     public Query orderBy(String... fields) {
         StringJoiner sj = new StringJoiner(", ");
         for (String f : fields) {

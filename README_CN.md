@@ -39,7 +39,7 @@ AI agent 获得 7 个工具（创建/列表/获取/更新/删除/搜索/统计 t
 <dependency>
     <groupId>io.github.tianhaocui</groupId>
     <artifactId>aura-web</artifactId>
-    <version>0.4.2</version>
+    <version>0.4.3</version>
 </dependency>
 <!-- 需要添加 SLF4J 实现，如 logback-classic -->
 ```
@@ -139,6 +139,8 @@ db.paginate(sql, filterMap, pageNum, pageSize);
 // Query builder — 简单 CRUD 快捷方式
 db.table("user").where("age", ">", 18).orderBy("name").find();
 db.table("user").where("id", 1).findOne();
+db.table("user").whereNull("deleted_at").find();       // WHERE deleted_at IS NULL
+db.table("user").whereNotNull("email").find();         // WHERE email IS NOT NULL
 
 // 快捷方法
 db.findById("user", id);
@@ -190,6 +192,15 @@ f.contentType() // MIME 类型
 f.size()        // 字节数
 ```
 
+## 文件下载
+
+```java
+ctx.sendFile("report.pdf", fileBytes);
+ctx.sendFile("data.csv", csvBytes, "text/csv");
+```
+
+自动设置 `Content-Disposition: attachment`。默认 content type 为 `application/octet-stream`。
+
 ## SSE（服务器推送事件）
 
 ```java
@@ -235,6 +246,9 @@ Aura.create()
     .port(8080)              // HTTP 端口
     .cors(true)              // CORS 允许所有来源
     .maxBodySize(10 * 1024 * 1024L) // 请求体大小限制（默认 10MB）
+    .requestTimeout(30)      // 超时 30 秒返回 503（环境变量 AURA_REQUEST_TIMEOUT）
+    .gzip(true)              // 响应压缩（环境变量 AURA_GZIP）
+    .gzipMinSize(1024)       // 最小压缩字节数（默认 1KB）
     .spa(true)               // SPA 模式：未知路径回退到 /index.html
     .mcp(true)               // 启用 --mcp-stdio 模式
     .staticFiles("/public")  // 静态文件
@@ -243,6 +257,8 @@ Aura.create()
     .onStop(a -> { ... })
     .start(args);            // 支持 --port=N --env=X --mcp-stdio
 ```
+
+重复路由（相同 method + path）在启动时检测并抛出 `IllegalStateException`。
 
 ## 模块
 

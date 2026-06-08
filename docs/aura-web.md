@@ -88,6 +88,7 @@ r.before(ctx -> {
     }
 });
 // ctx.isAborted() returns true after abort() is called
+// If abort() is called without setting a status, response defaults to 403 (Forbidden)
 ```
 
 ---
@@ -126,6 +127,8 @@ Request/response wrapper passed to handlers.
 | `status(int code)` | Context | Set status code (chainable) |
 | `json(Object obj)` | void | Send JSON response |
 | `text(String text)` | void | Send plain text response |
+| `sendFile(String name, byte[] data)` | void | Send file download (octet-stream) |
+| `sendFile(String name, byte[] data, String type)` | void | Send file download with content type |
 | `redirect(String url)` | void | 302 redirect |
 | `header(String name, String value)` | Context | Set response header |
 | `cookie(String name, String value, int maxAge)` | Context | Set cookie (HttpOnly + Secure) |
@@ -343,6 +346,17 @@ Returns full API structure as JSON:
 
 ---
 
+## File Download
+
+```java
+ctx.sendFile("report.pdf", fileBytes);
+ctx.sendFile("data.csv", csvBytes, "text/csv");
+```
+
+Sets `Content-Disposition: attachment; filename="<name>"` and `Content-Length`. Default content type is `application/octet-stream`. Filenames with quotes are escaped automatically.
+
+---
+
 ## Configuration
 
 | Feature | How |
@@ -351,4 +365,49 @@ Returns full API structure as JSON:
 | Static files | `app.staticFiles("/public")` — Serve from classpath with `Cache-Control` + `ETag` (86400s) |
 | SPA mode | `app.spa(true)` — SPA mode: unknown paths fall back to `/index.html` |
 | Body size limit | `app.maxBodySize(bytes)` — default 10MB |
+| Request timeout | `app.requestTimeout(seconds)` — 503 JSON on timeout (env: `AURA_REQUEST_TIMEOUT`) |
+| Gzip | `app.gzip(true)` — response compression (env: `AURA_GZIP`) |
+| Gzip min size | `app.gzipMinSize(bytes)` — min response size to compress (default: 1024) |
 | Graceful shutdown | `app.shutdownTimeout(seconds)` — default 30s |
+
+---
+
+## Request Timeout
+
+```java
+Aura.create().requestTimeout(30).start(); // or env AURA_REQUEST_TIMEOUT=30
+```
+
+When a handler exceeds the configured timeout:
+1. A 503 JSON response `{"error":"Request timeout"}` is sent to the client
+2. The handler thread is **not** interrupted — it continues running but cannot write to the response
+3. Thread safety is guaranteed via `AtomicBoolean` CAS — only one of timeout/handler can send the response
+
+Use for protecting against slow downstream calls. For long-running tasks, check a cancellation flag cooperatively.
+
+---
+
+## Gzip Compression
+
+```java
+Aura.create().gzip(true).gzipMinSize(1024).start(); // or env AURA_GZIP=true
+```
+
+- Responses smaller than `gzipMinSize` (default 1KB) are sent uncompressed
+- Only compresses when client sends `Accept-Encoding: gzip`
+- Streaming responses (SSE) are not compressed
+
+---
+
+## Route Conflict Detection
+
+Aura detects duplicate routes at startup and fails fast:
+
+```java
+app.routes(r -> {
+    r.get("/api/users", handler1);
+    r.get("/api/users", handler2); // IllegalStateException at startup
+});
+```
+
+Detection compares `method + path` (including parameterized paths like `/users/{id}`). Different methods on the same path are allowed. Routes inside `group()` are expanded before checking.

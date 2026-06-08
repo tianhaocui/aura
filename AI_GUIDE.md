@@ -9,13 +9,13 @@ You are developing with Aura, a lightweight Java 17+ backend framework.
     <dependency>
         <groupId>io.github.tianhaocui</groupId>
         <artifactId>aura-web</artifactId>
-        <version>0.4.2</version>
+        <version>0.4.3</version>
     </dependency>
     <!-- Optional: database -->
     <dependency>
         <groupId>io.github.tianhaocui</groupId>
         <artifactId>aura-db</artifactId>
-        <version>0.4.2</version>
+        <version>0.4.3</version>
     </dependency>
     <!-- Required: add your own SLF4J provider (aura-web uses slf4j-api) -->
     <dependency>
@@ -120,6 +120,8 @@ db.paginateDynamic(sql, filterMap, pageNum, pageSize); // Page<Row>
 // Query builder (simple CRUD shortcut)
 db.table("user").where("age", ">", 18).find();
 db.table("user").where("id", 1).findOne();
+db.table("user").whereNull("deleted_at").find();           // WHERE deleted_at IS NULL
+db.table("user").whereNotNull("email").find();             // WHERE email IS NOT NULL
 
 // Shortcuts
 db.findById("user", id);              // returns Row with table set — can call .update()/.delete()
@@ -226,6 +228,14 @@ f.size()        // bytes
 Aura.create().maxBodySize(500 * 1024 * 1024L)
 ```
 
+## File Download
+
+```java
+// Send file with Content-Disposition: attachment
+ctx.sendFile("report.pdf", fileBytes);                    // application/octet-stream
+ctx.sendFile("data.csv", csvBytes, "text/csv");           // custom content type
+```
+
 ## Pagination Helpers
 
 ```java
@@ -314,6 +324,9 @@ Aura.create()
     .cors(true)                    // CORS: true=allow all, or cors("https://...")
                                    // includes Access-Control-Max-Age: 86400
     .maxBodySize(10 * 1024 * 1024L) // request body limit (default: 10MB)
+    .requestTimeout(30)            // 503 after 30s (env: AURA_REQUEST_TIMEOUT)
+    .gzip(true)                    // response compression (env: AURA_GZIP)
+    .gzipMinSize(1024)             // min response size to compress (default: 1KB)
     .staticFiles("/public")        // serve classpath:/public with Cache-Control + ETag
     .spa(true)                     // SPA mode: unknown paths fall back to /index.html
     .accessLog(true)               // or env: AURA_ACCESS_LOG=true — logs: GET /path → 200 (12ms)
@@ -355,6 +368,7 @@ ctx.path("id")   ctx.query("page")   ctx.header("Authorization")
 ctx.body(T.class)  ctx.cookie("name")  ctx.method()  ctx.url()
 ctx.pageNum()    ctx.pageSize()       ctx.file("field")   // UploadedFile
 ctx.status(201)  ctx.json(obj)        ctx.text("ok")  ctx.redirect("/")
+ctx.sendFile("name.pdf", bytes)      ctx.sendFile("f.csv", bytes, "text/csv")
 ctx.set(user)    ctx.get(User.class)  ctx.app().getBean(Db.class)
 ctx.sse()        // SseEmitter — opens text/event-stream response
 
@@ -500,6 +514,11 @@ r.post("/auth/login", authService, "login"); // outside group = no auth
 - **`@Path` annotation only works with `.service()` registration** — routes registered via `routes()` lambda do NOT process `@Path`. Use explicit path strings in the lambda.
 - **Graceful shutdown is built-in** — configure via `shutdownTimeout(seconds)` or env `AURA_SHUTDOWN_TIMEOUT`. Default: 30s. Inflight requests complete before server stops.
 - **`ctx.body()` on empty body gives default values** — when the request body is empty or `{}`, record fields get Java defaults (`null` for objects, `0` for int, `false` for boolean). Use `@NotBlank` on required String fields to reject empty requests.
+- **Route conflict detection** — registering the same method + path twice throws `IllegalStateException` at startup. This catches copy-paste errors early.
+- **`abort()` without status defaults to 403** — if middleware calls `ctx.abort()` without setting a status code, the response defaults to 403 (Forbidden).
+- **Request timeout** — if `requestTimeout(seconds)` is set, handlers exceeding the timeout get a 503 JSON response. The handler thread is NOT interrupted — use cooperative checks for long-running tasks.
+- **Gzip compression** — `gzip(true)` compresses responses larger than `gzipMinSize` (default 1KB). Enable via env `AURA_GZIP=true`.
+- **`orderBy()` validates field names** — passing invalid characters (SQL injection attempts) throws `IllegalArgumentException` instead of silently executing.
 
 ## Packaging (Fat Jar)
 
