@@ -66,9 +66,7 @@ app.post("/user", (CreateReq req) -> save(req));   // body param
 app.routes(r -> {
     r.get("/user/{id}", userService, "get");
     r.post("/user", userService, "create");
-    // crud() and other Router-specific methods require a cast inside the lambda:
-    Router router = (Router) r;
-    router.crud("/user", userService);  // registers get/list/create/update/delete
+    r.crud("/user", userService);  // registers get/list/create/update/delete
 });
 
 // Service class — plain Java, no annotations needed
