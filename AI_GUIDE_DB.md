@@ -18,6 +18,10 @@ db.table("user").where("id", 1).findOne();
 db.table("user").whereNull("deleted_at").find();           // IS NULL
 db.table("user").whereNotNull("email").find();             // IS NOT NULL
 
+// IMPORTANT: where() throws if value is null or blank — use whereIf for optional conditions
+// db.table("user").where("status", null)  → throws IllegalArgumentException
+db.table("user").whereIf(status != null, "status", status).find();  // correct pattern
+
 // IN queries — auto-expands Collection
 db.table("user").where("id", "IN", List.of(1, 2, 3)).find();
 db.table("user").where("status", "NOT IN", List.of("banned")).find();
@@ -65,12 +69,11 @@ Object id = row.id();
 Row full = Row.of("user").set("name", "tom").insertFull(db);
 full.get("created_at"); // LocalDateTime from DB
 
-// findById → modify → update roundtrip
+// findById → modify → update: only .set() fields are sent to UPDATE
 Row found = db.findById("user", id);
 found.set("name", "updated").update(db);
-
-// Exclude server-managed columns from update
-found.exclude("created_at", "updated_at").set("name", "updated").update(db);
+// Generates: UPDATE user SET name=? WHERE id=?  (not all columns)
+// If no .set() was called, update sends all fields (backwards-compatible)
 
 // db.execute() returns int (affected row count)
 int affected = db.execute("UPDATE user SET active = ? WHERE id = ?", true, id);

@@ -200,8 +200,9 @@ public class Context implements BaseContext {
     @Override
     public void sendFile(String filename, byte[] data, String contentType) {
         exchange.getResponseHeaders().put(Headers.CONTENT_TYPE, contentType);
+        String safeName = filename.replaceAll("[\\r\\n\"]", "");
         exchange.getResponseHeaders().put(new HttpString("Content-Disposition"),
-                "attachment; filename=\"" + filename.replace("\"", "\\\"") + "\"");
+                "attachment; filename=\"" + safeName + "\"");
         exchange.setResponseContentLength(data.length);
         exchange.getResponseSender().send(ByteBuffer.wrap(data));
     }
