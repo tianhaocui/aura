@@ -315,6 +315,42 @@ Aura.create()
 public interface AuraPlugin { void install(Aura app); }
 ```
 
+## Common Integrations
+
+```java
+// --- Local Cache (Caffeine) ---
+var cache = Caffeine.newBuilder().maximumSize(10_000).expireAfterWrite(Duration.ofMinutes(5)).build();
+app.register(cache);
+app.onStop(a -> cache.invalidateAll());
+// In service:
+User user = cache.get(userId, id -> db.findById("user", id));
+
+// --- Redis (Redisson) ---
+var config = new Config();
+config.useSingleServer().setAddress("redis://localhost:6379");
+var redisson = Redisson.create(config);
+app.register(redisson);
+app.onStop(a -> redisson.shutdown());
+// In service:
+RMapCache<String, Object> map = redisson.getMapCache("sessions");
+map.put(token, session, 30, TimeUnit.MINUTES);
+
+// --- Scheduled Tasks ---
+var scheduler = Executors.newScheduledThreadPool(1);
+app.onStart(a -> scheduler.scheduleAtFixedRate(() -> {
+    db.table("sessions").where("expired_at", "<", LocalDateTime.now()).delete();
+}, 0, 1, TimeUnit.HOURS));
+app.onStop(a -> scheduler.shutdownNow());
+
+// --- HTTP Client (JDK) ---
+var http = HttpClient.newHttpClient();
+app.register(http);
+// In service:
+var req = HttpRequest.newBuilder(URI.create("https://api.example.com/data")).build();
+var resp = http.send(req, HttpResponse.BodyHandlers.ofString());
+String body = resp.body();
+```
+
 ## Configuration
 
 ```java
