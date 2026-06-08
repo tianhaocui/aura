@@ -87,6 +87,22 @@ class QueryBuildTest {
         assertThat(buildSql(q)).isEqualTo("SELECT * FROM users WHERE status = ?");
     }
 
+    @Test
+    void whereIf_trueWithNull_throws() throws Exception {
+        Query q = newQuery("users");
+        assertThatThrownBy(() -> q.whereIf(true, "name", null))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("must not be null");
+    }
+
+    @Test
+    void whereIf_trueWithValidValue_addsCondition() throws Exception {
+        Query q = newQuery("users");
+        q.whereIf(true, "status", "active");
+
+        assertThat(buildSql(q)).isEqualTo("SELECT * FROM users WHERE status = ?");
+    }
+
     // --- orderBy validates field names ---
 
     @Test
