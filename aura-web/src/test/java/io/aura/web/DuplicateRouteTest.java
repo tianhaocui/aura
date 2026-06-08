@@ -53,4 +53,30 @@ class DuplicateRouteTest {
                 .count();
         assertThat(count).isEqualTo(2);
     }
+
+    @Test
+    void duplicateParameterizedRoute_throwsOnStart() {
+        Aura app = Aura.create().port(0);
+        app.routes(r -> {
+            r.get("/api/users/{id}", ctx -> ctx.text("first"));
+            r.get("/api/users/{id}", ctx -> ctx.text("second"));
+        });
+        assertThatThrownBy(app::start)
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("Duplicate route");
+    }
+
+    @Test
+    void duplicateRouteInGroup_throwsOnStart() {
+        Aura app = Aura.create().port(0);
+        app.routes(r -> {
+            r.group("/api", api -> {
+                api.get("/users", ctx -> ctx.text("first"));
+                api.get("/users", ctx -> ctx.text("second"));
+            });
+        });
+        assertThatThrownBy(app::start)
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("Duplicate route: GET /api/users");
+    }
 }

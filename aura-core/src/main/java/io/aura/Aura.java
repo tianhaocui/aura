@@ -133,7 +133,7 @@ public class Aura {
     }
 
     public Aura gzipMinSize(int bytes) {
-        this.gzipMinSize = bytes;
+        this.gzipMinSize = Math.max(0, bytes);
         return this;
     }
 

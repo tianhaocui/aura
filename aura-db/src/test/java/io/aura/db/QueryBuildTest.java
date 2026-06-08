@@ -132,6 +132,42 @@ class QueryBuildTest {
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
+    @Test
+    void orderBy_emptyString_throws() throws Exception {
+        Query q = newQuery("users");
+        assertThatThrownBy(() -> q.orderBy(""))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void orderBy_multipleQualifiedIdentifiers_accepted() throws Exception {
+        Query q = newQuery("orders");
+        q.orderBy("t.created_at DESC", "t.id ASC");
+        assertThat(buildSql(q)).isEqualTo("SELECT * FROM orders ORDER BY t.created_at DESC, t.id ASC");
+    }
+
+    @Test
+    void orderBy_caseInsensitiveDirection() throws Exception {
+        Query q = newQuery("users");
+        q.orderBy("name asc", "age Desc");
+        assertThat(buildSql(q)).isEqualTo("SELECT * FROM users ORDER BY name asc, age Desc");
+    }
+
+    @Test
+    void orderBy_specialCharsInField_throws() throws Exception {
+        Query q = newQuery("users");
+        assertThatThrownBy(() -> q.orderBy("name`"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Invalid orderBy field");
+    }
+
+    @Test
+    void orderBy_spaceOnlyField_throws() throws Exception {
+        Query q = newQuery("users");
+        assertThatThrownBy(() -> q.orderBy("   "))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
     // --- select ---
 
     @Test
