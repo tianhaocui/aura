@@ -45,7 +45,8 @@ public class AuraMcpStarter implements McpStarter {
     private static Map<String, Object> handleRouterCall(McpRouter router, JSONObject params) {
         String toolName = params.getString("name");
         JSONObject args = params.getJSONObject("arguments");
-        Map<String, Object> argsMap = args != null ? args.toJavaObject(Map.class) : Map.of();
+        @SuppressWarnings("unchecked")
+        Map<String, Object> argsMap = args != null ? (Map<String, Object>) args.toJavaObject(Map.class) : Map.of();
         try {
             Object result = router.invoke(toolName, argsMap);
             String text = result instanceof String s ? s : JSON.toJSONString(result);

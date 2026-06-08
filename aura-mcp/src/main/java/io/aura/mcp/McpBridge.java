@@ -6,7 +6,7 @@ import com.alibaba.fastjson2.JSONObject;
 
 import java.io.*;
 import java.net.HttpURLConnection;
-import java.net.URL;
+import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 
@@ -101,7 +101,7 @@ public class McpBridge {
         }
 
         String url = baseUrl + path + query;
-        HttpURLConnection conn = (HttpURLConnection) new URL(url).openConnection();
+        HttpURLConnection conn = (HttpURLConnection) URI.create(url).toURL().openConnection();
         conn.setRequestMethod(httpMethod);
         conn.setConnectTimeout(10000);
         conn.setReadTimeout(30000);
@@ -109,7 +109,9 @@ public class McpBridge {
         if (body != null) {
             conn.setRequestProperty("Content-Type", "application/json");
             conn.setDoOutput(true);
-            conn.getOutputStream().write(body.getBytes(StandardCharsets.UTF_8));
+            try (OutputStream os = conn.getOutputStream()) {
+                os.write(body.getBytes(StandardCharsets.UTF_8));
+            }
         }
 
         try (InputStream is = conn.getResponseCode() < 400 ? conn.getInputStream() : conn.getErrorStream()) {
@@ -119,12 +121,14 @@ public class McpBridge {
 
     private void loadSchema() throws Exception {
         String url = baseUrl + "/__schema__";
-        HttpURLConnection conn = (HttpURLConnection) new URL(url).openConnection();
+        HttpURLConnection conn = (HttpURLConnection) URI.create(url).toURL().openConnection();
         conn.setConnectTimeout(5000);
         conn.setReadTimeout(5000);
-        String json = new String(conn.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
-        JSONObject schema = JSON.parseObject(json);
-        this.routes = schema.getJSONArray("routes");
+        try (InputStream is = conn.getInputStream()) {
+            String json = new String(is.readAllBytes(), StandardCharsets.UTF_8);
+            JSONObject schema = JSON.parseObject(json);
+            this.routes = schema.getJSONArray("routes");
+        }
     }
 
     private static String buildToolName(String method, String path) {
