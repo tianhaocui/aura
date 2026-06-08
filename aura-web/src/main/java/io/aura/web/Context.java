@@ -83,6 +83,7 @@ public class Context implements BaseContext {
             long maxSize = app != null ? app.maxBodySize() : 10 * 1024 * 1024;
             cachedBody = new String(exchange.getInputStream().readNBytes((int) Math.min(maxSize, Integer.MAX_VALUE)), StandardCharsets.UTF_8);
         }
+        if (cachedBody.isBlank()) return null;
         return JSON.parseObject(cachedBody, type);
     }
 
