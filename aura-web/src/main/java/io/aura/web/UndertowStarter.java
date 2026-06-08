@@ -235,7 +235,7 @@ public class UndertowStarter implements AuraStarter {
 
             if (app.requestTimeout() > 0 && timeoutScheduler != null) {
                 timeoutFuture = timeoutScheduler.schedule(() -> {
-                    if (responded.compareAndSet(false, true)) {
+                    if (responded.compareAndSet(false, true) && !exchange.isResponseStarted()) {
                         exchange.setStatusCode(503);
                         exchange.getResponseHeaders().put(Headers.CONTENT_TYPE, "application/json; charset=utf-8");
                         exchange.getResponseSender().send("{\"error\":\"Request timeout\"}");
@@ -534,6 +534,6 @@ public class UndertowStarter implements AuraStarter {
     }
 
     private static String generateShortId() {
-        return Long.toHexString(ThreadLocalRandom.current().nextLong() | 0x1000000000000000L).substring(0, 8);
+        return Long.toHexString(ThreadLocalRandom.current().nextLong() | 0x1000000000000000L).substring(0, 12);
     }
 }

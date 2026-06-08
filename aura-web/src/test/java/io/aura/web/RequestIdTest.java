@@ -7,11 +7,11 @@ import static org.assertj.core.api.Assertions.*;
 class RequestIdTest {
 
     @Test
-    void generateShortId_returns8chars() throws Exception {
+    void generateShortId_returns12chars() throws Exception {
         var method = UndertowStarter.class.getDeclaredMethod("generateShortId");
         method.setAccessible(true);
         String id = (String) method.invoke(null);
-        assertThat(id).hasSize(8);
+        assertThat(id).hasSize(12);
         assertThat(id).matches("[0-9a-f]+");
     }
 

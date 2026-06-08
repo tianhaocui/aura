@@ -123,7 +123,7 @@ public class Aura {
     }
 
     public Aura requestTimeout(int seconds) {
-        this.requestTimeout = seconds;
+        this.requestTimeout = Math.max(0, seconds);
         return this;
     }
 
@@ -404,13 +404,13 @@ public class Aura {
         if (accessLog != null) this.accessLog = "true".equalsIgnoreCase(accessLog);
 
         String requestTimeout = resolve("aura.request-timeout", "AURA_REQUEST_TIMEOUT");
-        if (requestTimeout != null) this.requestTimeout = Integer.parseInt(requestTimeout);
+        if (requestTimeout != null) this.requestTimeout = Math.max(0, Integer.parseInt(requestTimeout));
 
         String gzip = resolve("aura.gzip", "AURA_GZIP");
         if (gzip != null) this.gzip = "true".equalsIgnoreCase(gzip);
 
         String gzipMinSize = resolve("aura.gzip-min-size", "AURA_GZIP_MIN_SIZE");
-        if (gzipMinSize != null) this.gzipMinSize = Integer.parseInt(gzipMinSize);
+        if (gzipMinSize != null) this.gzipMinSize = Math.max(0, Integer.parseInt(gzipMinSize));
     }
 
     private String resolve(String propKey, String envKey) {
