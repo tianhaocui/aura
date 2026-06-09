@@ -285,7 +285,14 @@ public class UndertowStarter implements AuraStarter {
                 if (timeoutFuture != null) timeoutFuture.cancel(false);
                 runAfterHandlers(route.afterHandlers(), ctx);
                 if (app.accessLog()) {
-                    log.info("{} {} → {} ({}ms)", method, path, exchange.getStatusCode(), System.currentTimeMillis() - start);
+                    long elapsed = System.currentTimeMillis() - start;
+                    if ("json".equals(app.accessLogFormat())) {
+                        String ip = exchange.getSourceAddress() != null ? exchange.getSourceAddress().getHostString() : "-";
+                        log.info("{{\"ts\":\"{}\",\"method\":\"{}\",\"path\":\"{}\",\"status\":{},\"elapsed\":{},\"reqId\":\"{}\",\"ip\":\"{}\"}}",
+                                java.time.Instant.now(), method, path, exchange.getStatusCode(), elapsed, reqId, ip);
+                    } else {
+                        log.info("{} {} → {} ({}ms)", method, path, exchange.getStatusCode(), elapsed);
+                    }
                 }
                 MDC.remove("requestId");
             }

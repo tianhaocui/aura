@@ -18,6 +18,7 @@ class MockContext extends Context {
     private final Aura app;
     private final Map<Class<?>, Object> attrs = new ConcurrentHashMap<>();
     private final Map<String, Object> namedAttrs = new ConcurrentHashMap<>();
+    private final Map<String, String> respHeaders = new HashMap<>();
 
     MockContext(Map<String, String> pathParams, Map<String, String> queryParams,
                 Map<String, String> headers, String body, Aura app) {
@@ -51,8 +52,10 @@ class MockContext extends Context {
     }
     @Override public void text(String text) { responseBody = text; }
     @Override public void redirect(String url) { status = 302; }
-    @Override public Context header(String name, String value) { return this; }
+    @Override public Context header(String name, String value) { respHeaders.put(name, value); return this; }
     @Override public Context cookie(String name, String value, int maxAge) { return this; }
+
+    Map<String, String> responseHeaders() { return respHeaders; }
 
     byte[] fileBytes;
     String fileName;

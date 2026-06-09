@@ -104,9 +104,9 @@ public class TestClient {
                         try { h.handle(mockCtx); } catch (Exception ignored) {}
                     }
                 }
-                return new Response(mockCtx.status == 0 ? 200 : mockCtx.status, mockCtx.responseBody);
+                return new Response(mockCtx.status == 0 ? 200 : mockCtx.status, mockCtx.responseBody, mockCtx.responseHeaders());
             }
-            return new Response(404, "Not Found");
+            return new Response(404, "Not Found", Map.of());
         }
 
         @SuppressWarnings({"unchecked", "rawtypes"})
@@ -158,14 +158,41 @@ public class TestClient {
         }
     }
 
-    public record Response(int status, String body) {
+    public static class Response {
+        private final int status;
+        private final String body;
+        private final Map<String, String> headers;
+
+        Response(int status, String body, Map<String, String> headers) {
+            this.status = status;
+            this.body = body;
+            this.headers = headers != null ? headers : Map.of();
+        }
+
+        public int status() { return status; }
+        public String body() { return body; }
+
+        public String header(String name) { return headers.get(name); }
+
         public <T> T json(Class<T> type) {
             return JSON.parseObject(body, type);
+        }
+
+        public <T> List<T> jsonList(Class<T> type) {
+            return JSON.parseArray(body, type);
         }
 
         public Response expect(int statusCode) {
             if (status != statusCode) {
                 throw new AssertionError("Expected " + statusCode + " but got " + status + " body: " + body);
+            }
+            return this;
+        }
+
+        public Response expectHeader(String name, String value) {
+            String actual = headers.get(name);
+            if (!java.util.Objects.equals(value, actual)) {
+                throw new AssertionError("Expected header '" + name + "' to be '" + value + "' but got '" + actual + "'");
             }
             return this;
         }

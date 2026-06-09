@@ -36,7 +36,7 @@ public class Aura {
     private CorsConfig corsConfig;
     private long maxBodySize = 10 * 1024 * 1024; // 10MB default
     private int shutdownTimeout = 30;
-    private boolean accessLog;
+    private String accessLogFormat;
     private int requestTimeout;
     private boolean gzip;
     private int gzipMinSize = 1024;
@@ -129,7 +129,12 @@ public class Aura {
     }
 
     public Aura accessLog(boolean enabled) {
-        this.accessLog = enabled;
+        this.accessLogFormat = enabled ? "text" : null;
+        return this;
+    }
+
+    public Aura accessLog(String format) {
+        this.accessLogFormat = format;
         return this;
     }
 
@@ -396,7 +401,8 @@ public class Aura {
     public CorsConfig corsConfig() { return corsConfig; }
     public long maxBodySize() { return maxBodySize; }
     public int shutdownTimeout() { return shutdownTimeout; }
-    public boolean accessLog() { return accessLog; }
+    public boolean accessLog() { return accessLogFormat != null; }
+    public String accessLogFormat() { return accessLogFormat; }
     public int requestTimeout() { return requestTimeout; }
     public boolean gzip() { return gzip; }
     public int gzipMinSize() { return gzipMinSize; }
@@ -456,7 +462,11 @@ public class Aura {
         if (shutdown != null) this.shutdownTimeout = Integer.parseInt(shutdown);
 
         String accessLog = resolve("aura.access-log", "AURA_ACCESS_LOG");
-        if (accessLog != null) this.accessLog = "true".equalsIgnoreCase(accessLog);
+        if (accessLog != null) {
+            if ("true".equalsIgnoreCase(accessLog)) this.accessLogFormat = "text";
+            else if ("false".equalsIgnoreCase(accessLog)) this.accessLogFormat = null;
+            else this.accessLogFormat = accessLog;
+        }
 
         String requestTimeout = resolve("aura.request-timeout", "AURA_REQUEST_TIMEOUT");
         if (requestTimeout != null) this.requestTimeout = Math.max(0, Integer.parseInt(requestTimeout));
