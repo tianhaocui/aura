@@ -154,6 +154,14 @@ Db main = Db.create("main", "jdbc:mysql://host/main", user, pass);
 Db log  = Db.create("log", "jdbc:mysql://host/log", user, pass);
 app.register("main", main).register("log", log);
 Db logDb = app.getBean("log", Db.class);
+
+// Custom DataSource (full HikariCP control — pool size, timeout, driver-specific props)
+HikariConfig config = new HikariConfig();
+config.setJdbcUrl("jdbc:clickhouse://localhost:8123/analytics");
+config.setUsername("default");
+config.addDataSourceProperty("async_insert", "1");
+config.setMaximumPoolSize(5);
+Db analytics = Db.create("analytics", new HikariDataSource(config));
 ```
 
 ## Common Patterns
