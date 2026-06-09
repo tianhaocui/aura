@@ -34,6 +34,7 @@ public class Context implements BaseContext {
         this.pathParams = pathParams;
         this.app = app;
         this.requestId = requestId;
+        if (app != null) namedAttrs.put("_app", app);
     }
 
     public Aura app() { return app; }

@@ -172,10 +172,28 @@ public class UndertowStarter implements AuraStarter {
         // CORS
         String corsOrigin = app.corsOrigin();
         if (corsOrigin != null) {
-            exchange.getResponseHeaders().put(new HttpString("Access-Control-Allow-Origin"), corsOrigin);
-            exchange.getResponseHeaders().put(new HttpString("Access-Control-Allow-Methods"), "GET, POST, PUT, DELETE, OPTIONS");
-            exchange.getResponseHeaders().put(new HttpString("Access-Control-Allow-Headers"), "Content-Type, Authorization");
-            exchange.getResponseHeaders().put(new HttpString("Access-Control-Max-Age"), "86400");
+            io.aura.CorsConfig corsConfig = app.corsConfig();
+            String allowOrigin;
+            String allowHeaders;
+            boolean credentials = false;
+            if (corsConfig != null) {
+                String requestOrigin = exchange.getRequestHeaders().getFirst("Origin");
+                allowOrigin = corsConfig.resolveOrigin(requestOrigin);
+                allowHeaders = corsConfig.headers();
+                credentials = corsConfig.credentials();
+            } else {
+                allowOrigin = corsOrigin;
+                allowHeaders = "Content-Type, Authorization";
+            }
+            if (allowOrigin != null) {
+                exchange.getResponseHeaders().put(new HttpString("Access-Control-Allow-Origin"), allowOrigin);
+                exchange.getResponseHeaders().put(new HttpString("Access-Control-Allow-Methods"), "GET, POST, PUT, DELETE, OPTIONS");
+                exchange.getResponseHeaders().put(new HttpString("Access-Control-Allow-Headers"), allowHeaders);
+                exchange.getResponseHeaders().put(new HttpString("Access-Control-Max-Age"), "86400");
+                if (credentials) {
+                    exchange.getResponseHeaders().put(new HttpString("Access-Control-Allow-Credentials"), "true");
+                }
+            }
             if ("OPTIONS".equals(method)) {
                 exchange.setStatusCode(204);
                 exchange.endExchange();
@@ -267,7 +285,14 @@ public class UndertowStarter implements AuraStarter {
                 if (timeoutFuture != null) timeoutFuture.cancel(false);
                 runAfterHandlers(route.afterHandlers(), ctx);
                 if (app.accessLog()) {
-                    log.info("{} {} → {} ({}ms)", method, path, exchange.getStatusCode(), System.currentTimeMillis() - start);
+                    long elapsed = System.currentTimeMillis() - start;
+                    if ("json".equals(app.accessLogFormat())) {
+                        String ip = exchange.getSourceAddress() != null ? exchange.getSourceAddress().getHostString() : "-";
+                        log.info("{{\"ts\":\"{}\",\"method\":\"{}\",\"path\":\"{}\",\"status\":{},\"elapsed\":{},\"reqId\":\"{}\",\"ip\":\"{}\"}}",
+                                java.time.Instant.now(), method, path, exchange.getStatusCode(), elapsed, reqId, ip);
+                    } else {
+                        log.info("{} {} → {} ({}ms)", method, path, exchange.getStatusCode(), elapsed);
+                    }
                 }
                 MDC.remove("requestId");
             }

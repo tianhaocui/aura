@@ -33,9 +33,10 @@ public class Aura {
     private String staticFilesPath;
     private boolean spaMode;
     private String corsOrigin;
+    private CorsConfig corsConfig;
     private long maxBodySize = 10 * 1024 * 1024; // 10MB default
     private int shutdownTimeout = 30;
-    private boolean accessLog;
+    private String accessLogFormat;
     private int requestTimeout;
     private boolean gzip;
     private int gzipMinSize = 1024;
@@ -43,6 +44,8 @@ public class Aura {
     private int mcpPort = -1;
     private java.io.PrintStream mcpStdout;
     private McpRouterSpec mcpRouter;
+    private java.util.function.Function<io.aura.web.BaseContext, Long> authFunction;
+    private JwtSupport jwtSupport;
     private final java.util.concurrent.atomic.AtomicBoolean stopped = new java.util.concurrent.atomic.AtomicBoolean(false);
 
     private AuraStarter starter;
@@ -107,6 +110,14 @@ public class Aura {
         return this;
     }
 
+    public Aura cors(java.util.function.Consumer<CorsConfig> config) {
+        CorsConfig c = new CorsConfig();
+        config.accept(c);
+        this.corsConfig = c;
+        this.corsOrigin = "__cors_config__";
+        return this;
+    }
+
     public Aura maxBodySize(long bytes) {
         this.maxBodySize = bytes;
         return this;
@@ -118,7 +129,12 @@ public class Aura {
     }
 
     public Aura accessLog(boolean enabled) {
-        this.accessLog = enabled;
+        this.accessLogFormat = enabled ? "text" : null;
+        return this;
+    }
+
+    public Aura accessLog(String format) {
+        this.accessLogFormat = format;
         return this;
     }
 
@@ -136,6 +152,49 @@ public class Aura {
         this.gzipMinSize = Math.max(0, bytes);
         return this;
     }
+
+    public Aura auth(java.util.function.Function<io.aura.web.BaseContext, Long> authFunction) {
+        this.authFunction = authFunction;
+        return this;
+    }
+
+    public Aura jwt(String secret) {
+        return jwt(secret, 604800);
+    }
+
+    public Aura jwt(String secret, long expireSeconds) {
+        this.jwtSupport = new JwtSupport(secret, expireSeconds);
+        this.authFunction = ctx -> {
+            String header = ctx.header("Authorization");
+            if (header == null || !header.startsWith("Bearer ")) return null;
+            return jwtSupport.verify(header.substring(7));
+        };
+        return this;
+    }
+
+    public String signJwt(long userId) {
+        if (jwtSupport == null) throw new IllegalStateException("JWT not configured. Call app.jwt(secret) first.");
+        return jwtSupport.sign(userId);
+    }
+
+    public static io.aura.web.BaseHandler requireAuth() {
+        return ctx -> {
+            Aura app = (Aura) ctx.get("_app", Object.class);
+            if (app == null || app.authFunction == null) {
+                throw new IllegalStateException("Auth not configured. Call app.auth() or app.jwt() first.");
+            }
+            Long userId = app.authFunction.apply(ctx);
+            if (userId == null) {
+                ctx.status(401);
+                ctx.json(java.util.Map.of("error", "Unauthorized"));
+                ctx.abort();
+            } else {
+                ctx.set("_userId", userId);
+            }
+        };
+    }
+
+    public java.util.function.Function<io.aura.web.BaseContext, Long> authFunction() { return authFunction; }
 
     public Aura jsonConfig(java.util.function.Consumer<JsonConfig> config) {
         config.accept(this.jsonConfig);
@@ -339,9 +398,11 @@ public class Aura {
     public String staticFilesPath() { return staticFilesPath; }
     public boolean spa() { return spaMode; }
     public String corsOrigin() { return corsOrigin; }
+    public CorsConfig corsConfig() { return corsConfig; }
     public long maxBodySize() { return maxBodySize; }
     public int shutdownTimeout() { return shutdownTimeout; }
-    public boolean accessLog() { return accessLog; }
+    public boolean accessLog() { return accessLogFormat != null; }
+    public String accessLogFormat() { return accessLogFormat; }
     public int requestTimeout() { return requestTimeout; }
     public boolean gzip() { return gzip; }
     public int gzipMinSize() { return gzipMinSize; }
@@ -401,7 +462,11 @@ public class Aura {
         if (shutdown != null) this.shutdownTimeout = Integer.parseInt(shutdown);
 
         String accessLog = resolve("aura.access-log", "AURA_ACCESS_LOG");
-        if (accessLog != null) this.accessLog = "true".equalsIgnoreCase(accessLog);
+        if (accessLog != null) {
+            if ("true".equalsIgnoreCase(accessLog)) this.accessLogFormat = "text";
+            else if ("false".equalsIgnoreCase(accessLog)) this.accessLogFormat = null;
+            else this.accessLogFormat = accessLog;
+        }
 
         String requestTimeout = resolve("aura.request-timeout", "AURA_REQUEST_TIMEOUT");
         if (requestTimeout != null) this.requestTimeout = Math.max(0, Integer.parseInt(requestTimeout));
@@ -411,6 +476,12 @@ public class Aura {
 
         String gzipMinSize = resolve("aura.gzip-min-size", "AURA_GZIP_MIN_SIZE");
         if (gzipMinSize != null) this.gzipMinSize = Math.max(0, Integer.parseInt(gzipMinSize));
+
+        String jwtSecret = resolve("aura.jwt-secret", "AURA_JWT_SECRET");
+        if (jwtSecret != null && jwtSupport == null) {
+            String jwtExpire = resolve("aura.jwt-expire", "AURA_JWT_EXPIRE");
+            jwt(jwtSecret, jwtExpire != null ? Long.parseLong(jwtExpire) : 604800);
+        }
     }
 
     private String resolve(String propKey, String envKey) {
