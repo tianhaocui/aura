@@ -27,6 +27,7 @@ class MockContext extends Context {
         this.body = body;
         this.app = app;
         this.queryParams = queryParams;
+        if (app != null) namedAttrs.put("_app", app);
     }
 
     @Override public String path(String name) { return pathParams.get(name); }

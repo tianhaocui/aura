@@ -70,6 +70,13 @@ public interface BaseContext {
         throw new UnsupportedOperationException("sendFile not supported in this context");
     }
 
+    // --- auth ---
+    default long userId() {
+        Object id = get("_userId", Object.class);
+        if (id == null) throw new IllegalStateException("Not authenticated — use Aura.requireAuth() middleware");
+        return id instanceof Long l ? l : Long.parseLong(id.toString());
+    }
+
     // --- SSE ---
     default SseEmitter sse() throws Exception {
         throw new UnsupportedOperationException("SSE not supported in this context");
