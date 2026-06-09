@@ -539,10 +539,14 @@ public class UndertowStarter implements AuraStarter {
     }
 
     private boolean checkWsOrigin(HttpServerExchange exchange) {
-        String corsOrigin = app.corsOrigin();
-        if (corsOrigin == null) return true;
         String origin = exchange.getRequestHeaders().getFirst("Origin");
         if (origin == null) return true;
+        io.aura.CorsConfig corsConfig = app.corsConfig();
+        if (corsConfig != null) {
+            return corsConfig.resolveOrigin(origin) != null;
+        }
+        String corsOrigin = app.corsOrigin();
+        if (corsOrigin == null) return true;
         if ("*".equals(corsOrigin)) return true;
         return corsOrigin.equals(origin);
     }

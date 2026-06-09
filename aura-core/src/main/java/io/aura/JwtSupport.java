@@ -28,7 +28,9 @@ public final class JwtSupport {
         String[] parts = token.split("\\.");
         if (parts.length != 3) return null;
         String expectedSig = hmacSha256(parts[0] + "." + parts[1]);
-        if (!expectedSig.equals(parts[2])) return null;
+        if (!java.security.MessageDigest.isEqual(
+                expectedSig.getBytes(StandardCharsets.UTF_8),
+                parts[2].getBytes(StandardCharsets.UTF_8))) return null;
         try {
             String json = new String(Base64.getUrlDecoder().decode(parts[1]), StandardCharsets.UTF_8);
             long exp = extractLong(json, "exp");
