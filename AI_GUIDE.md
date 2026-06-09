@@ -16,13 +16,13 @@ db.find(sql, params)               — only for joins/subqueries
 <dependency>
     <groupId>io.github.tianhaocui</groupId>
     <artifactId>aura-web</artifactId>
-    <version>0.4.3</version>
+    <version>0.5.1</version>
 </dependency>
 <!-- Optional: database -->
 <dependency>
     <groupId>io.github.tianhaocui</groupId>
     <artifactId>aura-db</artifactId>
-    <version>0.4.3</version>
+    <version>0.5.1</version>
 </dependency>
 <!-- Required: add your own SLF4J provider -->
 <dependency>
@@ -118,12 +118,32 @@ record DateRange(@NotNull LocalDate start, @NotNull LocalDate end) implements Va
 }
 ```
 
+## Auth
+
+```java
+// Built-in JWT (zero dependency)
+app.jwt("secret");  // or env: AURA_JWT_SECRET
+
+// Protect routes
+r.group("/api", api -> {
+    api.before(Aura.requireAuth());  // 401 if not authenticated
+    api.get("/profile", ctx -> db.findById("user", ctx.userId()));
+});
+
+// Sign token (login endpoint)
+r.post("/login", ctx -> ctx.json(Map.of("token", app.signJwt(userId))));
+
+// Custom auth (OAuth, IAM, Redis session — anything)
+app.auth(ctx -> myIamClient.verify(ctx.header("X-Token")));
+```
+
+`ctx.userId()` returns the authenticated user ID. Throws if not authenticated.
+
 ## Plugins
 
 ```java
 Aura.create()
     .plugin(app -> app.register(new RedisClient("localhost")))
-    .plugin(new JwtAuthPlugin("secret"))
     .start();
 
 public interface AuraPlugin { void install(Aura app); }
@@ -135,10 +155,13 @@ public interface AuraPlugin { void install(Aura app); }
 Aura.create()
     .port(8080)                    // or env: AURA_PORT
     .env("dev")                    // or env: AURA_ENV
+    .jwt("secret")                 // or env: AURA_JWT_SECRET
     .cors(true)                    // CORS allow all
+    .cors(c -> c.origins("https://app.com").credentials(true))  // fine-grained
     .maxBodySize(10 * 1024 * 1024L)
     .requestTimeout(30)            // 503 after 30s
     .gzip(true)                    // response compression
+    .accessLog("json")             // JSON structured log (or true for human-readable)
     .staticFiles("/public")
     .spa(true)                     // unknown paths → /index.html
     .mcp(true)                     // MCP Server for AI agents

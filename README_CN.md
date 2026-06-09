@@ -39,7 +39,7 @@ AI agent 获得 7 个工具（创建/列表/获取/更新/删除/搜索/统计 t
 <dependency>
     <groupId>io.github.tianhaocui</groupId>
     <artifactId>aura-web</artifactId>
-    <version>0.4.3</version>
+    <version>0.5.1</version>
 </dependency>
 <!-- 需要添加 SLF4J 实现，如 logback-classic -->
 ```
@@ -220,6 +220,25 @@ r.post("/chat", ctx -> {
     sse.send("done", "");
     sse.close();
 });
+```
+
+## 认证
+
+```java
+// 内置 JWT — 一行搞定
+Aura.create().jwt("secret").routes(r -> {
+    r.group("/api", api -> {
+        api.before(Aura.requireAuth());
+        api.get("/me", ctx -> db.findById("user", ctx.userId()));
+    });
+    r.post("/login", ctx -> {
+        // 验证用户名密码...
+        ctx.json(Map.of("token", ctx.app().signJwt(userId)));
+    });
+}).start();
+
+// 自定义认证（OAuth、IAM、任何方案）
+app.auth(ctx -> myIamClient.verify(ctx.header("X-Token")));
 ```
 
 ## 中间件

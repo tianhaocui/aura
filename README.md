@@ -39,7 +39,7 @@ AI agent gets 7 tools (create/list/get/update/delete/search/stats todos). [Sourc
 <dependency>
     <groupId>io.github.tianhaocui</groupId>
     <artifactId>aura-web</artifactId>
-    <version>0.4.3</version>
+    <version>0.5.1</version>
 </dependency>
 <!-- Add an SLF4J provider, e.g. logback-classic -->
 ```
@@ -220,6 +220,25 @@ r.post("/chat", ctx -> {
     sse.send("done", "");
     sse.close();
 });
+```
+
+## Auth
+
+```java
+// Built-in JWT — one line
+Aura.create().jwt("secret").routes(r -> {
+    r.group("/api", api -> {
+        api.before(Aura.requireAuth());
+        api.get("/me", ctx -> db.findById("user", ctx.userId()));
+    });
+    r.post("/login", ctx -> {
+        // verify credentials...
+        ctx.json(Map.of("token", ctx.app().signJwt(userId)));
+    });
+}).start();
+
+// Custom auth (OAuth, IAM, anything)
+app.auth(ctx -> myIamClient.verify(ctx.header("X-Token")));
 ```
 
 ## Middleware
