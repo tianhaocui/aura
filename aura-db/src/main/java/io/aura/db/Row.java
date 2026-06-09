@@ -55,9 +55,21 @@ public class Row extends LinkedHashMap<String, Object> {
         return v == null ? null : v.toString();
     }
 
+    public String getStr(String key, String defaultValue) {
+        Object v = get(key);
+        return v == null ? defaultValue : v.toString();
+    }
+
     public Integer getInt(String key) {
         Object v = get(key);
         if (v == null) return null;
+        if (v instanceof Number n) return n.intValue();
+        return Integer.parseInt(v.toString());
+    }
+
+    public int getInt(String key, int defaultValue) {
+        Object v = get(key);
+        if (v == null) return defaultValue;
         if (v instanceof Number n) return n.intValue();
         return Integer.parseInt(v.toString());
     }
@@ -69,9 +81,23 @@ public class Row extends LinkedHashMap<String, Object> {
         return Long.parseLong(v.toString());
     }
 
+    public long getLong(String key, long defaultValue) {
+        Object v = get(key);
+        if (v == null) return defaultValue;
+        if (v instanceof Number n) return n.longValue();
+        return Long.parseLong(v.toString());
+    }
+
     public Boolean getBool(String key) {
         Object v = get(key);
         if (v == null) return null;
+        if (v instanceof Boolean b) return b;
+        return Boolean.parseBoolean(v.toString());
+    }
+
+    public boolean getBool(String key, boolean defaultValue) {
+        Object v = get(key);
+        if (v == null) return defaultValue;
         if (v instanceof Boolean b) return b;
         return Boolean.parseBoolean(v.toString());
     }
