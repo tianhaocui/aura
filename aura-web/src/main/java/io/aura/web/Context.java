@@ -42,6 +42,7 @@ public class Context implements BaseContext {
 
     @Override
     public UploadedFile file(String field) throws Exception {
+        exchange.startBlocking();
         FormDataParser parser = FormParserFactory.builder().build().createParser(exchange);
         if (parser == null) return null;
         try (parser) {
@@ -54,6 +55,19 @@ public class Context implements BaseContext {
                     ? value.getHeaders().getFirst(Headers.CONTENT_TYPE)
                     : null;
             return new UploadedFile(value.getFileName(), data, contentType);
+        }
+    }
+
+    @Override
+    public String formField(String name) throws Exception {
+        exchange.startBlocking();
+        FormDataParser parser = FormParserFactory.builder().build().createParser(exchange);
+        if (parser == null) return null;
+        try (parser) {
+            FormData formData = parser.parseBlocking();
+            FormData.FormValue value = formData.getFirst(name);
+            if (value == null || value.isFileItem()) return null;
+            return value.getValue();
         }
     }
 

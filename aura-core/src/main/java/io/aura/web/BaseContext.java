@@ -61,6 +61,7 @@ public interface BaseContext {
 
     // --- file upload ---
     default UploadedFile file(String field) throws Exception { return null; }
+    default String formField(String name) throws Exception { return null; }
 
     // --- file download ---
     default void sendFile(String filename, byte[] data) throws Exception {
