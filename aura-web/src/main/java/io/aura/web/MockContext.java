@@ -51,6 +51,7 @@ class MockContext extends Context {
         responseBody = JSON.toJSONString(obj, dateFormat, features);
     }
     @Override public void text(String text) { responseBody = text; }
+    @Override public void html(String html) { responseBody = html; }
     @Override public void redirect(String url) { status = 302; }
     @Override public Context header(String name, String value) { respHeaders.put(name, value); return this; }
     @Override public Context cookie(String name, String value, int maxAge) { return this; }
