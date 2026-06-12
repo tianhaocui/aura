@@ -47,6 +47,7 @@ public class Aura {
     private java.util.function.Function<io.aura.web.BaseContext, Long> authFunction;
     private JwtSupport jwtSupport;
     private final java.util.concurrent.atomic.AtomicBoolean stopped = new java.util.concurrent.atomic.AtomicBoolean(false);
+    private volatile Thread keepAliveThread;
 
     private AuraStarter starter;
     private McpStarter mcpStarter;
@@ -372,10 +373,19 @@ public class Aura {
                 log.error("--mcp-stdio requires aura-mcp dependency.");
             }
         }
+
+        // Keep JVM alive — Undertow threads may be daemon
+        keepAliveThread = new Thread(() -> {
+            try { new java.util.concurrent.CountDownLatch(1).await(); }
+            catch (InterruptedException ignored) {}
+        }, "aura-main");
+        keepAliveThread.setDaemon(false);
+        keepAliveThread.start();
     }
 
     public void stop() {
         if (!stopped.compareAndSet(false, true)) return;
+        if (keepAliveThread != null) keepAliveThread.interrupt();
         if (mcpStarter != null) {
             mcpStarter.stop();
             mcpStarter = null;
