@@ -48,6 +48,7 @@ public class Aura {
     private JwtSupport jwtSupport;
     private final java.util.concurrent.atomic.AtomicBoolean stopped = new java.util.concurrent.atomic.AtomicBoolean(false);
     private volatile Thread keepAliveThread;
+    private final java.util.LinkedHashMap<Class<? extends Exception>, io.aura.web.BaseExceptionHandler<?>> exceptionHandlers = new java.util.LinkedHashMap<>();
 
     private AuraStarter starter;
     private McpStarter mcpStarter;
@@ -176,6 +177,15 @@ public class Aura {
     public String signJwt(long userId) {
         if (jwtSupport == null) throw new IllegalStateException("JWT not configured. Call app.jwt(secret) first.");
         return jwtSupport.sign(userId);
+    }
+
+    public <T extends Exception> Aura exception(Class<T> type, io.aura.web.BaseExceptionHandler<T> handler) {
+        exceptionHandlers.put(type, handler);
+        return this;
+    }
+
+    public java.util.Map<Class<? extends Exception>, io.aura.web.BaseExceptionHandler<?>> exceptionHandlers() {
+        return exceptionHandlers;
     }
 
     public static io.aura.web.BaseHandler requireAuth() {

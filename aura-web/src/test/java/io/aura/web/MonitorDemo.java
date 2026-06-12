@@ -76,18 +76,18 @@ public class MonitorDemo {
         });
 
         // 请求计数中间件
+        app.exception(Exception.class, (e, ctx) -> {
+            errorCount.incrementAndGet();
+            recentErrors.add(Map.of(
+                    "time", Instant.now().toString(),
+                    "path", ctx.url(),
+                    "error", e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName()
+            ));
+            if (recentErrors.size() > 50) recentErrors.remove(0);
+            ctx.status(500).json(Map.of("error", e.getMessage()));
+        });
         app.routes((BaseRouter r) -> {
             r.before(ctx -> requestCount.incrementAndGet());
-            r.exception(Exception.class, (e, ctx) -> {
-                errorCount.incrementAndGet();
-                recentErrors.add(Map.of(
-                        "time", Instant.now().toString(),
-                        "path", ctx.url(),
-                        "error", e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName()
-                ));
-                if (recentErrors.size() > 50) recentErrors.remove(0);
-                ctx.status(500).json(Map.of("error", e.getMessage()));
-            });
 
             // 故意报错的测试端点
             r.get("/fail", ctx -> { throw new RuntimeException("test error"); });

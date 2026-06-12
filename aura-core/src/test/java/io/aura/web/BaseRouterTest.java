@@ -56,13 +56,6 @@ class BaseRouterTest {
     }
 
     @Test
-    void exception_registersHandler() {
-        BaseRouter router = new BaseRouter();
-        router.exception(RuntimeException.class, (e, ctx) -> {});
-        assertThat(router.exceptionHandlers).containsKey(RuntimeException.class);
-    }
-
-    @Test
     void group_createsSubRouter() {
         BaseRouter router = new BaseRouter();
         router.group("/api", sub -> {

@@ -1,9 +1,7 @@
 package io.aura.web;
 
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.function.Consumer;
 
 public class BaseRouter {
@@ -13,7 +11,6 @@ public class BaseRouter {
     public final List<BaseHandler> afterHandlers = new ArrayList<>();
     public final List<Group> groups = new ArrayList<>();
     public final List<WsRoute> wsRoutes = new ArrayList<>();
-    public final Map<Class<? extends Exception>, BaseExceptionHandler<?>> exceptionHandlers = new LinkedHashMap<>();
 
     public BaseRouteBuilder get(String path, BaseHandler handler) {
         return addRoute("GET", path, handler);
@@ -62,11 +59,6 @@ public class BaseRouter {
 
     public BaseRouter after(BaseHandler handler) {
         afterHandlers.add(handler);
-        return this;
-    }
-
-    public <T extends Exception> BaseRouter exception(Class<T> type, BaseExceptionHandler<T> handler) {
-        exceptionHandlers.put(type, handler);
         return this;
     }
 

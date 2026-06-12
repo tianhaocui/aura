@@ -26,6 +26,11 @@ public class AuraDemo {
             .staticFiles("/public")
             .onStart(a -> System.out.println("App: " + a.prop("app.name")))
             .onStop(a -> System.out.println("Shutting down..."))
+            .exception(UnauthorizedException.class, (e, ctx) -> {})
+            .exception(NumberFormatException.class, (e, ctx) ->
+                ctx.status(400).json(Map.of("error", "Invalid number: " + e.getMessage())))
+            .exception(Exception.class, (e, ctx) ->
+                ctx.status(500).json(Map.of("error", "Internal error")))
             .routes((BaseRouter r) -> {
                 // global logging middleware
                 r.before(ctx -> ctx.set("startTime", System.currentTimeMillis()));
@@ -79,13 +84,6 @@ public class AuraDemo {
                         ctx.json(Map.of("deleted", id));
                     });
                 });
-
-                // exception handlers
-                r.exception(UnauthorizedException.class, (e, ctx) -> {});
-                r.exception(NumberFormatException.class, (e, ctx) ->
-                    ctx.status(400).json(Map.of("error", "Invalid number: " + e.getMessage())));
-                r.exception(Exception.class, (e, ctx) ->
-                    ctx.status(500).json(Map.of("error", "Internal error")));
             });
 
         app.start();

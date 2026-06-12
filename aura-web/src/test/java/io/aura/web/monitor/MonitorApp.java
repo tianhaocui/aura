@@ -42,6 +42,8 @@ public class MonitorApp {
                 .cors(true)
                 .mcp(true)
                 .service(serverService, alertService)
+                .exception(Exception.class, (e, ctx) ->
+                        ctx.status(500).json(Map.of("error", e.getMessage())))
                 .routes((BaseRouter r) -> {
                     r.before(ctx -> ctx.set("startTime", System.currentTimeMillis()));
                     r.after(ctx -> {
@@ -64,9 +66,6 @@ public class MonitorApp {
                             "alerts", alertService.triggeredCount(),
                             "system", collector.collect()
                     )));
-
-                    r.exception(Exception.class, (e, ctx) ->
-                            ctx.status(500).json(Map.of("error", e.getMessage())));
                 });
 
         app.start();

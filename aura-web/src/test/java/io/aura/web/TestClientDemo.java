@@ -19,6 +19,8 @@ public class TestClientDemo {
 
         var app = Aura.create()
             .port(8080)
+            .exception(IllegalArgumentException.class, (e, ctx) ->
+                    ctx.status(400).json(Map.of("error", e.getMessage())))
             .routes(r -> {
                 Router router = (Router) r;
                 r.get("/health", ctx -> ctx.text("ok"));
@@ -28,8 +30,6 @@ public class TestClientDemo {
                 r.get("/search", ctx -> ctx.json(Map.of(
                         "q", ctx.query("q", ""),
                         "page", ctx.query("page", "1"))));
-                r.exception(IllegalArgumentException.class, (e, ctx) ->
-                        ctx.status(400).json(Map.of("error", e.getMessage())));
                 r.get("/validate", ctx -> { throw new IllegalArgumentException("bad input"); });
             });
 
