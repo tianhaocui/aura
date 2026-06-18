@@ -6,7 +6,7 @@
 
     <groupId>io.github.tianhaocui</groupId>
     <artifactId>aura-parent</artifactId>
-    <version>0.5.2</version>
+    <version>0.5.3</version>
     <packaging>pom</packaging>
 
     <name>Aura</name>

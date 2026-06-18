@@ -1,6 +1,6 @@
 {
   "name": "@aura-framework/mcp-bridge",
-  "version": "0.2.1",
+  "version": "0.5.3",
   "description": "MCP bridge for Aura framework applications. Connects any Aura app to AI tools via MCP protocol.",
   "bin": {
     "aura-mcp": "./index.js"
