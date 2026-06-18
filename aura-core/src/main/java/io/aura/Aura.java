@@ -49,13 +49,16 @@ public class Aura {
     private final java.util.concurrent.atomic.AtomicBoolean stopped = new java.util.concurrent.atomic.AtomicBoolean(false);
     private volatile Thread keepAliveThread;
     private final java.util.LinkedHashMap<Class<? extends Exception>, io.aura.web.BaseExceptionHandler<?>> exceptionHandlers = new java.util.LinkedHashMap<>();
+    private final List<io.aura.web.BaseHandler> beforeHandlers = new ArrayList<>();
+    private final List<io.aura.web.BaseHandler> afterHandlers = new ArrayList<>();
 
     private AuraStarter starter;
     private McpStarter mcpStarter;
 
     private Aura() {
         loadConfig("aura.properties");
-        applyFrameworkProps(); // apply env vars even if no config file
+        applyFrameworkProps();
+        loadConfig("aura-" + env + ".properties");
     }
 
     public static Aura create() {
@@ -186,6 +189,24 @@ public class Aura {
 
     public java.util.Map<Class<? extends Exception>, io.aura.web.BaseExceptionHandler<?>> exceptionHandlers() {
         return exceptionHandlers;
+    }
+
+    public Aura before(io.aura.web.BaseHandler handler) {
+        beforeHandlers.add(handler);
+        return this;
+    }
+
+    public Aura after(io.aura.web.BaseHandler handler) {
+        afterHandlers.add(handler);
+        return this;
+    }
+
+    public List<io.aura.web.BaseHandler> beforeHandlers() {
+        return beforeHandlers;
+    }
+
+    public List<io.aura.web.BaseHandler> afterHandlers() {
+        return afterHandlers;
     }
 
     public static io.aura.web.BaseHandler requireAuth() {
