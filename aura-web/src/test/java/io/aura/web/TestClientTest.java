@@ -10,14 +10,14 @@ class TestClientTest {
 
     private static TestClient clientWithRoutes() {
         Aura app = Aura.create();
+        app.exception(IllegalArgumentException.class, (e, ctx) -> {
+            ctx.status(400);
+            ctx.text("bad: " + e.getMessage());
+        });
         Router router = new Router();
         router.get("/hello", ctx -> ctx.text("world"));
         router.post("/echo", ctx -> ctx.text(ctx.body(String.class)));
         router.get("/greet", ctx -> ctx.text("hi " + ctx.query("name")));
-        router.exception(IllegalArgumentException.class, (e, ctx) -> {
-            ctx.status(400);
-            ctx.text("bad: " + e.getMessage());
-        });
         router.get("/boom", ctx -> { throw new IllegalArgumentException("oops"); });
         return new TestClient(app, router);
     }

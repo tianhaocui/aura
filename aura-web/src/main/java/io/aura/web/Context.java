@@ -123,6 +123,11 @@ public class Context implements BaseContext {
         exchange.getResponseSender().send(text);
     }
 
+    @Override public void html(String html) {
+        exchange.getResponseHeaders().put(Headers.CONTENT_TYPE, "text/html; charset=utf-8");
+        exchange.getResponseSender().send(html);
+    }
+
     @Override public void redirect(String url) {
         if (url.indexOf('\r') >= 0 || url.indexOf('\n') >= 0) {
             throw new IllegalArgumentException("Invalid redirect URL");
@@ -227,5 +232,15 @@ public class Context implements BaseContext {
 
     @Override
     public boolean isAborted() { return aborted; }
+
+    @Override
+    public String ip() {
+        String xff = exchange.getRequestHeaders().getFirst("X-Forwarded-For");
+        if (xff != null && !xff.isBlank()) {
+            return xff.split(",")[0].trim();
+        }
+        var addr = exchange.getSourceAddress();
+        return addr != null ? addr.getAddress().getHostAddress() : null;
+    }
 }
 

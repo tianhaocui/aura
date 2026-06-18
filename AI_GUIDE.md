@@ -16,13 +16,13 @@ db.find(sql, params)               — only for joins/subqueries
 <dependency>
     <groupId>io.github.tianhaocui</groupId>
     <artifactId>aura-web</artifactId>
-    <version>0.5.1</version>
+    <version>0.5.3</version>
 </dependency>
 <!-- Optional: database -->
 <dependency>
     <groupId>io.github.tianhaocui</groupId>
     <artifactId>aura-db</artifactId>
-    <version>0.5.1</version>
+    <version>0.5.3</version>
 </dependency>
 <!-- Required: add your own SLF4J provider -->
 <dependency>
@@ -80,6 +80,12 @@ class UserService {
 ## Middleware and Error Handling
 
 ```java
+// 全局异常处理（推荐 — 在 app 上注册，不在 router 里）
+app.exception(IllegalArgumentException.class, (e, ctx) ->
+    ctx.status(400).json(Result.fail(400, e.getMessage())));
+app.exception(Exception.class, (e, ctx) ->
+    ctx.status(500).json(Result.fail(500, "Internal error")));
+
 app.routes(r -> {
     r.before(ctx -> { /* auth, logging */ });
     r.after(ctx -> { /* timing, cleanup */ });
@@ -87,12 +93,12 @@ app.routes(r -> {
         api.before(authMiddleware);  // only /api/** requires auth
         api.get("/items", itemService, "list");
     });
-    r.exception(BizException.class, (e, ctx) -> ctx.status(400).json(Map.of("error", e.getMessage())));
 });
 ```
 
 Unhandled exceptions return JSON `{"error": "message"}`. In dev mode (`AURA_ENV=dev`), `"trace"` is added.
 `IllegalArgumentException` and `ValidationException` automatically return 400.
+**AI 写代码只管 throw，不需要 try-catch。**
 
 ## Validation Annotations
 
@@ -176,13 +182,19 @@ Properties read order: startup args > env var > `aura.properties` > code default
 ## Context API
 
 ```java
-ctx.path("id")   ctx.query("page")   ctx.header("Authorization")
-ctx.body(T.class)  ctx.cookie("name")  ctx.method()  ctx.url()
-ctx.pageNum()    ctx.pageSize()       ctx.file("field")
-ctx.status(201)  ctx.json(obj)        ctx.text("ok")  ctx.redirect("/")
-ctx.sendFile("name.pdf", bytes)      ctx.sse()
-ctx.set(user)    ctx.get(User.class)  ctx.app().getBean(Db.class)
-ctx.queryInt("page", 1)  ctx.queryLong("since", 0L)  ctx.queryBool("active", false)
+// 请求
+ctx.path("id")   ctx.pathInt("id")   ctx.pathLong("id")
+ctx.query("page")   ctx.queryRequired("name")   ctx.queryInt("page", 1)
+ctx.header("Authorization")   ctx.cookie("name")   ctx.method()   ctx.url()
+ctx.body(T.class)   ctx.bodyOrThrow(T.class)
+ctx.pageNum()   ctx.pageSize()   ctx.file("field")   ctx.formField("name")
+
+// 响应
+ctx.status(201)   ctx.json(obj)   ctx.text("ok")   ctx.html("<h1>Hi</h1>")
+ctx.redirect("/")   ctx.sendFile("name.pdf", bytes)   ctx.sse()
+
+// 上下文存储
+ctx.set(user)   ctx.get(User.class)   ctx.app().getBean(Db.class)
 ```
 
 `ctx.json(row)` works directly — Row extends LinkedHashMap, serializes as JSON object.
@@ -208,12 +220,20 @@ In-memory, no HTTP server needed. AI writes code → runs TestClient → confirm
 ## Important Notes
 
 - **`-parameters` compiler flag required** — without it, all route params are null/0 with no error
+- **Path param syntax is `{id}`** — NOT `:id`
 - **Validation only on record body params** — path/query params are NOT auto-validated
+- **DI is manual registration** — `app.register(instance)`, NOT auto-scan like Spring
+- **Config is .properties only** — no YAML support
+- **query params need manual access** — `ctx.query("name")`, no auto-binding
+- **Record classes auto-serialize** — field name = JSON key, no annotations needed
+- **`bodyOrThrow()` = body() + null check + BeanValidator** — the recommended way
+- **Exception handling via `app.exception()`** — handler 里不需要 try-catch
 - **`db.execute()` returns `int`** — affected row count
 - **`@Path` only with `.service()`** — not in `routes()` lambda
 - **Route conflicts throw at startup** — same method + path = `IllegalStateException`
 - **`abort()` defaults to 403** — without explicit status code
 - **`orderBy()` validates field names** — invalid chars throw `IllegalArgumentException`
+- **staticFiles path is classpath-relative** — e.g. `/public` = `src/main/resources/public`
 
 ## Extended Guides
 

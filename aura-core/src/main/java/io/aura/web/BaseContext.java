@@ -17,6 +17,7 @@ public interface BaseContext {
     BaseContext status(int code);
     void json(Object obj);
     void text(String text);
+    void html(String html);
     void redirect(String url);
     BaseContext header(String name, String value);
     BaseContext cookie(String name, String value, int maxAge);
@@ -26,6 +27,37 @@ public interface BaseContext {
     <T> T get(Class<T> type);
     void set(String key, Object value);
     <T> T get(String key, Class<T> type);
+
+    // --- body with validation ---
+    default <T> T bodyOrThrow(Class<T> type) throws Exception {
+        T obj = body(type);
+        if (obj == null) throw new IllegalArgumentException("Request body is required");
+        io.aura.BeanValidator.validate(obj);
+        return obj;
+    }
+
+    // --- required params ---
+    default String queryRequired(String name) {
+        String v = query(name);
+        if (v == null || v.isBlank()) throw new IllegalArgumentException("Missing required query parameter: " + name);
+        return v;
+    }
+
+    default int pathInt(String name) {
+        String v = path(name);
+        if (v == null || v.isBlank()) throw new IllegalArgumentException("Missing path parameter: " + name);
+        try { return Integer.parseInt(v.trim()); } catch (NumberFormatException e) {
+            throw new IllegalArgumentException("Path parameter '" + name + "' must be an integer, got: " + v);
+        }
+    }
+
+    default long pathLong(String name) {
+        String v = path(name);
+        if (v == null || v.isBlank()) throw new IllegalArgumentException("Missing path parameter: " + name);
+        try { return Long.parseLong(v.trim()); } catch (NumberFormatException e) {
+            throw new IllegalArgumentException("Path parameter '" + name + "' must be a long, got: " + v);
+        }
+    }
 
     // --- typed query params ---
     default int queryInt(String name, int defaultValue) {
@@ -89,4 +121,7 @@ public interface BaseContext {
 
     // --- request id ---
     default String requestId() { return null; }
+
+    // --- client ip ---
+    default String ip() { return null; }
 }

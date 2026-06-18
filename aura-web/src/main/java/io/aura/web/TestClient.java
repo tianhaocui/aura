@@ -16,7 +16,7 @@ public class TestClient {
     TestClient(Aura app, Router router) {
         this.app = app;
         this.router = router;
-        this.compiled = UndertowStarter.compileRoutes(router);
+        this.compiled = UndertowStarter.compileRoutes(router, app);
     }
 
     public static TestClient of(Aura app) {
@@ -114,7 +114,7 @@ public class TestClient {
             Throwable cause = e instanceof java.lang.reflect.InvocationTargetException ? e.getCause() : e;
             if (cause == null) cause = e;
             if (cause instanceof Error err) throw err;
-            for (var entry : router.exceptionHandlers.entrySet()) {
+            for (var entry : app.exceptionHandlers().entrySet()) {
                 if (entry.getKey().isAssignableFrom(cause.getClass())) {
                     try {
                         ((BaseExceptionHandler) entry.getValue()).handle((Exception) cause, ctx);

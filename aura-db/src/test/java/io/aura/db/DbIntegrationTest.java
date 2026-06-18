@@ -191,6 +191,55 @@ class DbIntegrationTest {
         assertThat(refetched.getStr("name")).isEqualTo("Charles");
     }
 
+    // --- Query.paginate / delete / update ---
+
+    @Test
+    void query_paginate_returnsPage() {
+        Row.of("users").set("name", "A").set("active", true).insert(db);
+        Row.of("users").set("name", "B").set("active", true).insert(db);
+        Row.of("users").set("name", "C").set("active", true).insert(db);
+
+        Page<Row> page = db.table("users").where("active", true).paginate(1, 2);
+        assertThat(page.list()).hasSize(2);
+        assertThat(page.total()).isEqualTo(3);
+        assertThat(page.totalPages()).isEqualTo(2);
+        assertThat(page.hasNext()).isTrue();
+    }
+
+    @Test
+    void query_paginate_page2() {
+        Row.of("users").set("name", "A").set("active", true).insert(db);
+        Row.of("users").set("name", "B").set("active", true).insert(db);
+        Row.of("users").set("name", "C").set("active", true).insert(db);
+
+        Page<Row> page = db.table("users").where("active", true).paginate(2, 2);
+        assertThat(page.list()).hasSize(1);
+        assertThat(page.pageNum()).isEqualTo(2);
+        assertThat(page.hasNext()).isFalse();
+    }
+
+    @Test
+    void query_delete_removesMatchingRows() {
+        Row.of("users").set("name", "Keep").set("active", true).insert(db);
+        Row.of("users").set("name", "Remove").set("active", false).insert(db);
+
+        int deleted = db.table("users").where("active", false).delete();
+        assertThat(deleted).isEqualTo(1);
+        assertThat(db.table("users").count()).isEqualTo(1);
+    }
+
+    @Test
+    void query_update_modifiesMatchingRows() {
+        Row.of("users").set("name", "OldName").set("active", true).insert(db);
+        Row.of("users").set("name", "Other").set("active", false).insert(db);
+
+        int updated = db.table("users").where("active", true).update(Row.of("users").set("name", "NewName"));
+        assertThat(updated).isEqualTo(1);
+
+        Row found = db.table("users").where("name", "NewName").findOne();
+        assertThat(found).isNotNull();
+    }
+
     // --- transaction ---
 
     @Test

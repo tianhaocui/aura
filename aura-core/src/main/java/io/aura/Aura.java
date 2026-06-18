@@ -48,13 +48,17 @@ public class Aura {
     private JwtSupport jwtSupport;
     private final java.util.concurrent.atomic.AtomicBoolean stopped = new java.util.concurrent.atomic.AtomicBoolean(false);
     private volatile Thread keepAliveThread;
+    private final java.util.LinkedHashMap<Class<? extends Exception>, io.aura.web.BaseExceptionHandler<?>> exceptionHandlers = new java.util.LinkedHashMap<>();
+    private final List<io.aura.web.BaseHandler> beforeHandlers = new ArrayList<>();
+    private final List<io.aura.web.BaseHandler> afterHandlers = new ArrayList<>();
 
     private AuraStarter starter;
     private McpStarter mcpStarter;
 
     private Aura() {
         loadConfig("aura.properties");
-        applyFrameworkProps(); // apply env vars even if no config file
+        applyFrameworkProps();
+        loadConfig("aura-" + env + ".properties");
     }
 
     public static Aura create() {
@@ -178,6 +182,33 @@ public class Aura {
         return jwtSupport.sign(userId);
     }
 
+    public <T extends Exception> Aura exception(Class<T> type, io.aura.web.BaseExceptionHandler<T> handler) {
+        exceptionHandlers.put(type, handler);
+        return this;
+    }
+
+    public java.util.Map<Class<? extends Exception>, io.aura.web.BaseExceptionHandler<?>> exceptionHandlers() {
+        return exceptionHandlers;
+    }
+
+    public Aura before(io.aura.web.BaseHandler handler) {
+        beforeHandlers.add(handler);
+        return this;
+    }
+
+    public Aura after(io.aura.web.BaseHandler handler) {
+        afterHandlers.add(handler);
+        return this;
+    }
+
+    public List<io.aura.web.BaseHandler> beforeHandlers() {
+        return beforeHandlers;
+    }
+
+    public List<io.aura.web.BaseHandler> afterHandlers() {
+        return afterHandlers;
+    }
+
     public static io.aura.web.BaseHandler requireAuth() {
         return ctx -> {
             Aura app = (Aura) ctx.get("_app", Object.class);
@@ -282,6 +313,16 @@ public class Aura {
         String val = prop(key);
         if (val == null) return defaultValue;
         return Integer.parseInt(val);
+    }
+
+    public Map<String, String> props(String prefix) {
+        Map<String, String> result = new java.util.LinkedHashMap<>();
+        for (Map.Entry<String, String> entry : props.entrySet()) {
+            if (entry.getKey().startsWith(prefix)) {
+                result.put(entry.getKey(), entry.getValue());
+            }
+        }
+        return result;
     }
 
 

@@ -68,12 +68,12 @@ class RouterTest {
     }
 
     @Test
-    void exception_registersHandler() {
-        Router router = new Router();
+    void exception_registersOnApp() {
+        var app = io.aura.Aura.create();
         BaseExceptionHandler<IllegalArgumentException> handler = (e, ctx) -> {};
-        router.exception(IllegalArgumentException.class, handler);
-        assertThat(router.exceptionHandlers).containsKey(IllegalArgumentException.class);
-        assertThat(router.exceptionHandlers.get(IllegalArgumentException.class)).isSameAs(handler);
+        app.exception(IllegalArgumentException.class, handler);
+        assertThat(app.exceptionHandlers()).containsKey(IllegalArgumentException.class);
+        assertThat(app.exceptionHandlers().get(IllegalArgumentException.class)).isSameAs(handler);
     }
 
     @Test

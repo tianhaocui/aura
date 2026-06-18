@@ -51,6 +51,7 @@ class MockContext extends Context {
         responseBody = JSON.toJSONString(obj, dateFormat, features);
     }
     @Override public void text(String text) { responseBody = text; }
+    @Override public void html(String html) { responseBody = html; }
     @Override public void redirect(String url) { status = 302; }
     @Override public Context header(String name, String value) { respHeaders.put(name, value); return this; }
     @Override public Context cookie(String name, String value, int maxAge) { return this; }
@@ -79,6 +80,15 @@ class MockContext extends Context {
     @Override @SuppressWarnings("unchecked")
     public <T> T get(String key, Class<T> type) { return (T) namedAttrs.get(key); }
     @Override public Aura app() { return app; }
+
+    @Override
+    public String ip() {
+        String xff = headers.get("X-Forwarded-For");
+        if (xff != null && !xff.isBlank()) {
+            return xff.split(",")[0].trim();
+        }
+        return "127.0.0.1";
+    }
 
     @Override
     public SseEmitter sse() {

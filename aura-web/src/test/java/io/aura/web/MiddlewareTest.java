@@ -18,6 +18,9 @@ class MiddlewareTest {
     void setup() {
         log.clear();
         Aura app = Aura.create()
+            .exception(RuntimeException.class, (e, ctx) -> {
+                ctx.status(400).text("error: " + e.getMessage());
+            })
             .routes((BaseRouter r) -> {
                 r.before(ctx -> log.add("global-before"));
                 r.after(ctx -> log.add("global-after"));
@@ -35,10 +38,6 @@ class MiddlewareTest {
                         log.add("api-handler");
                         ctx.text("api ok");
                     });
-                });
-
-                r.exception(RuntimeException.class, (e, ctx) -> {
-                    ctx.status(400).text("error: " + e.getMessage());
                 });
 
                 r.get("/fail", ctx -> {
