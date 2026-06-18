@@ -232,5 +232,15 @@ public class Context implements BaseContext {
 
     @Override
     public boolean isAborted() { return aborted; }
+
+    @Override
+    public String ip() {
+        String xff = exchange.getRequestHeaders().getFirst("X-Forwarded-For");
+        if (xff != null && !xff.isBlank()) {
+            return xff.split(",")[0].trim();
+        }
+        var addr = exchange.getSourceAddress();
+        return addr != null ? addr.getAddress().getHostAddress() : null;
+    }
 }
 

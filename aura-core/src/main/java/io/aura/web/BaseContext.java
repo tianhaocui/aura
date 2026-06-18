@@ -121,4 +121,7 @@ public interface BaseContext {
 
     // --- request id ---
     default String requestId() { return null; }
+
+    // --- client ip ---
+    default String ip() { return null; }
 }

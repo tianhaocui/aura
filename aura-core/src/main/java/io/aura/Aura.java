@@ -315,6 +315,16 @@ public class Aura {
         return Integer.parseInt(val);
     }
 
+    public Map<String, String> props(String prefix) {
+        Map<String, String> result = new java.util.LinkedHashMap<>();
+        for (Map.Entry<String, String> entry : props.entrySet()) {
+            if (entry.getKey().startsWith(prefix)) {
+                result.put(entry.getKey(), entry.getValue());
+            }
+        }
+        return result;
+    }
+
 
     public <T> Aura register(T instance) {
         registry.put(instance.getClass(), instance);

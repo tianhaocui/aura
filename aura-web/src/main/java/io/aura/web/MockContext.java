@@ -82,6 +82,15 @@ class MockContext extends Context {
     @Override public Aura app() { return app; }
 
     @Override
+    public String ip() {
+        String xff = headers.get("X-Forwarded-For");
+        if (xff != null && !xff.isBlank()) {
+            return xff.split(",")[0].trim();
+        }
+        return "127.0.0.1";
+    }
+
+    @Override
     public SseEmitter sse() {
         return new SseEmitter() {
             @Override public void send(String data) {
