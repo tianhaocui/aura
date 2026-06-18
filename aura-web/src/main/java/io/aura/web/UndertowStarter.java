@@ -83,7 +83,7 @@ public class UndertowStarter implements AuraStarter {
             PackageScanner.scan(app.scanPackages(), router);
         }
 
-        compiledRoutes = compile(router, "", new ArrayList<>(), new ArrayList<>());
+        compiledRoutes = compile(router, "", new ArrayList<>(app.beforeHandlers()), new ArrayList<>(app.afterHandlers()));
         compiledRoutes.sort(Comparator.comparingInt((CompiledRoute r) -> r.paramNames().size())
                 .thenComparing(Comparator.comparingLong((CompiledRoute r) -> r.rawPath().chars().filter(c -> c == '/').count()).reversed()));
         detectDuplicateRoutes(compiledRoutes);
@@ -141,7 +141,16 @@ public class UndertowStarter implements AuraStarter {
 
         server = builder.build();
 
-        server.start();
+        try {
+            server.start();
+        } catch (RuntimeException e) {
+            if (e.getCause() instanceof java.net.BindException) {
+                throw new RuntimeException(
+                    "Port " + app.port() + " is already in use. Set aura.port in config or AURA_PORT env var to use a different port.",
+                    e.getCause());
+            }
+            throw e;
+        }
         log.info("Aura started on port {} in {}ms", app.port(),
                 System.currentTimeMillis() - t0);
     }
@@ -489,6 +498,14 @@ public class UndertowStarter implements AuraStarter {
         } else {
             ctx.status(500).json(ApiError.of(msg, "INTERNAL_ERROR"));
         }
+    }
+
+    static List<CompiledRoute> compileRoutes(BaseRouter router, Aura app) {
+        List<CompiledRoute> routes = new UndertowStarter().compile(router, "",
+                new ArrayList<>(app.beforeHandlers()), new ArrayList<>(app.afterHandlers()));
+        routes.sort(Comparator.comparingInt((CompiledRoute r) -> r.paramNames().size())
+                .thenComparing(Comparator.comparingLong((CompiledRoute r) -> r.rawPath().chars().filter(c -> c == '/').count()).reversed()));
+        return routes;
     }
 
     static List<CompiledRoute> compileRoutes(BaseRouter router) {

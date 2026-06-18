@@ -16,7 +16,7 @@ public class TestClient {
     TestClient(Aura app, Router router) {
         this.app = app;
         this.router = router;
-        this.compiled = UndertowStarter.compileRoutes(router);
+        this.compiled = UndertowStarter.compileRoutes(router, app);
     }
 
     public static TestClient of(Aura app) {
