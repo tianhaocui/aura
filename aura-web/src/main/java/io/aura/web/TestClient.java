@@ -133,8 +133,16 @@ public class TestClient {
                         }
                         if (!mockCtx.isAborted()) {
                             route.handler().handle(mockCtx);
+                        } else if (mockCtx.status == 0) {
+                            mockCtx.status(403);
                         }
-                    } catch (Exception ignored) {}
+                    } catch (Exception e) {
+                        handleException(e, mockCtx);
+                    } finally {
+                        for (BaseHandler h : route.afterHandlers()) {
+                            try { h.handle(mockCtx); } catch (Exception ignored) {}
+                        }
+                    }
                     return new Response(mockCtx.status == 0 ? 200 : mockCtx.status, null, mockCtx.responseHeaders());
                 }
             }

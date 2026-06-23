@@ -224,4 +224,42 @@ class ServiceRegistrarTest {
         assertThat(routes).hasSize(1);
         assertThat(routes.get(0).method()).isEqualTo("GET");
     }
+
+    // --- @Patch / @Head / @Options annotations ---
+
+    @Path("/ext")
+    static class ExtMethodService {
+        @Patch("/update/{id}")
+        public String patch(int id) { return "patched-" + id; }
+
+        @Head("/check")
+        public void head() {}
+
+        @Options("/cors")
+        public void options() {}
+    }
+
+    @Test
+    void patchAnnotation_registeredAsPatch() {
+        Router router = new Router();
+        ServiceRegistrar.register(new ExtMethodService(), router);
+        List<CompiledRoute> routes = UndertowStarter.compileRoutes(router);
+        assertThat(routes).anyMatch(r -> r.method().equals("PATCH") && r.rawPath().equals("/ext/update/{id}"));
+    }
+
+    @Test
+    void headAnnotation_registeredAsHead() {
+        Router router = new Router();
+        ServiceRegistrar.register(new ExtMethodService(), router);
+        List<CompiledRoute> routes = UndertowStarter.compileRoutes(router);
+        assertThat(routes).anyMatch(r -> r.method().equals("HEAD") && r.rawPath().equals("/ext/check"));
+    }
+
+    @Test
+    void optionsAnnotation_registeredAsOptions() {
+        Router router = new Router();
+        ServiceRegistrar.register(new ExtMethodService(), router);
+        List<CompiledRoute> routes = UndertowStarter.compileRoutes(router);
+        assertThat(routes).anyMatch(r -> r.method().equals("OPTIONS") && r.rawPath().equals("/ext/cors"));
+    }
 }

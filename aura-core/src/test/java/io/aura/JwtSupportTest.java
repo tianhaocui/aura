@@ -54,4 +54,20 @@ class JwtSupportTest {
         String token = jwt1.sign(99L);
         assertThat(jwt2.verify(token)).isNull();
     }
+
+    @Test
+    void sign_and_verify_subjectWithQuotes() {
+        JwtSupport jwt = new JwtSupport("test-secret", 3600);
+        String token = jwt.sign("user\"name");
+        String subject = jwt.verify(token);
+        assertThat(subject).isEqualTo("user\"name");
+    }
+
+    @Test
+    void sign_and_verify_subjectWithBackslash() {
+        JwtSupport jwt = new JwtSupport("test-secret", 3600);
+        String token = jwt.sign("domain\\user");
+        String subject = jwt.verify(token);
+        assertThat(subject).isEqualTo("domain\\user");
+    }
 }

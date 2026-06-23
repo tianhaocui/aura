@@ -84,7 +84,7 @@ public class DevReloader {
                 userClassLoader.close();
             }
 
-            userClassLoader = new URLClassLoader(
+            userClassLoader = new ChildFirstClassLoader(
                     new URL[]{outputDir.toUri().toURL()},
                     getClass().getClassLoader()
             );

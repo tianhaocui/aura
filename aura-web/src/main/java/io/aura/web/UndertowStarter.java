@@ -371,8 +371,14 @@ public class UndertowStarter implements AuraStarter {
                     }
                     if (!ctx.isAborted()) {
                         route.handler().handle(ctx);
+                    } else if (exchange.getStatusCode() == 200) {
+                        exchange.setStatusCode(403);
                     }
-                } catch (Exception ignored) {}
+                } catch (Exception e) {
+                    handleException(e, ctx);
+                } finally {
+                    runAfterHandlers(route.afterHandlers(), ctx);
+                }
                 exchange.endExchange();
                 return;
             }

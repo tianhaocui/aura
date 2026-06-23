@@ -75,4 +75,29 @@ class HttpMethodsTest {
 
         client.options("/info").expect(204);
     }
+
+    @Test
+    void head_fallback_preservesErrorStatus() {
+        var app = Aura.create()
+            .routes((BaseRouter r) -> r.get("/fail", ctx -> {
+                throw new RuntimeException("boom");
+            }));
+        var client = TestClient.of(app);
+
+        var resp = client.head("/fail").execute();
+        assertThat(resp.status()).isEqualTo(500);
+        assertThat(resp.body()).isNull();
+    }
+
+    @Test
+    void head_fallback_runsAfterHandlers() {
+        var app = Aura.create()
+            .after(ctx -> ctx.header("X-After", "ran"))
+            .routes((BaseRouter r) -> r.get("/tracked", ctx -> ctx.text("ok")));
+        var client = TestClient.of(app);
+
+        var resp = client.head("/tracked").execute();
+        assertThat(resp.status()).isEqualTo(200);
+        assertThat(resp.header("X-After")).isEqualTo("ran");
+    }
 }

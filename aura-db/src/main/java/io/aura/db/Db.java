@@ -471,7 +471,7 @@ public class Db implements AutoCloseable {
             } else if (val instanceof java.sql.Time t) {
                 val = t.toLocalTime();
             }
-            row.put(meta.getColumnLabel(i).toLowerCase(), val);
+            row.put(meta.getColumnLabel(i), val);
         }
         return row;
     }
