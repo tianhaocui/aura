@@ -99,23 +99,7 @@ public class TestClient {
                 if (params == null) continue;
 
                 var mockCtx = new MockContext(params, queryParams, headers, body, app);
-                try {
-                    for (BaseHandler mw : route.beforeHandlers()) {
-                        mw.handle(mockCtx);
-                        if (mockCtx.isAborted()) break;
-                    }
-                    if (!mockCtx.isAborted()) {
-                        route.handler().handle(mockCtx);
-                    } else if (mockCtx.statusCode() == 200) {
-                        mockCtx.status(403);
-                    }
-                } catch (Exception e) {
-                    handleException(e, mockCtx);
-                } finally {
-                    for (BaseHandler h : route.afterHandlers()) {
-                        try { h.handle(mockCtx); } catch (Exception ignored) {}
-                    }
-                }
+                RouteExecutor.execute(route, mockCtx, (e, c) -> handleException(e, (MockContext) c));
                 return new Response(mockCtx.status == 0 ? 200 : mockCtx.status, mockCtx.responseBody, mockCtx.responseHeaders());
             }
 
@@ -126,23 +110,7 @@ public class TestClient {
                     Map<String, String> params = route.match(routePath);
                     if (params == null) continue;
                     var mockCtx = new MockContext(params, queryParams, headers, body, app);
-                    try {
-                        for (BaseHandler mw : route.beforeHandlers()) {
-                            mw.handle(mockCtx);
-                            if (mockCtx.isAborted()) break;
-                        }
-                        if (!mockCtx.isAborted()) {
-                            route.handler().handle(mockCtx);
-                        } else if (mockCtx.status == 0) {
-                            mockCtx.status(403);
-                        }
-                    } catch (Exception e) {
-                        handleException(e, mockCtx);
-                    } finally {
-                        for (BaseHandler h : route.afterHandlers()) {
-                            try { h.handle(mockCtx); } catch (Exception ignored) {}
-                        }
-                    }
+                    RouteExecutor.execute(route, mockCtx, (e, c) -> handleException(e, (MockContext) c));
                     return new Response(mockCtx.status == 0 ? 200 : mockCtx.status, null, mockCtx.responseHeaders());
                 }
             }

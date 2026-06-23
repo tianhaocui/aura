@@ -70,4 +70,46 @@ class JwtSupportTest {
         String subject = jwt.verify(token);
         assertThat(subject).isEqualTo("domain\\user");
     }
+
+    @Test
+    void sign_and_verify_subjectWithColon() {
+        JwtSupport jwt = new JwtSupport("test-secret", 3600);
+        String token = jwt.sign("user:123");
+        assertThat(jwt.verify(token)).isEqualTo("user:123");
+    }
+
+    @Test
+    void sign_and_verify_subjectWithSpecialChars() {
+        JwtSupport jwt = new JwtSupport("test-secret", 3600);
+        String token = jwt.sign("admin@example.com");
+        assertThat(jwt.verify(token)).isEqualTo("admin@example.com");
+    }
+
+    @Test
+    void sign_and_verify_subjectWithUnicode() {
+        JwtSupport jwt = new JwtSupport("test-secret", 3600);
+        String token = jwt.sign("用户名");
+        assertThat(jwt.verify(token)).isEqualTo("用户名");
+    }
+
+    @Test
+    void sign_and_verify_subjectWithMultipleEscapes() {
+        JwtSupport jwt = new JwtSupport("test-secret", 3600);
+        String token = jwt.sign("path\\to\\\"file\"");
+        assertThat(jwt.verify(token)).isEqualTo("path\\to\\\"file\"");
+    }
+
+    @Test
+    void verify_emptySubject_returnsNull() {
+        JwtSupport jwt = new JwtSupport("test-secret", 3600);
+        String token = jwt.sign("");
+        assertThat(jwt.verify(token)).isNull();
+    }
+
+    @Test
+    void sign_and_verify_subjectWithJsonLikeContent() {
+        JwtSupport jwt = new JwtSupport("test-secret", 3600);
+        String token = jwt.sign("{\"nested\":\"value\"}");
+        assertThat(jwt.verify(token)).isEqualTo("{\"nested\":\"value\"}");
+    }
 }

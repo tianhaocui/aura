@@ -78,4 +78,29 @@ class PropsBindingTest {
         FlagConfig config = app.props("flag.", FlagConfig.class);
         assertThat(config.debug()).isTrue();
     }
+
+    @Test
+    void missingWrapperFields_returnNull() {
+        var app = Aura.create();
+
+        record WrapperConfig(Integer count, Long timeout, Double rate, Boolean enabled) {}
+        WrapperConfig config = app.props("missing.", WrapperConfig.class);
+        assertThat(config.count()).isNull();
+        assertThat(config.timeout()).isNull();
+        assertThat(config.rate()).isNull();
+        assertThat(config.enabled()).isNull();
+    }
+
+    @Test
+    void primitiveFields_getDefaults_wrapperFields_getNull() {
+        var app = Aura.create().set("mix.name", "test");
+
+        record MixConfig(String name, int port, Integer maxConn, long ttl, Long maxSize) {}
+        MixConfig config = app.props("mix.", MixConfig.class);
+        assertThat(config.name()).isEqualTo("test");
+        assertThat(config.port()).isEqualTo(0);
+        assertThat(config.maxConn()).isNull();
+        assertThat(config.ttl()).isEqualTo(0L);
+        assertThat(config.maxSize()).isNull();
+    }
 }

@@ -84,9 +84,12 @@ public class DevReloader {
                 userClassLoader.close();
             }
 
+            String pkg = mainClass.contains(".")
+                    ? mainClass.substring(0, mainClass.lastIndexOf('.') + 1) : "";
             userClassLoader = new ChildFirstClassLoader(
                     new URL[]{outputDir.toUri().toURL()},
-                    getClass().getClassLoader()
+                    getClass().getClassLoader(),
+                    pkg
             );
 
             Class<?> mainCls = userClassLoader.loadClass(mainClass);
@@ -96,7 +99,7 @@ public class DevReloader {
             long elapsed = System.currentTimeMillis() - t0;
             log.info("[aura-dev] reloaded in {}ms ({} files)", elapsed, changedFiles.size());
         } catch (Exception e) {
-            log.error("[aura-dev] reload failed: {}", e.getMessage());
+            log.error("[aura-dev] reload failed", e);
         }
     }
 

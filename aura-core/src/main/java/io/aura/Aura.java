@@ -56,9 +56,6 @@ public class Aura {
     private AuraStarter starter;
     private McpStarter mcpStarter;
     private boolean reloadMode;
-    private static volatile Aura RELOAD_INSTANCE;
-    private static volatile boolean devMode;
-    private final List<Runnable> reloadCleanupHooks = new java.util.concurrent.CopyOnWriteArrayList<>();
 
     private Aura() {
         loadConfig("aura.properties");
@@ -67,8 +64,8 @@ public class Aura {
     }
 
     public static Aura create() {
-        if (RELOAD_INSTANCE != null) {
-            Aura app = RELOAD_INSTANCE;
+        if (ReloadState.RELOAD_INSTANCE != null) {
+            Aura app = ReloadState.RELOAD_INSTANCE;
             app.reloadMode = true;
             app.directRoutes.clear();
             app.services.clear();
@@ -81,24 +78,22 @@ public class Aura {
         return new Aura();
     }
 
-    public static void setReloadInstance(Aura app) { RELOAD_INSTANCE = app; }
-    public static void clearReloadInstance() { RELOAD_INSTANCE = null; }
-    public static boolean isDevMode() { return devMode; }
+    public static void setReloadInstance(Aura app) { ReloadState.RELOAD_INSTANCE = app; }
+    public static void clearReloadInstance() { ReloadState.RELOAD_INSTANCE = null; }
+    public static boolean isDevMode() { return ReloadState.devMode; }
 
     public Aura dev(boolean enable) {
-        devMode = enable;
+        ReloadState.devMode = enable;
         return this;
     }
 
     public Aura onReload(Runnable hook) {
-        reloadCleanupHooks.add(hook);
+        ReloadState.cleanupHooks.add(hook);
         return this;
     }
 
     public void fireReloadCleanup() {
-        for (Runnable hook : reloadCleanupHooks) {
-            try { hook.run(); } catch (Exception ignored) {}
-        }
+        ReloadState.fireCleanup();
     }
 
     public static Aura run(String... args) {
@@ -401,40 +396,10 @@ public class Aura {
 
     @SuppressWarnings("unchecked")
     public <T> T props(String prefix, Class<T> recordType) {
-        if (!recordType.isRecord()) {
-            throw new IllegalArgumentException("props(prefix, Class) only supports Record types");
-        }
-        var components = recordType.getRecordComponents();
-        Object[] args = new Object[components.length];
-        Class<?>[] paramTypes = new Class<?>[components.length];
-        for (int i = 0; i < components.length; i++) {
-            var rc = components[i];
-            paramTypes[i] = rc.getType();
-            String value = props.get(prefix + rc.getName());
-            args[i] = convertPropValue(value, rc.getType());
-        }
-        try {
-            return (T) recordType.getDeclaredConstructor(paramTypes).newInstance(args);
-        } catch (Exception e) {
-            throw new RuntimeException("Failed to bind config to " + recordType.getSimpleName(), e);
-        }
+        return ConfigBinder.bind(this.props, prefix, recordType);
     }
 
-    private static Object convertPropValue(String value, Class<?> type) {
-        if (type == String.class) return value;
-        if (value == null || value.isBlank()) {
-            if (type == int.class || type == Integer.class) return 0;
-            if (type == long.class || type == Long.class) return 0L;
-            if (type == double.class || type == Double.class) return 0.0;
-            if (type == boolean.class || type == Boolean.class) return false;
-            return null;
-        }
-        if (type == int.class || type == Integer.class) return Integer.parseInt(value);
-        if (type == long.class || type == Long.class) return Long.parseLong(value);
-        if (type == double.class || type == Double.class) return Double.parseDouble(value);
-        if (type == boolean.class || type == Boolean.class) return "true".equalsIgnoreCase(value);
-        return value;
-    }
+
 
 
     public <T> Aura register(T instance) {
@@ -477,7 +442,7 @@ public class Aura {
             } else if ("--mcp-stdio".equals(arg)) {
                 mcpStdio = true;
             } else if ("--dev".equals(arg)) {
-                devMode = true;
+                ReloadState.devMode = true;
             } else if (arg.startsWith("--") && arg.contains("=")) {
                 int eq = arg.indexOf('=');
                 String key = arg.substring(2, eq);
@@ -486,7 +451,7 @@ public class Aura {
             }
         }
         if ("dev".equalsIgnoreCase(System.getenv("AURA_ENV"))) {
-            devMode = true;
+            ReloadState.devMode = true;
         }
         applyFrameworkProps();
         if (mcpStdio) {
@@ -589,18 +554,7 @@ public class Aura {
     public McpRouterSpec mcpRouter() { return mcpRouter; }
 
     private void selfCheck() {
-        for (Object service : services) {
-            for (var m : service.getClass().getDeclaredMethods()) {
-                if (m.isSynthetic() || m.getParameterCount() == 0) continue;
-                if (java.lang.reflect.Modifier.isPublic(m.getModifiers())
-                        && m.getParameters()[0].getName().startsWith("arg")) {
-                    log.warn("[Aura] Service {} method {}() has synthetic parameter names. " +
-                            "Add -parameters to javac options for route parameter binding to work.",
-                            service.getClass().getSimpleName(), m.getName());
-                    return;
-                }
-            }
-        }
+        StartupCheck.checkParameterNames(services);
     }
 
     private void fireStart() {

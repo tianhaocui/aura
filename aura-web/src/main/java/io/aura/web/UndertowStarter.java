@@ -318,42 +318,30 @@ public class UndertowStarter implements AuraStarter {
                 }, app.requestTimeout(), TimeUnit.SECONDS);
             }
 
-            try {
-                for (BaseHandler mw : route.beforeHandlers()) {
-                    mw.handle(ctx);
-                    if (ctx.isAborted()) break;
-                }
-                if (!ctx.isAborted()) {
-                    route.handler().handle(ctx);
-                } else if (exchange.getStatusCode() == 200) {
-                    exchange.setStatusCode(403);
-                }
-            } catch (Exception e) {
-                handleException(e, ctx);
+            RouteExecutor.execute(route, ctx, (e, c) -> {
+                handleException(e, (Context) c);
                 long elapsed = System.currentTimeMillis() - start;
                 String clientIp = exchange.getSourceAddress() != null ? exchange.getSourceAddress().getHostString() : "-";
                 Throwable cause = e instanceof java.lang.reflect.InvocationTargetException ? e.getCause() : e;
                 if (cause == null) cause = e;
                 log.error("[{}] {} {} {} {}: {} ({}ms, {})", reqId, method, path,
                         exchange.getStatusCode(), cause.getClass().getSimpleName(), cause.getMessage(), elapsed, clientIp);
-            } finally {
-                responded.set(true);
-                if (timeoutFuture != null) timeoutFuture.cancel(false);
-                runAfterHandlers(route.afterHandlers(), ctx);
-                if (app.accessLog()) {
-                    long elapsed = System.currentTimeMillis() - start;
-                    if ("json".equals(app.accessLogFormat())) {
-                        String ip = exchange.getSourceAddress() != null ? exchange.getSourceAddress().getHostString() : "-";
-                        String safePath = path.replace("\\", "\\\\").replace("\"", "\\\"");
-                        String safeReqId = reqId.replace("\\", "\\\\").replace("\"", "\\\"");
-                        log.info("{{\"ts\":\"{}\",\"method\":\"{}\",\"path\":\"{}\",\"status\":{},\"elapsed\":{},\"reqId\":\"{}\",\"ip\":\"{}\"}}",
-                                java.time.Instant.now(), method, safePath, exchange.getStatusCode(), elapsed, safeReqId, ip);
-                    } else {
-                        log.info("{} {} → {} ({}ms)", method, path, exchange.getStatusCode(), elapsed);
-                    }
+            });
+            responded.set(true);
+            if (timeoutFuture != null) timeoutFuture.cancel(false);
+            if (app.accessLog()) {
+                long elapsed = System.currentTimeMillis() - start;
+                if ("json".equals(app.accessLogFormat())) {
+                    String ip = exchange.getSourceAddress() != null ? exchange.getSourceAddress().getHostString() : "-";
+                    String safePath = path.replace("\\", "\\\\").replace("\"", "\\\"");
+                    String safeReqId = reqId.replace("\\", "\\\\").replace("\"", "\\\"");
+                    log.info("{{\"ts\":\"{}\",\"method\":\"{}\",\"path\":\"{}\",\"status\":{},\"elapsed\":{},\"reqId\":\"{}\",\"ip\":\"{}\"}}",
+                            java.time.Instant.now(), method, safePath, exchange.getStatusCode(), elapsed, safeReqId, ip);
+                } else {
+                    log.info("{} {} → {} ({}ms)", method, path, exchange.getStatusCode(), elapsed);
                 }
-                MDC.remove("requestId");
             }
+            MDC.remove("requestId");
             return;
         }
 
@@ -364,21 +352,7 @@ public class UndertowStarter implements AuraStarter {
                 Map<String, String> params = route.match(path);
                 if (params == null) continue;
                 Context ctx = new Context(exchange, params, app, null);
-                try {
-                    for (BaseHandler mw : route.beforeHandlers()) {
-                        mw.handle(ctx);
-                        if (ctx.isAborted()) break;
-                    }
-                    if (!ctx.isAborted()) {
-                        route.handler().handle(ctx);
-                    } else if (exchange.getStatusCode() == 200) {
-                        exchange.setStatusCode(403);
-                    }
-                } catch (Exception e) {
-                    handleException(e, ctx);
-                } finally {
-                    runAfterHandlers(route.afterHandlers(), ctx);
-                }
+                RouteExecutor.execute(route, ctx, (e, c) -> handleException(e, (Context) c));
                 exchange.endExchange();
                 return;
             }
@@ -529,16 +503,6 @@ public class UndertowStarter implements AuraStarter {
             }
         }
         return params;
-    }
-
-    private void runAfterHandlers(List<BaseHandler> afterHandlers, Context ctx) {
-        for (BaseHandler h : afterHandlers) {
-            try {
-                h.handle(ctx);
-            } catch (Exception e) {
-                log.error("Error in after handler", e);
-            }
-        }
     }
 
     @SuppressWarnings({"unchecked", "rawtypes"})
