@@ -16,13 +16,13 @@ db.find(sql, params)               — only for joins/subqueries
 <dependency>
     <groupId>io.github.tianhaocui</groupId>
     <artifactId>aura-web</artifactId>
-    <version>0.5.3</version>
+    <version>0.5.4</version>
 </dependency>
 <!-- Optional: database -->
 <dependency>
     <groupId>io.github.tianhaocui</groupId>
     <artifactId>aura-db</artifactId>
-    <version>0.5.3</version>
+    <version>0.5.4</version>
 </dependency>
 <!-- Required: add your own SLF4J provider -->
 <dependency>
