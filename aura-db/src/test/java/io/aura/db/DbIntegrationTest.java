@@ -328,4 +328,35 @@ class DbIntegrationTest {
         }
         assertThat(db.findOne("SELECT * FROM users WHERE name = ?", "AutoClose")).isNull();
     }
+
+    @Test
+    void query_exists_returnsTrue_whenRowsExist() {
+        Row.of("users").set("name", "ExistCheck").set("active", true).insert(db);
+        assertThat(db.table("users").where("name", "ExistCheck").exists()).isTrue();
+    }
+
+    @Test
+    void query_exists_returnsFalse_whenNoRows() {
+        assertThat(db.table("users").where("name", "NoSuchUser").exists()).isFalse();
+    }
+
+    @Test
+    void transactionThrows_propagatesCheckedException() {
+        assertThatThrownBy(() -> db.transactionThrows(() -> {
+            Row.of("users").set("name", "ThrowsTest").set("active", true).insert(db);
+            throw new java.io.IOException("checked");
+        })).isInstanceOf(java.io.IOException.class);
+
+        assertThat(db.findOne("SELECT * FROM users WHERE name = ?", "ThrowsTest")).isNull();
+    }
+
+    @Test
+    void transactionThrows_commitsOnSuccess() throws Exception {
+        String result = db.transactionThrows(() -> {
+            Row.of("users").set("name", "ThrowsOk").set("active", true).insert(db);
+            return "done";
+        });
+        assertThat(result).isEqualTo("done");
+        assertThat(db.findOne("SELECT * FROM users WHERE name = ?", "ThrowsOk")).isNotNull();
+    }
 }

@@ -115,6 +115,10 @@ public class Query {
         return row == null ? 0 : ((Number) row.values().iterator().next()).intValue();
     }
 
+    public boolean exists() {
+        return count() > 0;
+    }
+
     public int update(Row row) {
         var setCols = new ArrayList<String>();
         var allParams = new ArrayList<>();

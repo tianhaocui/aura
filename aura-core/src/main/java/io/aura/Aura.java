@@ -44,9 +44,10 @@ public class Aura {
     private int mcpPort = -1;
     private java.io.PrintStream mcpStdout;
     private McpRouterSpec mcpRouter;
-    private java.util.function.Function<io.aura.web.BaseContext, Long> authFunction;
+    private java.util.function.Function<io.aura.web.BaseContext, String> authFunction;
     private JwtSupport jwtSupport;
     private final java.util.concurrent.atomic.AtomicBoolean stopped = new java.util.concurrent.atomic.AtomicBoolean(false);
+    private volatile boolean shuttingDown;
     private volatile Thread keepAliveThread;
     private final java.util.LinkedHashMap<Class<? extends Exception>, io.aura.web.BaseExceptionHandler<?>> exceptionHandlers = new java.util.LinkedHashMap<>();
     private final List<io.aura.web.BaseHandler> beforeHandlers = new ArrayList<>();
@@ -54,6 +55,10 @@ public class Aura {
 
     private AuraStarter starter;
     private McpStarter mcpStarter;
+    private boolean reloadMode;
+    private static volatile Aura RELOAD_INSTANCE;
+    private static volatile boolean devMode;
+    private final List<Runnable> reloadCleanupHooks = new java.util.concurrent.CopyOnWriteArrayList<>();
 
     private Aura() {
         loadConfig("aura.properties");
@@ -62,7 +67,38 @@ public class Aura {
     }
 
     public static Aura create() {
+        if (RELOAD_INSTANCE != null) {
+            Aura app = RELOAD_INSTANCE;
+            app.reloadMode = true;
+            app.directRoutes.clear();
+            app.services.clear();
+            app.routeConfig = null;
+            app.scanPackages.clear();
+            app.beforeHandlers.clear();
+            app.afterHandlers.clear();
+            return app;
+        }
         return new Aura();
+    }
+
+    public static void setReloadInstance(Aura app) { RELOAD_INSTANCE = app; }
+    public static void clearReloadInstance() { RELOAD_INSTANCE = null; }
+    public static boolean isDevMode() { return devMode; }
+
+    public Aura dev(boolean enable) {
+        devMode = enable;
+        return this;
+    }
+
+    public Aura onReload(Runnable hook) {
+        reloadCleanupHooks.add(hook);
+        return this;
+    }
+
+    public void fireReloadCleanup() {
+        for (Runnable hook : reloadCleanupHooks) {
+            try { hook.run(); } catch (Exception ignored) {}
+        }
     }
 
     public static Aura run(String... args) {
@@ -133,6 +169,19 @@ public class Aura {
         return this;
     }
 
+    public Aura health() {
+        get("/health", (io.aura.web.BaseHandler) ctx -> {
+            if (shuttingDown) {
+                ctx.status(503).json(java.util.Map.of("status", "DOWN"));
+            } else {
+                ctx.json(java.util.Map.of("status", "UP"));
+            }
+        });
+        return this;
+    }
+
+    public boolean isShuttingDown() { return shuttingDown; }
+
     public Aura accessLog(boolean enabled) {
         this.accessLogFormat = enabled ? "text" : null;
         return this;
@@ -158,7 +207,7 @@ public class Aura {
         return this;
     }
 
-    public Aura auth(java.util.function.Function<io.aura.web.BaseContext, Long> authFunction) {
+    public Aura auth(java.util.function.Function<io.aura.web.BaseContext, String> authFunction) {
         this.authFunction = authFunction;
         return this;
     }
@@ -180,6 +229,16 @@ public class Aura {
     public String signJwt(long userId) {
         if (jwtSupport == null) throw new IllegalStateException("JWT not configured. Call app.jwt(secret) first.");
         return jwtSupport.sign(userId);
+    }
+
+    public String signJwt(String subject) {
+        if (jwtSupport == null) throw new IllegalStateException("JWT not configured. Call app.jwt(secret) first.");
+        return jwtSupport.sign(subject);
+    }
+
+    public String verifyJwt(String token) {
+        if (jwtSupport == null) throw new IllegalStateException("JWT not configured. Call app.jwt(secret) first.");
+        return jwtSupport.verify(token);
     }
 
     public <T extends Exception> Aura exception(Class<T> type, io.aura.web.BaseExceptionHandler<T> handler) {
@@ -215,7 +274,7 @@ public class Aura {
             if (app == null || app.authFunction == null) {
                 throw new IllegalStateException("Auth not configured. Call app.auth() or app.jwt() first.");
             }
-            Long userId = app.authFunction.apply(ctx);
+            String userId = app.authFunction.apply(ctx);
             if (userId == null) {
                 ctx.status(401);
                 ctx.json(java.util.Map.of("error", "Unauthorized"));
@@ -226,7 +285,7 @@ public class Aura {
         };
     }
 
-    public java.util.function.Function<io.aura.web.BaseContext, Long> authFunction() { return authFunction; }
+    public java.util.function.Function<io.aura.web.BaseContext, String> authFunction() { return authFunction; }
 
     public Aura jsonConfig(java.util.function.Consumer<JsonConfig> config) {
         config.accept(this.jsonConfig);
@@ -294,6 +353,21 @@ public class Aura {
         return this;
     }
 
+    public Aura patch(String path, Object handler) {
+        directRoutes.add(new RouteEntry("PATCH", path, handler, null));
+        return this;
+    }
+
+    public Aura head(String path, Object handler) {
+        directRoutes.add(new RouteEntry("HEAD", path, handler, null));
+        return this;
+    }
+
+    public Aura options(String path, Object handler) {
+        directRoutes.add(new RouteEntry("OPTIONS", path, handler, null));
+        return this;
+    }
+
     public Aura onStart(Consumer<Aura> hook) {
         startHooks.add(hook);
         return this;
@@ -323,6 +397,43 @@ public class Aura {
             }
         }
         return result;
+    }
+
+    @SuppressWarnings("unchecked")
+    public <T> T props(String prefix, Class<T> recordType) {
+        if (!recordType.isRecord()) {
+            throw new IllegalArgumentException("props(prefix, Class) only supports Record types");
+        }
+        var components = recordType.getRecordComponents();
+        Object[] args = new Object[components.length];
+        Class<?>[] paramTypes = new Class<?>[components.length];
+        for (int i = 0; i < components.length; i++) {
+            var rc = components[i];
+            paramTypes[i] = rc.getType();
+            String value = props.get(prefix + rc.getName());
+            args[i] = convertPropValue(value, rc.getType());
+        }
+        try {
+            return (T) recordType.getDeclaredConstructor(paramTypes).newInstance(args);
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to bind config to " + recordType.getSimpleName(), e);
+        }
+    }
+
+    private static Object convertPropValue(String value, Class<?> type) {
+        if (type == String.class) return value;
+        if (value == null || value.isBlank()) {
+            if (type == int.class || type == Integer.class) return 0;
+            if (type == long.class || type == Long.class) return 0L;
+            if (type == double.class || type == Double.class) return 0.0;
+            if (type == boolean.class || type == Boolean.class) return false;
+            return null;
+        }
+        if (type == int.class || type == Integer.class) return Integer.parseInt(value);
+        if (type == long.class || type == Long.class) return Long.parseLong(value);
+        if (type == double.class || type == Double.class) return Double.parseDouble(value);
+        if (type == boolean.class || type == Boolean.class) return "true".equalsIgnoreCase(value);
+        return value;
     }
 
 
@@ -365,13 +476,17 @@ public class Aura {
                 scan(arg.substring(7).split(","));
             } else if ("--mcp-stdio".equals(arg)) {
                 mcpStdio = true;
+            } else if ("--dev".equals(arg)) {
+                devMode = true;
             } else if (arg.startsWith("--") && arg.contains("=")) {
-                // --key=value → props, then re-apply framework settings
                 int eq = arg.indexOf('=');
                 String key = arg.substring(2, eq);
                 String val = arg.substring(eq + 1);
                 props.put(key, val);
             }
+        }
+        if ("dev".equalsIgnoreCase(System.getenv("AURA_ENV"))) {
+            devMode = true;
         }
         applyFrameworkProps();
         if (mcpStdio) {
@@ -383,6 +498,15 @@ public class Aura {
     }
 
     public void start() {
+        if (reloadMode) {
+            reloadMode = false;
+            selfCheck();
+            starter.reloadRoutes(this);
+            return;
+        }
+        ServiceLoader.load(AuraPlugin.class).forEach(p -> {
+            if (!plugins.contains(p)) plugins.add(p);
+        });
         for (AuraPlugin plugin : plugins) {
             plugin.install(this);
         }
@@ -390,6 +514,7 @@ public class Aura {
         starter = loader.findFirst()
                 .orElseThrow(() -> new IllegalStateException(
                         "No AuraStarter found. Add aura-web to your dependencies."));
+        selfCheck();
         fireStart();
         starter.start(this);
 
@@ -426,6 +551,7 @@ public class Aura {
 
     public void stop() {
         if (!stopped.compareAndSet(false, true)) return;
+        shuttingDown = true;
         if (keepAliveThread != null) keepAliveThread.interrupt();
         if (mcpStarter != null) {
             mcpStarter.stop();
@@ -461,6 +587,21 @@ public class Aura {
     public int mcpPort() { return mcpPort; }
     public java.io.PrintStream mcpStdout() { return mcpStdout; }
     public McpRouterSpec mcpRouter() { return mcpRouter; }
+
+    private void selfCheck() {
+        for (Object service : services) {
+            for (var m : service.getClass().getDeclaredMethods()) {
+                if (m.isSynthetic() || m.getParameterCount() == 0) continue;
+                if (java.lang.reflect.Modifier.isPublic(m.getModifiers())
+                        && m.getParameters()[0].getName().startsWith("arg")) {
+                    log.warn("[Aura] Service {} method {}() has synthetic parameter names. " +
+                            "Add -parameters to javac options for route parameter binding to work.",
+                            service.getClass().getSimpleName(), m.getName());
+                    return;
+                }
+            }
+        }
+    }
 
     private void fireStart() {
         for (Consumer<Aura> hook : startHooks) {

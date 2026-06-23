@@ -131,6 +131,33 @@ try (var tx = db.beginTransaction()) {
     db.execute(sql1, args1);
     tx.commit();
 }
+
+// Checked exceptions — propagates directly, no wrapping
+db.transactionThrows(() -> {
+    String result = callExternalApi();  // throws IOException
+    db.execute(sql, result);
+    return result;
+});
+```
+
+## Row Getters
+
+```java
+row.getStr("name")                    // String (toString on any type)
+row.getInt("age", 0)                  // int with default
+row.getLong("id")                     // long
+row.getDouble("amount")              // double (new in 0.5.4)
+row.getDouble("rate", 0.0)           // double with default
+row.getBool("active")                // boolean
+row.get("created_at")                // raw Object (preserves JDBC type)
+```
+
+Row preserves original column case from the database. `row.get("Name")` falls back to case-insensitive match if exact key not found.
+
+## Query.exists()
+
+```java
+boolean hasUser = db.table("user").where("email", email).exists();  // count() > 0
 ```
 
 ## IN Query Helper

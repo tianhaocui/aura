@@ -7,13 +7,21 @@ import static org.assertj.core.api.Assertions.*;
 class JwtSupportTest {
 
     @Test
-    void sign_and_verify() {
+    void sign_and_verify_long() {
         JwtSupport jwt = new JwtSupport("test-secret", 3600);
         String token = jwt.sign(42L);
         assertThat(token).isNotBlank();
         assertThat(token.split("\\.")).hasSize(3);
-        Long userId = jwt.verify(token);
-        assertThat(userId).isEqualTo(42L);
+        String subject = jwt.verify(token);
+        assertThat(subject).isEqualTo("42");
+    }
+
+    @Test
+    void sign_and_verify_string() {
+        JwtSupport jwt = new JwtSupport("test-secret", 3600);
+        String token = jwt.sign("uuid-abc-123");
+        String subject = jwt.verify(token);
+        assertThat(subject).isEqualTo("uuid-abc-123");
     }
 
     @Test

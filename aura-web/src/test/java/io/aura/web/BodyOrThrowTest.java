@@ -51,6 +51,22 @@ class BodyOrThrowTest {
     }
 
     @Test
+    void structuredErrors_containsFieldAndMessage() {
+        var app = Aura.create();
+        app.routes(r -> r.post("/users", ctx -> {
+            ctx.bodyOrThrow(ValidatedReq.class);
+        }));
+        var client = TestClient.of(app);
+
+        var resp = client.post("/users").body("{\"name\":\"\"}").execute();
+        assertThat(resp.status()).isEqualTo(400);
+        assertThat(resp.body()).contains("\"error\"");
+        assertThat(resp.body()).contains("\"errors\"");
+        assertThat(resp.body()).contains("\"field\"");
+        assertThat(resp.body()).contains("\"message\"");
+    }
+
+    @Test
     void passesValidation_whenValid() {
         var app = Aura.create();
         app.routes(r -> r.post("/users", ctx -> {

@@ -52,7 +52,7 @@ class AuthTest {
     void customAuth_works() {
         Aura app = Aura.create().auth(ctx -> {
             String token = ctx.header("X-Token");
-            if ("valid-token".equals(token)) return 99L;
+            if ("valid-token".equals(token)) return "99";
             return null;
         });
         Router router = new Router();

@@ -29,15 +29,27 @@ public class Row extends LinkedHashMap<String, Object> {
     }
 
     public Row exclude(String... cols) {
-        for (String col : cols) excluded.add(col.toLowerCase());
+        for (String col : cols) excluded.add(col);
         return this;
     }
 
     public Row set(String key, Object value) {
         SqlSafe.identifier(key);
-        put(key.toLowerCase(), value);
-        dirtyKeys.add(key.toLowerCase());
+        put(key, value);
+        dirtyKeys.add(key);
         return this;
+    }
+
+    @Override
+    public Object get(Object key) {
+        Object v = super.get(key);
+        if (v != null || super.containsKey(key)) return v;
+        if (key instanceof String k) {
+            for (var entry : entrySet()) {
+                if (k.equalsIgnoreCase(entry.getKey())) return entry.getValue();
+            }
+        }
+        return null;
     }
 
     public Row id(Object id) {
@@ -86,6 +98,20 @@ public class Row extends LinkedHashMap<String, Object> {
         if (v == null) return defaultValue;
         if (v instanceof Number n) return n.longValue();
         return Long.parseLong(v.toString());
+    }
+
+    public Double getDouble(String key) {
+        Object v = get(key);
+        if (v == null) return null;
+        if (v instanceof Number n) return n.doubleValue();
+        return Double.parseDouble(v.toString());
+    }
+
+    public double getDouble(String key, double defaultValue) {
+        Object v = get(key);
+        if (v == null) return defaultValue;
+        if (v instanceof Number n) return n.doubleValue();
+        return Double.parseDouble(v.toString());
     }
 
     public Boolean getBool(String key) {

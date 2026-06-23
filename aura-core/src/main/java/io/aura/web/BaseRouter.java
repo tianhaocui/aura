@@ -44,6 +44,22 @@ public class BaseRouter {
         throw new UnsupportedOperationException("Service method routing requires aura-web");
     }
 
+    public BaseRouteBuilder patch(String path, BaseHandler handler) {
+        return addRoute("PATCH", path, handler);
+    }
+
+    public BaseRouteBuilder patch(String path, Object target, String method) {
+        throw new UnsupportedOperationException("Service method routing requires aura-web");
+    }
+
+    public BaseRouteBuilder head(String path, BaseHandler handler) {
+        return addRoute("HEAD", path, handler);
+    }
+
+    public BaseRouteBuilder options(String path, BaseHandler handler) {
+        return addRoute("OPTIONS", path, handler);
+    }
+
     public BaseRouter crud(String path, Object service) {
         throw new UnsupportedOperationException("crud() requires aura-web");
     }
