@@ -104,10 +104,10 @@ public interface BaseContext {
     }
 
     // --- auth ---
-    default long userId() {
+    default String userId() {
         Object id = get("_userId", Object.class);
         if (id == null) throw new IllegalStateException("Not authenticated — use Aura.requireAuth() middleware");
-        return id instanceof Long l ? l : Long.parseLong(id.toString());
+        return id.toString();
     }
 
     // --- SSE ---

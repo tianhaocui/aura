@@ -7,7 +7,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
-class MockContext extends Context {
+public class MockContext extends Context {
 
     int status;
     String responseBody;
@@ -20,8 +20,8 @@ class MockContext extends Context {
     private final Map<String, Object> namedAttrs = new ConcurrentHashMap<>();
     private final Map<String, String> respHeaders = new HashMap<>();
 
-    MockContext(Map<String, String> pathParams, Map<String, String> queryParams,
-                Map<String, String> headers, String body, Aura app) {
+    public MockContext(Map<String, String> pathParams, Map<String, String> queryParams,
+                       Map<String, String> headers, String body, Aura app) {
         super(null, pathParams, app, null);
         this.pathParams = pathParams;
         this.headers = headers;

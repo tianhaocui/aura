@@ -50,6 +50,9 @@ final class ServiceRegistrar {
             case "POST" -> router.post(info.path, service, m.getName());
             case "PUT" -> router.put(info.path, service, m.getName());
             case "DELETE" -> router.delete(info.path, service, m.getName());
+            case "PATCH" -> router.patch(info.path, service, m.getName());
+            case "HEAD" -> router.head(info.path, service, m.getName());
+            case "OPTIONS" -> router.options(info.path, service, m.getName());
             default -> null;
         };
         if (rb == null) return;
@@ -69,7 +72,9 @@ final class ServiceRegistrar {
 
     private static boolean hasRouteAnnotation(Method m) {
         return m.isAnnotationPresent(Get.class) || m.isAnnotationPresent(Post.class)
-                || m.isAnnotationPresent(Put.class) || m.isAnnotationPresent(Delete.class);
+                || m.isAnnotationPresent(Put.class) || m.isAnnotationPresent(Delete.class)
+                || m.isAnnotationPresent(Patch.class) || m.isAnnotationPresent(Head.class)
+                || m.isAnnotationPresent(Options.class);
     }
 
     private static RouteInfo resolveRoute(Method m, String prefix) {
@@ -84,6 +89,15 @@ final class ServiceRegistrar {
 
         Delete delAnn = m.getAnnotation(Delete.class);
         if (delAnn != null) return new RouteInfo("DELETE", prefix + delAnn.value());
+
+        Patch patchAnn = m.getAnnotation(Patch.class);
+        if (patchAnn != null) return new RouteInfo("PATCH", prefix + patchAnn.value());
+
+        Head headAnn = m.getAnnotation(Head.class);
+        if (headAnn != null) return new RouteInfo("HEAD", prefix + headAnn.value());
+
+        Options optAnn = m.getAnnotation(Options.class);
+        if (optAnn != null) return new RouteInfo("OPTIONS", prefix + optAnn.value());
 
         String name = m.getName();
         return switch (name) {

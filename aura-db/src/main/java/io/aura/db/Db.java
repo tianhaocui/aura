@@ -289,6 +289,17 @@ public class Db implements AutoCloseable {
         return doTransaction(block);
     }
 
+    public void transactionThrows(ThrowingRunnable block) throws Exception {
+        transactionThrows(() -> { block.run(); return null; });
+    }
+
+    public <T> T transactionThrows(ThrowingSupplier<T> block) throws Exception {
+        if (TX_CONN.get() != null) {
+            return block.get();
+        }
+        return doTransactionThrows(block);
+    }
+
     /**
      * Always starts a new independent transaction, even if already inside one.
      * Runs the block in a new thread so it gets its own DB connection.
@@ -396,6 +407,25 @@ public class Db implements AutoCloseable {
         }
     }
 
+    private <T> T doTransactionThrows(ThrowingSupplier<T> block) throws Exception {
+        try (Connection conn = ds.getConnection()) {
+            conn.setAutoCommit(false);
+            TX_CONN.set(conn);
+            try {
+                T result = block.get();
+                conn.commit();
+                return result;
+            } catch (Exception e) {
+                try { conn.rollback(); } catch (SQLException rollbackEx) { e.addSuppressed(rollbackEx); }
+                throw e;
+            } finally {
+                TX_CONN.remove();
+            }
+        } catch (SQLException e) {
+            throw new DbException(e);
+        }
+    }
+
     @Override
     public void close() {
         ds.close();
@@ -441,7 +471,7 @@ public class Db implements AutoCloseable {
             } else if (val instanceof java.sql.Time t) {
                 val = t.toLocalTime();
             }
-            row.put(meta.getColumnLabel(i).toLowerCase(), val);
+            row.put(meta.getColumnLabel(i), val);
         }
         return row;
     }

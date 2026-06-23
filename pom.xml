@@ -39,6 +39,7 @@
         <module>aura-web</module>
         <module>aura-db</module>
         <module>aura-mcp</module>
+        <module>aura-dev</module>
     </modules>
 
     <properties>
@@ -46,7 +47,7 @@
         <maven.compiler.source>${java.version}</maven.compiler.source>
         <maven.compiler.target>${java.version}</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <aura.version>0.5.2</aura.version>
+        <aura.version>0.5.3</aura.version>
         <undertow.version>2.3.12.Final</undertow.version>
         <fastjson2.version>2.0.47</fastjson2.version>
         <hikaricp.version>5.1.0</hikaricp.version>

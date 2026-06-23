@@ -43,8 +43,8 @@ public class UndertowStarter implements AuraStarter {
     private Router router;
     private ResourceHandler staticHandler;
     private ClassPathResourceManager resourceManager;
-    private List<CompiledRoute> compiledRoutes;
-    private List<CompiledWsRoute> compiledWsRoutes;
+    private volatile List<CompiledRoute> compiledRoutes;
+    private volatile List<CompiledWsRoute> compiledWsRoutes;
 
     @Override
     @SuppressWarnings("unchecked")
@@ -67,6 +67,9 @@ public class UndertowStarter implements AuraStarter {
                 case "POST" -> router.post(entry.path(), handler);
                 case "PUT" -> router.put(entry.path(), handler);
                 case "DELETE" -> router.delete(entry.path(), handler);
+                case "PATCH" -> router.patch(entry.path(), handler);
+                case "HEAD" -> router.head(entry.path(), handler);
+                case "OPTIONS" -> router.options(entry.path(), handler);
             }
         }
 
@@ -174,6 +177,50 @@ public class UndertowStarter implements AuraStarter {
         }
     }
 
+    @Override
+    @SuppressWarnings("unchecked")
+    public void reloadRoutes(io.aura.Aura app) {
+        long t0 = System.currentTimeMillis();
+        Router newRouter = new Router();
+
+        for (var entry : app.directRoutes()) {
+            BaseHandler handler = entry.handler() instanceof BaseHandler h
+                    ? h : new LambdaHandler(entry.handler());
+            switch (entry.method()) {
+                case "GET" -> newRouter.get(entry.path(), handler);
+                case "POST" -> newRouter.post(entry.path(), handler);
+                case "PUT" -> newRouter.put(entry.path(), handler);
+                case "DELETE" -> newRouter.delete(entry.path(), handler);
+                case "PATCH" -> newRouter.patch(entry.path(), handler);
+                case "HEAD" -> newRouter.head(entry.path(), handler);
+                case "OPTIONS" -> newRouter.options(entry.path(), handler);
+            }
+        }
+
+        var config = (java.util.function.Consumer<BaseRouter>) app.routeConfig();
+        if (config != null) config.accept(newRouter);
+
+        for (Object service : app.services()) {
+            ServiceRegistrar.register(service, newRouter);
+        }
+
+        if (!app.scanPackages().isEmpty()) {
+            PackageScanner.scan(app.scanPackages(), newRouter);
+        }
+
+        var newCompiled = compile(newRouter, "",
+                new java.util.ArrayList<>(app.beforeHandlers()), new java.util.ArrayList<>(app.afterHandlers()));
+        newCompiled.sort(java.util.Comparator.comparingInt((CompiledRoute r) -> r.paramNames().size())
+                .thenComparing(CompiledRoute::rawPath));
+        detectDuplicateRoutes(newCompiled);
+
+        this.compiledRoutes = newCompiled;
+        this.compiledWsRoutes = compileWsRoutes(newRouter);
+        this.router = newRouter;
+
+        log.info("[aura-dev] routes reloaded in {}ms", System.currentTimeMillis() - t0);
+    }
+
     private void dispatch(HttpServerExchange exchange) {
         String method = exchange.getRequestMethod().toString();
         String path = exchange.getRequestURI();
@@ -196,7 +243,7 @@ public class UndertowStarter implements AuraStarter {
             }
             if (allowOrigin != null) {
                 exchange.getResponseHeaders().put(new HttpString("Access-Control-Allow-Origin"), allowOrigin);
-                exchange.getResponseHeaders().put(new HttpString("Access-Control-Allow-Methods"), "GET, POST, PUT, DELETE, OPTIONS");
+                exchange.getResponseHeaders().put(new HttpString("Access-Control-Allow-Methods"), "GET, POST, PUT, DELETE, PATCH, HEAD, OPTIONS");
                 exchange.getResponseHeaders().put(new HttpString("Access-Control-Allow-Headers"), allowHeaders);
                 exchange.getResponseHeaders().put(new HttpString("Access-Control-Max-Age"), "86400");
                 if (credentials) {
@@ -271,43 +318,44 @@ public class UndertowStarter implements AuraStarter {
                 }, app.requestTimeout(), TimeUnit.SECONDS);
             }
 
-            try {
-                for (BaseHandler mw : route.beforeHandlers()) {
-                    mw.handle(ctx);
-                    if (ctx.isAborted()) break;
-                }
-                if (!ctx.isAborted()) {
-                    route.handler().handle(ctx);
-                } else if (exchange.getStatusCode() == 200) {
-                    exchange.setStatusCode(403);
-                }
-            } catch (Exception e) {
-                handleException(e, ctx);
+            RouteExecutor.execute(route, ctx, (e, c) -> {
+                handleException(e, (Context) c);
                 long elapsed = System.currentTimeMillis() - start;
                 String clientIp = exchange.getSourceAddress() != null ? exchange.getSourceAddress().getHostString() : "-";
                 Throwable cause = e instanceof java.lang.reflect.InvocationTargetException ? e.getCause() : e;
                 if (cause == null) cause = e;
                 log.error("[{}] {} {} {} {}: {} ({}ms, {})", reqId, method, path,
                         exchange.getStatusCode(), cause.getClass().getSimpleName(), cause.getMessage(), elapsed, clientIp);
-            } finally {
-                responded.set(true);
-                if (timeoutFuture != null) timeoutFuture.cancel(false);
-                runAfterHandlers(route.afterHandlers(), ctx);
-                if (app.accessLog()) {
-                    long elapsed = System.currentTimeMillis() - start;
-                    if ("json".equals(app.accessLogFormat())) {
-                        String ip = exchange.getSourceAddress() != null ? exchange.getSourceAddress().getHostString() : "-";
-                        String safePath = path.replace("\\", "\\\\").replace("\"", "\\\"");
-                        String safeReqId = reqId.replace("\\", "\\\\").replace("\"", "\\\"");
-                        log.info("{{\"ts\":\"{}\",\"method\":\"{}\",\"path\":\"{}\",\"status\":{},\"elapsed\":{},\"reqId\":\"{}\",\"ip\":\"{}\"}}",
-                                java.time.Instant.now(), method, safePath, exchange.getStatusCode(), elapsed, safeReqId, ip);
-                    } else {
-                        log.info("{} {} → {} ({}ms)", method, path, exchange.getStatusCode(), elapsed);
-                    }
+            });
+            responded.set(true);
+            if (timeoutFuture != null) timeoutFuture.cancel(false);
+            if (app.accessLog()) {
+                long elapsed = System.currentTimeMillis() - start;
+                if ("json".equals(app.accessLogFormat())) {
+                    String ip = exchange.getSourceAddress() != null ? exchange.getSourceAddress().getHostString() : "-";
+                    String safePath = path.replace("\\", "\\\\").replace("\"", "\\\"");
+                    String safeReqId = reqId.replace("\\", "\\\\").replace("\"", "\\\"");
+                    log.info("{{\"ts\":\"{}\",\"method\":\"{}\",\"path\":\"{}\",\"status\":{},\"elapsed\":{},\"reqId\":\"{}\",\"ip\":\"{}\"}}",
+                            java.time.Instant.now(), method, safePath, exchange.getStatusCode(), elapsed, safeReqId, ip);
+                } else {
+                    log.info("{} {} → {} ({}ms)", method, path, exchange.getStatusCode(), elapsed);
                 }
-                MDC.remove("requestId");
             }
+            MDC.remove("requestId");
             return;
+        }
+
+        // HEAD auto-fallback: use GET handler but suppress body
+        if ("HEAD".equals(method)) {
+            for (CompiledRoute route : compiledRoutes) {
+                if (!"GET".equals(route.method())) continue;
+                Map<String, String> params = route.match(path);
+                if (params == null) continue;
+                Context ctx = new Context(exchange, params, app, null);
+                RouteExecutor.execute(route, ctx, (e, c) -> handleException(e, (Context) c));
+                exchange.endExchange();
+                return;
+            }
         }
 
         if (staticHandler != null) {
@@ -457,16 +505,6 @@ public class UndertowStarter implements AuraStarter {
         return params;
     }
 
-    private void runAfterHandlers(List<BaseHandler> afterHandlers, Context ctx) {
-        for (BaseHandler h : afterHandlers) {
-            try {
-                h.handle(ctx);
-            } catch (Exception e) {
-                log.error("Error in after handler", e);
-            }
-        }
-    }
-
     @SuppressWarnings({"unchecked", "rawtypes"})
     private void handleException(Exception e, Context ctx) {
         Throwable cause = e instanceof java.lang.reflect.InvocationTargetException ? e.getCause() : e;
@@ -482,6 +520,14 @@ public class UndertowStarter implements AuraStarter {
                 }
                 return;
             }
+        }
+        if (cause instanceof io.aura.Validate.ValidationException ve && !ve.errors().isEmpty()) {
+            ctx.status(400).json(java.util.Map.of(
+                    "error", "Validation failed",
+                    "errors", ve.errors().stream()
+                            .map(fe -> java.util.Map.of("field", fe.field(), "message", fe.message()))
+                            .toList()));
+            return;
         }
         if (cause instanceof IllegalArgumentException || cause instanceof io.aura.Validate.ValidationException) {
             ctx.status(400).json(ApiError.of(

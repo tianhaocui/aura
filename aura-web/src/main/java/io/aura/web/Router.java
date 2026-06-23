@@ -26,6 +26,18 @@ public class Router extends BaseRouter {
         return addMethodRoute("DELETE", path, new MethodRefHandler(target, method));
     }
 
+    public BaseRouteBuilder patch(String path, Object target, String method) {
+        return addMethodRoute("PATCH", path, new MethodRefHandler(target, method));
+    }
+
+    public BaseRouteBuilder head(String path, Object target, String method) {
+        return addMethodRoute("HEAD", path, new MethodRefHandler(target, method));
+    }
+
+    public BaseRouteBuilder options(String path, Object target, String method) {
+        return addMethodRoute("OPTIONS", path, new MethodRefHandler(target, method));
+    }
+
     public BaseRouter crud(String path, Object service) {
         return crud(path, service, "get", "list", "create", "update", "delete");
     }

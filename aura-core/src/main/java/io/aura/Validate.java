@@ -34,8 +34,24 @@ public final class Validate {
         if (!condition) throw new ValidationException(message);
     }
 
+    public record FieldError(String field, String message) {}
+
     public static class ValidationException extends RuntimeException {
-        public ValidationException(String message) { super(message); }
+        private final java.util.List<FieldError> errors;
+
+        public ValidationException(String message) {
+            super(message);
+            this.errors = java.util.List.of();
+        }
+
+        public ValidationException(java.util.List<FieldError> errors) {
+            super("Validation failed: " + errors.stream()
+                    .map(e -> e.field() + " " + e.message())
+                    .collect(java.util.stream.Collectors.joining(", ")));
+            this.errors = errors;
+        }
+
+        public java.util.List<FieldError> errors() { return errors; }
     }
 
     private Validate() {}

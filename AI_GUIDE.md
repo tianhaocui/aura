@@ -49,6 +49,9 @@ Aura.create().port(8080)
 app.get("/path", () -> result);                    // no params
 app.get("/user/{id}", (int id) -> findUser(id));   // path param
 app.post("/user", (CreateReq req) -> save(req));   // body param
+app.patch("/user/{id}", (int id, PatchReq req) -> update(id, req));  // partial update
+app.head("/file/{id}", (int id) -> checkExists(id));   // existence check
+app.options("/api/items", () -> "GET,POST,PATCH");     // API discovery
 
 app.routes(r -> {
     r.get("/user/{id}", userService, "get");
@@ -136,14 +139,15 @@ r.group("/api", api -> {
     api.get("/profile", ctx -> db.findById("user", ctx.userId()));
 });
 
-// Sign token (login endpoint)
-r.post("/login", ctx -> ctx.json(Map.of("token", app.signJwt(userId))));
+// Sign token — accepts String subject (userId, email, UUID, etc.)
+r.post("/login", ctx -> ctx.json(Map.of("token", app.signJwt("user-123"))));
+r.post("/login", ctx -> ctx.json(Map.of("token", app.signJwt(42L))));  // long overload
 
 // Custom auth (OAuth, IAM, Redis session — anything)
-app.auth(ctx -> myIamClient.verify(ctx.header("X-Token")));
+app.auth(ctx -> myIamClient.verify(ctx.header("X-Token")));  // returns String userId or null
 ```
 
-`ctx.userId()` returns the authenticated user ID. Throws if not authenticated.
+`ctx.userId()` returns String. Throws if not authenticated.
 
 ## Plugins
 
@@ -171,6 +175,8 @@ Aura.create()
     .staticFiles("/public")
     .spa(true)                     // unknown paths → /index.html
     .mcp(true)                     // MCP Server for AI agents
+    .health()                      // /health endpoint, 503 on shutdown
+    .dev(true)                     // hot-reload (requires aura-dev dependency + JDK)
     .set("db.url", "jdbc:mysql://...")
     .onStart(a -> a.register(Db.create(...)))
     .onStop(a -> a.getBean(Db.class).close())
@@ -179,6 +185,16 @@ Aura.create()
 
 Properties read order: startup args > env var > `aura.properties` > code default.
 
+### Config Binding to Record
+
+```java
+// aura.properties: bnp.api.key=abc123, bnp.api.url=https://..., bnp.api.timeout=30
+record BnpConfig(String key, String url, int timeout) {}
+BnpConfig config = app.props("bnp.api.", BnpConfig.class);  // auto-strips prefix, binds by field name
+```
+
+Supported types: String, int, long, double, boolean. Record-only (no POJO). Missing keys → default values (null/0/false).
+
 ## Context API
 
 ```java
@@ -186,12 +202,15 @@ Properties read order: startup args > env var > `aura.properties` > code default
 ctx.path("id")   ctx.pathInt("id")   ctx.pathLong("id")
 ctx.query("page")   ctx.queryRequired("name")   ctx.queryInt("page", 1)
 ctx.header("Authorization")   ctx.cookie("name")   ctx.method()   ctx.url()
-ctx.body(T.class)   ctx.bodyOrThrow(T.class)
+ctx.body(T.class)   ctx.bodyOrThrow(T.class)   ctx.ip()
 ctx.pageNum()   ctx.pageSize()   ctx.file("field")   ctx.formField("name")
 
 // 响应
 ctx.status(201)   ctx.json(obj)   ctx.text("ok")   ctx.html("<h1>Hi</h1>")
 ctx.redirect("/")   ctx.sendFile("name.pdf", bytes)   ctx.sse()
+
+// 认证 (userId 返回 String — 支持 long/UUID/email)
+ctx.userId()
 
 // 上下文存储
 ctx.set(user)   ctx.get(User.class)   ctx.app().getBean(Db.class)
@@ -202,10 +221,27 @@ ctx.set(user)   ctx.get(User.class)   ctx.app().getBean(Db.class)
 ## Testing
 
 ```java
-TestClient client = new TestClient(app, router);
+TestClient client = TestClient.of(app);
 client.get("/user/1").execute().expect(200).bodyContains("alice");
 client.post("/user").body(Map.of("name", "bob")).execute().expect(201);
-client.delete("/user/1").execute().expect(204);
+client.patch("/user/1").body(Map.of("name", "new")).expect(200);
+client.get("/items").query("page", "2").query("size", "10").expect(200);
+
+// JSONPath assertions
+client.get("/user/1").execute().expect(200)
+    .expectJson("$.name", "alice")
+    .expectJson("$.age", 30);
+
+// Session — auto token management
+TestSession session = client.session("Bearer " + token);
+session.get("/api/me").expect(200);
+
+// Or login + auto-extract token
+session.login(client.post("/login").body(creds).execute());
+session.get("/protected").expect(200);
+
+// Direct MockContext (public) — unit test handlers without routing
+var ctx = new MockContext(Map.of("id", "1"), Map.of(), Map.of(), null, app);
 ```
 
 In-memory, no HTTP server needed. AI writes code → runs TestClient → confirms it works.

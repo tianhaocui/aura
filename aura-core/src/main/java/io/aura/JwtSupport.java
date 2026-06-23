@@ -16,14 +16,19 @@ public final class JwtSupport {
     }
 
     public String sign(long userId) {
+        return sign(String.valueOf(userId));
+    }
+
+    public String sign(String subject) {
         String header = base64Url("{\"alg\":\"HS256\",\"typ\":\"JWT\"}");
         long exp = System.currentTimeMillis() / 1000 + expireSeconds;
-        String payload = base64Url("{\"sub\":\"" + userId + "\",\"exp\":" + exp + "}");
+        String safeSub = subject.replace("\\", "\\\\").replace("\"", "\\\"");
+        String payload = base64Url("{\"sub\":\"" + safeSub + "\",\"exp\":" + exp + "}");
         String signature = hmacSha256(header + "." + payload);
         return header + "." + payload + "." + signature;
     }
 
-    public Long verify(String token) {
+    public String verify(String token) {
         if (token == null || token.isBlank()) return null;
         String[] parts = token.split("\\.");
         if (parts.length != 3) return null;
@@ -35,8 +40,8 @@ public final class JwtSupport {
             String json = new String(Base64.getUrlDecoder().decode(parts[1]), StandardCharsets.UTF_8);
             long exp = extractLong(json, "exp");
             if (exp > 0 && System.currentTimeMillis() / 1000 > exp) return null;
-            long sub = extractLong(json, "sub");
-            return sub != 0 ? sub : null;
+            String sub = extractString(json, "sub");
+            return sub != null && !sub.isEmpty() ? sub : null;
         } catch (Exception e) {
             return null;
         }
@@ -68,6 +73,34 @@ public final class JwtSupport {
         while (end < json.length() && (Character.isDigit(json.charAt(end)) || json.charAt(end) == '-')) end++;
         if (end == start) return 0;
         return Long.parseLong(json.substring(start, end));
+    }
+
+    private static String extractString(String json, String key) {
+        String search = "\"" + key + "\":\"";
+        int idx = json.indexOf(search);
+        if (idx < 0) return null;
+        int start = idx + search.length();
+        StringBuilder sb = new StringBuilder();
+        for (int i = start; i < json.length(); i++) {
+            char c = json.charAt(i);
+            if (c == '\\' && i + 1 < json.length()) {
+                char next = json.charAt(++i);
+                switch (next) {
+                    case '"' -> sb.append('"');
+                    case '\\' -> sb.append('\\');
+                    case '/' -> sb.append('/');
+                    case 'n' -> sb.append('\n');
+                    case 'r' -> sb.append('\r');
+                    case 't' -> sb.append('\t');
+                    default -> { sb.append('\\'); sb.append(next); }
+                }
+            } else if (c == '"') {
+                return sb.toString();
+            } else {
+                sb.append(c);
+            }
+        }
+        return null;
     }
 
     private JwtSupport() { this("", 0); }
