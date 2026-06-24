@@ -118,6 +118,8 @@ java -jar target/your-app-1.0.jar
 java -jar target/your-app-1.0.jar --mcp-stdio
 ```
 
+Fat jar properties loading: `aura.properties` and `aura-{env}.properties` are loaded from classpath root (`src/main/resources/`). In fat jar, maven-shade merges all classpath resources — if a dependency also ships `aura.properties`, use `ServicesResourceTransformer` and ensure your file is in `src/main/resources/` (not a nested path). Env vars and `--args` always take precedence regardless of packaging.
+
 Add this profile to pom.xml:
 
 ```xml
