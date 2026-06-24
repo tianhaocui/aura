@@ -76,7 +76,13 @@ var resp = http.send(req, HttpResponse.BodyHandlers.ofString());
 
 ## Configuration Details
 
-Properties read order: startup args > env var > `aura.properties` > code default.
+Properties resolution priority (highest to lowest):
+1. `--key=value` startup args
+2. Environment variable (`KEY_NAME` — `.` and `-` → `_`, uppercased)
+3. System Property (`-Dkey=value`)
+4. `app.set(key, value)`
+5. `aura-{env}.properties`
+6. `aura.properties`
 
 Startup args override any key: `--aura.port=9090 --db.url=jdbc:mysql://...`
 

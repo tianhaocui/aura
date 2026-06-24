@@ -16,13 +16,13 @@ db.find(sql, params)               — only for joins/subqueries
 <dependency>
     <groupId>io.github.tianhaocui</groupId>
     <artifactId>aura-web</artifactId>
-    <version>0.5.4</version>
+    <version>0.5.5</version>
 </dependency>
 <!-- Optional: database -->
 <dependency>
     <groupId>io.github.tianhaocui</groupId>
     <artifactId>aura-db</artifactId>
-    <version>0.5.4</version>
+    <version>0.5.5</version>
 </dependency>
 <!-- Required: add your own SLF4J provider -->
 <dependency>
@@ -101,6 +101,42 @@ app.routes(r -> {
     });
 });
 ```
+
+### app.exception() 注册规则
+
+- 使用 `isAssignableFrom` 匹配 — 注册 `RuntimeException.class` 会捕获所有子类
+- `LinkedHashMap` 按注册顺序遍历，**第一个匹配的 handler 生效**
+- 先注册具体异常，再注册通用异常（从小到大注册）
+- `InvocationTargetException` 自动 unwrap，匹配的是 `getCause()`
+
+```java
+// 正确顺序：具体在前，通用在后
+app.exception(ValidationException.class, (e, ctx) -> ctx.status(400).json(...));
+app.exception(AuthException.class, (e, ctx) -> ctx.status(401).json(...));
+app.exception(Exception.class, (e, ctx) -> ctx.status(500).json(...));
+```
+
+### 全局过滤器 + 路径白名单
+
+```java
+// 方式一：app.before().exclude() — 推荐
+app.before(ctx -> {
+    String token = ctx.header("Authorization");
+    if (token == null) { ctx.status(401).json(Map.of("error", "Unauthorized")); ctx.abort(); }
+    else ctx.set("_userId", verifyToken(token));
+}).exclude("/health", "/login", "/public/*");
+
+// 方式二：router group — 按路径前缀分组
+app.routes(r -> {
+    r.get("/health", ctx -> ctx.text("ok"));       // 不需要认证
+    r.group("/api", api -> {
+        api.before(authMiddleware);                  // /api/** 需要认证
+        api.get("/users", userService, "list");
+    });
+});
+```
+
+`exclude()` 支持精确匹配和通配符（`*` 结尾表示前缀匹配）。
 
 Unhandled exceptions return JSON `{"error": "message"}`. In dev mode (`AURA_ENV=dev`), `"trace"` is added.
 `IllegalArgumentException` and `ValidationException` automatically return 400.
@@ -186,6 +222,16 @@ Aura.create()
     .start(args);
 ```
 
+### Lifecycle Hooks
+
+- `onStart(hook)` — runs **after** server port is listening (safe to register service discovery)
+- `onStop(hook)` — runs on SIGTERM/SIGINT during graceful shutdown (close connections, deregister)
+
+```java
+app.onStart(a -> nacosClient.register("my-service", a.port()));  // port is ready
+app.onStop(a -> nacosClient.deregister("my-service"));
+```
+
 Properties read order: startup args > env var > System Property (-D) > `aura.properties` > code default.
 
 Priority (highest to lowest):
@@ -195,6 +241,8 @@ Priority (highest to lowest):
 4. `app.set(key, value)`
 5. `aura-{env}.properties`
 6. `aura.properties`
+
+Env var key conversion: `prop("nacos.server-addr")` → looks up `NACOS_SERVER_ADDR` (`.` → `_`, `-` → `_`, uppercase).
 
 `props(prefix)` uses pure `startsWith()` matching — `props("login.")` matches `login.item-cms.url`.
 
@@ -231,6 +279,20 @@ ctx.set(user)   ctx.get(User.class)   ctx.app().getBean(Db.class)
 ```
 
 `ctx.json(row)` works directly — Row extends LinkedHashMap, serializes as JSON object.
+
+### HTTP 代理/透传响应
+
+```java
+// 透传第三方 API 响应（保留原始 Content-Type）
+r.get("/proxy/report", ctx -> {
+    var resp = httpClient.send(req, HttpResponse.BodyHandlers.ofString());
+    ctx.status(resp.statusCode());
+    resp.headers().firstValue("Content-Type").ifPresent(ct -> ctx.header("Content-Type", ct));
+    ctx.raw(resp.body());  // 不覆盖 Content-Type
+});
+```
+
+`ctx.raw()` vs `ctx.text()`: raw 不设 Content-Type，适合透传外部响应或自定义格式（CSV/XML/protobuf）。
 
 ## Testing
 
@@ -273,6 +335,7 @@ In-memory, no HTTP server needed. AI writes code → runs TestClient → confirm
 - **Path param syntax is `{id}`** — NOT `:id`
 - **Validation only on record body params** — path/query params are NOT auto-validated
 - **DI is manual registration** — `app.register(instance)`, NOT auto-scan like Spring
+- **Multi-datasource** — `Db.create(name, dataSource)`, register with `app.register(name, db)`. See AI_GUIDE_DB.md.
 - **Config is .properties only** — no YAML support
 - **query params need manual access** — `ctx.query("name")`, no auto-binding
 - **Record classes auto-serialize** — field name = JSON key, no annotations needed
