@@ -16,18 +16,25 @@ public class MockContext extends Context {
     private final Map<String, String> queryParams;
     private final String body;
     private final Aura app;
+    private final String requestPath;
     private final Map<Class<?>, Object> attrs = new ConcurrentHashMap<>();
     private final Map<String, Object> namedAttrs = new ConcurrentHashMap<>();
     private final Map<String, String> respHeaders = new HashMap<>();
 
     public MockContext(Map<String, String> pathParams, Map<String, String> queryParams,
                        Map<String, String> headers, String body, Aura app) {
+        this(pathParams, queryParams, headers, body, app, "");
+    }
+
+    public MockContext(Map<String, String> pathParams, Map<String, String> queryParams,
+                       Map<String, String> headers, String body, Aura app, String requestPath) {
         super(null, pathParams, app, null);
         this.pathParams = pathParams;
         this.headers = headers;
         this.body = body;
         this.app = app;
         this.queryParams = queryParams;
+        this.requestPath = requestPath;
         if (app != null) namedAttrs.put("_app", app);
     }
 
@@ -38,7 +45,7 @@ public class MockContext extends Context {
     @Override public String cookie(String name) { return null; }
     @Override public <T> T body(Class<T> type) { return body == null || body.isBlank() ? null : JSON.parseObject(body, type); }
     @Override public String method() { return ""; }
-    @Override public String url() { return ""; }
+    @Override public String url() { return requestPath; }
     @Override public int statusCode() { return status == 0 ? 200 : status; }
 
     @Override public Context status(int code) { this.status = code; return this; }
@@ -52,6 +59,7 @@ public class MockContext extends Context {
     }
     @Override public void text(String text) { responseBody = text; }
     @Override public void html(String html) { responseBody = html; }
+    @Override public void raw(String body) { responseBody = body; }
     @Override public void redirect(String url) { status = 302; }
     @Override public Context header(String name, String value) { respHeaders.put(name, value); return this; }
     @Override public Context cookie(String name, String value, int maxAge) { return this; }
