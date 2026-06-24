@@ -18,6 +18,7 @@ public interface BaseContext {
     void json(Object obj);
     void text(String text);
     void html(String html);
+    void raw(String body);
     void redirect(String url);
     BaseContext header(String name, String value);
     BaseContext cookie(String name, String value, int maxAge);

@@ -98,7 +98,7 @@ public class TestClient {
                 Map<String, String> params = route.match(routePath);
                 if (params == null) continue;
 
-                var mockCtx = new MockContext(params, queryParams, headers, body, app);
+                var mockCtx = new MockContext(params, queryParams, headers, body, app, routePath);
                 RouteExecutor.execute(route, mockCtx, (e, c) -> handleException(e, (MockContext) c));
                 return new Response(mockCtx.status == 0 ? 200 : mockCtx.status, mockCtx.responseBody, mockCtx.responseHeaders());
             }
@@ -109,7 +109,7 @@ public class TestClient {
                     if (!"GET".equals(route.method())) continue;
                     Map<String, String> params = route.match(routePath);
                     if (params == null) continue;
-                    var mockCtx = new MockContext(params, queryParams, headers, body, app);
+                    var mockCtx = new MockContext(params, queryParams, headers, body, app, routePath);
                     RouteExecutor.execute(route, mockCtx, (e, c) -> handleException(e, (MockContext) c));
                     return new Response(mockCtx.status == 0 ? 200 : mockCtx.status, null, mockCtx.responseHeaders());
                 }

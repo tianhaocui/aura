@@ -21,6 +21,7 @@ class BaseContextQueryTypedTest {
             @Override public void json(Object obj) {}
             @Override public void text(String text) {}
             @Override public void html(String html) {}
+            @Override public void raw(String body) {}
             @Override public void redirect(String url) {}
             @Override public BaseContext header(String n, String v) { return this; }
             @Override public BaseContext cookie(String n, String v, int maxAge) { return this; }

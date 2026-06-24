@@ -89,6 +89,9 @@ app.exception(IllegalArgumentException.class, (e, ctx) ->
 app.exception(Exception.class, (e, ctx) ->
     ctx.status(500).json(Result.fail(500, "Internal error")));
 
+// 全局 before with exclude（无需在 handler 里 if 跳过）
+app.before(authHandler).exclude("/health", "/api/adapter/health*");
+
 app.routes(r -> {
     r.before(ctx -> { /* auth, logging */ });
     r.after(ctx -> { /* timing, cleanup */ });
@@ -183,7 +186,17 @@ Aura.create()
     .start(args);
 ```
 
-Properties read order: startup args > env var > `aura.properties` > code default.
+Properties read order: startup args > env var > System Property (-D) > `aura.properties` > code default.
+
+Priority (highest to lowest):
+1. `--key=value` startup args
+2. Environment variable (`KEY_NAME` — dots and hyphens become underscores, uppercased)
+3. System Property (`-Dkey=value`)
+4. `app.set(key, value)`
+5. `aura-{env}.properties`
+6. `aura.properties`
+
+`props(prefix)` uses pure `startsWith()` matching — `props("login.")` matches `login.item-cms.url`.
 
 ### Config Binding to Record
 
@@ -207,6 +220,7 @@ ctx.pageNum()   ctx.pageSize()   ctx.file("field")   ctx.formField("name")
 
 // 响应
 ctx.status(201)   ctx.json(obj)   ctx.text("ok")   ctx.html("<h1>Hi</h1>")
+ctx.raw(body)   // write body without setting Content-Type (for CSV, XML, etc.)
 ctx.redirect("/")   ctx.sendFile("name.pdf", bytes)   ctx.sse()
 
 // 认证 (userId 返回 String — 支持 long/UUID/email)

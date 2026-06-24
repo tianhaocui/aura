@@ -245,9 +245,8 @@ public class Aura {
         return exceptionHandlers;
     }
 
-    public Aura before(io.aura.web.BaseHandler handler) {
-        beforeHandlers.add(handler);
-        return this;
+    public io.aura.web.BeforeBuilder before(io.aura.web.BaseHandler handler) {
+        return new io.aura.web.BeforeBuilder(this, handler);
     }
 
     public Aura after(io.aura.web.BaseHandler handler) {
@@ -375,7 +374,7 @@ public class Aura {
 
 
     public String prop(String key) {
-        return resolve(key, key.replace('.', '_').toUpperCase());
+        return resolve(key, key.replace('.', '_').replace('-', '_').toUpperCase());
     }
 
     public int prop(String key, int defaultValue) {
@@ -480,8 +479,8 @@ public class Aura {
                 .orElseThrow(() -> new IllegalStateException(
                         "No AuraStarter found. Add aura-web to your dependencies."));
         selfCheck();
-        fireStart();
         starter.start(this);
+        fireStart();
 
         if (mcpPort >= 0) {
             ServiceLoader<McpStarter> mcpLoader = ServiceLoader.load(McpStarter.class);
@@ -633,6 +632,8 @@ public class Aura {
     private String resolve(String propKey, String envKey) {
         String envVal = System.getenv(envKey);
         if (envVal != null) return envVal;
+        String sysProp = System.getProperty(propKey);
+        if (sysProp != null) return sysProp;
         return props.get(propKey);
     }
 

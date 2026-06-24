@@ -128,6 +128,10 @@ public class Context implements BaseContext {
         exchange.getResponseSender().send(html);
     }
 
+    @Override public void raw(String body) {
+        exchange.getResponseSender().send(body);
+    }
+
     @Override public void redirect(String url) {
         if (url.indexOf('\r') >= 0 || url.indexOf('\n') >= 0) {
             throw new IllegalArgumentException("Invalid redirect URL");
