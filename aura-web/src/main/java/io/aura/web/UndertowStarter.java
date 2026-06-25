@@ -54,24 +54,7 @@ public class UndertowStarter implements AuraStarter {
 
         router = new Router();
 
-        // direct routes from app.get/post/put/delete
-        for (var entry : app.directRoutes()) {
-            BaseHandler handler;
-            if (entry.handler() instanceof BaseHandler h) {
-                handler = h;
-            } else {
-                handler = new LambdaHandler(entry.handler());
-            }
-            switch (entry.method()) {
-                case "GET" -> router.get(entry.path(), handler);
-                case "POST" -> router.post(entry.path(), handler);
-                case "PUT" -> router.put(entry.path(), handler);
-                case "DELETE" -> router.delete(entry.path(), handler);
-                case "PATCH" -> router.patch(entry.path(), handler);
-                case "HEAD" -> router.head(entry.path(), handler);
-                case "OPTIONS" -> router.options(entry.path(), handler);
-            }
-        }
+        registerDirectRoutes(app, router);
 
         Consumer<?> config = app.routeConfig();
         if (config != null) {
@@ -110,7 +93,7 @@ public class UndertowStarter implements AuraStarter {
 
         shutdownHandler = new GracefulShutdownHandler(exchange -> {
             if (exchange.isInIoThread()) {
-                exchange.dispatch(ex -> dispatch(ex));
+                exchange.dispatch(this::dispatch);
                 return;
             }
             dispatch(exchange);
@@ -190,19 +173,7 @@ public class UndertowStarter implements AuraStarter {
         long t0 = System.currentTimeMillis();
         Router newRouter = new Router();
 
-        for (var entry : app.directRoutes()) {
-            BaseHandler handler = entry.handler() instanceof BaseHandler h
-                    ? h : new LambdaHandler(entry.handler());
-            switch (entry.method()) {
-                case "GET" -> newRouter.get(entry.path(), handler);
-                case "POST" -> newRouter.post(entry.path(), handler);
-                case "PUT" -> newRouter.put(entry.path(), handler);
-                case "DELETE" -> newRouter.delete(entry.path(), handler);
-                case "PATCH" -> newRouter.patch(entry.path(), handler);
-                case "HEAD" -> newRouter.head(entry.path(), handler);
-                case "OPTIONS" -> newRouter.options(entry.path(), handler);
-            }
-        }
+        registerDirectRoutes(app, newRouter);
 
         var config = (java.util.function.Consumer<BaseRouter>) app.routeConfig();
         if (config != null) config.accept(newRouter);
@@ -226,6 +197,22 @@ public class UndertowStarter implements AuraStarter {
         this.router = newRouter;
 
         log.info("[aura-dev] routes reloaded in {}ms", System.currentTimeMillis() - t0);
+    }
+
+    private static void registerDirectRoutes(Aura app, Router router) {
+        for (var entry : app.directRoutes()) {
+            BaseHandler handler = entry.handler() instanceof BaseHandler h
+                    ? h : new LambdaHandler(entry.handler());
+            switch (entry.method()) {
+                case "GET" -> router.get(entry.path(), handler);
+                case "POST" -> router.post(entry.path(), handler);
+                case "PUT" -> router.put(entry.path(), handler);
+                case "DELETE" -> router.delete(entry.path(), handler);
+                case "PATCH" -> router.patch(entry.path(), handler);
+                case "HEAD" -> router.head(entry.path(), handler);
+                case "OPTIONS" -> router.options(entry.path(), handler);
+            }
+        }
     }
 
     private void dispatch(HttpServerExchange exchange) {

@@ -502,7 +502,7 @@ public class Aura {
         }
         registry.putIfAbsent(Aura.class, this);
         if (!serviceClasses.isEmpty()) {
-            List<Object> resolved = ServiceResolver.resolve(serviceClasses, registry, namedRegistry);
+            List<Object> resolved = ServiceResolver.resolve(serviceClasses, registry);
             for (Object bean : resolved) {
                 if (bean instanceof Reloadable r) reloadables.add(r);
                 if (bean instanceof AutoCloseable c) closeables.add(c);

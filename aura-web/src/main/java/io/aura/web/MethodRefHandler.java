@@ -1,7 +1,6 @@
 package io.aura.web;
 
 import com.alibaba.fastjson2.JSON;
-import io.aura.BeanValidator;
 
 import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
@@ -34,10 +33,14 @@ public final class MethodRefHandler implements BaseHandler {
         }
         Object result = method.invoke(target, args);
         if (!hasReturnValue) return;
-        if (ctx instanceof Context c && c.isResponseStarted()) return;
-        if (ctx instanceof Context c && c.app() != null && c.app().resultWrapper() != null) {
-            ctx.json(c.app().resultWrapper().apply(result));
-        } else if (result != null) {
+        if (ctx instanceof Context c) {
+            if (c.isResponseStarted()) return;
+            if (c.app() != null && c.app().resultWrapper() != null) {
+                ctx.json(c.app().resultWrapper().apply(result));
+                return;
+            }
+        }
+        if (result != null) {
             ctx.json(result);
         }
     }
@@ -81,8 +84,7 @@ public final class MethodRefHandler implements BaseHandler {
         if (type == boolean.class || type == Boolean.class) return Boolean.parseBoolean(s);
         if (type == String.class) return s;
         if (type.isRecord() || TypeUtil.isPojo(type)) {
-            return com.alibaba.fastjson2.JSON.parseObject(
-                    com.alibaba.fastjson2.JSON.toJSONString(val), type);
+            return JSON.parseObject(JSON.toJSONString(val), type);
         }
         return val;
     }

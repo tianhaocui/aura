@@ -33,7 +33,7 @@ class ServiceResolverTest {
         registry.put(Repo.class, repo);
 
         List<Object> result = ServiceResolver.resolve(
-                List.of(ServiceA.class, ServiceB.class), registry, Map.of());
+                List.of(ServiceA.class, ServiceB.class), registry);
 
         assertEquals(2, result.size());
         assertInstanceOf(ServiceA.class, result.get(0));
@@ -48,7 +48,7 @@ class ServiceResolverTest {
         registry.put(Repo.class, new Repo());
 
         List<Object> result = ServiceResolver.resolve(
-                List.of(ServiceB.class, ServiceA.class), registry, Map.of());
+                List.of(ServiceB.class, ServiceA.class), registry);
 
         assertInstanceOf(ServiceA.class, result.get(0));
         assertInstanceOf(ServiceB.class, result.get(1));
@@ -60,7 +60,7 @@ class ServiceResolverTest {
         registry.put(Repo.class, new Repo());
 
         List<Object> result = ServiceResolver.resolve(
-                List.of(ServiceC.class, ServiceA.class, ServiceB.class), registry, Map.of());
+                List.of(ServiceC.class, ServiceA.class, ServiceB.class), registry);
 
         assertEquals(3, result.size());
         assertInstanceOf(ServiceA.class, result.get(0));
@@ -79,7 +79,7 @@ class ServiceResolverTest {
     void detectsCycle() {
         Map<Class<?>, Object> registry = new LinkedHashMap<>();
         var ex = assertThrows(IllegalStateException.class, () ->
-                ServiceResolver.resolve(List.of(CycleA.class, CycleB.class), registry, Map.of()));
+                ServiceResolver.resolve(List.of(CycleA.class, CycleB.class), registry));
         assertTrue(ex.getMessage().contains("Circular dependency"));
     }
 
@@ -87,7 +87,7 @@ class ServiceResolverTest {
     void errorOnMissingDependency() {
         Map<Class<?>, Object> registry = new LinkedHashMap<>();
         var ex = assertThrows(IllegalStateException.class, () ->
-                ServiceResolver.resolve(List.of(ServiceA.class), registry, Map.of()));
+                ServiceResolver.resolve(List.of(ServiceA.class), registry));
         assertTrue(ex.getMessage().contains("Cannot create ServiceA"));
         assertTrue(ex.getMessage().contains("Repo"));
         assertTrue(ex.getMessage().contains("Hint"));
@@ -102,7 +102,7 @@ class ServiceResolverTest {
     void errorOnMultipleConstructors() {
         Map<Class<?>, Object> registry = new LinkedHashMap<>();
         var ex = assertThrows(IllegalStateException.class, () ->
-                ServiceResolver.resolve(List.of(MultiCtor.class), registry, Map.of()));
+                ServiceResolver.resolve(List.of(MultiCtor.class), registry));
         assertTrue(ex.getMessage().contains("ambiguous"));
     }
 
@@ -122,7 +122,7 @@ class ServiceResolverTest {
         registry.put(MyImpl.class, impl);
 
         List<Object> result = ServiceResolver.resolve(
-                List.of(NeedsInterface.class), registry, Map.of());
+                List.of(NeedsInterface.class), registry);
 
         assertEquals(1, result.size());
         assertSame(impl, ((NeedsInterface) result.get(0)).dep);
@@ -143,7 +143,7 @@ class ServiceResolverTest {
         Map<Class<?>, Object> registry = new LinkedHashMap<>();
         registry.put(Repo.class, new Repo());
         List<Object> resolved = ServiceResolver.resolve(
-                List.of(ReloadableService.class), registry, Map.of());
+                List.of(ReloadableService.class), registry);
         assertInstanceOf(Reloadable.class, resolved.get(0));
     }
 
@@ -161,7 +161,7 @@ class ServiceResolverTest {
         registry.put(ImplB.class, new ImplB());
 
         var ex = assertThrows(IllegalStateException.class, () ->
-                ServiceResolver.resolve(List.of(NeedsInterface.class), registry, Map.of()));
+                ServiceResolver.resolve(List.of(NeedsInterface.class), registry));
         assertTrue(ex.getMessage().contains("Multiple beans match type"));
         assertTrue(ex.getMessage().contains("ImplA"));
         assertTrue(ex.getMessage().contains("ImplB"));

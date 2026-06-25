@@ -23,7 +23,7 @@ class AuraSelfRegisterTest {
 
         Map<Class<?>, Object> registry = new LinkedHashMap<>();
         registry.put(Aura.class, app);
-        List<Object> resolved = ServiceResolver.resolve(List.of(NeedsAura.class), registry, Map.of());
+        List<Object> resolved = ServiceResolver.resolve(List.of(NeedsAura.class), registry);
 
         assertEquals(1, resolved.size());
         assertInstanceOf(NeedsAura.class, resolved.get(0));
@@ -45,7 +45,7 @@ class AuraSelfRegisterTest {
 
         Map<Class<?>, Object> registry = new LinkedHashMap<>();
         registry.put(Aura.class, app);
-        List<Object> resolved = ServiceResolver.resolve(List.of(PathService.class), registry, Map.of());
+        List<Object> resolved = ServiceResolver.resolve(List.of(PathService.class), registry);
 
         for (Object bean : resolved) {
             if (bean.getClass().isAnnotationPresent(Path.class)) {

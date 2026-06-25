@@ -5,8 +5,7 @@ import java.util.*;
 
 class ServiceResolver {
 
-    static List<Object> resolve(List<Class<?>> classes, Map<Class<?>, Object> registry,
-                                Map<String, Object> namedRegistry) {
+    static List<Object> resolve(List<Class<?>> classes, Map<Class<?>, Object> registry) {
         List<Class<?>> sorted = topologicalSort(classes, registry);
         List<Object> instantiated = new ArrayList<>();
         for (Class<?> clazz : sorted) {
