@@ -31,6 +31,10 @@ public class BeforeBuilder {
         return this;
     }
 
+    public Aura and() {
+        return app;
+    }
+
     public BeforeBuilder before(BaseHandler handler) {
         return app.before(handler);
     }

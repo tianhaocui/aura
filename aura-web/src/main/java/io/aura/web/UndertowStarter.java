@@ -83,7 +83,7 @@ public class UndertowStarter implements AuraStarter {
         }
 
         if (!app.scanPackages().isEmpty()) {
-            PackageScanner.scan(app.scanPackages(), router);
+            PackageScanner.scan(app.scanPackages(), router, app);
         }
 
         compiledRoutes = compile(router, "", new ArrayList<>(app.beforeHandlers()), new ArrayList<>(app.afterHandlers()));
@@ -205,7 +205,7 @@ public class UndertowStarter implements AuraStarter {
         }
 
         if (!app.scanPackages().isEmpty()) {
-            PackageScanner.scan(app.scanPackages(), newRouter);
+            PackageScanner.scan(app.scanPackages(), newRouter, app);
         }
 
         var newCompiled = compile(newRouter, "",
@@ -376,7 +376,12 @@ public class UndertowStarter implements AuraStarter {
             }
         }
         exchange.setStatusCode(404);
-        exchange.getResponseSender().send("Not Found");
+        if (Aura.isDevMode()) {
+            exchange.getResponseHeaders().put(Headers.CONTENT_TYPE, "application/json");
+            exchange.getResponseSender().send(buildRouteDiagnostic(method, path));
+        } else {
+            exchange.getResponseSender().send("Not Found");
+        }
     }
 
     private void serveSchema(HttpServerExchange exchange) {
@@ -645,5 +650,44 @@ public class UndertowStarter implements AuraStarter {
 
     private static String generateShortId() {
         return Long.toHexString(ThreadLocalRandom.current().nextLong() | 0x1000000000000000L).substring(0, 12);
+    }
+
+    private String buildRouteDiagnostic(String method, String path) {
+        List<String> registered = new ArrayList<>();
+        String hint = null;
+        int bestDist = Integer.MAX_VALUE;
+
+        for (CompiledRoute cr : compiledRoutes) {
+            String entry = cr.method() + " " + cr.rawPath();
+            registered.add(entry);
+            if (cr.method().equalsIgnoreCase(method)) {
+                int dist = levenshtein(path, cr.rawPath());
+                if (dist < bestDist && dist <= 3) {
+                    bestDist = dist;
+                    hint = entry;
+                }
+            }
+        }
+
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("error", "No route matched: " + method + " " + path);
+        if (hint != null) body.put("hint", "Did you mean: " + hint + "?");
+        body.put("registered", registered);
+        return JSON.toJSONString(body);
+    }
+
+    private static int levenshtein(String a, String b) {
+        int[] prev = new int[b.length() + 1];
+        int[] curr = new int[b.length() + 1];
+        for (int j = 0; j <= b.length(); j++) prev[j] = j;
+        for (int i = 1; i <= a.length(); i++) {
+            curr[0] = i;
+            for (int j = 1; j <= b.length(); j++) {
+                int cost = a.charAt(i - 1) == b.charAt(j - 1) ? 0 : 1;
+                curr[j] = Math.min(Math.min(curr[j - 1] + 1, prev[j] + 1), prev[j - 1] + cost);
+            }
+            int[] tmp = prev; prev = curr; curr = tmp;
+        }
+        return prev[b.length()];
     }
 }

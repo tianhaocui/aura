@@ -29,6 +29,9 @@ public class Aura {
     private final List<Object> services = new ArrayList<>();
     private final List<RouteEntry> directRoutes = new ArrayList<>();
     private final List<String> scanPackages = new ArrayList<>();
+    private final List<Class<?>> serviceClasses = new ArrayList<>();
+    private final List<Reloadable> reloadables = new ArrayList<>();
+    private final List<AutoCloseable> closeables = new ArrayList<>();
     private final List<AuraPlugin> plugins = new ArrayList<>();
     private String staticFilesPath;
     private boolean spaMode;
@@ -313,6 +316,11 @@ public class Aura {
         return this;
     }
 
+    public Aura services(Class<?>... classes) {
+        serviceClasses.addAll(List.of(classes));
+        return this;
+    }
+
     public Aura scan(String... packages) {
         for (String pkg : packages) {
             this.scanPackages.add(pkg);
@@ -374,7 +382,13 @@ public class Aura {
 
 
     public String prop(String key) {
-        return resolve(key, key.replace('.', '_').replace('-', '_').toUpperCase());
+        String envKey = key.replace('.', '_').replace('-', '_').toUpperCase();
+        String value = resolve(key, envKey);
+        if (value == null && isDevMode()) {
+            log.warn("[Aura] prop(\"{}\") returned null. Checked: env {} (not set), sysprop {} (not set), props map (not found). Hint: app.set(\"{}\", value) or set env {}.",
+                    key, envKey, key, key, envKey);
+        }
+        return value;
     }
 
     public int prop(String key, int defaultValue) {
@@ -387,7 +401,8 @@ public class Aura {
         Map<String, String> result = new java.util.LinkedHashMap<>();
         for (Map.Entry<String, String> entry : props.entrySet()) {
             if (entry.getKey().startsWith(prefix)) {
-                result.put(entry.getKey(), entry.getValue());
+                String resolved = prop(entry.getKey());
+                result.put(entry.getKey(), resolved != null ? resolved : entry.getValue());
             }
         }
         return result;
@@ -395,7 +410,7 @@ public class Aura {
 
     @SuppressWarnings("unchecked")
     public <T> T props(String prefix, Class<T> recordType) {
-        return ConfigBinder.bind(this.props, prefix, recordType);
+        return ConfigBinder.bind(props(prefix), prefix, recordType);
     }
 
 
@@ -474,6 +489,13 @@ public class Aura {
         for (AuraPlugin plugin : plugins) {
             plugin.install(this);
         }
+        if (!serviceClasses.isEmpty()) {
+            List<Object> resolved = ServiceResolver.resolve(serviceClasses, registry, namedRegistry);
+            for (Object bean : resolved) {
+                if (bean instanceof Reloadable r) reloadables.add(r);
+                if (bean instanceof AutoCloseable c) closeables.add(c);
+            }
+        }
         ServiceLoader<AuraStarter> loader = ServiceLoader.load(AuraStarter.class);
         starter = loader.findFirst()
                 .orElseThrow(() -> new IllegalStateException(
@@ -525,7 +547,18 @@ public class Aura {
             starter.stop();
             starter = null;
         }
+        for (int i = closeables.size() - 1; i >= 0; i--) {
+            try { closeables.get(i).close(); }
+            catch (Exception e) { log.error("Error closing {}", closeables.get(i).getClass().getSimpleName(), e); }
+        }
         fireStop();
+    }
+
+    public void reloadConfig() {
+        for (Reloadable r : reloadables) {
+            try { r.reload(this); }
+            catch (Exception e) { log.error("[Aura] Reload failed: {}", r.getClass().getSimpleName(), e); }
+        }
     }
 
 
