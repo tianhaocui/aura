@@ -319,6 +319,28 @@ app.reloadConfig();  // manually, or triggered by NacosPlugin on config change
 
 Services implementing `Closeable` are auto-closed on stop (reverse order).
 
+### resultWrapper — Global response wrapping
+
+```java
+app.resultWrapper(Result::ok);  // one line — all handler return values auto-wrapped
+```
+
+Service methods just return business objects; framework wraps with Result:
+```java
+@Path("/api/users")
+public class UserController {
+    @Get("/{id}")
+    User get(int id) { return db.findById("user", id); }
+    // Response: {"code":0,"message":"ok","data":{"name":"alice"}}
+}
+```
+
+Behavior:
+- Handler returns value → `wrapper.apply(value)` → JSON response
+- Handler throws → exceptionHandler → wrapper NOT applied
+- Handler manually calls ctx.json()/ctx.text() → wrapper NOT applied (response already sent)
+- Wrapper must accept null (handler returning null → `Result.ok(null)`)
+
 ## Configuration
 
 ```java
@@ -389,7 +411,8 @@ ctx.pageNum()   ctx.pageSize()   ctx.file("field")   ctx.formField("name")
 
 // 响应
 ctx.status(201)   ctx.json(obj)   ctx.text("ok")   ctx.html("<h1>Hi</h1>")
-ctx.raw(body)   // write body without setting Content-Type (for CSV, XML, etc.)
+ctx.jsonRaw(str)  // output raw JSON string without re-serialization
+ctx.raw(body)     // write body without setting Content-Type (for CSV, XML, etc.)
 ctx.redirect("/")   ctx.sendFile("name.pdf", bytes)   ctx.sse()
 
 // 认证 (userId 返回 String — 支持 long/UUID/email)
