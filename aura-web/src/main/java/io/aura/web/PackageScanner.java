@@ -1,5 +1,6 @@
 package io.aura.web;
 
+import io.aura.Aura;
 import io.aura.annotation.Path;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -14,13 +15,13 @@ final class PackageScanner {
 
     private static final Logger log = LoggerFactory.getLogger(PackageScanner.class);
 
-    static void scan(List<String> packages, Router router) {
+    static void scan(List<String> packages, Router router, Aura app) {
         for (String pkg : packages) {
             List<Class<?>> classes = findClasses(pkg);
             for (Class<?> clazz : classes) {
                 if (clazz.isAnnotationPresent(Path.class)) {
                     try {
-                        Object instance = clazz.getDeclaredConstructor().newInstance();
+                        Object instance = instantiate(clazz, app);
                         ServiceRegistrar.register(instance, router);
                         log.info("Registered service: {}", clazz.getSimpleName());
                     } catch (Exception e) {
@@ -29,6 +30,33 @@ final class PackageScanner {
                 }
             }
         }
+    }
+
+    private static Object instantiate(Class<?> clazz, Aura app) throws Exception {
+        java.lang.reflect.Constructor<?>[] ctors = clazz.getConstructors();
+        if (ctors.length == 0) {
+            return clazz.getDeclaredConstructor().newInstance();
+        }
+        if (ctors.length > 1) {
+            throw new IllegalStateException(
+                    "[Aura] @Path class " + clazz.getSimpleName() + " has multiple public constructors. Keep only one.");
+        }
+        java.lang.reflect.Constructor<?> ctor = ctors[0];
+        Class<?>[] paramTypes = ctor.getParameterTypes();
+        if (paramTypes.length == 0) {
+            return ctor.newInstance();
+        }
+        Object[] args = new Object[paramTypes.length];
+        for (int i = 0; i < paramTypes.length; i++) {
+            args[i] = app.getBean(paramTypes[i]);
+            if (args[i] == null) {
+                throw new IllegalStateException(
+                        "[Aura] Cannot inject param #" + (i + 1) + " (" + paramTypes[i].getSimpleName() +
+                                ") of @Path class " + clazz.getSimpleName() +
+                                ". No bean of this type registered. Hint: register it before calling start().");
+            }
+        }
+        return ctor.newInstance(args);
     }
 
     private static List<Class<?>> findClasses(String packageName) {

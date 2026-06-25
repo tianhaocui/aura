@@ -48,7 +48,7 @@ public class TestClient {
             ServiceRegistrar.register(service, router);
         }
         if (!app.scanPackages().isEmpty()) {
-            PackageScanner.scan(app.scanPackages(), router);
+            PackageScanner.scan(app.scanPackages(), router, app);
         }
         return new TestClient(app, router);
     }
@@ -115,6 +115,10 @@ public class TestClient {
                 }
             }
 
+            if (Aura.isDevMode()) {
+                String diagnostic = buildRouteDiagnostic(method, routePath);
+                return new Response(404, diagnostic, Map.of("Content-Type", "application/json"));
+            }
             return new Response(404, "Not Found", Map.of());
         }
 
@@ -173,6 +177,43 @@ public class TestClient {
                         + " body: " + resp.body());
             }
             return resp;
+        }
+
+        private String buildRouteDiagnostic(String method, String path) {
+            java.util.List<String> registered = new java.util.ArrayList<>();
+            String hint = null;
+            int bestDist = Integer.MAX_VALUE;
+            for (var route : compiled) {
+                String entry = route.method() + " " + route.rawPath();
+                registered.add(entry);
+                if (route.method().equalsIgnoreCase(method)) {
+                    int dist = levenshtein(path, route.rawPath());
+                    if (dist < bestDist && dist <= 3) {
+                        bestDist = dist;
+                        hint = entry;
+                    }
+                }
+            }
+            Map<String, Object> body = new java.util.LinkedHashMap<>();
+            body.put("error", "No route matched: " + method + " " + path);
+            if (hint != null) body.put("hint", "Did you mean: " + hint + "?");
+            body.put("registered", registered);
+            return JSON.toJSONString(body);
+        }
+
+        private static int levenshtein(String a, String b) {
+            int[] prev = new int[b.length() + 1];
+            int[] curr = new int[b.length() + 1];
+            for (int j = 0; j <= b.length(); j++) prev[j] = j;
+            for (int i = 1; i <= a.length(); i++) {
+                curr[0] = i;
+                for (int j = 1; j <= b.length(); j++) {
+                    int cost = a.charAt(i - 1) == b.charAt(j - 1) ? 0 : 1;
+                    curr[j] = Math.min(Math.min(curr[j - 1] + 1, prev[j] + 1), prev[j - 1] + cost);
+                }
+                int[] tmp = prev; prev = curr; curr = tmp;
+            }
+            return prev[b.length()];
         }
     }
 
