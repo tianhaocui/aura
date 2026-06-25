@@ -193,10 +193,86 @@ app.auth(ctx -> myIamClient.verify(ctx.header("X-Token")));  // returns String u
 ```java
 Aura.create()
     .plugin(app -> app.register(new RedisClient("localhost")))
+    .plugin(new NacosPlugin())  // aura-nacos: auto service registration + config
     .start();
 
 public interface AuraPlugin { void install(Aura app); }
 ```
+
+## Services — Auto-Wiring (v0.6.0+)
+
+**This is the recommended way to register business components.** AI should use this pattern by default.
+
+```java
+Aura.create()
+    .register(Db.create(app.prop("db.url"), app.prop("db.user"), app.prop("db.pass")))
+    .register(app.props("engine.", EngineConfig.class))
+    .services(
+        ScoreService.class,
+        MatchService.class,
+        OddsService.class,
+        Engine.class             // ← AI adds components here: one line per service
+    )
+    .start();
+```
+
+### Rules
+
+- `register(instance)` = infrastructure you create manually (Db, Config Records, external clients)
+- `services(Class...)` = business components — framework auto-creates via constructor injection
+- **Order doesn't matter** — `register()` and `services()` can appear in any order. All resolve happens at `start()`.
+- Constructor params are matched **by type** from registered beans + other services
+- Unique public constructor required (multiple → startup error)
+- Missing dependency → startup error with clear message:
+  ```
+  [Aura] Cannot create Engine: constructor requires ScoreService but no bean of that type registered.
+  Registered: [Db, MatchService, EngineConfig]
+  Hint: add ScoreService.class to services() or register an instance.
+  ```
+- Circular dependency → startup error with full chain
+- `@Path` classes found by `scan()` also get constructor injection automatically
+
+### Adding a new Service (AI workflow)
+
+```java
+// Step 1: Write the class
+public class NotificationService {
+    private final Db db;
+    private final Engine engine;
+    public NotificationService(Db db, Engine engine) { ... }
+}
+
+// Step 2: Add ONE line to services()
+.services(
+    ...,
+    NotificationService.class  // ← just this
+)
+```
+
+No need to know variable names, creation order, or where to pass references.
+
+### Reloadable — Config hot-reload
+
+```java
+// Implement Reloadable to receive config change notifications
+public class ApiKeyFilter implements Reloadable {
+    private volatile String apiKey;
+
+    public ApiKeyFilter(Aura app) {
+        this.apiKey = app.prop("api.key");
+    }
+
+    @Override
+    public void reload(Aura app) {
+        this.apiKey = app.prop("api.key");  // re-read updated config
+    }
+}
+
+// Framework calls reload() on all Reloadable services when:
+app.reloadConfig();  // manually, or triggered by NacosPlugin on config change
+```
+
+Services implementing `Closeable` are auto-closed on stop (reverse order).
 
 ## Configuration
 
@@ -334,7 +410,7 @@ In-memory, no HTTP server needed. AI writes code → runs TestClient → confirm
 - **`-parameters` compiler flag required** — without it, all route params are null/0 with no error
 - **Path param syntax is `{id}`** — NOT `:id`
 - **Validation only on record body params** — path/query params are NOT auto-validated
-- **DI is manual registration** — `app.register(instance)`, NOT auto-scan like Spring
+- **DI via `services(Class...)`** — framework auto-creates with constructor injection. Use `register(instance)` only for infrastructure (Db, configs).
 - **Multi-datasource** — `Db.create(name, dataSource)`, register with `app.register(name, db)`. See AI_GUIDE_DB.md.
 - **Config is .properties only** — no YAML support
 - **query params need manual access** — `ctx.query("name")`, no auto-binding
