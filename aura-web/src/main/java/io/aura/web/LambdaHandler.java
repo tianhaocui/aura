@@ -30,7 +30,11 @@ public final class LambdaHandler implements BaseHandler {
         }
 
         Object result = samMethod.invoke(lambda, args);
-        if (hasReturn && result != null) {
+        if (!hasReturn) return;
+        if (ctx instanceof Context c && c.isResponseStarted()) return;
+        if (ctx instanceof Context c && c.app() != null && c.app().resultWrapper() != null) {
+            ctx.json(c.app().resultWrapper().apply(result));
+        } else if (result != null) {
             if (result instanceof String s) {
                 ctx.text(s);
             } else {

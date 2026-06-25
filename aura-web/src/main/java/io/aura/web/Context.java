@@ -38,6 +38,7 @@ public class Context implements BaseContext {
     }
 
     public Aura app() { return app; }
+    boolean isResponseStarted() { return exchange != null && exchange.isResponseStarted(); }
     @Override public String requestId() { return requestId; }
 
     @Override
@@ -116,6 +117,11 @@ public class Context implements BaseContext {
                 ? new JSONWriter.Feature[]{JSONWriter.Feature.WriteNulls}
                 : new JSONWriter.Feature[0];
         exchange.getResponseSender().send(JSON.toJSONString(obj, dateFormat, features));
+    }
+
+    @Override public void jsonRaw(String json) {
+        exchange.getResponseHeaders().put(Headers.CONTENT_TYPE, "application/json; charset=utf-8");
+        exchange.getResponseSender().send(json);
     }
 
     @Override public void text(String text) {

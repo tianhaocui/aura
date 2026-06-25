@@ -16,6 +16,7 @@ public interface BaseContext {
     // --- response ---
     BaseContext status(int code);
     void json(Object obj);
+    void jsonRaw(String json);
     void text(String text);
     void html(String html);
     void raw(String body);

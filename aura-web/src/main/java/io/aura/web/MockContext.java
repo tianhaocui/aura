@@ -57,6 +57,7 @@ public class MockContext extends Context {
                 : new com.alibaba.fastjson2.JSONWriter.Feature[0];
         responseBody = JSON.toJSONString(obj, dateFormat, features);
     }
+    @Override public void jsonRaw(String json) { responseBody = json; }
     @Override public void text(String text) { responseBody = text; }
     @Override public void html(String html) { responseBody = html; }
     @Override public void raw(String body) { responseBody = body; }

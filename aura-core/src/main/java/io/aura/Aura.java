@@ -55,6 +55,7 @@ public class Aura {
     private final java.util.LinkedHashMap<Class<? extends Exception>, io.aura.web.BaseExceptionHandler<?>> exceptionHandlers = new java.util.LinkedHashMap<>();
     private final List<io.aura.web.BaseHandler> beforeHandlers = new ArrayList<>();
     private final List<io.aura.web.BaseHandler> afterHandlers = new ArrayList<>();
+    private java.util.function.Function<Object, Object> resultWrapper;
 
     private AuraStarter starter;
     private McpStarter mcpStarter;
@@ -287,6 +288,15 @@ public class Aura {
     public Aura jsonConfig(java.util.function.Consumer<JsonConfig> config) {
         config.accept(this.jsonConfig);
         return this;
+    }
+
+    public Aura resultWrapper(java.util.function.Function<Object, Object> wrapper) {
+        this.resultWrapper = wrapper;
+        return this;
+    }
+
+    public java.util.function.Function<Object, Object> resultWrapper() {
+        return resultWrapper;
     }
 
     public Aura mcp(boolean enabled) {
