@@ -331,6 +331,7 @@ public class Aura {
         return this;
     }
 
+    /** @deprecated Use {@code services(Class...)} instead. */
     @Deprecated
     public Aura scan(String... packages) {
         for (String pkg : packages) {
