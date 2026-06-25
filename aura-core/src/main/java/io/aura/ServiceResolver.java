@@ -105,12 +105,21 @@ class ServiceResolver {
     private static Object findBean(Class<?> type, Map<Class<?>, Object> registry) {
         Object exact = registry.get(type);
         if (exact != null) return exact;
+        Object match = null;
+        Class<?> matchKey = null;
         for (Map.Entry<Class<?>, Object> entry : registry.entrySet()) {
             if (type.isAssignableFrom(entry.getKey())) {
-                return entry.getValue();
+                if (match != null) {
+                    throw new IllegalStateException(
+                            "[Aura] Multiple beans match type " + type.getSimpleName() + ": [" +
+                                    matchKey.getSimpleName() + ", " + entry.getKey().getSimpleName() +
+                                    "]. Use app.register(\"name\", instance) + @Named to disambiguate.");
+                }
+                match = entry.getValue();
+                matchKey = entry.getKey();
             }
         }
-        return null;
+        return match;
     }
 
     private static String buildMissingBeanMessage(Class<?> target, Class<?> missing, int paramIndex,

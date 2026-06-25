@@ -146,4 +146,24 @@ class ServiceResolverTest {
                 List.of(ReloadableService.class), registry, Map.of());
         assertInstanceOf(Reloadable.class, resolved.get(0));
     }
+
+    public static class ImplA implements MyInterface {
+        public ImplA() {}
+    }
+    public static class ImplB implements MyInterface {
+        public ImplB() {}
+    }
+
+    @Test
+    void errorOnAmbiguousInterfaceMatch() {
+        Map<Class<?>, Object> registry = new LinkedHashMap<>();
+        registry.put(ImplA.class, new ImplA());
+        registry.put(ImplB.class, new ImplB());
+
+        var ex = assertThrows(IllegalStateException.class, () ->
+                ServiceResolver.resolve(List.of(NeedsInterface.class), registry, Map.of()));
+        assertTrue(ex.getMessage().contains("Multiple beans match type"));
+        assertTrue(ex.getMessage().contains("ImplA"));
+        assertTrue(ex.getMessage().contains("ImplB"));
+    }
 }
