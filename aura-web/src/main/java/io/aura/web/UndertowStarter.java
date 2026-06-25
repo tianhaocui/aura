@@ -77,7 +77,12 @@ public class UndertowStarter implements AuraStarter {
         if (!compiledRoutes.isEmpty()) {
             log.info("Routes:");
             for (CompiledRoute cr : compiledRoutes) {
-                log.info("  {} {}", cr.method(), cr.rawPath());
+                String source = "";
+                if (cr.handler() instanceof MethodRefHandler mh && mh.resolvedMethod() != null) {
+                    source = " — " + mh.resolvedMethod().getDeclaringClass().getSimpleName()
+                            + "." + mh.resolvedMethod().getName();
+                }
+                log.info("  {} {}{}", cr.method(), cr.rawPath(), source);
             }
         }
 

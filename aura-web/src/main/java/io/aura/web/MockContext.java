@@ -11,6 +11,7 @@ public class MockContext extends Context {
 
     int status;
     String responseBody;
+    private boolean responded;
     private final Map<String, String> pathParams;
     private final Map<String, String> headers;
     private final Map<String, String> queryParams;
@@ -56,15 +57,17 @@ public class MockContext extends Context {
                 ? new com.alibaba.fastjson2.JSONWriter.Feature[]{com.alibaba.fastjson2.JSONWriter.Feature.WriteNulls}
                 : new com.alibaba.fastjson2.JSONWriter.Feature[0];
         responseBody = JSON.toJSONString(obj, dateFormat, features);
+        responded = true;
     }
-    @Override public void jsonRaw(String json) { responseBody = json; }
-    @Override public void text(String text) { responseBody = text; }
-    @Override public void html(String html) { responseBody = html; }
-    @Override public void raw(String body) { responseBody = body; }
-    @Override public void redirect(String url) { status = 302; }
+    @Override public void jsonRaw(String json) { responseBody = json; responded = true; }
+    @Override public void text(String text) { responseBody = text; responded = true; }
+    @Override public void html(String html) { responseBody = html; responded = true; }
+    @Override public void raw(String body) { responseBody = body; responded = true; }
+    @Override public void redirect(String url) { status = 302; responded = true; }
     @Override public Context header(String name, String value) { respHeaders.put(name, value); return this; }
     @Override public Context cookie(String name, String value, int maxAge) { return this; }
 
+    @Override boolean isResponseStarted() { return responded; }
     Map<String, String> responseHeaders() { return respHeaders; }
 
     byte[] fileBytes;
