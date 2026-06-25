@@ -245,10 +245,13 @@ app.services(
 规则：
 - `register(instance)` = 基础设施（Db、Config Record）
 - `services(Class...)` = 业务组件（框架自动创建）
+- **@Path 类在 services() 里自动注册路由** — 无需额外 routes() 调用
+- Aura 自身自动注册 — 任何 service 可注入 `Aura` 访问 config/beans
 - 调用顺序无关，start() 时统一 resolve
 - 缺失依赖 → 启动报错含 Hint
 - 实现 `Reloadable` → 配置变更时自动调 reload()
 - 实现 `Closeable` → stop 时自动 close
+- `scan()` 已废弃 → 用 `services(Class...)` 替代
 
 AI 加组件只需：写类 + services() 加一行。
 

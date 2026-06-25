@@ -359,8 +359,9 @@ Aura.create()
     .mcp(true)                     // MCP Server for AI agents
     .health()                      // /health endpoint, 503 on shutdown
     .dev(true)                     // hot-reload (requires aura-dev dependency + JDK)
+    .resultWrapper(Result::ok)     // auto-wrap handler returns with Result
     .set("db.url", "jdbc:mysql://...")
-    .onStart(a -> a.register(Db.create(...)))
+    .onStart(a -> log.info("ready on port {}", a.port()))
     .onStop(a -> a.getBean(Db.class).close())
     .start(args);
 ```
