@@ -19,6 +19,7 @@ class BaseContextQueryTypedTest {
             @Override public int statusCode() { return 200; }
             @Override public BaseContext status(int code) { return this; }
             @Override public void json(Object obj) {}
+            @Override public void jsonRaw(String json) {}
             @Override public void text(String text) {}
             @Override public void html(String html) {}
             @Override public void raw(String body) {}

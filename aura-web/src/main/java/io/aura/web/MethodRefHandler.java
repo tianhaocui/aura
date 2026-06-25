@@ -33,7 +33,11 @@ public final class MethodRefHandler implements BaseHandler {
             args[i] = binders[i].resolve(ctx);
         }
         Object result = method.invoke(target, args);
-        if (hasReturnValue && result != null) {
+        if (!hasReturnValue) return;
+        if (ctx instanceof Context c && c.isResponseStarted()) return;
+        if (ctx instanceof Context c && c.app() != null && c.app().resultWrapper() != null) {
+            ctx.json(c.app().resultWrapper().apply(result));
+        } else if (result != null) {
             ctx.json(result);
         }
     }

@@ -55,6 +55,7 @@ public class Aura {
     private final java.util.LinkedHashMap<Class<? extends Exception>, io.aura.web.BaseExceptionHandler<?>> exceptionHandlers = new java.util.LinkedHashMap<>();
     private final List<io.aura.web.BaseHandler> beforeHandlers = new ArrayList<>();
     private final List<io.aura.web.BaseHandler> afterHandlers = new ArrayList<>();
+    private java.util.function.Function<Object, Object> resultWrapper;
 
     private AuraStarter starter;
     private McpStarter mcpStarter;
@@ -289,6 +290,15 @@ public class Aura {
         return this;
     }
 
+    public Aura resultWrapper(java.util.function.Function<Object, Object> wrapper) {
+        this.resultWrapper = wrapper;
+        return this;
+    }
+
+    public java.util.function.Function<Object, Object> resultWrapper() {
+        return resultWrapper;
+    }
+
     public Aura mcp(boolean enabled) {
         this.mcpPort = enabled ? 0 : -1;
         return this;
@@ -321,6 +331,7 @@ public class Aura {
         return this;
     }
 
+    @Deprecated
     public Aura scan(String... packages) {
         for (String pkg : packages) {
             this.scanPackages.add(pkg);
@@ -489,11 +500,15 @@ public class Aura {
         for (AuraPlugin plugin : plugins) {
             plugin.install(this);
         }
+        registry.putIfAbsent(Aura.class, this);
         if (!serviceClasses.isEmpty()) {
             List<Object> resolved = ServiceResolver.resolve(serviceClasses, registry, namedRegistry);
             for (Object bean : resolved) {
                 if (bean instanceof Reloadable r) reloadables.add(r);
                 if (bean instanceof AutoCloseable c) closeables.add(c);
+                if (bean.getClass().isAnnotationPresent(io.aura.annotation.Path.class)) {
+                    services.add(bean);
+                }
             }
         }
         ServiceLoader<AuraStarter> loader = ServiceLoader.load(AuraStarter.class);
@@ -569,6 +584,7 @@ public class Aura {
     public List<Object> services() { return services; }
     public List<RouteEntry> directRoutes() { return directRoutes; }
     public List<String> scanPackages() { return scanPackages; }
+    public List<Class<?>> serviceClasses() { return serviceClasses; }
     public String staticFilesPath() { return staticFilesPath; }
     public boolean spa() { return spaMode; }
     public String corsOrigin() { return corsOrigin; }

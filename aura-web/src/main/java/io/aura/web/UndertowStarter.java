@@ -91,6 +91,13 @@ public class UndertowStarter implements AuraStarter {
                 .thenComparing(Comparator.comparingLong((CompiledRoute r) -> r.rawPath().chars().filter(c -> c == '/').count()).reversed()));
         detectDuplicateRoutes(compiledRoutes);
 
+        if (!compiledRoutes.isEmpty()) {
+            log.info("Routes:");
+            for (CompiledRoute cr : compiledRoutes) {
+                log.info("  {} {}", cr.method(), cr.rawPath());
+            }
+        }
+
         compiledWsRoutes = compileWsRoutes(router);
 
         String staticPath = app.staticFilesPath();
