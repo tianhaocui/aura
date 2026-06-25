@@ -16,13 +16,13 @@ db.find(sql, params)               — only for joins/subqueries
 <dependency>
     <groupId>io.github.tianhaocui</groupId>
     <artifactId>aura-web</artifactId>
-    <version>0.6.0</version>
+    <version>0.6.1</version>
 </dependency>
 <!-- Optional: database -->
 <dependency>
     <groupId>io.github.tianhaocui</groupId>
     <artifactId>aura-db</artifactId>
-    <version>0.6.0</version>
+    <version>0.6.1</version>
 </dependency>
 <!-- Required: add your own SLF4J provider -->
 <dependency>
@@ -70,7 +70,7 @@ class UserService {
 
 **Route priority**: exact paths beat parameterized paths. `/api/items/search` matches before `/api/items/{id}`.
 
-**`@Path` annotation**: only works with `.service()` registration. Inside `routes()` lambda, register paths explicitly.
+**`@Path` annotation**: works with `.services()` registration (auto-DI + routes) or `.service()`. Inside `routes()` lambda, register paths explicitly.
 
 ## Parameter Binding Rules
 
@@ -208,18 +208,20 @@ Aura.create()
     .register(Db.create(app.prop("db.url"), app.prop("db.user"), app.prop("db.pass")))
     .register(app.props("engine.", EngineConfig.class))
     .services(
-        ScoreService.class,
-        MatchService.class,
-        OddsService.class,
-        Engine.class             // ← AI adds components here: one line per service
+        ScoreService.class,       // DI-only — no routes
+        MatchService.class,       // DI-only — no routes
+        UserController.class,     // @Path("/api/users") → DI + auto route registration
+        OrderController.class     // @Path("/api/orders") → DI + auto route registration
     )
+    .before(Aura.requireAuth()).exclude("/health", "/api/auth/*")
     .start();
 ```
 
 ### Rules
 
 - `register(instance)` = infrastructure you create manually (Db, Config Records, external clients)
-- `services(Class...)` = business components — framework auto-creates via constructor injection
+- `services(Class...)` = all components — DI via constructor injection. **@Path classes also get routes registered automatically**
+- **Aura itself is auto-registered** — any service can inject `Aura` to access config/beans
 - **Order doesn't matter** — `register()` and `services()` can appear in any order. All resolve happens at `start()`.
 - Constructor params are matched **by type** from registered beans + other services
 - Unique public constructor required (multiple → startup error)
@@ -230,22 +232,65 @@ Aura.create()
   Hint: add ScoreService.class to services() or register an instance.
   ```
 - Circular dependency → startup error with full chain
-- `@Path` classes found by `scan()` also get constructor injection automatically
+- **Route table logged at startup** — all routes printed after compilation for visibility
 
-### Adding a new Service (AI workflow)
+### @Path in services() (v0.6.1+)
+
+Classes with `@Path` in services() get both DI and automatic route registration. No separate step needed.
 
 ```java
-// Step 1: Write the class
+@Path("/api/users")
+public class UserController {
+    private final Db db;
+    public UserController(Db db) { this.db = db; }
+
+    @Get("/{id}")
+    public User get(int id) { return db.findById("users", id).as(User.class); }
+
+    @Post("")
+    public User create(CreateReq req) { return db.insert("users", req); }
+}
+
+// Registration: one line in services()
+Aura.create()
+    .register(Db.create(...))
+    .services(UserController.class)  // ← DI + routes in one shot
+    .start();
+```
+
+**Two API methods, two semantics:**
+```
+register(instance)   — infrastructure: pre-created instances (Db, Config Records)
+services(Class...)   — all components: constructor injection. @Path → auto-routes
+```
+
+AI adds a component → add one line to services(). Done.
+
+### Adding a new Component (AI workflow)
+
+```java
+// DI-only service (no routes):
 public class NotificationService {
     private final Db db;
     private final Engine engine;
     public NotificationService(Db db, Engine engine) { ... }
 }
 
-// Step 2: Add ONE line to services()
+// Route service (with @Path):
+@Path("/api/notifications")
+public class NotificationController {
+    private final NotificationService notifications;
+    public NotificationController(NotificationService notifications) { ... }
+
+    @Get("")
+    public List<Notification> list() { return notifications.listAll(); }
+}
+
+// Register: add lines to services()
 .services(
     ...,
-    NotificationService.class  // ← just this
+    NotificationService.class,     // ← DI only
+    NotificationController.class   // ← DI + routes
 )
 ```
 
@@ -410,7 +455,8 @@ In-memory, no HTTP server needed. AI writes code → runs TestClient → confirm
 - **`-parameters` compiler flag required** — without it, all route params are null/0 with no error
 - **Path param syntax is `{id}`** — NOT `:id`
 - **Validation only on record body params** — path/query params are NOT auto-validated
-- **DI via `services(Class...)`** — framework auto-creates with constructor injection. Use `register(instance)` only for infrastructure (Db, configs).
+- **DI via `services(Class...)`** — framework auto-creates with constructor injection. `@Path` classes also get routes registered. Use `register(instance)` only for infrastructure (Db, configs).
+- **`scan()` is deprecated** — use `services(Class...)` instead. services() handles both DI and @Path routing.
 - **Multi-datasource** — `Db.create(name, dataSource)`, register with `app.register(name, db)`. See AI_GUIDE_DB.md.
 - **Config is .properties only** — no YAML support
 - **query params need manual access** — `ctx.query("name")`, no auto-binding
@@ -418,7 +464,7 @@ In-memory, no HTTP server needed. AI writes code → runs TestClient → confirm
 - **`bodyOrThrow()` = body() + null check + BeanValidator** — the recommended way
 - **Exception handling via `app.exception()`** — handler 里不需要 try-catch
 - **`db.execute()` returns `int`** — affected row count
-- **`@Path` only with `.service()`** — not in `routes()` lambda
+- **`@Path` works with `.services()` or `.service()`** — not in `routes()` lambda
 - **Route conflicts throw at startup** — same method + path = `IllegalStateException`
 - **`abort()` defaults to 403** — without explicit status code
 - **`orderBy()` validates field names** — invalid chars throw `IllegalArgumentException`

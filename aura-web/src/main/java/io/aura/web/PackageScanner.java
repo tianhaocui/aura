@@ -15,11 +15,18 @@ final class PackageScanner {
 
     private static final Logger log = LoggerFactory.getLogger(PackageScanner.class);
 
+    @Deprecated
     static void scan(List<String> packages, Router router, Aura app) {
+        java.util.Set<Class<?>> alreadyResolved = new java.util.HashSet<>(app.serviceClasses());
         for (String pkg : packages) {
             List<Class<?>> classes = findClasses(pkg);
             for (Class<?> clazz : classes) {
                 if (clazz.isAnnotationPresent(Path.class)) {
+                    if (alreadyResolved.contains(clazz)) {
+                        throw new IllegalStateException(
+                                "[Aura] " + clazz.getSimpleName() + " is in both services() and scan(). " +
+                                "Remove scan() — services() handles @Path routing automatically.");
+                    }
                     try {
                         Object instance = instantiate(clazz, app);
                         ServiceRegistrar.register(instance, router);

@@ -321,6 +321,7 @@ public class Aura {
         return this;
     }
 
+    @Deprecated
     public Aura scan(String... packages) {
         for (String pkg : packages) {
             this.scanPackages.add(pkg);
@@ -489,11 +490,15 @@ public class Aura {
         for (AuraPlugin plugin : plugins) {
             plugin.install(this);
         }
+        registry.putIfAbsent(Aura.class, this);
         if (!serviceClasses.isEmpty()) {
             List<Object> resolved = ServiceResolver.resolve(serviceClasses, registry, namedRegistry);
             for (Object bean : resolved) {
                 if (bean instanceof Reloadable r) reloadables.add(r);
                 if (bean instanceof AutoCloseable c) closeables.add(c);
+                if (bean.getClass().isAnnotationPresent(io.aura.annotation.Path.class)) {
+                    services.add(bean);
+                }
             }
         }
         ServiceLoader<AuraStarter> loader = ServiceLoader.load(AuraStarter.class);
@@ -569,6 +574,7 @@ public class Aura {
     public List<Object> services() { return services; }
     public List<RouteEntry> directRoutes() { return directRoutes; }
     public List<String> scanPackages() { return scanPackages; }
+    public List<Class<?>> serviceClasses() { return serviceClasses; }
     public String staticFilesPath() { return staticFilesPath; }
     public boolean spa() { return spaMode; }
     public String corsOrigin() { return corsOrigin; }
