@@ -33,6 +33,9 @@ public class Aura {
     private final List<Reloadable> reloadables = new ArrayList<>();
     private final List<AutoCloseable> closeables = new ArrayList<>();
     private final List<AuraPlugin> plugins = new ArrayList<>();
+    private Scheduler scheduler;
+    private int rateLimitMax = -1;
+    private java.time.Duration rateLimitWindow;
     private String staticFilesPath;
     private boolean spaMode;
     private String corsOrigin;
@@ -201,6 +204,15 @@ public class Aura {
         return this;
     }
 
+    public Aura rateLimit(int maxRequests, java.time.Duration window) {
+        this.rateLimitMax = maxRequests;
+        this.rateLimitWindow = window;
+        return this;
+    }
+
+    public int rateLimitMax() { return rateLimitMax; }
+    public java.time.Duration rateLimitWindow() { return rateLimitWindow; }
+
     public Aura gzipMinSize(int bytes) {
         this.gzipMinSize = Math.max(0, bytes);
         return this;
@@ -253,9 +265,8 @@ public class Aura {
         return new io.aura.web.BeforeBuilder(this, handler);
     }
 
-    public Aura after(io.aura.web.BaseHandler handler) {
-        afterHandlers.add(handler);
-        return this;
+    public io.aura.web.BeforeBuilder after(io.aura.web.BaseHandler handler) {
+        return new io.aura.web.BeforeBuilder(this, handler, afterHandlers);
     }
 
     public List<io.aura.web.BaseHandler> beforeHandlers() {
@@ -511,6 +522,8 @@ public class Aura {
                     services.add(bean);
                 }
             }
+            scheduler = new Scheduler();
+            scheduler.scan(resolved);
         }
         ServiceLoader<AuraStarter> loader = ServiceLoader.load(AuraStarter.class);
         starter = loader.findFirst()
@@ -519,6 +532,12 @@ public class Aura {
         selfCheck();
         starter.start(this);
         fireStart();
+        if (scheduler != null && !scheduler.tasks().isEmpty()) {
+            log.info("Scheduled tasks:");
+            for (var t : scheduler.tasks()) {
+                log.info("  {} ({})", t.method(), t.schedule());
+            }
+        }
 
         if (mcpPort >= 0) {
             ServiceLoader<McpStarter> mcpLoader = ServiceLoader.load(McpStarter.class);
@@ -554,6 +573,7 @@ public class Aura {
     public void stop() {
         if (!stopped.compareAndSet(false, true)) return;
         shuttingDown = true;
+        if (scheduler != null) scheduler.shutdown();
         if (keepAliveThread != null) keepAliveThread.interrupt();
         if (mcpStarter != null) {
             mcpStarter.stop();

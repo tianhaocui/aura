@@ -119,6 +119,18 @@ public class Db implements AutoCloseable {
         return queryOne("SELECT * FROM " + table + " WHERE " + primaryKey + " = ?", new Object[]{id}, rs -> rsToRow(rs, table, primaryKey));
     }
 
+    public Row findByIdOrThrow(String table, Object id) {
+        Row row = findById(table, id);
+        if (row == null) throw new io.aura.NotFoundException(table + " not found: id=" + id);
+        return row;
+    }
+
+    public Row findByIdOrThrow(String table, String primaryKey, Object id) {
+        Row row = findById(table, primaryKey, id);
+        if (row == null) throw new io.aura.NotFoundException(table + " not found: " + primaryKey + "=" + id);
+        return row;
+    }
+
     public List<Row> findWhere(String table, String where, Object... params) {
         SqlSafe.identifier(table);
         return query("SELECT * FROM " + table + " WHERE " + where, params, rs -> rsToRow(rs, table));

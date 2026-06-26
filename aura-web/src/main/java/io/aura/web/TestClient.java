@@ -12,11 +12,21 @@ public class TestClient {
     private final Aura app;
     private final Router router;
     private final List<CompiledRoute> compiled;
+    private final RateLimiter rateLimiter;
 
     TestClient(Aura app, Router router) {
         this.app = app;
         this.router = router;
         this.compiled = UndertowStarter.compileRoutes(router, app);
+        if (app.rateLimitMax() > 0 && !"dev".equals(app.env())) {
+            this.rateLimiter = new RateLimiter(app.rateLimitWindow());
+        } else {
+            // Check if any method has @RateLimit even without global config
+            boolean hasMethodLimit = compiled.stream().anyMatch(cr ->
+                    cr.handler() instanceof MethodRefHandler mh && mh.resolvedMethod() != null
+                            && mh.resolvedMethod().isAnnotationPresent(io.aura.annotation.RateLimit.class));
+            this.rateLimiter = hasMethodLimit ? new RateLimiter(java.time.Duration.ofSeconds(60)) : null;
+        }
     }
 
     public static TestClient of(Aura app) {
@@ -93,10 +103,35 @@ public class TestClient {
             String routePath = path.contains("?") ? path.substring(0, path.indexOf('?')) : path;
             Map<String, String> queryParams = parseQueryString(path);
 
+            // Global rate limit check
+            if (rateLimiter != null && app.rateLimitMax() > 0) {
+                String clientIp = headers.getOrDefault("X-Forwarded-For", "127.0.0.1").split(",")[0].trim();
+                if (!rateLimiter.allow(clientIp, app.rateLimitMax())) {
+                    long retryAfter = app.rateLimitWindow().toSeconds();
+                    return new Response(429,
+                            "{\"error\":\"Rate limit exceeded\",\"retryAfter\":" + retryAfter + "}",
+                            Map.of("Retry-After", String.valueOf(retryAfter)));
+                }
+            }
+
             for (var route : compiled) {
                 if (!route.method().equals(method)) continue;
                 Map<String, String> params = route.match(routePath);
                 if (params == null) continue;
+
+                // Per-method @RateLimit check
+                if (rateLimiter != null && route.handler() instanceof MethodRefHandler mh && mh.resolvedMethod() != null) {
+                    io.aura.annotation.RateLimit rl = mh.resolvedMethod().getAnnotation(io.aura.annotation.RateLimit.class);
+                    if (rl != null) {
+                        String clientIp = headers.getOrDefault("X-Forwarded-For", "127.0.0.1").split(",")[0].trim();
+                        String key = clientIp + ":" + mh.resolvedMethod().getDeclaringClass().getSimpleName() + "." + mh.resolvedMethod().getName();
+                        if (!rateLimiter.allow(key, rl.value())) {
+                            return new Response(429,
+                                    "{\"error\":\"Rate limit exceeded\",\"retryAfter\":" + rl.window() + "}",
+                                    Map.of("Retry-After", String.valueOf(rl.window())));
+                        }
+                    }
+                }
 
                 var mockCtx = new MockContext(params, queryParams, headers, body, app, routePath);
                 RouteExecutor.execute(route, mockCtx, (e, c) -> handleException(e, (MockContext) c));
@@ -136,6 +171,11 @@ public class TestClient {
                     }
                     return;
                 }
+            }
+            if (cause instanceof io.aura.NotFoundException) {
+                ctx.status = 404;
+                ctx.responseBody = JSON.toJSONString(Map.of("error", cause.getMessage(), "code", "NOT_FOUND"));
+                return;
             }
             if (cause instanceof io.aura.Validate.ValidationException ve && !ve.errors().isEmpty()) {
                 ctx.status = 400;
