@@ -284,6 +284,13 @@ public class UndertowStarter implements AuraStarter {
             return;
         }
 
+        // OpenAPI 3.0 endpoint
+        if ("GET".equals(method) && "/openapi.json".equals(path) && app.openapi()) {
+            exchange.getResponseHeaders().put(Headers.CONTENT_TYPE, "application/json; charset=utf-8");
+            exchange.getResponseSender().send(OpenApiGenerator.generate(compiledRoutes, app));
+            return;
+        }
+
         // WebSocket upgrade
         if ("GET".equals(method) && isWebSocketUpgrade(exchange)) {
             if (!checkWsOrigin(exchange)) {

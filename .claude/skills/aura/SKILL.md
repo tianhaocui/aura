@@ -208,6 +208,7 @@ Aura.create()
     .env("dev")             // 或 AURA_ENV（影响错误详情输出）
     .cors(true)             // 或细粒度：.cors(c -> c.origins("https://app.com"))
     .rateLimit(100, Duration.ofMinutes(1))  // 全局限流：100 req/min per IP
+    .openapi(true)          // GET /openapi.json（自动生成 OpenAPI 3.0）
     .accessLog("json")      // JSON 格式 access log
     .staticFiles("/public") // classpath 相对路径
     .spa(true)              // SPA 模式：未匹配路径 → index.html

@@ -364,6 +364,7 @@ Aura.create()
     .dev(true)                     // hot-reload (requires aura-dev dependency + JDK)
     .resultWrapper(Result::ok)     // auto-wrap handler returns with Result
     .rateLimit(100, Duration.ofMinutes(1))  // global: 100 req/min per IP (disabled in dev)
+    .openapi(true)                 // GET /openapi.json (auto-generated OpenAPI 3.0)
     .set("db.url", "jdbc:mysql://...")
     .onStart(a -> log.info("ready on port {}", a.port()))
     .onStop(a -> a.getBean(Db.class).close())
@@ -547,6 +548,19 @@ Rules:
 - Cron: 5-field format (minute hour day-of-month month day-of-week)
 - Startup log prints registered scheduled tasks
 - Errors during execution are logged, scheduler continues
+
+## OpenAPI (v0.6.2+)
+
+```java
+app.openapi(true);           // GET /openapi.json (title defaults to app.name or "Aura App")
+app.openapi("My API");       // with custom title
+```
+
+- Auto-generates OpenAPI 3.0.3 JSON from compiled routes + method signatures
+- Record fields → schema properties; validation annotations → constraints/required
+- Return types → response schemas; path/query params auto-detected
+- No external dependencies, no Swagger annotations needed
+- Useful for Swagger UI, Postman import, frontend codegen
 
 ## Extended Guides
 

@@ -103,6 +103,12 @@ public class TestClient {
             String routePath = path.contains("?") ? path.substring(0, path.indexOf('?')) : path;
             Map<String, String> queryParams = parseQueryString(path);
 
+            // OpenAPI endpoint
+            if ("GET".equals(method) && "/openapi.json".equals(routePath) && app.openapi()) {
+                return new Response(200, OpenApiGenerator.generate(compiled, app),
+                        Map.of("Content-Type", "application/json"));
+            }
+
             // Global rate limit check
             if (rateLimiter != null && app.rateLimitMax() > 0) {
                 String clientIp = headers.getOrDefault("X-Forwarded-For", "127.0.0.1").split(",")[0].trim();

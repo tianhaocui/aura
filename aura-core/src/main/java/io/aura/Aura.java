@@ -213,6 +213,14 @@ public class Aura {
     public int rateLimitMax() { return rateLimitMax; }
     public java.time.Duration rateLimitWindow() { return rateLimitWindow; }
 
+    private boolean openapi;
+    private String openapiTitle;
+
+    public Aura openapi(boolean enabled) { this.openapi = enabled; return this; }
+    public Aura openapi(String title) { this.openapi = true; this.openapiTitle = title; return this; }
+    public boolean openapi() { return openapi; }
+    public String openapiTitle() { return openapiTitle; }
+
     public Aura gzipMinSize(int bytes) {
         this.gzipMinSize = Math.max(0, bytes);
         return this;
