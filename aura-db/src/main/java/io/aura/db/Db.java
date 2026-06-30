@@ -14,7 +14,7 @@ public class Db implements AutoCloseable {
 
     private final HikariDataSource ds;
     private final String name;
-    private static final ThreadLocal<Connection> TX_CONN = new ThreadLocal<>();
+    private final ThreadLocal<Connection> TX_CONN = new ThreadLocal<>();
     private static final java.util.concurrent.ExecutorService INDEPENDENT_TX_POOL =
             java.util.concurrent.Executors.newCachedThreadPool(r -> {
                 Thread t = new Thread(r, "aura-tx-independent");
@@ -117,6 +117,18 @@ public class Db implements AutoCloseable {
         SqlSafe.identifier(table);
         SqlSafe.identifier(primaryKey);
         return queryOne("SELECT * FROM " + table + " WHERE " + primaryKey + " = ?", new Object[]{id}, rs -> rsToRow(rs, table, primaryKey));
+    }
+
+    public Row findByIdOrThrow(String table, Object id) {
+        Row row = findById(table, id);
+        if (row == null) throw new io.aura.NotFoundException(table + " not found: id=" + id);
+        return row;
+    }
+
+    public Row findByIdOrThrow(String table, String primaryKey, Object id) {
+        Row row = findById(table, primaryKey, id);
+        if (row == null) throw new io.aura.NotFoundException(table + " not found: " + primaryKey + "=" + id);
+        return row;
     }
 
     public List<Row> findWhere(String table, String where, Object... params) {

@@ -39,6 +39,7 @@ public class UndertowStarter implements AuraStarter {
     private Undertow server;
     private GracefulShutdownHandler shutdownHandler;
     private ScheduledExecutorService timeoutScheduler;
+    private RateLimiter rateLimiter;
     private Aura app;
     private Router router;
     private ResourceHandler staticHandler;
@@ -87,6 +88,24 @@ public class UndertowStarter implements AuraStarter {
         }
 
         compiledWsRoutes = compileWsRoutes(router);
+
+        if (app.rateLimitMax() > 0 && !"dev".equals(app.env())) {
+            rateLimiter = new RateLimiter();
+            log.info("Rate limit: {}/{}", app.rateLimitMax(), app.rateLimitWindow().toSeconds() + "s");
+        }
+        // Log per-method @RateLimit annotations
+        for (CompiledRoute cr : compiledRoutes) {
+            if (cr.handler() instanceof MethodRefHandler mh && mh.resolvedMethod() != null) {
+                io.aura.annotation.RateLimit rl = mh.resolvedMethod().getAnnotation(io.aura.annotation.RateLimit.class);
+                if (rl != null) {
+                    if (rateLimiter == null) {
+                        rateLimiter = new RateLimiter();
+                    }
+                    log.info("  Rate limit: {}.{} ({}/{}s)", mh.resolvedMethod().getDeclaringClass().getSimpleName(),
+                            mh.resolvedMethod().getName(), rl.value(), rl.window());
+                }
+            }
+        }
 
         String staticPath = app.staticFilesPath();
         if (staticPath != null) {
@@ -155,6 +174,9 @@ public class UndertowStarter implements AuraStarter {
 
     @Override
     public void stop() {
+        if (rateLimiter != null) {
+            rateLimiter.shutdown();
+        }
         if (timeoutScheduler != null) {
             timeoutScheduler.shutdownNow();
         }
@@ -256,9 +278,16 @@ public class UndertowStarter implements AuraStarter {
             }
         }
 
-        // built-in schema endpoint
-        if ("GET".equals(method) && "/__schema__".equals(path)) {
+        // built-in schema endpoint (dev-only)
+        if ("GET".equals(method) && "/__schema__".equals(path) && "dev".equals(app.env())) {
             serveSchema(exchange);
+            return;
+        }
+
+        // OpenAPI 3.0 endpoint (dev-only unless explicitly enabled)
+        if ("GET".equals(method) && "/openapi.json".equals(path) && app.openapi() && "dev".equals(app.env())) {
+            exchange.getResponseHeaders().put(Headers.CONTENT_TYPE, "application/json; charset=utf-8");
+            exchange.getResponseSender().send(OpenApiGenerator.generate(compiledRoutes, app));
             return;
         }
 
@@ -293,6 +322,20 @@ public class UndertowStarter implements AuraStarter {
             }
         }
 
+        // Global rate limit check
+        if (rateLimiter != null && app.rateLimitMax() > 0) {
+            String clientIp = extractIp(exchange);
+            int windowSec = (int) app.rateLimitWindow().toSeconds();
+            if (!rateLimiter.allow(clientIp, app.rateLimitMax(), windowSec)) {
+                exchange.setStatusCode(429);
+                exchange.getResponseHeaders().put(Headers.CONTENT_TYPE, "application/json; charset=utf-8");
+                exchange.getResponseHeaders().put(new HttpString("Retry-After"),
+                        String.valueOf(app.rateLimitWindow().toSeconds()));
+                exchange.getResponseSender().send("{\"error\":\"Rate limit exceeded\",\"retryAfter\":" + app.rateLimitWindow().toSeconds() + "}");
+                return;
+            }
+        }
+
         for (CompiledRoute route : compiledRoutes) {
             if (!route.method().equals(method)) continue;
             Map<String, String> params = route.match(path);
@@ -303,6 +346,23 @@ public class UndertowStarter implements AuraStarter {
             MDC.put("requestId", reqId);
 
             Context ctx = new Context(exchange, params, app, reqId);
+
+            // Per-method @RateLimit check
+            if (rateLimiter != null && route.handler() instanceof MethodRefHandler mh && mh.resolvedMethod() != null) {
+                io.aura.annotation.RateLimit rl = mh.resolvedMethod().getAnnotation(io.aura.annotation.RateLimit.class);
+                if (rl != null) {
+                    String clientIp = extractIp(exchange);
+                    String key = clientIp + ":" + mh.resolvedMethod().getDeclaringClass().getSimpleName() + "." + mh.resolvedMethod().getName();
+                    if (!rateLimiter.allow(key, rl.value(), rl.window())) {
+                        exchange.setStatusCode(429);
+                        exchange.getResponseHeaders().put(Headers.CONTENT_TYPE, "application/json; charset=utf-8");
+                        exchange.getResponseHeaders().put(new HttpString("Retry-After"), String.valueOf(rl.window()));
+                        exchange.getResponseSender().send("{\"error\":\"Rate limit exceeded\",\"retryAfter\":" + rl.window() + "}");
+                        return;
+                    }
+                }
+            }
+
             long start = System.currentTimeMillis();
             java.util.concurrent.ScheduledFuture<?> timeoutFuture = null;
             var responded = new AtomicBoolean(false);
@@ -525,6 +585,10 @@ public class UndertowStarter implements AuraStarter {
                 return;
             }
         }
+        if (cause instanceof io.aura.NotFoundException) {
+            ctx.status(404).json(ApiError.of(cause.getMessage(), "NOT_FOUND"));
+            return;
+        }
         if (cause instanceof io.aura.Validate.ValidationException ve && !ve.errors().isEmpty()) {
             ctx.status(400).json(java.util.Map.of(
                     "error", "Validation failed",
@@ -540,13 +604,13 @@ public class UndertowStarter implements AuraStarter {
             return;
         }
         log.error("Unhandled exception", cause);
-        String msg = cause.getMessage() != null ? cause.getMessage() : cause.getClass().getSimpleName();
         if ("dev".equals(app.env())) {
+            String msg = cause.getMessage() != null ? cause.getMessage() : cause.getClass().getSimpleName();
             java.io.StringWriter sw = new java.io.StringWriter();
             cause.printStackTrace(new java.io.PrintWriter(sw));
             ctx.status(500).json(java.util.Map.of("error", msg, "code", "INTERNAL_ERROR", "trace", sw.toString()));
         } else {
-            ctx.status(500).json(ApiError.of(msg, "INTERNAL_ERROR"));
+            ctx.status(500).json(ApiError.of("Internal Server Error", "INTERNAL_ERROR"));
         }
     }
 
@@ -649,6 +713,16 @@ public class UndertowStarter implements AuraStarter {
 
     private static String generateShortId() {
         return Long.toHexString(ThreadLocalRandom.current().nextLong() | 0x1000000000000000L).substring(0, 12);
+    }
+
+    private String extractIp(HttpServerExchange exchange) {
+        if (app.trustProxy()) {
+            String xff = exchange.getRequestHeaders().getFirst("X-Forwarded-For");
+            if (xff != null && !xff.isBlank()) {
+                return xff.split(",")[0].trim();
+            }
+        }
+        return exchange.getSourceAddress() != null ? exchange.getSourceAddress().getHostString() : "unknown";
     }
 
     private String buildRouteDiagnostic(String method, String path) {

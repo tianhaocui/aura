@@ -12,11 +12,21 @@ public class TestClient {
     private final Aura app;
     private final Router router;
     private final List<CompiledRoute> compiled;
+    private final RateLimiter rateLimiter;
 
     TestClient(Aura app, Router router) {
         this.app = app;
         this.router = router;
         this.compiled = UndertowStarter.compileRoutes(router, app);
+        if (app.rateLimitMax() > 0 && !"dev".equals(app.env())) {
+            this.rateLimiter = new RateLimiter();
+        } else {
+            // Check if any method has @RateLimit even without global config
+            boolean hasMethodLimit = compiled.stream().anyMatch(cr ->
+                    cr.handler() instanceof MethodRefHandler mh && mh.resolvedMethod() != null
+                            && mh.resolvedMethod().isAnnotationPresent(io.aura.annotation.RateLimit.class));
+            this.rateLimiter = hasMethodLimit ? new RateLimiter() : null;
+        }
     }
 
     public static TestClient of(Aura app) {
@@ -93,10 +103,41 @@ public class TestClient {
             String routePath = path.contains("?") ? path.substring(0, path.indexOf('?')) : path;
             Map<String, String> queryParams = parseQueryString(path);
 
+            // OpenAPI endpoint (dev-only)
+            if ("GET".equals(method) && "/openapi.json".equals(routePath) && app.openapi() && "dev".equals(app.env())) {
+                return new Response(200, OpenApiGenerator.generate(compiled, app),
+                        Map.of("Content-Type", "application/json"));
+            }
+
+            // Global rate limit check
+            if (rateLimiter != null && app.rateLimitMax() > 0) {
+                String clientIp = extractClientIp(headers);
+                if (!rateLimiter.allow(clientIp, app.rateLimitMax(), (int) app.rateLimitWindow().toSeconds())) {
+                    long retryAfter = app.rateLimitWindow().toSeconds();
+                    return new Response(429,
+                            "{\"error\":\"Rate limit exceeded\",\"retryAfter\":" + retryAfter + "}",
+                            Map.of("Retry-After", String.valueOf(retryAfter)));
+                }
+            }
+
             for (var route : compiled) {
                 if (!route.method().equals(method)) continue;
                 Map<String, String> params = route.match(routePath);
                 if (params == null) continue;
+
+                // Per-method @RateLimit check
+                if (rateLimiter != null && route.handler() instanceof MethodRefHandler mh && mh.resolvedMethod() != null) {
+                    io.aura.annotation.RateLimit rl = mh.resolvedMethod().getAnnotation(io.aura.annotation.RateLimit.class);
+                    if (rl != null) {
+                        String clientIp = extractClientIp(headers);
+                        String key = clientIp + ":" + mh.resolvedMethod().getDeclaringClass().getSimpleName() + "." + mh.resolvedMethod().getName();
+                        if (!rateLimiter.allow(key, rl.value(), rl.window())) {
+                            return new Response(429,
+                                    "{\"error\":\"Rate limit exceeded\",\"retryAfter\":" + rl.window() + "}",
+                                    Map.of("Retry-After", String.valueOf(rl.window())));
+                        }
+                    }
+                }
 
                 var mockCtx = new MockContext(params, queryParams, headers, body, app, routePath);
                 RouteExecutor.execute(route, mockCtx, (e, c) -> handleException(e, (MockContext) c));
@@ -137,6 +178,11 @@ public class TestClient {
                     return;
                 }
             }
+            if (cause instanceof io.aura.NotFoundException) {
+                ctx.status = 404;
+                ctx.responseBody = JSON.toJSONString(Map.of("error", cause.getMessage(), "code", "NOT_FOUND"));
+                return;
+            }
             if (cause instanceof io.aura.Validate.ValidationException ve && !ve.errors().isEmpty()) {
                 ctx.status = 400;
                 ctx.responseBody = JSON.toJSONString(Map.of(
@@ -153,8 +199,12 @@ public class TestClient {
                 return;
             }
             if (ctx.status == 0) ctx.status = 500;
-            ctx.responseBody = JSON.toJSONString(Map.of("error",
-                    cause.getMessage() != null ? cause.getMessage() : cause.getClass().getSimpleName()));
+            if ("dev".equals(app.env())) {
+                ctx.responseBody = JSON.toJSONString(Map.of("error",
+                        cause.getMessage() != null ? cause.getMessage() : cause.getClass().getSimpleName()));
+            } else {
+                ctx.responseBody = JSON.toJSONString(Map.of("error", "Internal Server Error"));
+            }
         }
 
         private static Map<String, String> parseQueryString(String path) {
@@ -199,6 +249,16 @@ public class TestClient {
             if (hint != null) body.put("hint", "Did you mean: " + hint + "?");
             body.put("registered", registered);
             return JSON.toJSONString(body);
+        }
+
+        private String extractClientIp(Map<String, String> headers) {
+            if (app.trustProxy()) {
+                String xff = headers.get("X-Forwarded-For");
+                if (xff != null && !xff.isBlank()) {
+                    return xff.split(",")[0].trim();
+                }
+            }
+            return "127.0.0.1";
         }
 
         private static int levenshtein(String a, String b) {

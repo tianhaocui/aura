@@ -33,6 +33,9 @@ public class Aura {
     private final List<Reloadable> reloadables = new ArrayList<>();
     private final List<AutoCloseable> closeables = new ArrayList<>();
     private final List<AuraPlugin> plugins = new ArrayList<>();
+    private Scheduler scheduler;
+    private int rateLimitMax = -1;
+    private java.time.Duration rateLimitWindow;
     private String staticFilesPath;
     private boolean spaMode;
     private String corsOrigin;
@@ -55,7 +58,9 @@ public class Aura {
     private final java.util.LinkedHashMap<Class<? extends Exception>, io.aura.web.BaseExceptionHandler<?>> exceptionHandlers = new java.util.LinkedHashMap<>();
     private final List<io.aura.web.BaseHandler> beforeHandlers = new ArrayList<>();
     private final List<io.aura.web.BaseHandler> afterHandlers = new ArrayList<>();
+    private final java.util.Map<Class<?>, java.util.function.Function<io.aura.web.BaseContext, ?>> paramResolvers = new java.util.LinkedHashMap<>();
     private java.util.function.Function<Object, Object> resultWrapper;
+    private boolean trustProxy;
 
     private AuraStarter starter;
     private McpStarter mcpStarter;
@@ -77,6 +82,7 @@ public class Aura {
             app.scanPackages.clear();
             app.beforeHandlers.clear();
             app.afterHandlers.clear();
+            app.plugins.clear();
             return app;
         }
         return new Aura();
@@ -103,7 +109,7 @@ public class Aura {
     public static Aura run(String... args) {
         String callerClass = new Throwable().getStackTrace()[1].getClassName();
         String pkg = callerClass.contains(".") ? callerClass.substring(0, callerClass.lastIndexOf('.')) : "";
-        Aura app = new Aura();
+        Aura app = create();
         if (!pkg.isEmpty()) app.scan(pkg);
         app.start(args);
         return app;
@@ -153,6 +159,9 @@ public class Aura {
     public Aura cors(java.util.function.Consumer<CorsConfig> config) {
         CorsConfig c = new CorsConfig();
         config.accept(c);
+        if (c.credentials() && c.origins().contains("*") && c.origins().size() == 1) {
+            throw new IllegalStateException("CORS: credentials=true is incompatible with wildcard origin '*'. Specify explicit origins.");
+        }
         this.corsConfig = c;
         this.corsOrigin = "__cors_config__";
         return this;
@@ -200,6 +209,47 @@ public class Aura {
         this.gzip = enabled;
         return this;
     }
+
+    public Aura rateLimit(int maxRequests, java.time.Duration window) {
+        this.rateLimitMax = maxRequests;
+        this.rateLimitWindow = window;
+        return this;
+    }
+
+    public int rateLimitMax() { return rateLimitMax; }
+    public java.time.Duration rateLimitWindow() { return rateLimitWindow; }
+
+    private boolean openapi;
+    private String openapiTitle;
+
+    public Aura openapi(boolean enabled) { this.openapi = enabled; return this; }
+    public Aura openapi(String title) { this.openapi = true; this.openapiTitle = title; return this; }
+    public boolean openapi() { return openapi; }
+    public String openapiTitle() { return openapiTitle; }
+
+    private String bannerText = DEFAULT_BANNER;
+    private boolean bannerEnabled = true;
+
+    private static final String DEFAULT_BANNER =
+            "    _                      \n" +
+            "   / \\  _   _ _ __ __ _   \n" +
+            "  / _ \\| | | | '__/ _` |  \n" +
+            " / ___ \\ |_| | | | (_| |  v0.6.2\n" +
+            "/_/   \\_\\__,_|_|  \\__,_|  \n";
+
+    public Aura banner(String text) { this.bannerText = text; return this; }
+    public Aura banner(boolean enabled) { this.bannerEnabled = enabled; return this; }
+
+    @SuppressWarnings("unchecked")
+    public <T> Aura paramResolver(Class<T> type, java.util.function.Function<io.aura.web.BaseContext, T> resolver) {
+        paramResolvers.put(type, resolver);
+        return this;
+    }
+
+    public java.util.Map<Class<?>, java.util.function.Function<io.aura.web.BaseContext, ?>> paramResolvers() { return paramResolvers; }
+
+    public Aura trustProxy(boolean trust) { this.trustProxy = trust; return this; }
+    public boolean trustProxy() { return trustProxy; }
 
     public Aura gzipMinSize(int bytes) {
         this.gzipMinSize = Math.max(0, bytes);
@@ -253,9 +303,8 @@ public class Aura {
         return new io.aura.web.BeforeBuilder(this, handler);
     }
 
-    public Aura after(io.aura.web.BaseHandler handler) {
-        afterHandlers.add(handler);
-        return this;
+    public io.aura.web.BeforeBuilder after(io.aura.web.BaseHandler handler) {
+        return new io.aura.web.BeforeBuilder(this, handler, afterHandlers);
     }
 
     public List<io.aura.web.BaseHandler> beforeHandlers() {
@@ -511,14 +560,25 @@ public class Aura {
                     services.add(bean);
                 }
             }
+            scheduler = new Scheduler();
+            scheduler.scan(resolved);
         }
         ServiceLoader<AuraStarter> loader = ServiceLoader.load(AuraStarter.class);
         starter = loader.findFirst()
                 .orElseThrow(() -> new IllegalStateException(
                         "No AuraStarter found. Add aura-web to your dependencies."));
         selfCheck();
+        if (bannerEnabled && bannerText != null) {
+            System.out.println(bannerText);
+        }
         starter.start(this);
         fireStart();
+        if (scheduler != null && !scheduler.tasks().isEmpty()) {
+            log.info("Scheduled tasks:");
+            for (var t : scheduler.tasks()) {
+                log.info("  {} ({})", t.method(), t.schedule());
+            }
+        }
 
         if (mcpPort >= 0) {
             ServiceLoader<McpStarter> mcpLoader = ServiceLoader.load(McpStarter.class);
@@ -554,6 +614,7 @@ public class Aura {
     public void stop() {
         if (!stopped.compareAndSet(false, true)) return;
         shuttingDown = true;
+        if (scheduler != null) scheduler.shutdown();
         if (keepAliveThread != null) keepAliveThread.interrupt();
         if (mcpStarter != null) {
             mcpStarter.stop();

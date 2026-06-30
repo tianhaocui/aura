@@ -105,6 +105,18 @@ public class Query {
         return list.isEmpty() ? null : list.get(0);
     }
 
+    public Row findOneOrThrow() {
+        Row row = findOne();
+        if (row == null) throw new io.aura.NotFoundException("Not found: " + table);
+        return row;
+    }
+
+    public Row findOneOrThrow(String message) {
+        Row row = findOne();
+        if (row == null) throw new io.aura.NotFoundException(message);
+        return row;
+    }
+
     public Page<Row> paginate(int pageNum, int pageSize) {
         return db.paginate(buildSql(), params.toArray(), pageNum, pageSize);
     }

@@ -42,6 +42,7 @@ public class MockContext extends Context {
     @Override public String path(String name) { return pathParams.get(name); }
     @Override public String query(String name) { return queryParams.get(name); }
     @Override public String query(String name, String def) { String v = query(name); return v != null ? v : def; }
+    @Override public Map<String, String> queryMap() { return queryParams; }
     @Override public String header(String name) { return headers.get(name); }
     @Override public String cookie(String name) { return null; }
     @Override public <T> T body(Class<T> type) { return body == null || body.isBlank() ? null : JSON.parseObject(body, type); }
@@ -64,7 +65,14 @@ public class MockContext extends Context {
     @Override public void html(String html) { responseBody = html; responded = true; }
     @Override public void raw(String body) { responseBody = body; responded = true; }
     @Override public void redirect(String url) { status = 302; responded = true; }
-    @Override public Context header(String name, String value) { respHeaders.put(name, value); return this; }
+    @Override public Context header(String name, String value) {
+        if (name.indexOf('\r') >= 0 || name.indexOf('\n') >= 0
+                || value.indexOf('\r') >= 0 || value.indexOf('\n') >= 0) {
+            throw new IllegalArgumentException("Header name/value must not contain CR or LF");
+        }
+        respHeaders.put(name, value);
+        return this;
+    }
     @Override public Context cookie(String name, String value, int maxAge) { return this; }
 
     @Override boolean isResponseStarted() { return responded; }
@@ -95,9 +103,11 @@ public class MockContext extends Context {
 
     @Override
     public String ip() {
-        String xff = headers.get("X-Forwarded-For");
-        if (xff != null && !xff.isBlank()) {
-            return xff.split(",")[0].trim();
+        if (app != null && app.trustProxy()) {
+            String xff = headers.get("X-Forwarded-For");
+            if (xff != null && !xff.isBlank()) {
+                return xff.split(",")[0].trim();
+            }
         }
         return "127.0.0.1";
     }
