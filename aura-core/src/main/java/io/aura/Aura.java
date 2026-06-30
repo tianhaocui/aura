@@ -60,6 +60,7 @@ public class Aura {
     private final List<io.aura.web.BaseHandler> afterHandlers = new ArrayList<>();
     private final java.util.Map<Class<?>, java.util.function.Function<io.aura.web.BaseContext, ?>> paramResolvers = new java.util.LinkedHashMap<>();
     private java.util.function.Function<Object, Object> resultWrapper;
+    private boolean trustProxy;
 
     private AuraStarter starter;
     private McpStarter mcpStarter;
@@ -81,6 +82,7 @@ public class Aura {
             app.scanPackages.clear();
             app.beforeHandlers.clear();
             app.afterHandlers.clear();
+            app.plugins.clear();
             return app;
         }
         return new Aura();
@@ -107,7 +109,7 @@ public class Aura {
     public static Aura run(String... args) {
         String callerClass = new Throwable().getStackTrace()[1].getClassName();
         String pkg = callerClass.contains(".") ? callerClass.substring(0, callerClass.lastIndexOf('.')) : "";
-        Aura app = new Aura();
+        Aura app = create();
         if (!pkg.isEmpty()) app.scan(pkg);
         app.start(args);
         return app;
@@ -157,6 +159,9 @@ public class Aura {
     public Aura cors(java.util.function.Consumer<CorsConfig> config) {
         CorsConfig c = new CorsConfig();
         config.accept(c);
+        if (c.credentials() && c.origins().contains("*") && c.origins().size() == 1) {
+            throw new IllegalStateException("CORS: credentials=true is incompatible with wildcard origin '*'. Specify explicit origins.");
+        }
         this.corsConfig = c;
         this.corsOrigin = "__cors_config__";
         return this;
@@ -242,6 +247,9 @@ public class Aura {
     }
 
     public java.util.Map<Class<?>, java.util.function.Function<io.aura.web.BaseContext, ?>> paramResolvers() { return paramResolvers; }
+
+    public Aura trustProxy(boolean trust) { this.trustProxy = trust; return this; }
+    public boolean trustProxy() { return trustProxy; }
 
     public Aura gzipMinSize(int bytes) {
         this.gzipMinSize = Math.max(0, bytes);

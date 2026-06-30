@@ -103,15 +103,15 @@ public class TestClient {
             String routePath = path.contains("?") ? path.substring(0, path.indexOf('?')) : path;
             Map<String, String> queryParams = parseQueryString(path);
 
-            // OpenAPI endpoint
-            if ("GET".equals(method) && "/openapi.json".equals(routePath) && app.openapi()) {
+            // OpenAPI endpoint (dev-only)
+            if ("GET".equals(method) && "/openapi.json".equals(routePath) && app.openapi() && "dev".equals(app.env())) {
                 return new Response(200, OpenApiGenerator.generate(compiled, app),
                         Map.of("Content-Type", "application/json"));
             }
 
             // Global rate limit check
             if (rateLimiter != null && app.rateLimitMax() > 0) {
-                String clientIp = headers.getOrDefault("X-Forwarded-For", "127.0.0.1").split(",")[0].trim();
+                String clientIp = extractClientIp(headers);
                 if (!rateLimiter.allow(clientIp, app.rateLimitMax(), (int) app.rateLimitWindow().toSeconds())) {
                     long retryAfter = app.rateLimitWindow().toSeconds();
                     return new Response(429,
@@ -129,7 +129,7 @@ public class TestClient {
                 if (rateLimiter != null && route.handler() instanceof MethodRefHandler mh && mh.resolvedMethod() != null) {
                     io.aura.annotation.RateLimit rl = mh.resolvedMethod().getAnnotation(io.aura.annotation.RateLimit.class);
                     if (rl != null) {
-                        String clientIp = headers.getOrDefault("X-Forwarded-For", "127.0.0.1").split(",")[0].trim();
+                        String clientIp = extractClientIp(headers);
                         String key = clientIp + ":" + mh.resolvedMethod().getDeclaringClass().getSimpleName() + "." + mh.resolvedMethod().getName();
                         if (!rateLimiter.allow(key, rl.value(), rl.window())) {
                             return new Response(429,
@@ -199,8 +199,12 @@ public class TestClient {
                 return;
             }
             if (ctx.status == 0) ctx.status = 500;
-            ctx.responseBody = JSON.toJSONString(Map.of("error",
-                    cause.getMessage() != null ? cause.getMessage() : cause.getClass().getSimpleName()));
+            if ("dev".equals(app.env())) {
+                ctx.responseBody = JSON.toJSONString(Map.of("error",
+                        cause.getMessage() != null ? cause.getMessage() : cause.getClass().getSimpleName()));
+            } else {
+                ctx.responseBody = JSON.toJSONString(Map.of("error", "Internal Server Error"));
+            }
         }
 
         private static Map<String, String> parseQueryString(String path) {
@@ -245,6 +249,16 @@ public class TestClient {
             if (hint != null) body.put("hint", "Did you mean: " + hint + "?");
             body.put("registered", registered);
             return JSON.toJSONString(body);
+        }
+
+        private String extractClientIp(Map<String, String> headers) {
+            if (app.trustProxy()) {
+                String xff = headers.get("X-Forwarded-For");
+                if (xff != null && !xff.isBlank()) {
+                    return xff.split(",")[0].trim();
+                }
+            }
+            return "127.0.0.1";
         }
 
         private static int levenshtein(String a, String b) {

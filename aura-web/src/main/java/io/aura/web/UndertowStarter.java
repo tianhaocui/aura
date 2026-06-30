@@ -278,14 +278,14 @@ public class UndertowStarter implements AuraStarter {
             }
         }
 
-        // built-in schema endpoint
-        if ("GET".equals(method) && "/__schema__".equals(path)) {
+        // built-in schema endpoint (dev-only)
+        if ("GET".equals(method) && "/__schema__".equals(path) && "dev".equals(app.env())) {
             serveSchema(exchange);
             return;
         }
 
-        // OpenAPI 3.0 endpoint
-        if ("GET".equals(method) && "/openapi.json".equals(path) && app.openapi()) {
+        // OpenAPI 3.0 endpoint (dev-only unless explicitly enabled)
+        if ("GET".equals(method) && "/openapi.json".equals(path) && app.openapi() && "dev".equals(app.env())) {
             exchange.getResponseHeaders().put(Headers.CONTENT_TYPE, "application/json; charset=utf-8");
             exchange.getResponseSender().send(OpenApiGenerator.generate(compiledRoutes, app));
             return;
@@ -604,13 +604,13 @@ public class UndertowStarter implements AuraStarter {
             return;
         }
         log.error("Unhandled exception", cause);
-        String msg = cause.getMessage() != null ? cause.getMessage() : cause.getClass().getSimpleName();
         if ("dev".equals(app.env())) {
+            String msg = cause.getMessage() != null ? cause.getMessage() : cause.getClass().getSimpleName();
             java.io.StringWriter sw = new java.io.StringWriter();
             cause.printStackTrace(new java.io.PrintWriter(sw));
             ctx.status(500).json(java.util.Map.of("error", msg, "code", "INTERNAL_ERROR", "trace", sw.toString()));
         } else {
-            ctx.status(500).json(ApiError.of(msg, "INTERNAL_ERROR"));
+            ctx.status(500).json(ApiError.of("Internal Server Error", "INTERNAL_ERROR"));
         }
     }
 
@@ -715,10 +715,12 @@ public class UndertowStarter implements AuraStarter {
         return Long.toHexString(ThreadLocalRandom.current().nextLong() | 0x1000000000000000L).substring(0, 12);
     }
 
-    private static String extractIp(HttpServerExchange exchange) {
-        String xff = exchange.getRequestHeaders().getFirst("X-Forwarded-For");
-        if (xff != null && !xff.isBlank()) {
-            return xff.split(",")[0].trim();
+    private String extractIp(HttpServerExchange exchange) {
+        if (app.trustProxy()) {
+            String xff = exchange.getRequestHeaders().getFirst("X-Forwarded-For");
+            if (xff != null && !xff.isBlank()) {
+                return xff.split(",")[0].trim();
+            }
         }
         return exchange.getSourceAddress() != null ? exchange.getSourceAddress().getHostString() : "unknown";
     }

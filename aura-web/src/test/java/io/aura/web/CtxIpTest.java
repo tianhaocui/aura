@@ -20,7 +20,7 @@ class CtxIpTest {
 
     @Test
     void ip_prefersXForwardedFor() {
-        var app = Aura.create()
+        var app = Aura.create().trustProxy(true)
             .routes((BaseRouter r) -> r.get("/ip", ctx -> ctx.text(ctx.ip())));
         var client = TestClient.of(app);
 
@@ -30,7 +30,7 @@ class CtxIpTest {
 
     @Test
     void ip_xffSingleValue() {
-        var app = Aura.create()
+        var app = Aura.create().trustProxy(true)
             .routes((BaseRouter r) -> r.get("/ip", ctx -> ctx.text(ctx.ip())));
         var client = TestClient.of(app);
 

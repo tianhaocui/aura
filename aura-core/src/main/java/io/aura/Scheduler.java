@@ -86,7 +86,17 @@ public final class Scheduler {
         long delayMs = Duration.between(now, next).toMillis();
         executor.schedule(() -> {
             invoke(bean, m, methodName);
-            scheduleCron(bean, m, methodName, cron);
+            scheduleCronFromFire(bean, m, methodName, cron, next);
+        }, delayMs, TimeUnit.MILLISECONDS);
+    }
+
+    private void scheduleCronFromFire(Object bean, Method m, String methodName, CronExpression cron, LocalDateTime lastFire) {
+        LocalDateTime next = cron.nextFireTime(lastFire);
+        long delayMs = Duration.between(LocalDateTime.now(), next).toMillis();
+        if (delayMs < 0) delayMs = 0;
+        executor.schedule(() -> {
+            invoke(bean, m, methodName);
+            scheduleCronFromFire(bean, m, methodName, cron, next);
         }, delayMs, TimeUnit.MILLISECONDS);
     }
 

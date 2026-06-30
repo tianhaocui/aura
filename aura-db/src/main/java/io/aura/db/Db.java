@@ -14,7 +14,7 @@ public class Db implements AutoCloseable {
 
     private final HikariDataSource ds;
     private final String name;
-    private static final ThreadLocal<Connection> TX_CONN = new ThreadLocal<>();
+    private final ThreadLocal<Connection> TX_CONN = new ThreadLocal<>();
     private static final java.util.concurrent.ExecutorService INDEPENDENT_TX_POOL =
             java.util.concurrent.Executors.newCachedThreadPool(r -> {
                 Thread t = new Thread(r, "aura-tx-independent");

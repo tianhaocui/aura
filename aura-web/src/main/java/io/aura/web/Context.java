@@ -26,6 +26,7 @@ public class Context implements BaseContext {
     private final String requestId;
     private final Map<Class<?>, Object> attrs = new ConcurrentHashMap<>();
     private final Map<String, Object> namedAttrs = new ConcurrentHashMap<>();
+    private final java.util.concurrent.atomic.AtomicBoolean responseSent = new java.util.concurrent.atomic.AtomicBoolean(false);
     private String cachedBody;
     private volatile boolean aborted;
 
@@ -116,6 +117,7 @@ public class Context implements BaseContext {
     @Override public Context status(int code) { exchange.setStatusCode(code); return this; }
 
     @Override public void json(Object obj) {
+        if (!responseSent.compareAndSet(false, true)) return;
         exchange.getResponseHeaders().put(Headers.CONTENT_TYPE, "application/json; charset=utf-8");
         JsonConfig cfg = app != null ? app.jsonConfig() : null;
         String dateFormat = cfg != null ? cfg.dateFormat() : "yyyy-MM-dd'T'HH:mm:ss.SSS";
@@ -126,21 +128,25 @@ public class Context implements BaseContext {
     }
 
     @Override public void jsonRaw(String json) {
+        if (!responseSent.compareAndSet(false, true)) return;
         exchange.getResponseHeaders().put(Headers.CONTENT_TYPE, "application/json; charset=utf-8");
         exchange.getResponseSender().send(json);
     }
 
     @Override public void text(String text) {
+        if (!responseSent.compareAndSet(false, true)) return;
         exchange.getResponseHeaders().put(Headers.CONTENT_TYPE, "text/plain; charset=utf-8");
         exchange.getResponseSender().send(text);
     }
 
     @Override public void html(String html) {
+        if (!responseSent.compareAndSet(false, true)) return;
         exchange.getResponseHeaders().put(Headers.CONTENT_TYPE, "text/html; charset=utf-8");
         exchange.getResponseSender().send(html);
     }
 
     @Override public void raw(String body) {
+        if (!responseSent.compareAndSet(false, true)) return;
         exchange.getResponseSender().send(body);
     }
 
@@ -154,6 +160,10 @@ public class Context implements BaseContext {
     }
 
     @Override public Context header(String name, String value) {
+        if (name.indexOf('\r') >= 0 || name.indexOf('\n') >= 0
+                || value.indexOf('\r') >= 0 || value.indexOf('\n') >= 0) {
+            throw new IllegalArgumentException("Header name/value must not contain CR or LF");
+        }
         exchange.getResponseHeaders().put(new HttpString(name), value);
         return this;
     }
@@ -251,9 +261,11 @@ public class Context implements BaseContext {
 
     @Override
     public String ip() {
-        String xff = exchange.getRequestHeaders().getFirst("X-Forwarded-For");
-        if (xff != null && !xff.isBlank()) {
-            return xff.split(",")[0].trim();
+        if (app != null && app.trustProxy()) {
+            String xff = exchange.getRequestHeaders().getFirst("X-Forwarded-For");
+            if (xff != null && !xff.isBlank()) {
+                return xff.split(",")[0].trim();
+            }
         }
         var addr = exchange.getSourceAddress();
         return addr != null ? addr.getAddress().getHostAddress() : null;
