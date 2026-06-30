@@ -44,7 +44,7 @@ public final class MethodRefHandler implements BaseHandler {
         if (!hasReturnValue) return;
         if (ctx instanceof Context c) {
             if (c.isResponseStarted()) return;
-            if (c.app() != null && c.app().resultWrapper() != null) {
+            if (result != null && c.app() != null && c.app().resultWrapper() != null) {
                 ctx.json(c.app().resultWrapper().apply(result));
                 return;
             }

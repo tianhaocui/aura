@@ -83,11 +83,11 @@ public final class Scheduler {
     private void scheduleCron(Object bean, Method m, String methodName, CronExpression cron) {
         LocalDateTime now = LocalDateTime.now();
         LocalDateTime next = cron.nextFireTime(now);
-        long delaySeconds = Duration.between(now, next).getSeconds();
+        long delayMs = Duration.between(now, next).toMillis();
         executor.schedule(() -> {
             invoke(bean, m, methodName);
             scheduleCron(bean, m, methodName, cron);
-        }, delaySeconds, TimeUnit.SECONDS);
+        }, delayMs, TimeUnit.MILLISECONDS);
     }
 
     private void invoke(Object bean, Method m, String methodName) {

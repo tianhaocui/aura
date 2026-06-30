@@ -28,7 +28,7 @@ public final class OpenApiGenerator {
             String path = cr.rawPath();
             if ("/__schema__".equals(path) || "/openapi.json".equals(path)) continue;
 
-            Map<String, Object> operation = buildOperation(cr, schemas);
+            Map<String, Object> operation = buildOperation(cr, schemas, app);
             paths.computeIfAbsent(path, k -> new LinkedHashMap<>())
                     .put(cr.method().toLowerCase(), operation);
         }
@@ -40,7 +40,7 @@ public final class OpenApiGenerator {
         return JSON.toJSONString(doc);
     }
 
-    private static Map<String, Object> buildOperation(CompiledRoute cr, Map<String, Map<String, Object>> schemas) {
+    private static Map<String, Object> buildOperation(CompiledRoute cr, Map<String, Map<String, Object>> schemas, Aura app) {
         Map<String, Object> op = new LinkedHashMap<>();
 
         if (cr.meta() != null && cr.meta().description() != null) {
@@ -70,6 +70,7 @@ public final class OpenApiGenerator {
         List<Map<String, Object>> parameters = new ArrayList<>();
         for (Parameter p : method.getParameters()) {
             if (p.getType() == Context.class || p.getType() == BaseContext.class) continue;
+            if (app.paramResolvers().containsKey(p.getType())) continue;
 
             if (p.getType().isRecord() || TypeUtil.isPojo(p.getType())) {
                 Map<String, Object> schema = buildSchema(p.getType(), schemas);

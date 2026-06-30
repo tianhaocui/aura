@@ -2,32 +2,25 @@ package io.aura.web;
 
 import java.time.Duration;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 final class RateLimiter {
 
-    private final ConcurrentHashMap<String, AtomicInteger> counters = new ConcurrentHashMap<>();
-    private final ScheduledExecutorService cleaner;
+    private record Entry(long timestamp) {}
 
-    RateLimiter(Duration window) {
-        this.cleaner = Executors.newSingleThreadScheduledExecutor(r -> {
-            Thread t = new Thread(r, "aura-rate-limiter");
-            t.setDaemon(true);
-            return t;
-        });
-        long windowMs = window.toMillis();
-        cleaner.scheduleAtFixedRate(counters::clear, windowMs, windowMs, TimeUnit.MILLISECONDS);
-    }
+    private final ConcurrentHashMap<String, CopyOnWriteArrayList<Entry>> requests = new ConcurrentHashMap<>();
 
-    boolean allow(String key, int limit) {
-        AtomicInteger counter = counters.computeIfAbsent(key, k -> new AtomicInteger(0));
-        return counter.incrementAndGet() <= limit;
+    boolean allow(String key, int limit, int windowSeconds) {
+        long now = System.currentTimeMillis();
+        long windowMs = windowSeconds * 1000L;
+        CopyOnWriteArrayList<Entry> entries = requests.computeIfAbsent(key, k -> new CopyOnWriteArrayList<>());
+        entries.removeIf(e -> now - e.timestamp > windowMs);
+        if (entries.size() >= limit) return false;
+        entries.add(new Entry(now));
+        return true;
     }
 
     void shutdown() {
-        cleaner.shutdownNow();
+        requests.clear();
     }
 }

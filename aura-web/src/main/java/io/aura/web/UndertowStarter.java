@@ -90,7 +90,7 @@ public class UndertowStarter implements AuraStarter {
         compiledWsRoutes = compileWsRoutes(router);
 
         if (app.rateLimitMax() > 0 && !"dev".equals(app.env())) {
-            rateLimiter = new RateLimiter(app.rateLimitWindow());
+            rateLimiter = new RateLimiter();
             log.info("Rate limit: {}/{}", app.rateLimitMax(), app.rateLimitWindow().toSeconds() + "s");
         }
         // Log per-method @RateLimit annotations
@@ -99,7 +99,7 @@ public class UndertowStarter implements AuraStarter {
                 io.aura.annotation.RateLimit rl = mh.resolvedMethod().getAnnotation(io.aura.annotation.RateLimit.class);
                 if (rl != null) {
                     if (rateLimiter == null) {
-                        rateLimiter = new RateLimiter(java.time.Duration.ofSeconds(rl.window()));
+                        rateLimiter = new RateLimiter();
                     }
                     log.info("  Rate limit: {}.{} ({}/{}s)", mh.resolvedMethod().getDeclaringClass().getSimpleName(),
                             mh.resolvedMethod().getName(), rl.value(), rl.window());
@@ -325,7 +325,8 @@ public class UndertowStarter implements AuraStarter {
         // Global rate limit check
         if (rateLimiter != null && app.rateLimitMax() > 0) {
             String clientIp = extractIp(exchange);
-            if (!rateLimiter.allow(clientIp, app.rateLimitMax())) {
+            int windowSec = (int) app.rateLimitWindow().toSeconds();
+            if (!rateLimiter.allow(clientIp, app.rateLimitMax(), windowSec)) {
                 exchange.setStatusCode(429);
                 exchange.getResponseHeaders().put(Headers.CONTENT_TYPE, "application/json; charset=utf-8");
                 exchange.getResponseHeaders().put(new HttpString("Retry-After"),
@@ -352,7 +353,7 @@ public class UndertowStarter implements AuraStarter {
                 if (rl != null) {
                     String clientIp = extractIp(exchange);
                     String key = clientIp + ":" + mh.resolvedMethod().getDeclaringClass().getSimpleName() + "." + mh.resolvedMethod().getName();
-                    if (!rateLimiter.allow(key, rl.value())) {
+                    if (!rateLimiter.allow(key, rl.value(), rl.window())) {
                         exchange.setStatusCode(429);
                         exchange.getResponseHeaders().put(Headers.CONTENT_TYPE, "application/json; charset=utf-8");
                         exchange.getResponseHeaders().put(new HttpString("Retry-After"), String.valueOf(rl.window()));

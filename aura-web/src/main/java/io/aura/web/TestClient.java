@@ -19,13 +19,13 @@ public class TestClient {
         this.router = router;
         this.compiled = UndertowStarter.compileRoutes(router, app);
         if (app.rateLimitMax() > 0 && !"dev".equals(app.env())) {
-            this.rateLimiter = new RateLimiter(app.rateLimitWindow());
+            this.rateLimiter = new RateLimiter();
         } else {
             // Check if any method has @RateLimit even without global config
             boolean hasMethodLimit = compiled.stream().anyMatch(cr ->
                     cr.handler() instanceof MethodRefHandler mh && mh.resolvedMethod() != null
                             && mh.resolvedMethod().isAnnotationPresent(io.aura.annotation.RateLimit.class));
-            this.rateLimiter = hasMethodLimit ? new RateLimiter(java.time.Duration.ofSeconds(60)) : null;
+            this.rateLimiter = hasMethodLimit ? new RateLimiter() : null;
         }
     }
 
@@ -112,7 +112,7 @@ public class TestClient {
             // Global rate limit check
             if (rateLimiter != null && app.rateLimitMax() > 0) {
                 String clientIp = headers.getOrDefault("X-Forwarded-For", "127.0.0.1").split(",")[0].trim();
-                if (!rateLimiter.allow(clientIp, app.rateLimitMax())) {
+                if (!rateLimiter.allow(clientIp, app.rateLimitMax(), (int) app.rateLimitWindow().toSeconds())) {
                     long retryAfter = app.rateLimitWindow().toSeconds();
                     return new Response(429,
                             "{\"error\":\"Rate limit exceeded\",\"retryAfter\":" + retryAfter + "}",
@@ -131,7 +131,7 @@ public class TestClient {
                     if (rl != null) {
                         String clientIp = headers.getOrDefault("X-Forwarded-For", "127.0.0.1").split(",")[0].trim();
                         String key = clientIp + ":" + mh.resolvedMethod().getDeclaringClass().getSimpleName() + "." + mh.resolvedMethod().getName();
-                        if (!rateLimiter.allow(key, rl.value())) {
+                        if (!rateLimiter.allow(key, rl.value(), rl.window())) {
                             return new Response(429,
                                     "{\"error\":\"Rate limit exceeded\",\"retryAfter\":" + rl.window() + "}",
                                     Map.of("Retry-After", String.valueOf(rl.window())));
