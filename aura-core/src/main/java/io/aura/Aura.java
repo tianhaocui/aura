@@ -221,6 +221,19 @@ public class Aura {
     public boolean openapi() { return openapi; }
     public String openapiTitle() { return openapiTitle; }
 
+    private String bannerText = DEFAULT_BANNER;
+    private boolean bannerEnabled = true;
+
+    private static final String DEFAULT_BANNER =
+            "    _                      \n" +
+            "   / \\  _   _ _ __ __ _   \n" +
+            "  / _ \\| | | | '__/ _` |  \n" +
+            " / ___ \\ |_| | | | (_| |  v0.6.2\n" +
+            "/_/   \\_\\__,_|_|  \\__,_|  \n";
+
+    public Aura banner(String text) { this.bannerText = text; return this; }
+    public Aura banner(boolean enabled) { this.bannerEnabled = enabled; return this; }
+
     public Aura gzipMinSize(int bytes) {
         this.gzipMinSize = Math.max(0, bytes);
         return this;
@@ -538,6 +551,9 @@ public class Aura {
                 .orElseThrow(() -> new IllegalStateException(
                         "No AuraStarter found. Add aura-web to your dependencies."));
         selfCheck();
+        if (bannerEnabled && bannerText != null) {
+            System.out.println(bannerText);
+        }
         starter.start(this);
         fireStart();
         if (scheduler != null && !scheduler.tasks().isEmpty()) {

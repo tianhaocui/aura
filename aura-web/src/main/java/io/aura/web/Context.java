@@ -84,6 +84,12 @@ public class Context implements BaseContext {
         return val == null ? defaultValue : val;
     }
 
+    @Override public java.util.Map<String, String> queryMap() {
+        java.util.Map<String, String> map = new java.util.LinkedHashMap<>();
+        exchange.getQueryParameters().forEach((k, v) -> map.put(k, v.peek()));
+        return map;
+    }
+
     @Override public String header(String name) {
         return exchange.getRequestHeaders().getFirst(name);
     }

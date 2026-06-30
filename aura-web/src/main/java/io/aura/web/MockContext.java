@@ -42,6 +42,7 @@ public class MockContext extends Context {
     @Override public String path(String name) { return pathParams.get(name); }
     @Override public String query(String name) { return queryParams.get(name); }
     @Override public String query(String name, String def) { String v = query(name); return v != null ? v : def; }
+    @Override public Map<String, String> queryMap() { return queryParams; }
     @Override public String header(String name) { return headers.get(name); }
     @Override public String cookie(String name) { return null; }
     @Override public <T> T body(Class<T> type) { return body == null || body.isBlank() ? null : JSON.parseObject(body, type); }
