@@ -58,6 +58,7 @@ public class Aura {
     private final java.util.LinkedHashMap<Class<? extends Exception>, io.aura.web.BaseExceptionHandler<?>> exceptionHandlers = new java.util.LinkedHashMap<>();
     private final List<io.aura.web.BaseHandler> beforeHandlers = new ArrayList<>();
     private final List<io.aura.web.BaseHandler> afterHandlers = new ArrayList<>();
+    private final java.util.Map<Class<?>, java.util.function.Function<io.aura.web.BaseContext, ?>> paramResolvers = new java.util.LinkedHashMap<>();
     private java.util.function.Function<Object, Object> resultWrapper;
 
     private AuraStarter starter;
@@ -233,6 +234,14 @@ public class Aura {
 
     public Aura banner(String text) { this.bannerText = text; return this; }
     public Aura banner(boolean enabled) { this.bannerEnabled = enabled; return this; }
+
+    @SuppressWarnings("unchecked")
+    public <T> Aura paramResolver(Class<T> type, java.util.function.Function<io.aura.web.BaseContext, T> resolver) {
+        paramResolvers.put(type, resolver);
+        return this;
+    }
+
+    public java.util.Map<Class<?>, java.util.function.Function<io.aura.web.BaseContext, ?>> paramResolvers() { return paramResolvers; }
 
     public Aura gzipMinSize(int bytes) {
         this.gzipMinSize = Math.max(0, bytes);
