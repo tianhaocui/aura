@@ -30,6 +30,11 @@ public class TestClient {
     }
 
     public static TestClient of(Aura app) {
+        // Wire MCP HTTP transport if mcpPath is configured
+        if (app.mcpPath() != null && app.mcpRouter() != null) {
+            java.util.ServiceLoader<io.aura.McpStarter> mcpLoader = java.util.ServiceLoader.load(io.aura.McpStarter.class);
+            mcpLoader.findFirst().ifPresent(starter -> starter.httpHandler(app));
+        }
         Router router = new Router();
         // replay direct routes
         for (var entry : app.directRoutes()) {

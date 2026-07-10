@@ -50,6 +50,7 @@ public class Aura {
     private int mcpPort = -1;
     private java.io.PrintStream mcpStdout;
     private McpRouterSpec mcpRouter;
+    private String mcpPath;
     private java.util.function.Function<io.aura.web.BaseContext, String> authFunction;
     private JwtSupport jwtSupport;
     private final java.util.concurrent.atomic.AtomicBoolean stopped = new java.util.concurrent.atomic.AtomicBoolean(false);
@@ -363,6 +364,13 @@ public class Aura {
         return this;
     }
 
+    public Aura mcp(String path) {
+        this.mcpPath = path;
+        return this;
+    }
+
+    public String mcpPath() { return mcpPath; }
+
     public Aura routes(Consumer<io.aura.web.BaseRouter> routeConfig) {
         this.routeConfig = routeConfig;
         return this;
@@ -568,6 +576,18 @@ public class Aura {
                 .orElseThrow(() -> new IllegalStateException(
                         "No AuraStarter found. Add aura-web to your dependencies."));
         selfCheck();
+        if (mcpPath != null && mcpRouter != null) {
+            ServiceLoader<McpStarter> mcpLoader = ServiceLoader.load(McpStarter.class);
+            mcpStarter = mcpLoader.findFirst().orElse(null);
+            if (mcpStarter != null) {
+                Object transport = mcpStarter.httpHandler(this);
+                if (transport != null) {
+                    registry.put(transport.getClass(), transport);
+                }
+            } else {
+                log.warn("MCP HTTP transport requires aura-mcp dependency.");
+            }
+        }
         if (bannerEnabled && bannerText != null) {
             System.out.println(bannerText);
         }
