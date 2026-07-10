@@ -1,6 +1,71 @@
 # Changelog
 
-## 0.5.4 (unreleased)
+## 0.6.2
+
+### Added
+- `after().exclude(paths...)` — path exclusion for after middleware (symmetric with before)
+- `db.findOneOrThrow()` / `db.findByIdOrThrow()` — throws NotFoundException (404)
+- `@RateLimit(value, window)` — method-level rate limiting annotation
+- `@Scheduled(cron/fixedRate/fixedDelay)` — declarative scheduled tasks
+- `app.openapi(true)` — auto-generate OpenAPI 3.0 JSON from routes + method signatures
+- `ctx.queryMap()` — get all query params as Map
+- `ctx.jsonRaw(String)` — send raw JSON without re-serialization
+- `app.resultWrapper(Result::ok)` — auto-wrap handler return values
+- `app.paramResolver(Class, Function)` — custom parameter injection (e.g. CurrentUser from token)
+- `app.trustProxy(true)` — opt-in X-Forwarded-For trust for rate limiting
+- Startup banner (customizable via `app.banner(text)` or disable with `app.banner(false)`)
+- `NotFoundException` — framework exception mapped to 404
+
+### Fixed
+- RateLimiter race condition — synchronized sliding-window (was non-atomic check-then-act)
+- RateLimiter per-method window isolation (was shared global clear cycle)
+- RateLimiter memory growth — periodic key eviction (60s cycle)
+- Production error responses no longer leak exception messages (returns "Internal Server Error")
+- `ctx.header()` CRLF injection validation
+- `/__schema__` and `/openapi.json` only served in dev mode (was bypassing auth)
+- `Db.TX_CONN` changed to instance-level ThreadLocal (was static — multi-DB caused cross-contamination)
+- Hot-reload clears plugins list on reload (was accumulating)
+- Scheduler cron uses millisecond precision (was truncating to seconds)
+- Response double-write protection via AtomicBoolean CAS
+- CORS rejects `credentials=true` with wildcard origin at config time
+- `Aura.run()` uses `create()` factory (supports hot-reload)
+- `resultWrapper` skips null return values (prevents NPE)
+- OpenAPI skips paramResolver-injected types (was emitting as requestBody)
+
+## 0.6.1
+
+### Added
+- `services()` — @Path classes auto-register routes (DI + routing in one step)
+- `app.resultWrapper(fn)` — global response wrapping
+- `ctx.jsonRaw(String)` — raw JSON output without serialization
+- Aura auto-registers itself as bean (services can inject `Aura`)
+- Startup route table log with handler source (e.g. `GET /api/users — UserController.list`)
+- `scan()` marked @Deprecated — use `services(Class...)` instead
+
+## 0.6.0
+
+### Added
+- `services(Class...)` — auto-wiring via constructor injection + topological sort
+- `Reloadable` interface — config hot-reload notification
+- `app.reloadConfig()` — trigger all Reloadable components
+- Error diagnostics: prop() null shows lookup path, 404 suggests closest route (Levenshtein)
+- `props(prefix)` now walks full resolve chain (env > sysprop > file)
+- `BeforeBuilder.and()` — chain back to Aura after exclude()
+- `ServiceResolver` — dependency resolution with cycle detection + clear error messages
+- `scan()` @Path classes get constructor injection
+
+## 0.5.5
+
+### Added
+- `ctx.raw(String)` — write body without setting Content-Type
+- `app.before(handler).exclude(paths...)` — path-based middleware exclusion
+
+### Fixed
+- `prop()` env key conversion: hyphens now converted to underscores (`nacos.server-addr` → `NACOS_SERVER_ADDR`)
+- `onStart` hooks now fire after server port is listening (was before)
+- Config resolve adds System Property layer (env > sysprop > file)
+
+## 0.5.4
 
 ### Added
 - `app.patch()`, `app.head()`, `app.options()` — full HTTP method routing (PATCH/HEAD/OPTIONS)
