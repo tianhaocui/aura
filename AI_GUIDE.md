@@ -16,13 +16,13 @@ db.find(sql, params)               — only for joins/subqueries
 <dependency>
     <groupId>io.github.tianhaocui</groupId>
     <artifactId>aura-web</artifactId>
-    <version>0.6.1</version>
+    <version>0.6.2</version>
 </dependency>
 <!-- Optional: database -->
 <dependency>
     <groupId>io.github.tianhaocui</groupId>
     <artifactId>aura-db</artifactId>
-    <version>0.6.1</version>
+    <version>0.6.2</version>
 </dependency>
 <!-- Required: add your own SLF4J provider -->
 <dependency>
@@ -91,6 +91,9 @@ app.exception(Exception.class, (e, ctx) ->
 
 // 全局 before with exclude（无需在 handler 里 if 跳过）
 app.before(authHandler).exclude("/health", "/api/adapter/health*");
+
+// 全局 after with exclude（审计日志跳过 health 检查）
+app.after(ctx -> auditLog(ctx)).exclude("/health", "/metrics");
 
 app.routes(r -> {
     r.before(ctx -> { /* auth, logging */ });
@@ -360,6 +363,8 @@ Aura.create()
     .health()                      // /health endpoint, 503 on shutdown
     .dev(true)                     // hot-reload (requires aura-dev dependency + JDK)
     .resultWrapper(Result::ok)     // auto-wrap handler returns with Result
+    .rateLimit(100, Duration.ofMinutes(1))  // global: 100 req/min per IP (disabled in dev)
+    .openapi(true)                 // GET /openapi.json (auto-generated OpenAPI 3.0)
     .set("db.url", "jdbc:mysql://...")
     .onStart(a -> log.info("ready on port {}", a.port()))
     .onStop(a -> a.getBean(Db.class).close())
@@ -493,6 +498,69 @@ In-memory, no HTTP server needed. AI writes code → runs TestClient → confirm
 - **`abort()` defaults to 403** — without explicit status code
 - **`orderBy()` validates field names** — invalid chars throw `IllegalArgumentException`
 - **staticFiles path is classpath-relative** — e.g. `/public` = `src/main/resources/public`
+- **`NotFoundException` → 404** — throw from handler or use `db.findOneOrThrow()` / `db.findByIdOrThrow()`
+
+## Rate Limiting (v0.6.2+)
+
+```java
+// Global: all endpoints, disabled in dev mode
+app.rateLimit(100, Duration.ofMinutes(1));  // 100 req/min per IP
+
+// Method-level: on @Path service methods
+@Path("/api/auth")
+public class AuthController {
+    @Post("/login")
+    @RateLimit(5)  // 5 req/60s per IP (default window)
+    public Token login(LoginReq req) { ... }
+
+    @Post("/register")
+    @RateLimit(value = 3, window = 300)  // 3 req/5min per IP
+    public User register(RegisterReq req) { ... }
+}
+```
+
+- Global limit applies to all requests before route matching
+- `@RateLimit` applies per-method, per-IP after route matching
+- Exceeding limit → 429 + `Retry-After` header + JSON error
+- Dev mode: rate limiting disabled (global only; @RateLimit always enforced)
+- Startup log prints rate limit configuration
+
+## Scheduled Tasks (v0.6.2+)
+
+```java
+public class StatsService {
+    @Scheduled(cron = "0 0 * * *")  // 每天 00:00
+    public void resetDailyStreak() { ... }
+
+    @Scheduled(fixedRate = 60_000)  // 每 60 秒
+    public void refreshCache() { ... }
+
+    @Scheduled(fixedDelay = 30_000)  // 上次执行完后 30 秒
+    public void pollQueue() { ... }
+}
+
+app.services(StatsService.class);  // 必须注册到 services()
+```
+
+Rules:
+- Method must be `public`, no parameters
+- Exactly one of `cron`/`fixedRate`/`fixedDelay` must be set
+- Cron: 5-field format (minute hour day-of-month month day-of-week)
+- Startup log prints registered scheduled tasks
+- Errors during execution are logged, scheduler continues
+
+## OpenAPI (v0.6.2+)
+
+```java
+app.openapi(true);           // GET /openapi.json (title defaults to app.name or "Aura App")
+app.openapi("My API");       // with custom title
+```
+
+- Auto-generates OpenAPI 3.0.3 JSON from compiled routes + method signatures
+- Record fields → schema properties; validation annotations → constraints/required
+- Return types → response schemas; path/query params auto-detected
+- No external dependencies, no Swagger annotations needed
+- Useful for Swagger UI, Postman import, frontend codegen
 
 ## Extended Guides
 

@@ -10,6 +10,7 @@ public final class MethodRefHandler implements BaseHandler {
     private final Object target;
     private final Method method;
     private final ParamResolver.Binder[] binders;
+    private final Parameter[] params;
     private final boolean hasReturnValue;
 
     MethodRefHandler(Object target, String methodName) {
@@ -18,7 +19,7 @@ public final class MethodRefHandler implements BaseHandler {
         this.method.setAccessible(true);
         this.hasReturnValue = method.getReturnType() != void.class;
 
-        Parameter[] params = method.getParameters();
+        this.params = method.getParameters();
         this.binders = new ParamResolver.Binder[params.length];
         for (int i = 0; i < params.length; i++) {
             binders[i] = ParamResolver.create(params[i]);
@@ -28,14 +29,22 @@ public final class MethodRefHandler implements BaseHandler {
     @Override
     public void handle(BaseContext ctx) throws Exception {
         Object[] args = new Object[binders.length];
+        var resolvers = getResolvers(ctx);
         for (int i = 0; i < binders.length; i++) {
+            if (resolvers != null) {
+                var resolver = resolvers.get(params[i].getType());
+                if (resolver != null) {
+                    args[i] = resolver.apply(ctx);
+                    continue;
+                }
+            }
             args[i] = binders[i].resolve(ctx);
         }
         Object result = method.invoke(target, args);
         if (!hasReturnValue) return;
         if (ctx instanceof Context c) {
             if (c.isResponseStarted()) return;
-            if (c.app() != null && c.app().resultWrapper() != null) {
+            if (result != null && c.app() != null && c.app().resultWrapper() != null) {
                 ctx.json(c.app().resultWrapper().apply(result));
                 return;
             }
@@ -110,5 +119,15 @@ public final class MethodRefHandler implements BaseHandler {
         if (found == null) throw new IllegalArgumentException(
                 "No method '" + name + "' found in " + clazz.getName());
         return found;
+    }
+
+    @SuppressWarnings("rawtypes")
+    private static java.util.Map<Class<?>, java.util.function.Function<BaseContext, ?>> getResolvers(BaseContext ctx) {
+        io.aura.Aura app = null;
+        if (ctx instanceof Context c) app = c.app();
+        else if (ctx instanceof MockContext m) app = m.app();
+        if (app == null) return null;
+        var resolvers = app.paramResolvers();
+        return resolvers.isEmpty() ? null : resolvers;
     }
 }

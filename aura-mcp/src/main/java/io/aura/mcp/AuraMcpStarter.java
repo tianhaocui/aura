@@ -15,6 +15,7 @@ import org.slf4j.LoggerFactory;
 public class AuraMcpStarter implements McpStarter {
 
     private static final Logger log = LoggerFactory.getLogger(AuraMcpStarter.class);
+    private McpHttpTransport httpTransport;
 
     @Override
     public void start(Aura app) {
@@ -40,7 +41,29 @@ public class AuraMcpStarter implements McpStarter {
     }
 
     @Override
-    public void stop() {}
+    public Object httpHandler(Aura app) {
+        if (!(app.mcpRouter() instanceof McpRouter mcpRouter)) {
+            log.warn("MCP HTTP transport requires McpRouter. Use app.mcp(new McpRouter()) first.");
+            return null;
+        }
+        String serverName = app.prop("app.name") != null ? app.prop("app.name") : "aura-mcp";
+        httpTransport = new McpHttpTransport(mcpRouter, serverName);
+        String path = app.mcpPath();
+        app.post(path, httpTransport.postHandler());
+        app.get(path, httpTransport.sseHandler());
+        log.info("[Aura] MCP Server:");
+        log.info("  Transport: HTTP+SSE at {}", path);
+        log.info("  Tools: {} registered", httpTransport.toolCount());
+        return httpTransport;
+    }
+
+    @Override
+    public void stop() {
+        if (httpTransport != null) {
+            httpTransport.shutdown();
+            httpTransport = null;
+        }
+    }
 
     private static Map<String, Object> handleRouterCall(McpRouter router, JSONObject params) {
         String toolName = params.getString("name");

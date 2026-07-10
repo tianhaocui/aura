@@ -6,6 +6,7 @@ public interface BaseContext {
     String path(String name);
     String query(String name);
     String query(String name, String defaultValue);
+    default java.util.Map<String, String> queryMap() { return java.util.Map.of(); }
     String header(String name);
     String cookie(String name);
     <T> T body(Class<T> type) throws Exception;

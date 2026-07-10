@@ -50,7 +50,7 @@ public final class McpProtocol {
         log.info("MCP stdio stream closed");
     }
 
-    private JSONObject dispatch(JSONObject request) {
+    public JSONObject dispatch(JSONObject request) {
         String method = request.getString("method");
         Object id = request.get("id");
 
@@ -78,12 +78,16 @@ public final class McpProtocol {
         return resp;
     }
 
-    private void sendError(Object id, int code, String message) {
+    public JSONObject buildError(Object id, int code, String message) {
         JSONObject err = new JSONObject();
         err.put("jsonrpc", "2.0");
         err.put("id", id);
         err.put("error", Map.of("code", code, "message", message));
-        out.println(err.toJSONString());
+        return err;
+    }
+
+    private void sendError(Object id, int code, String message) {
+        out.println(buildError(id, code, message).toJSONString());
         out.flush();
     }
 }

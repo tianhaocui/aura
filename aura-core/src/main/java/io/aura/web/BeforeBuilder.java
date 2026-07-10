@@ -13,9 +13,13 @@ public class BeforeBuilder {
     private final BaseHandler original;
 
     public BeforeBuilder(Aura app, BaseHandler handler) {
+        this(app, handler, app.beforeHandlers());
+    }
+
+    public BeforeBuilder(Aura app, BaseHandler handler, List<BaseHandler> targetList) {
         this.app = app;
         this.original = handler;
-        app.beforeHandlers().add(ctx -> {
+        targetList.add(ctx -> {
             String path = ctx.url();
             for (String ex : excludes) {
                 if (path.equals(ex) || (ex.endsWith("*") && path.startsWith(ex.substring(0, ex.length() - 1)))) {
@@ -39,7 +43,7 @@ public class BeforeBuilder {
         return app.before(handler);
     }
 
-    public Aura after(BaseHandler handler) {
+    public BeforeBuilder after(BaseHandler handler) {
         return app.after(handler);
     }
 

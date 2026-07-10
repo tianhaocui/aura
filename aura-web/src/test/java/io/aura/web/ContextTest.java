@@ -416,6 +416,19 @@ class ContextTest {
     // -------------------------------------------------------------------------
 
     record User(String name, int age) {}
+        // -------------------------------------------------------------------------
+    // queryMap() — returns all query params as Map<String, String>
+
+    @Test void queryMap_returnsAllParams() {
+        MockContext ctx = mockCtxWithQuery(Map.of("a", "1", "b", "2"));
+        assertThat(ctx.queryMap()).containsEntry("a", "1").containsEntry("b", "2").hasSize(2);
+    }
+
+    @Test void queryMap_emptyWhenNoParams() {
+        MockContext ctx = mockCtx();
+        assertThat(ctx.queryMap()).isEmpty();
+    }
+
     record NullableObj(String name, String value) {}
 
     static abstract class AbstractService {}

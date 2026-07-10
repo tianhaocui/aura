@@ -39,8 +39,14 @@ int total = db.table("user").where("active", true).count();
 db.table("user").where("status", "inactive").delete();
 db.table("user").where("id", 1).update(Row.of("user").set("name", "new"));
 
+// findOneOrThrow — throws NotFoundException (→ 404) if null
+db.table("user").where("id", id).findOneOrThrow();                  // "Not found: user"
+db.table("user").where("id", id).findOneOrThrow("User not found");  // custom message
+
 // Shortcuts
 db.findById("user", id);
+db.findByIdOrThrow("user", id);                    // throws NotFoundException if null
+db.findByIdOrThrow("user", "uuid", id);            // custom primary key column
 db.findWhere("user", "active = ?", true);
 db.deleteById("user", id);
 ```
