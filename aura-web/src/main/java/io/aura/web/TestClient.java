@@ -114,6 +114,12 @@ public class TestClient {
                         Map.of("Content-Type", "application/json"));
             }
 
+            // Schema endpoint (dev or explicitly enabled)
+            if ("GET".equals(method) && "/__schema__".equals(routePath) && ("dev".equals(app.env()) || app.schemaEnabled())) {
+                return new Response(200, buildSchema(),
+                        Map.of("Content-Type", "application/json"));
+            }
+
             // Global rate limit check
             if (rateLimiter != null && app.rateLimitMax() > 0) {
                 String clientIp = extractClientIp(headers);
@@ -232,6 +238,20 @@ public class TestClient {
                         + " body: " + resp.body());
             }
             return resp;
+        }
+
+        private String buildSchema() {
+            java.util.List<Map<String, Object>> routes = new java.util.ArrayList<>();
+            for (var cr : compiled) {
+                Map<String, Object> entry = new java.util.LinkedHashMap<>();
+                entry.put("method", cr.method());
+                entry.put("path", cr.rawPath());
+                routes.add(entry);
+            }
+            Map<String, Object> schema = new java.util.LinkedHashMap<>();
+            schema.put("name", app.prop("app.name") != null ? app.prop("app.name") : "Aura App");
+            schema.put("routes", routes);
+            return JSON.toJSONString(schema);
         }
 
         private String buildRouteDiagnostic(String method, String path) {

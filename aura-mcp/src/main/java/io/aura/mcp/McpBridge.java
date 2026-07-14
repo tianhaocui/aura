@@ -83,6 +83,7 @@ public class McpBridge {
         String body = null;
 
         if (params != null && args != null) {
+            JSONObject bodyParams = new JSONObject();
             for (int i = 0; i < params.size(); i++) {
                 JSONObject p = params.getJSONObject(i);
                 String pName = p.getString("name");
@@ -95,8 +96,11 @@ public class McpBridge {
                 } else if ("query".equals(source)) {
                     query.append(query.isEmpty() ? "?" : "&").append(pName).append("=").append(val);
                 } else if ("body".equals(source)) {
-                    body = args.toJSONString();
+                    bodyParams.put(pName, val);
                 }
+            }
+            if (!bodyParams.isEmpty()) {
+                body = bodyParams.toJSONString();
             }
         }
 

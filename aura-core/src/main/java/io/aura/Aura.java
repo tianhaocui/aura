@@ -62,6 +62,7 @@ public class Aura {
     private final java.util.Map<Class<?>, java.util.function.Function<io.aura.web.BaseContext, ?>> paramResolvers = new java.util.LinkedHashMap<>();
     private java.util.function.Function<Object, Object> resultWrapper;
     private boolean trustProxy;
+    private boolean schemaEnabled;
 
     private AuraStarter starter;
     private McpStarter mcpStarter;
@@ -251,6 +252,9 @@ public class Aura {
 
     public Aura trustProxy(boolean trust) { this.trustProxy = trust; return this; }
     public boolean trustProxy() { return trustProxy; }
+
+    public Aura schema(boolean enabled) { this.schemaEnabled = enabled; return this; }
+    public boolean schemaEnabled() { return schemaEnabled; }
 
     public Aura gzipMinSize(int bytes) {
         this.gzipMinSize = Math.max(0, bytes);

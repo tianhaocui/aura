@@ -60,7 +60,7 @@ class McpUtilTest {
 
     @Test
     void jsonType_null_returnsString() {
-        assertThat(McpUtil.jsonType(null)).isEqualTo("string");
+        assertThat(McpUtil.jsonType((String) null)).isEqualTo("string");
     }
 
     @Test

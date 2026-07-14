@@ -278,8 +278,8 @@ public class UndertowStarter implements AuraStarter {
             }
         }
 
-        // built-in schema endpoint (dev-only)
-        if ("GET".equals(method) && "/__schema__".equals(path) && "dev".equals(app.env())) {
+        // built-in schema endpoint (dev or explicitly enabled)
+        if ("GET".equals(method) && "/__schema__".equals(path) && ("dev".equals(app.env()) || app.schemaEnabled())) {
             serveSchema(exchange);
             return;
         }

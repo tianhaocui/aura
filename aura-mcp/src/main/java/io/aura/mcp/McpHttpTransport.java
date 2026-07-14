@@ -74,16 +74,20 @@ public final class McpHttpTransport {
             SseEmitter emitter = ctx.sse();
             SseSession session = new SseSession(sessionId, emitter);
             sessions.put(sessionId, session);
-            try {
-                emitter.send("endpoint", JSON.toJSONString(Map.of(
-                        "sessionId", sessionId,
-                        "message", "MCP SSE session established"
-                )));
-                session.awaitClose();
-            } finally {
-                sessions.remove(sessionId);
-                emitter.close();
-            }
+            emitter.send("endpoint", JSON.toJSONString(Map.of(
+                    "sessionId", sessionId,
+                    "message", "MCP SSE session established"
+            )));
+            Thread cleanupThread = new Thread(() -> {
+                try {
+                    session.awaitClose();
+                } finally {
+                    sessions.remove(sessionId);
+                    emitter.close();
+                }
+            }, "mcp-sse-cleanup-" + sessionId);
+            cleanupThread.setDaemon(true);
+            cleanupThread.start();
         };
     }
 

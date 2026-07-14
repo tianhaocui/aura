@@ -100,7 +100,7 @@ class McpHttpTransportTest {
         assertThat(resp.status()).isEqualTo(200);
 
         JSONObject body = JSON.parseObject(resp.body());
-        assertThat(body.getJSONObject("result").getString("protocolVersion")).isEqualTo("2024-11-05");
+        assertThat(body.getJSONObject("result").getString("protocolVersion")).isEqualTo("2025-03-26");
         assertThat(body.getJSONObject("result").getJSONObject("serverInfo")).isNotNull();
     }
 

@@ -240,6 +240,31 @@ class McpToolBuilderTest {
     }
 
     // -----------------------------------------------------------------------
+    // optional() — required=false
+    // -----------------------------------------------------------------------
+
+    @Test
+    void optional_paramNotInRequiredArray() {
+        McpRouter router = new McpRouter();
+        new McpToolBuilder(router, "search", "搜索")
+                .param("keyword", String.class, "关键词")
+                .optional("limit", int.class, "限制数量")
+                .handler(ctx -> null);
+
+        McpTool tool = router.tools().get(0);
+        assertThat(tool.params().get(1).required()).isFalse();
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> schema = (Map<String, Object>) ((List<?>) router.buildSchema().get("tools")).get(0);
+        @SuppressWarnings("unchecked")
+        Map<String, Object> inputSchema = (Map<String, Object>) schema.get("inputSchema");
+        @SuppressWarnings("unchecked")
+        List<String> required = (List<String>) inputSchema.get("required");
+        assertThat(required).containsExactly("keyword");
+        assertThat(required).doesNotContain("limit");
+    }
+
+    // -----------------------------------------------------------------------
     // build() returns immutable params list
     // -----------------------------------------------------------------------
 

@@ -19,6 +19,61 @@ public class AuraMcpStarter implements McpStarter {
 
     @Override
     public void start(Aura app) {
+        if (!(app.mcpRouter() instanceof McpRouter mcpRouter)) {
+            log.warn("MCP standalone server requires McpRouter. Use app.mcp(new McpRouter()) first.");
+            return;
+        }
+        int port = app.mcpPort();
+        if (port == 0) {
+            port = 3001;
+        }
+        String serverName = app.prop("app.name") != null ? app.prop("app.name") : "aura-mcp";
+        httpTransport = new McpHttpTransport(mcpRouter, serverName);
+        try {
+            var server = com.sun.net.httpserver.HttpServer.create(
+                    new java.net.InetSocketAddress(port), 0);
+            server.createContext("/mcp", exchange -> {
+                try {
+                    if ("POST".equals(exchange.getRequestMethod())) {
+                        String body = new String(exchange.getRequestBody().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+                        com.alibaba.fastjson2.JSONObject request = com.alibaba.fastjson2.JSON.parseObject(body);
+                        com.alibaba.fastjson2.JSONObject response = new McpProtocol(
+                                new PrintStream(OutputStream.nullOutputStream()), serverName,
+                                (method, params) -> switch (method) {
+                                    case "tools/list" -> mcpRouter.buildSchema();
+                                    case "tools/call" -> handleRouterCall(mcpRouter, params);
+                                    default -> null;
+                                }
+                        ).dispatch(request);
+                        byte[] resp = response != null ? response.toJSONString().getBytes(java.nio.charset.StandardCharsets.UTF_8) : "{}".getBytes();
+                        exchange.getResponseHeaders().set("Content-Type", "application/json");
+                        exchange.sendResponseHeaders(200, resp.length);
+                        exchange.getResponseBody().write(resp);
+                    } else {
+                        exchange.sendResponseHeaders(405, -1);
+                    }
+                } catch (Exception e) {
+                    byte[] err = ("{\"error\":\"" + e.getMessage() + "\"}").getBytes(java.nio.charset.StandardCharsets.UTF_8);
+                    exchange.getResponseHeaders().set("Content-Type", "application/json");
+                    exchange.sendResponseHeaders(500, err.length);
+                    exchange.getResponseBody().write(err);
+                } finally {
+                    exchange.close();
+                }
+            });
+            server.setExecutor(java.util.concurrent.Executors.newCachedThreadPool(r -> {
+                Thread t = new Thread(r, "mcp-standalone");
+                t.setDaemon(true);
+                return t;
+            }));
+            server.start();
+            log.info("[Aura] MCP Server:");
+            log.info("  Transport: standalone HTTP at port {}", port);
+            log.info("  Endpoint: /mcp");
+            log.info("  Tools: {} registered", mcpRouter.tools().size());
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to start MCP standalone server on port " + port, e);
+        }
     }
 
     @Override

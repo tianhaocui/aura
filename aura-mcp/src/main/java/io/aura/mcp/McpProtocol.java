@@ -59,8 +59,8 @@ public final class McpProtocol {
         Object result;
         if ("initialize".equals(method)) {
             result = Map.of(
-                "protocolVersion", "2024-11-05",
-                "capabilities", Map.of("tools", Map.of()),
+                "protocolVersion", "2025-03-26",
+                "capabilities", Map.of("tools", Map.of("listChanged", false)),
                 "serverInfo", Map.of("name", serverName, "version", "0.1.0")
             );
         } else if ("notifications/initialized".equals(method)) {

@@ -33,7 +33,7 @@ class McpBridgeProtocolTest {
     void initialize_returnsProtocolVersion() throws Exception {
         String response = sendRequest("initialize", 1, null);
         JSONObject result = parseResult(response);
-        assertThat(result.getString("protocolVersion")).isEqualTo("2024-11-05");
+        assertThat(result.getString("protocolVersion")).isEqualTo("2025-03-26");
         assertThat(result.getJSONObject("capabilities")).containsKey("tools");
         assertThat(result.getJSONObject("serverInfo").getString("name")).isEqualTo("aura-mcp");
     }

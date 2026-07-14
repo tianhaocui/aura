@@ -82,7 +82,9 @@ public class McpRouter implements McpRouterSpec {
             }
             if (desc != null) prop.put("description", desc);
             properties.put(p.name(), prop);
-            required.add(p.name());
+            if (p.required()) {
+                required.add(p.name());
+            }
         }
         schema.put("properties", properties);
         if (!required.isEmpty()) schema.put("required", required);
@@ -114,7 +116,7 @@ public class McpRouter implements McpRouterSpec {
     private static List<McpParam> buildParamsFromMethod(Method method) {
         List<McpParam> params = new ArrayList<>();
         for (var p : method.getParameters()) {
-            params.add(new McpParam(p.getName(), McpUtil.jsonType(p.getType().getSimpleName()), null, null));
+            params.add(new McpParam(p.getName(), McpUtil.jsonType(p.getType()), null, null));
         }
         return params;
     }

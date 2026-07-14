@@ -146,6 +146,16 @@ class SecurityFixesTest {
         assertThat(resp.body()).contains("openapi");
     }
 
+    @Test
+    void schema_prodMode_schemaEnabled_returns200() {
+        Aura app = Aura.create().env("prod").schema(true);
+        app.get("/api", (Supplier<String>) () -> "ok");
+        var client = TestClient.of(app);
+
+        var resp = client.get("/__schema__").execute();
+        assertThat(resp.status()).isEqualTo(200);
+    }
+
     // Fix #8: RateLimiter key cleanup
     @Test
     void rateLimiter_cleanup_removesEmptyKeys() throws Exception {

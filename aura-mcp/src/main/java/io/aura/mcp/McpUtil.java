@@ -18,8 +18,18 @@ public final class McpUtil {
             case "int", "long", "Integer", "Long" -> "integer";
             case "double", "float", "Double", "Float", "BigDecimal" -> "number";
             case "boolean", "Boolean" -> "boolean";
+            case "List", "ArrayList", "LinkedList", "Set", "HashSet", "Collection" -> "array";
+            case "Map", "HashMap", "LinkedHashMap", "Object", "JSONObject" -> "object";
             default -> "string";
         };
+    }
+
+    public static String jsonType(Class<?> type) {
+        if (type == null) return "string";
+        if (type.isArray()) return "array";
+        if (java.util.Collection.class.isAssignableFrom(type)) return "array";
+        if (java.util.Map.class.isAssignableFrom(type)) return "object";
+        return jsonType(type.getSimpleName());
     }
 
     public static Map<String, Object> buildInputSchema(List<ParamInfo> params) {

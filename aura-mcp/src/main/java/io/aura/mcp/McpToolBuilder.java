@@ -24,7 +24,12 @@ public class McpToolBuilder {
         if (type.isEnum()) {
             return addEnumParam(name, type, description);
         }
-        params.add(new McpParam(name, McpUtil.jsonType(type.getSimpleName()), description, null));
+        params.add(new McpParam(name, McpUtil.jsonType(type), description, null));
+        return this;
+    }
+
+    public McpToolBuilder optional(String name, Class<?> type, String description) {
+        params.add(new McpParam(name, McpUtil.jsonType(type), description, null, false));
         return this;
     }
 
@@ -36,7 +41,7 @@ public class McpToolBuilder {
             resolveMap.put(entry.getKey(), entry.getValue());
         }
         mappings.put(name, resolveMap);
-        params.add(new McpParam(name, McpUtil.jsonType(type.getSimpleName()), description, enumValues));
+        params.add(new McpParam(name, McpUtil.jsonType(type), description, enumValues));
         return this;
     }
 
