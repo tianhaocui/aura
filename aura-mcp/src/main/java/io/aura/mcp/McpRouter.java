@@ -4,10 +4,11 @@ import io.aura.McpRouterSpec;
 
 import java.lang.reflect.Method;
 import java.util.*;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 public class McpRouter implements McpRouterSpec {
 
-    private final List<McpTool> tools = new ArrayList<>();
+    private final List<McpTool> tools = new CopyOnWriteArrayList<>();
 
     public McpToolBuilder tool(String name, String description) {
         return new McpToolBuilder(this, name, description);

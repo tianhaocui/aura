@@ -66,7 +66,11 @@ public final class McpProtocol {
         } else if ("notifications/initialized".equals(method)) {
             result = null;
         } else {
-            result = handler.handle(method, request.getJSONObject("params"));
+            try {
+                result = handler.handle(method, request.getJSONObject("params"));
+            } catch (Exception e) {
+                return buildError(id, -32603, "Internal error: " + e.getMessage());
+            }
         }
 
         if (id == null || result == null) return null;

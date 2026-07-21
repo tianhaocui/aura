@@ -3,6 +3,9 @@ package io.aura.web;
 import com.alibaba.fastjson2.JSON;
 import io.aura.Aura;
 
+import java.net.URLDecoder;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -94,7 +97,10 @@ public class TestClient {
 
         public Request query(String name, String value) {
             String separator = path.contains("?") ? "&" : "?";
-            path = path + separator + name + "=" + value;
+            path = path + separator
+                    + URLEncoder.encode(name, StandardCharsets.UTF_8)
+                    + "="
+                    + URLEncoder.encode(value, StandardCharsets.UTF_8);
             return this;
         }
 
@@ -239,8 +245,11 @@ public class TestClient {
             String qs = path.substring(idx + 1);
             for (String pair : qs.split("&")) {
                 String[] kv = pair.split("=", 2);
-                if (kv.length == 2) params.put(kv[0], kv[1]);
-                else if (kv.length == 1) params.put(kv[0], "");
+                if (kv.length == 2) params.put(
+                        URLDecoder.decode(kv[0], StandardCharsets.UTF_8),
+                        URLDecoder.decode(kv[1], StandardCharsets.UTF_8));
+                else if (kv.length == 1) params.put(
+                        URLDecoder.decode(kv[0], StandardCharsets.UTF_8), "");
             }
             return params;
         }

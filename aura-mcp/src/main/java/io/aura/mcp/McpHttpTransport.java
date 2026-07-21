@@ -105,6 +105,10 @@ public final class McpHttpTransport {
 
     private Map<String, Object> handleCall(JSONObject params) {
         String toolName = params.getString("name");
+        if (toolName == null) {
+            return Map.of("isError", true,
+                    "content", List.of(Map.of("type", "text", "text", "Missing required parameter: name")));
+        }
         JSONObject args = params.getJSONObject("arguments");
         @SuppressWarnings("unchecked")
         Map<String, Object> argsMap = args != null ? (Map<String, Object>) args.toJavaObject(Map.class) : Map.of();

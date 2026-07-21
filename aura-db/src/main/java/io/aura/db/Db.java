@@ -269,22 +269,27 @@ public class Db implements AutoCloseable {
 
     public int[] batch(String sql, List<Object[]> paramsList) {
         boolean inTx = TX_CONN.get() != null;
-        Connection conn = null;
-        try {
-            conn = getConnection();
+        if (inTx) {
+            Connection conn = TX_CONN.get();
             try (PreparedStatement ps = conn.prepareStatement(sql)) {
                 for (Object[] params : paramsList) {
                     for (int i = 0; i < params.length; i++) ps.setObject(i + 1, params[i]);
                     ps.addBatch();
                 }
                 return ps.executeBatch();
+            } catch (SQLException e) {
+                throw new DbException(e);
             }
+        }
+        try (Connection conn = ds.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            for (Object[] params : paramsList) {
+                for (int i = 0; i < params.length; i++) ps.setObject(i + 1, params[i]);
+                ps.addBatch();
+            }
+            return ps.executeBatch();
         } catch (SQLException e) {
             throw new DbException(e);
-        } finally {
-            if (!inTx && conn != null) {
-                try { conn.close(); } catch (SQLException ignored) {}
-            }
         }
     }
 
