@@ -63,6 +63,7 @@ public class Aura {
     private java.util.function.Function<Object, Object> resultWrapper;
     private boolean trustProxy;
     private boolean schemaEnabled;
+    private java.util.function.BiConsumer<Exception, ExceptionSnapshot> exceptionSnapshotHandler;
 
     private AuraStarter starter;
     private McpStarter mcpStarter;
@@ -255,6 +256,12 @@ public class Aura {
 
     public Aura schema(boolean enabled) { this.schemaEnabled = enabled; return this; }
     public boolean schemaEnabled() { return schemaEnabled; }
+
+    public Aura onException(java.util.function.BiConsumer<Exception, ExceptionSnapshot> handler) {
+        this.exceptionSnapshotHandler = handler;
+        return this;
+    }
+    public java.util.function.BiConsumer<Exception, ExceptionSnapshot> exceptionSnapshotHandler() { return exceptionSnapshotHandler; }
 
     public Aura gzipMinSize(int bytes) {
         this.gzipMinSize = Math.max(0, bytes);

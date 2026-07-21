@@ -270,5 +270,29 @@ public class Context implements BaseContext {
         var addr = exchange.getSourceAddress();
         return addr != null ? addr.getAddress().getHostAddress() : null;
     }
+
+    io.aura.ExceptionSnapshot buildSnapshot(Throwable cause, long durationMs) {
+        Map<String, String> hdrs = new java.util.LinkedHashMap<>();
+        if (exchange != null) {
+            exchange.getRequestHeaders().forEach(h ->
+                    hdrs.put(h.getHeaderName().toString(), h.getFirst()));
+        }
+        String uid = null;
+        try { uid = userId(); } catch (Exception ignored) {}
+        return new io.aura.ExceptionSnapshot(
+                requestId,
+                method(),
+                url(),
+                hdrs,
+                queryMap(),
+                pathParams != null ? Map.copyOf(pathParams) : Map.of(),
+                cachedBody,
+                uid,
+                durationMs,
+                cause.getClass().getName(),
+                cause.getMessage(),
+                io.aura.ExceptionSnapshot.captureStackTrace(cause)
+        );
+    }
 }
 

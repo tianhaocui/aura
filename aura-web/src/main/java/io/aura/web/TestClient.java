@@ -186,12 +186,14 @@ public class TestClient {
                     } catch (Exception inner) {
                         if (ctx.status == 0) ctx.status = 500;
                     }
+                    notifySnapshotHandler(cause, ctx);
                     return;
                 }
             }
             if (cause instanceof io.aura.NotFoundException) {
                 ctx.status = 404;
                 ctx.responseBody = JSON.toJSONString(Map.of("error", cause.getMessage(), "code", "NOT_FOUND"));
+                notifySnapshotHandler(cause, ctx);
                 return;
             }
             if (cause instanceof io.aura.Validate.ValidationException ve && !ve.errors().isEmpty()) {
@@ -201,12 +203,14 @@ public class TestClient {
                         "errors", ve.errors().stream()
                                 .map(fe -> Map.of("field", fe.field(), "message", fe.message()))
                                 .toList()));
+                notifySnapshotHandler(cause, ctx);
                 return;
             }
             if (cause instanceof IllegalArgumentException || cause instanceof io.aura.Validate.ValidationException) {
                 ctx.status = 400;
                 ctx.responseBody = JSON.toJSONString(Map.of("error",
                         cause.getMessage() != null ? cause.getMessage() : "Bad Request"));
+                notifySnapshotHandler(cause, ctx);
                 return;
             }
             if (ctx.status == 0) ctx.status = 500;
@@ -216,6 +220,16 @@ public class TestClient {
             } else {
                 ctx.responseBody = JSON.toJSONString(Map.of("error", "Internal Server Error"));
             }
+            notifySnapshotHandler(cause, ctx);
+        }
+
+        private void notifySnapshotHandler(Throwable cause, MockContext ctx) {
+            var handler = app.exceptionSnapshotHandler();
+            if (handler == null) return;
+            try {
+                io.aura.ExceptionSnapshot snapshot = ctx.buildSnapshot(cause, 0);
+                handler.accept((Exception) cause, snapshot);
+            } catch (Exception ignored) {}
         }
 
         private static Map<String, String> parseQueryString(String path) {
