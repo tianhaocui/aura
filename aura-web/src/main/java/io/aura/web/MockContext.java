@@ -144,4 +144,24 @@ public class MockContext extends Context {
             }
         };
     }
+
+    @Override
+    io.aura.ExceptionSnapshot buildSnapshot(Throwable cause, long durationMs) {
+        String uid = null;
+        try { uid = userId(); } catch (Exception ignored) {}
+        return new io.aura.ExceptionSnapshot(
+                requestId(),
+                method(),
+                url(),
+                headers != null ? Map.copyOf(headers) : Map.of(),
+                queryParams != null ? Map.copyOf(queryParams) : Map.of(),
+                pathParams != null ? Map.copyOf(pathParams) : Map.of(),
+                body,
+                uid,
+                durationMs,
+                cause.getClass().getName(),
+                cause.getMessage(),
+                io.aura.ExceptionSnapshot.captureStackTrace(cause)
+        );
+    }
 }

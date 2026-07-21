@@ -378,7 +378,7 @@ public class UndertowStarter implements AuraStarter {
             }
 
             RouteExecutor.execute(route, ctx, (e, c) -> {
-                handleException(e, (Context) c);
+                handleException(e, (Context) c, start);
                 long elapsed = System.currentTimeMillis() - start;
                 String clientIp = exchange.getSourceAddress() != null ? exchange.getSourceAddress().getHostString() : "-";
                 Throwable cause = e instanceof java.lang.reflect.InvocationTargetException ? e.getCause() : e;
@@ -411,7 +411,7 @@ public class UndertowStarter implements AuraStarter {
                 Map<String, String> params = route.match(path);
                 if (params == null) continue;
                 Context ctx = new Context(exchange, params, app, null);
-                RouteExecutor.execute(route, ctx, (e, c) -> handleException(e, (Context) c));
+                RouteExecutor.execute(route, ctx, (e, c) -> handleException(e, (Context) c, 0));
                 exchange.endExchange();
                 return;
             }
@@ -570,7 +570,7 @@ public class UndertowStarter implements AuraStarter {
     }
 
     @SuppressWarnings({"unchecked", "rawtypes"})
-    private void handleException(Exception e, Context ctx) {
+    private void handleException(Exception e, Context ctx, long startTime) {
         Throwable cause = e instanceof java.lang.reflect.InvocationTargetException ? e.getCause() : e;
         if (cause == null) cause = e;
         if (cause instanceof Error err) throw err;
@@ -582,11 +582,13 @@ public class UndertowStarter implements AuraStarter {
                     log.error("Error in exception handler", inner);
                     ctx.status(500).json(java.util.Map.of("error", "Internal Server Error"));
                 }
+                notifySnapshotHandler(cause, ctx, startTime);
                 return;
             }
         }
         if (cause instanceof io.aura.NotFoundException) {
             ctx.status(404).json(ApiError.of(cause.getMessage(), "NOT_FOUND"));
+            notifySnapshotHandler(cause, ctx, startTime);
             return;
         }
         if (cause instanceof io.aura.Validate.ValidationException ve && !ve.errors().isEmpty()) {
@@ -595,12 +597,14 @@ public class UndertowStarter implements AuraStarter {
                     "errors", ve.errors().stream()
                             .map(fe -> java.util.Map.of("field", fe.field(), "message", fe.message()))
                             .toList()));
+            notifySnapshotHandler(cause, ctx, startTime);
             return;
         }
         if (cause instanceof IllegalArgumentException || cause instanceof io.aura.Validate.ValidationException) {
             ctx.status(400).json(ApiError.of(
                     cause.getMessage() != null ? cause.getMessage() : "Bad Request",
                     "VALIDATION_ERROR"));
+            notifySnapshotHandler(cause, ctx, startTime);
             return;
         }
         log.error("Unhandled exception", cause);
@@ -612,6 +616,17 @@ public class UndertowStarter implements AuraStarter {
         } else {
             ctx.status(500).json(ApiError.of("Internal Server Error", "INTERNAL_ERROR"));
         }
+        notifySnapshotHandler(cause, ctx, startTime);
+    }
+
+    private void notifySnapshotHandler(Throwable cause, Context ctx, long startTime) {
+        var handler = app.exceptionSnapshotHandler();
+        if (handler == null) return;
+        try {
+            long durationMs = startTime > 0 ? System.currentTimeMillis() - startTime : 0;
+            io.aura.ExceptionSnapshot snapshot = ctx.buildSnapshot(cause, durationMs);
+            handler.accept((Exception) cause, snapshot);
+        } catch (Exception ignored) {}
     }
 
     static List<CompiledRoute> compileRoutes(BaseRouter router, Aura app) {
