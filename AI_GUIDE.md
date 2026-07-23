@@ -2,6 +2,8 @@
 
 You are developing with Aura, a lightweight Java 17+ backend framework.
 
+> **重要**：开始工作前先读 `CLAUDE.md`，架构决策和完成标准都在那里。
+
 ## Query Style Decision Rule
 
 ```
