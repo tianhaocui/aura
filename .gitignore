@@ -12,3 +12,4 @@ CLAUDE.md
 .codepilot-uploads/
 release.sh
 .lark-cli/
+.omx/

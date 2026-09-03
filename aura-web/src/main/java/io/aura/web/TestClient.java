@@ -2,6 +2,8 @@ package io.aura.web;
 
 import com.alibaba.fastjson2.JSON;
 import io.aura.Aura;
+import io.aura.snapshot.Snapshot;
+import io.aura.snapshot.SnapshotScope;
 
 import java.util.HashMap;
 import java.util.List;
@@ -92,69 +94,67 @@ public class TestClient {
         public Response execute() {
             String routePath = path.contains("?") ? path.substring(0, path.indexOf('?')) : path;
             Map<String, String> queryParams = parseQueryString(path);
-
-            for (var route : compiled) {
-                if (!route.method().equals(method)) continue;
-                Map<String, String> params = route.match(routePath);
-                if (params == null) continue;
-
-                var mockCtx = new MockContext(params, queryParams, headers, body, app, routePath);
-                RouteExecutor.execute(route, mockCtx, (e, c) -> handleException(e, (MockContext) c));
-                return new Response(mockCtx.status == 0 ? 200 : mockCtx.status, mockCtx.responseBody, mockCtx.responseHeaders());
+            SnapshotScope snapshotScope = Snapshot.currentOrNull();
+            boolean snapshotBound = false;
+            if (snapshotScope == null && SnapshotRecorder.shouldCapture(app)) {
+                snapshotScope = SnapshotScope.capture();
+                Snapshot.bind(snapshotScope);
+                snapshotBound = true;
             }
+            final SnapshotScope activeSnapshotScope = snapshotScope;
 
-            // HEAD auto-fallback: use GET handler, suppress body
-            if ("HEAD".equals(method)) {
+            try {
                 for (var route : compiled) {
-                    if (!"GET".equals(route.method())) continue;
+                    if (!route.method().equals(method)) continue;
                     Map<String, String> params = route.match(routePath);
                     if (params == null) continue;
-                    var mockCtx = new MockContext(params, queryParams, headers, body, app, routePath);
-                    RouteExecutor.execute(route, mockCtx, (e, c) -> handleException(e, (MockContext) c));
-                    return new Response(mockCtx.status == 0 ? 200 : mockCtx.status, null, mockCtx.responseHeaders());
-                }
-            }
 
-            if (Aura.isDevMode()) {
-                String diagnostic = buildRouteDiagnostic(method, routePath);
-                return new Response(404, diagnostic, Map.of("Content-Type", "application/json"));
+                    var mockCtx = new MockContext(params, queryParams, headers, body, app, routePath);
+                    final Exception[] failure = new Exception[1];
+                    RouteExecutor.execute(route, mockCtx, (e, c) -> {
+                        failure[0] = e;
+                        handleException(e, (MockContext) c);
+                    });
+                    if (failure[0] != null && activeSnapshotScope != null && activeSnapshotScope.mode() == SnapshotScope.Mode.CAPTURE) {
+                        SnapshotRecorder.of(app).record(failure[0], route, mockCtx, method, routePath,
+                                queryParams, headers, body, activeSnapshotScope);
+                    }
+                    return new Response(mockCtx.status == 0 ? 200 : mockCtx.status, mockCtx.responseBody, mockCtx.responseHeaders());
+                }
+
+                // HEAD auto-fallback: use GET handler, suppress body
+                if ("HEAD".equals(method)) {
+                    for (var route : compiled) {
+                        if (!"GET".equals(route.method())) continue;
+                        Map<String, String> params = route.match(routePath);
+                        if (params == null) continue;
+                        var mockCtx = new MockContext(params, queryParams, headers, body, app, routePath);
+                        final Exception[] failure = new Exception[1];
+                        RouteExecutor.execute(route, mockCtx, (e, c) -> {
+                            failure[0] = e;
+                            handleException(e, (MockContext) c);
+                        });
+                        if (failure[0] != null && activeSnapshotScope != null && activeSnapshotScope.mode() == SnapshotScope.Mode.CAPTURE) {
+                            SnapshotRecorder.of(app).record(failure[0], route, mockCtx, method, routePath,
+                                    queryParams, headers, body, activeSnapshotScope);
+                        }
+                        return new Response(mockCtx.status == 0 ? 200 : mockCtx.status, null, mockCtx.responseHeaders());
+                    }
+                }
+
+                if (Aura.isDevMode()) {
+                    String diagnostic = buildRouteDiagnostic(method, routePath);
+                    return new Response(404, diagnostic, Map.of("Content-Type", "application/json"));
+                }
+                return new Response(404, "Not Found", Map.of());
+            } finally {
+                if (snapshotBound) Snapshot.clear();
             }
-            return new Response(404, "Not Found", Map.of());
         }
 
         @SuppressWarnings({"unchecked", "rawtypes"})
         private void handleException(Exception e, MockContext ctx) {
-            Throwable cause = e instanceof java.lang.reflect.InvocationTargetException ? e.getCause() : e;
-            if (cause == null) cause = e;
-            if (cause instanceof Error err) throw err;
-            for (var entry : app.exceptionHandlers().entrySet()) {
-                if (entry.getKey().isAssignableFrom(cause.getClass())) {
-                    try {
-                        ((BaseExceptionHandler) entry.getValue()).handle((Exception) cause, ctx);
-                    } catch (Exception inner) {
-                        if (ctx.status == 0) ctx.status = 500;
-                    }
-                    return;
-                }
-            }
-            if (cause instanceof io.aura.Validate.ValidationException ve && !ve.errors().isEmpty()) {
-                ctx.status = 400;
-                ctx.responseBody = JSON.toJSONString(Map.of(
-                        "error", "Validation failed",
-                        "errors", ve.errors().stream()
-                                .map(fe -> Map.of("field", fe.field(), "message", fe.message()))
-                                .toList()));
-                return;
-            }
-            if (cause instanceof IllegalArgumentException || cause instanceof io.aura.Validate.ValidationException) {
-                ctx.status = 400;
-                ctx.responseBody = JSON.toJSONString(Map.of("error",
-                        cause.getMessage() != null ? cause.getMessage() : "Bad Request"));
-                return;
-            }
-            if (ctx.status == 0) ctx.status = 500;
-            ctx.responseBody = JSON.toJSONString(Map.of("error",
-                    cause.getMessage() != null ? cause.getMessage() : cause.getClass().getSimpleName()));
+            ExceptionResolver.apply(app, e, ctx);
         }
 
         private static Map<String, String> parseQueryString(String path) {

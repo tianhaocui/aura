@@ -22,6 +22,21 @@ class AuraBuilderTest {
         assertThat(app.env()).isEqualTo("prod");
     }
 
+    @Test
+    void jwtValidationUsesFinalEnvironmentRegardlessOfCallOrder() {
+        assertThatThrownBy(() -> Aura.create().jwt("short", 3600).env("prod"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("at least 32 bytes");
+        assertThatThrownBy(() -> Aura.create().jwt("12345678901234567890123456789012", 0).env("prod"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("expiration must be positive");
+    }
+
+    @Test
+    void jwtWeakConfigurationRemainsCompatibleInDevelopment() {
+        assertThatCode(() -> Aura.create().jwt("short", 0)).doesNotThrowAnyException();
+    }
+
     // --- workers ---
 
     @Test
@@ -134,6 +149,13 @@ class AuraBuilderTest {
     void maxBodySize_setsValue() {
         Aura app = Aura.create().maxBodySize(5 * 1024 * 1024L);
         assertThat(app.maxBodySize()).isEqualTo(5 * 1024 * 1024L);
+    }
+
+    @Test
+    void maxUploadSize_hasBoundedDefaultAndCanBeConfigured() {
+        assertThat(Aura.create().maxUploadSize()).isEqualTo(1024 * 1024L);
+        assertThat(Aura.create().maxUploadSize(256 * 1024L).maxUploadSize()).isEqualTo(256 * 1024L);
+        assertThat(Aura.create().maxUploadSize(-1).maxUploadSize()).isZero();
     }
 
     // --- shutdownTimeout ---

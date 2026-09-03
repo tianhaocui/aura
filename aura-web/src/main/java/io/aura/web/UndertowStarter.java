@@ -3,6 +3,8 @@ package io.aura.web;
 import com.alibaba.fastjson2.JSON;
 import io.aura.Aura;
 import io.aura.AuraStarter;
+import io.aura.snapshot.Snapshot;
+import io.aura.snapshot.SnapshotScope;
 import io.undertow.Undertow;
 import io.undertow.server.HttpHandler;
 import io.undertow.server.HttpServerExchange;
@@ -170,6 +172,7 @@ public class UndertowStarter implements AuraStarter {
             server.stop();
             log.info("Aura stopped");
         }
+        if (app != null) SnapshotRecorder.close(app);
     }
 
     @Override
@@ -224,6 +227,13 @@ public class UndertowStarter implements AuraStarter {
         String method = exchange.getRequestMethod().toString();
         String path = exchange.getRequestURI();
 
+        if (isCsrfRejected(exchange, method)) {
+            exchange.setStatusCode(403);
+            exchange.getResponseHeaders().put(Headers.CONTENT_TYPE, "application/json; charset=utf-8");
+            exchange.getResponseSender().send("{\"error\":\"CSRF validation failed\"}");
+            return;
+        }
+
         // CORS
         String corsOrigin = app.corsOrigin();
         if (corsOrigin != null) {
@@ -236,6 +246,15 @@ public class UndertowStarter implements AuraStarter {
                 allowOrigin = corsConfig.resolveOrigin(requestOrigin);
                 allowHeaders = corsConfig.headers();
                 credentials = corsConfig.credentials();
+                if (corsConfig.hasWildcardOrigin() && credentials) {
+                    // A wildcard cannot be combined with credentialed CORS. Disable this
+                    // response rather than reflecting an arbitrary browser Origin.
+                    allowOrigin = null;
+                    credentials = false;
+                }
+                if (requestOrigin != null && !"*".equals(allowOrigin)) {
+                    exchange.addResponseCommitListener(ex -> ex.getResponseHeaders().add(Headers.VARY, "Origin"));
+                }
             } else {
                 allowOrigin = corsOrigin;
                 allowHeaders = "Content-Type, Authorization";
@@ -258,6 +277,11 @@ public class UndertowStarter implements AuraStarter {
 
         // built-in schema endpoint
         if ("GET".equals(method) && "/__schema__".equals(path)) {
+            if (!schemaAllowed(exchange)) {
+                exchange.setStatusCode(schemaTokenConfigured() ? 401 : 404);
+                exchange.endExchange();
+                return;
+            }
             serveSchema(exchange);
             return;
         }
@@ -306,41 +330,80 @@ public class UndertowStarter implements AuraStarter {
             long start = System.currentTimeMillis();
             java.util.concurrent.ScheduledFuture<?> timeoutFuture = null;
             var responded = new AtomicBoolean(false);
+            var timedOut = new AtomicBoolean(false);
+            var timeoutActionDone = new java.util.concurrent.CountDownLatch(1);
+            Object completionLock = new Object();
+            SnapshotScope snapshotScope = Snapshot.currentOrNull();
+            boolean snapshotBound = false;
+            if (snapshotScope == null && SnapshotRecorder.shouldCapture(app)) {
+                snapshotScope = SnapshotScope.capture();
+                Snapshot.bind(snapshotScope);
+                snapshotBound = true;
+            }
+            final SnapshotScope activeSnapshotScope = snapshotScope;
+            final Thread handlerThread = Thread.currentThread();
 
             if (app.requestTimeout() > 0 && timeoutScheduler != null) {
                 timeoutFuture = timeoutScheduler.schedule(() -> {
-                    if (responded.compareAndSet(false, true) && !exchange.isResponseStarted()) {
-                        exchange.setStatusCode(503);
-                        exchange.getResponseHeaders().put(Headers.CONTENT_TYPE, "application/json; charset=utf-8");
-                        exchange.getResponseSender().send("{\"error\":\"Request timeout\"}");
+                    try {
+                        boolean timeoutWon;
+                        synchronized (completionLock) {
+                            timeoutWon = responded.compareAndSet(false, true);
+                            if (timeoutWon) timedOut.set(true);
+                        }
+                        if (timeoutWon) {
+                            ctx.abort();
+                            handlerThread.interrupt();
+                            exchange.setPersistent(false);
+                            if (!exchange.isResponseStarted()) {
+                                exchange.setStatusCode(503);
+                                exchange.getResponseHeaders().put(Headers.CONTENT_TYPE, "application/json; charset=utf-8");
+                                exchange.getResponseSender().send("{\"error\":\"Request timeout\"}");
+                            }
+                        }
+                    } finally {
+                        timeoutActionDone.countDown();
                     }
                 }, app.requestTimeout(), TimeUnit.SECONDS);
             }
 
-            RouteExecutor.execute(route, ctx, (e, c) -> {
-                handleException(e, (Context) c);
-                long elapsed = System.currentTimeMillis() - start;
-                String clientIp = exchange.getSourceAddress() != null ? exchange.getSourceAddress().getHostString() : "-";
-                Throwable cause = e instanceof java.lang.reflect.InvocationTargetException ? e.getCause() : e;
-                if (cause == null) cause = e;
-                log.error("[{}] {} {} {} {}: {} ({}ms, {})", reqId, method, path,
-                        exchange.getStatusCode(), cause.getClass().getSimpleName(), cause.getMessage(), elapsed, clientIp);
-            });
-            responded.set(true);
-            if (timeoutFuture != null) timeoutFuture.cancel(false);
-            if (app.accessLog()) {
-                long elapsed = System.currentTimeMillis() - start;
-                if ("json".equals(app.accessLogFormat())) {
-                    String ip = exchange.getSourceAddress() != null ? exchange.getSourceAddress().getHostString() : "-";
-                    String safePath = path.replace("\\", "\\\\").replace("\"", "\\\"");
-                    String safeReqId = reqId.replace("\\", "\\\\").replace("\"", "\\\"");
-                    log.info("{{\"ts\":\"{}\",\"method\":\"{}\",\"path\":\"{}\",\"status\":{},\"elapsed\":{},\"reqId\":\"{}\",\"ip\":\"{}\"}}",
-                            java.time.Instant.now(), method, safePath, exchange.getStatusCode(), elapsed, safeReqId, ip);
-                } else {
-                    log.info("{} {} → {} ({}ms)", method, path, exchange.getStatusCode(), elapsed);
+            try {
+                RouteExecutor.execute(route, ctx, (e, c) -> {
+                    handleException(e, (Context) c);
+                    long elapsed = System.currentTimeMillis() - start;
+                    if (activeSnapshotScope != null) {
+                        SnapshotRecorder.of(app).record(e, route, (Context) c, exchange, activeSnapshotScope);
+                    }
+                    String clientIp = exchange.getSourceAddress() != null ? exchange.getSourceAddress().getHostString() : "-";
+                    Throwable cause = ExceptionResolver.unwrap(e);
+                    log.error("[{}] {} {} {} {}: {} ({}ms, {})", safeLog(reqId, 64), safeLog(method, 16),
+                            safeLog(route.rawPath(), 512), exchange.getStatusCode(), cause.getClass().getSimpleName(),
+                            productionExceptionMessage(cause), elapsed, safeLog(clientIp, 64), cause);
+                });
+                synchronized (completionLock) {
+                    responded.compareAndSet(false, true);
                 }
+                if (app.accessLog()) {
+                    long elapsed = System.currentTimeMillis() - start;
+                    if ("json".equals(app.accessLogFormat())) {
+                    String ip = safeLog(exchange.getSourceAddress() != null ? exchange.getSourceAddress().getHostString() : "-", 64);
+                    String safePath = safeJsonLog(route.rawPath(), 512);
+                    String safeReqId = safeJsonLog(reqId, 64);
+                        log.info("{{\"ts\":\"{}\",\"method\":\"{}\",\"path\":\"{}\",\"status\":{},\"elapsed\":{},\"reqId\":\"{}\",\"ip\":\"{}\"}}",
+                                java.time.Instant.now(), safeJsonLog(method, 16), safePath, exchange.getStatusCode(), elapsed, safeReqId, safeJsonLog(ip, 64));
+                    } else {
+                        log.info("{} {} → {} ({}ms)", safeLog(method, 16), safeLog(route.rawPath(), 512), exchange.getStatusCode(), elapsed);
+                    }
+                }
+            } finally {
+                if (timeoutFuture != null) timeoutFuture.cancel(false);
+                if (timedOut.get()) {
+                    awaitUninterruptibly(timeoutActionDone);
+                    Thread.interrupted();
+                }
+                if (snapshotBound) Snapshot.clear();
+                MDC.remove("requestId");
             }
-            MDC.remove("requestId");
             return;
         }
 
@@ -415,6 +478,7 @@ public class UndertowStarter implements AuraStarter {
         schema.put("routes", routes);
 
         exchange.getResponseHeaders().put(Headers.CONTENT_TYPE, "application/json; charset=utf-8");
+        exchange.getResponseHeaders().put(Headers.CACHE_CONTROL, "no-store");
         exchange.getResponseSender().send(JSON.toJSONString(schema));
     }
 
@@ -511,43 +575,7 @@ public class UndertowStarter implements AuraStarter {
 
     @SuppressWarnings({"unchecked", "rawtypes"})
     private void handleException(Exception e, Context ctx) {
-        Throwable cause = e instanceof java.lang.reflect.InvocationTargetException ? e.getCause() : e;
-        if (cause == null) cause = e;
-        if (cause instanceof Error err) throw err;
-        for (var entry : app.exceptionHandlers().entrySet()) {
-            if (entry.getKey().isAssignableFrom(cause.getClass())) {
-                try {
-                    ((BaseExceptionHandler) entry.getValue()).handle((Exception) cause, ctx);
-                } catch (Exception inner) {
-                    log.error("Error in exception handler", inner);
-                    ctx.status(500).json(java.util.Map.of("error", "Internal Server Error"));
-                }
-                return;
-            }
-        }
-        if (cause instanceof io.aura.Validate.ValidationException ve && !ve.errors().isEmpty()) {
-            ctx.status(400).json(java.util.Map.of(
-                    "error", "Validation failed",
-                    "errors", ve.errors().stream()
-                            .map(fe -> java.util.Map.of("field", fe.field(), "message", fe.message()))
-                            .toList()));
-            return;
-        }
-        if (cause instanceof IllegalArgumentException || cause instanceof io.aura.Validate.ValidationException) {
-            ctx.status(400).json(ApiError.of(
-                    cause.getMessage() != null ? cause.getMessage() : "Bad Request",
-                    "VALIDATION_ERROR"));
-            return;
-        }
-        log.error("Unhandled exception", cause);
-        String msg = cause.getMessage() != null ? cause.getMessage() : cause.getClass().getSimpleName();
-        if ("dev".equals(app.env())) {
-            java.io.StringWriter sw = new java.io.StringWriter();
-            cause.printStackTrace(new java.io.PrintWriter(sw));
-            ctx.status(500).json(java.util.Map.of("error", msg, "code", "INTERNAL_ERROR", "trace", sw.toString()));
-        } else {
-            ctx.status(500).json(ApiError.of(msg, "INTERNAL_ERROR"));
-        }
+        ExceptionResolver.apply(app, e, ctx);
     }
 
     static List<CompiledRoute> compileRoutes(BaseRouter router, Aura app) {
@@ -607,15 +635,144 @@ public class UndertowStarter implements AuraStarter {
 
     private boolean checkWsOrigin(HttpServerExchange exchange) {
         String origin = exchange.getRequestHeaders().getFirst("Origin");
-        if (origin == null) return true;
+        if (origin == null || origin.isBlank()) {
+            // Non-browser clients commonly omit Origin. Keep that compatibility only
+            // for development or an explicit opt-in; production browser handshakes
+            // must carry an allowlisted Origin.
+            return "dev".equalsIgnoreCase(app.env())
+                    || Boolean.parseBoolean(property("aura.websocket.allow-missing-origin"));
+        }
+        String explicit = property("aura.websocket.origins");
+        if (explicit != null && !explicit.isBlank()) {
+            return java.util.Arrays.stream(explicit.split(","))
+                    .map(String::trim).anyMatch(origin::equals);
+        }
         io.aura.CorsConfig corsConfig = app.corsConfig();
         if (corsConfig != null) {
+            if (corsConfig.hasWildcardOrigin()) return false;
             return corsConfig.resolveOrigin(origin) != null;
         }
         String corsOrigin = app.corsOrigin();
-        if (corsOrigin == null) return true;
-        if ("*".equals(corsOrigin)) return true;
+        if (corsOrigin == null) return "dev".equalsIgnoreCase(app.env());
+        if ("*".equals(corsOrigin)) return false;
         return corsOrigin.equals(origin);
+    }
+
+    private boolean schemaAllowed(HttpServerExchange exchange) {
+        boolean enabled = Boolean.parseBoolean(property("aura.schema.enabled"));
+        if (!"dev".equalsIgnoreCase(app.env()) && !enabled) return false;
+        String token = schemaToken();
+        if (token == null || token.isBlank()) return "dev".equalsIgnoreCase(app.env());
+        String supplied = exchange.getRequestHeaders().getFirst("X-Aura-Schema-Token");
+        if (supplied == null) {
+            String authorization = exchange.getRequestHeaders().getFirst(Headers.AUTHORIZATION);
+            if (authorization != null && authorization.regionMatches(true, 0, "Bearer ", 0, 7)) {
+                supplied = authorization.substring(7).trim();
+            }
+        }
+        return java.security.MessageDigest.isEqual(token.getBytes(java.nio.charset.StandardCharsets.UTF_8),
+                (supplied == null ? "" : supplied).getBytes(java.nio.charset.StandardCharsets.UTF_8));
+    }
+
+    private boolean schemaTokenConfigured() {
+        return schemaToken() != null;
+    }
+
+    private String schemaToken() {
+        String token = property("aura.schema.auth-token");
+        if (token == null) token = property("aura.schema-token");
+        return token;
+    }
+
+    private boolean isCsrfRejected(HttpServerExchange exchange, String method) {
+        String enabled = property("aura.csrf.enabled");
+        boolean enforce = enabled != null && Boolean.parseBoolean(enabled);
+        if (!enforce || !isUnsafeMethod(method)) return false;
+        String headerName = propertyOrDefault("aura.csrf.header", "X-CSRF-Token");
+        String cookieName = propertyOrDefault("aura.csrf.cookie", "csrf_token");
+        String header = exchange.getRequestHeaders().getFirst(headerName);
+        var cookie = exchange.getRequestCookie(cookieName);
+        if (header != null && !header.isBlank() && cookie != null && cookie.getValue() != null
+                && !cookie.getValue().isBlank() && java.security.MessageDigest.isEqual(
+                header.getBytes(java.nio.charset.StandardCharsets.UTF_8),
+                cookie.getValue().getBytes(java.nio.charset.StandardCharsets.UTF_8))) return false;
+        String origin = exchange.getRequestHeaders().getFirst("Origin");
+        if (origin == null) {
+            String referer = exchange.getRequestHeaders().getFirst("Referer");
+            if (referer != null) {
+                try { origin = java.net.URI.create(referer).getScheme() + "://" + java.net.URI.create(referer).getAuthority(); }
+                catch (IllegalArgumentException ignored) { return true; }
+            }
+        }
+        if (origin == null) return true;
+        String expected = expectedPublicOrigin(exchange);
+        return !expected.equalsIgnoreCase(origin);
+    }
+
+    private String expectedPublicOrigin(HttpServerExchange exchange) {
+        String configured = property("aura.public-origin");
+        if (configured != null && !configured.isBlank()) return configured.trim();
+        String scheme = exchange.getRequestScheme();
+        String host = exchange.getHostAndPort();
+        String peer = exchange.getSourceAddress() == null || exchange.getSourceAddress().getAddress() == null
+                ? null : exchange.getSourceAddress().getAddress().getHostAddress();
+        if (Context.isTrustedProxy(app.prop("aura.trusted-proxies"), peer)) {
+            String forwardedProto = exchange.getRequestHeaders().getFirst("X-Forwarded-Proto");
+            String forwardedHost = exchange.getRequestHeaders().getFirst("X-Forwarded-Host");
+            if (forwardedProto != null && forwardedProto.matches("(?i)https?")) scheme = forwardedProto.toLowerCase();
+            if (forwardedHost != null && forwardedHost.matches("[A-Za-z0-9.-]+(?::[0-9]{1,5})?")) host = forwardedHost;
+        }
+        return scheme + "://" + host;
+    }
+
+    private static boolean isUnsafeMethod(String method) {
+        return "POST".equals(method) || "PUT".equals(method) || "PATCH".equals(method)
+                || "DELETE".equals(method);
+    }
+
+    private String property(String key) {
+        String env = System.getenv(key.replace('.', '_').replace('-', '_').toUpperCase());
+        if (env != null) return env;
+        String sys = System.getProperty(key);
+        if (sys != null) return sys;
+        return app.prop(key);
+    }
+
+    private String propertyOrDefault(String key, String fallback) {
+        String value = property(key);
+        return value == null || value.isBlank() ? fallback : value.trim();
+    }
+
+    static String safeLog(String value, int maxLength) {
+        if (value == null) return "-";
+        StringBuilder result = new StringBuilder(Math.min(value.length(), maxLength));
+        for (int i = 0; i < value.length() && result.length() < maxLength; i++) {
+            char c = value.charAt(i);
+            if (c < 0x20 || c == 0x7f) result.append(' ');
+            else result.append(c);
+        }
+        return result.toString();
+    }
+
+    static String safeJsonLog(String value, int maxLength) {
+        return safeLog(value, maxLength).replace("\\", "\\\\").replace("\"", "\\\"");
+    }
+
+    private static void awaitUninterruptibly(java.util.concurrent.CountDownLatch latch) {
+        boolean waiting = true;
+        while (waiting) {
+            try {
+                latch.await();
+                waiting = false;
+            } catch (InterruptedException ignored) {
+                // A timeout interrupts this same handler thread before signalling completion.
+            }
+        }
+    }
+
+    private String productionExceptionMessage(Throwable cause) {
+        if ("dev".equalsIgnoreCase(app.env())) return safeLog(cause.getMessage(), 256);
+        return "suppressed";
     }
 
     private List<CompiledWsRoute> compileWsRoutes(BaseRouter router) {

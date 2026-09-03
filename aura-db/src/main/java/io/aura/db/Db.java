@@ -121,7 +121,8 @@ public class Db implements AutoCloseable {
 
     public List<Row> findWhere(String table, String where, Object... params) {
         SqlSafe.identifier(table);
-        return query("SELECT * FROM " + table + " WHERE " + where, params, rs -> rsToRow(rs, table));
+        String safeWhere = SqlSafe.whereClause(where);
+        return query("SELECT * FROM " + table + " WHERE " + safeWhere, params, rs -> rsToRow(rs, table));
     }
 
     public int deleteById(String table, Object id) {

@@ -26,17 +26,18 @@ public record CompiledRoute(String method, String rawPath, Pattern pattern, List
                                   List<BaseHandler> afterHandlers, RouteMeta meta) {
         String fullPath = prefix + path;
         List<String> paramNames = new ArrayList<>();
-        // escape regex metacharacters in literal segments, then replace {param} placeholders
-        String regex = fullPath
-                .replace(".", "\\.")
-                .replace("+", "\\+")
-                .replaceAll("\\\\\\.(\\{[a-zA-Z_][a-zA-Z0-9_]*})", ".$1") // undo escaping inside {}
-                .replaceAll("\\{([a-zA-Z_][a-zA-Z0-9_]*)}", "([^/]+)");
+        StringBuilder regexBuilder = new StringBuilder();
         Pattern paramPattern = Pattern.compile("\\{([a-zA-Z_][a-zA-Z0-9_]*)}");
         Matcher m = paramPattern.matcher(fullPath);
+        int last = 0;
         while (m.find()) {
+            regexBuilder.append(Pattern.quote(fullPath.substring(last, m.start())));
+            regexBuilder.append("([^/]+)");
             paramNames.add(m.group(1));
+            last = m.end();
         }
+        regexBuilder.append(Pattern.quote(fullPath.substring(last)));
+        String regex = regexBuilder.toString();
         return new CompiledRoute(method, fullPath, Pattern.compile("^" + regex + "$"),
                 paramNames, beforeHandlers, handler, afterHandlers, meta);
     }

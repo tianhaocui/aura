@@ -166,7 +166,7 @@ public record CreateUser(
     @NotBlank String name,
     @Min(0) @Max(150) int age,
     @Size(min = 11, max = 11) String phone,
-    @Pattern("[a-z]+@[a-z]+\\.[a-z]+") String email
+    @Pattern("[A-Z]{2}-[0-9]{6}") String customerCode
 ) {}
 ```
 
@@ -177,9 +177,18 @@ public record CreateUser(
 | `@Min(value)` | Number | >= value |
 | `@Max(value)` | Number | <= value |
 | `@Size(min, max)` | String | length between min and max |
-| `@Pattern(regex)` | String | matches regex |
+| `@Pattern(regex)` | String | matches Aura's safe regex subset |
 
 All annotations support a custom `message` attribute. Multiple violations are reported together.
+
+`@Pattern` deliberately accepts a linear-time-safe subset: literals, character
+classes, anchors, escapes, fixed repetitions such as `{4}`, and at most one
+variable repetition such as `+` or `{1,64}`. Groups, alternation,
+backreferences, multiple variable repetitions, and other backtracking-prone
+constructs are rejected. Use explicit application validation when a more
+complex expression is required. The expression is limited to 1024 UTF-16 code
+units and the validated value to 4096 UTF-16 code units, as measured by Java
+`String.length()`; exceeding either limit is reported as a validation failure.
 
 Validation failure throws `ValidationException` → HTTP 400.
 
@@ -259,7 +268,7 @@ Plugins are installed in order before the server starts. They can register servi
 | `@Min(value)` | Record field | Validates >= value |
 | `@Max(value)` | Record field | Validates <= value |
 | `@Size(min, max)` | Record field | Validates string length |
-| `@Pattern(regex)` | Record field | Validates regex match |
+| `@Pattern(regex)` | Record field | Validates against the safe regex subset |
 
 ### Convention-based routing (no annotations needed)
 

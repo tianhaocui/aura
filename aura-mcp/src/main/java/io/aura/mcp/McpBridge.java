@@ -7,22 +7,37 @@ import com.alibaba.fastjson2.JSONObject;
 import java.io.*;
 import java.net.HttpURLConnection;
 import java.net.URI;
+import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 
 public class McpBridge {
 
+    private static final int MAX_RESPONSE_BYTES = 1024 * 1024;
+
     private final String baseUrl;
     private final PrintStream out;
+    private final String schemaToken;
     private JSONArray routes;
 
     public McpBridge(String baseUrl) {
-        this(baseUrl, System.out);
+        this(baseUrl, System.out, configuredSchemaToken());
     }
 
     public McpBridge(String baseUrl, PrintStream out) {
-        this.baseUrl = baseUrl.endsWith("/") ? baseUrl.substring(0, baseUrl.length() - 1) : baseUrl;
+        this(baseUrl, out, configuredSchemaToken());
+    }
+
+    public McpBridge(String baseUrl, PrintStream out, String schemaToken) {
+        URI parsed = URI.create(Objects.requireNonNull(baseUrl, "baseUrl"));
+        if (!("http".equalsIgnoreCase(parsed.getScheme()) || "https".equalsIgnoreCase(parsed.getScheme()))
+                || parsed.getHost() == null || parsed.getUserInfo() != null) {
+            throw new IllegalArgumentException("baseUrl must be an absolute HTTP(S) URL without userinfo");
+        }
+        String normalized = parsed.toString();
+        this.baseUrl = normalized.endsWith("/") ? normalized.substring(0, normalized.length() - 1) : normalized;
         this.out = out;
+        this.schemaToken = schemaToken == null || schemaToken.isBlank() ? null : schemaToken;
     }
 
     public void run() throws Exception {
@@ -91,9 +106,10 @@ public class McpBridge {
                 if (val == null) continue;
 
                 if ("path".equals(source)) {
-                    path = path.replace("{" + pName + "}", val.toString());
+                    path = path.replace("{" + pName + "}", encode(val.toString()));
                 } else if ("query".equals(source)) {
-                    query.append(query.isEmpty() ? "?" : "&").append(pName).append("=").append(val);
+                    query.append(query.isEmpty() ? "?" : "&")
+                            .append(encode(pName)).append("=").append(encode(val.toString()));
                 } else if ("body".equals(source)) {
                     body = args.toJSONString();
                 }
@@ -102,6 +118,7 @@ public class McpBridge {
 
         String url = baseUrl + path + query;
         HttpURLConnection conn = (HttpURLConnection) URI.create(url).toURL().openConnection();
+        conn.setInstanceFollowRedirects(false);
         conn.setRequestMethod(httpMethod);
         conn.setConnectTimeout(10000);
         conn.setReadTimeout(30000);
@@ -115,20 +132,39 @@ public class McpBridge {
         }
 
         try (InputStream is = conn.getResponseCode() < 400 ? conn.getInputStream() : conn.getErrorStream()) {
-            return is != null ? new String(is.readAllBytes(), StandardCharsets.UTF_8) : "";
+            return is != null ? readBounded(is, MAX_RESPONSE_BYTES) : "";
         }
     }
 
     private void loadSchema() throws Exception {
         String url = baseUrl + "/__schema__";
         HttpURLConnection conn = (HttpURLConnection) URI.create(url).toURL().openConnection();
+        conn.setInstanceFollowRedirects(false);
         conn.setConnectTimeout(5000);
         conn.setReadTimeout(5000);
+        if (schemaToken != null) conn.setRequestProperty("X-Aura-Schema-Token", schemaToken);
         try (InputStream is = conn.getInputStream()) {
-            String json = new String(is.readAllBytes(), StandardCharsets.UTF_8);
+            String json = readBounded(is, MAX_RESPONSE_BYTES);
             JSONObject schema = JSON.parseObject(json);
             this.routes = schema.getJSONArray("routes");
         }
+    }
+
+    private static String encode(String value) {
+        return URLEncoder.encode(value, StandardCharsets.UTF_8).replace("+", "%20");
+    }
+
+    private static String configuredSchemaToken() {
+        String value = System.getProperty("aura.schema.auth-token");
+        if (value == null) value = System.getProperty("aura.schema-token");
+        if (value == null) value = System.getenv("AURA_SCHEMA_TOKEN");
+        return value;
+    }
+
+    private static String readBounded(InputStream input, int maxBytes) throws IOException {
+        byte[] bytes = input.readNBytes(maxBytes + 1);
+        if (bytes.length > maxBytes) throw new IOException("HTTP response exceeds maximum size");
+        return new String(bytes, StandardCharsets.UTF_8);
     }
 
     private static String buildToolName(String method, String path) {

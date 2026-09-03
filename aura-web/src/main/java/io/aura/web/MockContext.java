@@ -2,6 +2,7 @@ package io.aura.web;
 
 import com.alibaba.fastjson2.JSON;
 import io.aura.Aura;
+import io.aura.snapshot.Snapshot;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -57,13 +58,14 @@ public class MockContext extends Context {
                 ? new com.alibaba.fastjson2.JSONWriter.Feature[]{com.alibaba.fastjson2.JSONWriter.Feature.WriteNulls}
                 : new com.alibaba.fastjson2.JSONWriter.Feature[0];
         responseBody = JSON.toJSONString(obj, dateFormat, features);
+        Snapshot.response(statusCode(), "application/json; charset=utf-8", obj);
         responded = true;
     }
-    @Override public void jsonRaw(String json) { responseBody = json; responded = true; }
-    @Override public void text(String text) { responseBody = text; responded = true; }
-    @Override public void html(String html) { responseBody = html; responded = true; }
-    @Override public void raw(String body) { responseBody = body; responded = true; }
-    @Override public void redirect(String url) { status = 302; responded = true; }
+    @Override public void jsonRaw(String json) { responseBody = json; Snapshot.response(statusCode(), "application/json; charset=utf-8", json); responded = true; }
+    @Override public void text(String text) { responseBody = text; Snapshot.response(statusCode(), "text/plain; charset=utf-8", text); responded = true; }
+    @Override public void html(String html) { responseBody = html; Snapshot.response(statusCode(), "text/html; charset=utf-8", html); responded = true; }
+    @Override public void raw(String body) { responseBody = body; Snapshot.response(statusCode(), null, body); responded = true; }
+    @Override public void redirect(String url) { status = 302; Snapshot.response(statusCode(), null, null); responded = true; }
     @Override public Context header(String name, String value) { respHeaders.put(name, value); return this; }
     @Override public Context cookie(String name, String value, int maxAge) { return this; }
 
@@ -78,6 +80,7 @@ public class MockContext extends Context {
         this.fileName = filename;
         this.fileBytes = data;
         this.fileContentType = contentType;
+        Snapshot.response(statusCode(), contentType, java.util.Map.of("filename", filename, "bytes", data.length));
     }
 
     @Override public <T> void set(T instance) { attrs.put(instance.getClass(), instance); }
@@ -96,10 +99,8 @@ public class MockContext extends Context {
     @Override
     public String ip() {
         String xff = headers.get("X-Forwarded-For");
-        if (xff != null && !xff.isBlank()) {
-            return xff.split(",")[0].trim();
-        }
-        return "127.0.0.1";
+        String trusted = app != null ? app.prop("aura.trusted-proxies") : null;
+        return Context.resolveClientIp(trusted, "127.0.0.1", xff);
     }
 
     @Override

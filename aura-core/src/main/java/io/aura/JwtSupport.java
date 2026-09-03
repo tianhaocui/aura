@@ -11,6 +11,9 @@ public final class JwtSupport {
     private final long expireSeconds;
 
     public JwtSupport(String secret, long expireSeconds) {
+        if (secret == null || secret.isBlank()) {
+            throw new IllegalArgumentException("JWT secret must not be blank");
+        }
         this.secret = secret;
         this.expireSeconds = expireSeconds;
     }
@@ -39,7 +42,7 @@ public final class JwtSupport {
         try {
             String json = new String(Base64.getUrlDecoder().decode(parts[1]), StandardCharsets.UTF_8);
             long exp = extractLong(json, "exp");
-            if (exp > 0 && System.currentTimeMillis() / 1000 > exp) return null;
+            if (exp <= 0 || System.currentTimeMillis() / 1000 > exp) return null;
             String sub = extractString(json, "sub");
             return sub != null && !sub.isEmpty() ? sub : null;
         } catch (Exception e) {

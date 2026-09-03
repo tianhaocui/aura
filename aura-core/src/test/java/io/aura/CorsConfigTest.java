@@ -30,8 +30,7 @@ class CorsConfigTest {
     void credentials_enabledDisablesWildcardOrigin() {
         CorsConfig config = new CorsConfig().credentials(true);
         assertThat(config.credentials()).isTrue();
-        // With credentials=true, resolveOrigin should not return "*"
-        assertThat(config.resolveOrigin("https://example.com")).isEqualTo("https://example.com");
+        assertThat(config.resolveOrigin("https://example.com")).isNull();
     }
 
     @Test
@@ -41,9 +40,9 @@ class CorsConfigTest {
     }
 
     @Test
-    void resolveOrigin_wildcardWithCredentials_returnsRequestOrigin() {
+    void resolveOrigin_wildcardWithCredentials_rejectsOrigin() {
         CorsConfig config = new CorsConfig().credentials(true);
-        assertThat(config.resolveOrigin("https://myapp.com")).isEqualTo("https://myapp.com");
+        assertThat(config.resolveOrigin("https://myapp.com")).isNull();
     }
 
     @Test

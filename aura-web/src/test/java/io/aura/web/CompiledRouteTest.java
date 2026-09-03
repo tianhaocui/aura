@@ -26,6 +26,14 @@ class CompiledRouteTest {
     }
 
     @Test
+    void staticPathTreatsRegexMetacharactersAsLiterals() {
+        CompiledRoute route = compile("GET", "/reports/v1.0+final");
+
+        assertThat(route.match("/reports/v1.0+final")).isNotNull();
+        assertThat(route.match("/reports/v1x000final")).isNull();
+    }
+
+    @Test
     void paramPath_matchesAndExtractsParam() {
         CompiledRoute route = compile("GET", "/user/{id}");
         Map<String, String> params = route.match("/user/42");

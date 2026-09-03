@@ -10,6 +10,7 @@ import java.util.ServiceLoader;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
 
+import io.aura.snapshot.SnapshotOptions;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -38,6 +39,7 @@ public class Aura {
     private String corsOrigin;
     private CorsConfig corsConfig;
     private long maxBodySize = 10 * 1024 * 1024; // 10MB default
+    private long maxUploadSize = 1024 * 1024; // 1MB default for materialized UploadedFile values
     private int shutdownTimeout = 30;
     private String accessLogFormat;
     private int requestTimeout;
@@ -49,6 +51,8 @@ public class Aura {
     private McpRouterSpec mcpRouter;
     private java.util.function.Function<io.aura.web.BaseContext, String> authFunction;
     private JwtSupport jwtSupport;
+    private String jwtSecret;
+    private long jwtExpireSeconds;
     private final java.util.concurrent.atomic.AtomicBoolean stopped = new java.util.concurrent.atomic.AtomicBoolean(false);
     private volatile boolean shuttingDown;
     private volatile Thread keepAliveThread;
@@ -56,6 +60,7 @@ public class Aura {
     private final List<io.aura.web.BaseHandler> beforeHandlers = new ArrayList<>();
     private final List<io.aura.web.BaseHandler> afterHandlers = new ArrayList<>();
     private java.util.function.Function<Object, Object> resultWrapper;
+    private final SnapshotOptions snapshotOptions = new SnapshotOptions();
 
     private AuraStarter starter;
     private McpStarter mcpStarter;
@@ -117,6 +122,7 @@ public class Aura {
 
     public Aura env(String env) {
         this.env = env;
+        validateJwtConfiguration();
         return this;
     }
 
@@ -153,6 +159,10 @@ public class Aura {
     public Aura cors(java.util.function.Consumer<CorsConfig> config) {
         CorsConfig c = new CorsConfig();
         config.accept(c);
+        if (c.credentials() && c.hasWildcardOrigin()) {
+            throw new IllegalArgumentException(
+                    "Credentialed CORS requires explicit origins; wildcard '*' is not allowed");
+        }
         this.corsConfig = c;
         this.corsOrigin = "__cors_config__";
         return this;
@@ -160,6 +170,11 @@ public class Aura {
 
     public Aura maxBodySize(long bytes) {
         this.maxBodySize = bytes;
+        return this;
+    }
+
+    public Aura maxUploadSize(long bytes) {
+        this.maxUploadSize = Math.max(0L, bytes);
         return this;
     }
 
@@ -216,6 +231,9 @@ public class Aura {
     }
 
     public Aura jwt(String secret, long expireSeconds) {
+        validateJwtConfiguration(secret, expireSeconds);
+        this.jwtSecret = secret;
+        this.jwtExpireSeconds = expireSeconds;
         this.jwtSupport = new JwtSupport(secret, expireSeconds);
         this.authFunction = ctx -> {
             String header = ctx.header("Authorization");
@@ -297,6 +315,15 @@ public class Aura {
 
     public java.util.function.Function<Object, Object> resultWrapper() {
         return resultWrapper;
+    }
+
+    public Aura snapshot(Consumer<SnapshotOptions> config) {
+        config.accept(snapshotOptions);
+        return this;
+    }
+
+    public SnapshotOptions snapshotOptions() {
+        return snapshotOptions;
     }
 
     public Aura mcp(boolean enabled) {
@@ -489,6 +516,7 @@ public class Aura {
     }
 
     public void start() {
+        validateJwtConfiguration();
         if (reloadMode) {
             reloadMode = false;
             selfCheck();
@@ -591,6 +619,7 @@ public class Aura {
     public String corsOrigin() { return corsOrigin; }
     public CorsConfig corsConfig() { return corsConfig; }
     public long maxBodySize() { return maxBodySize; }
+    public long maxUploadSize() { return maxUploadSize; }
     public int shutdownTimeout() { return shutdownTimeout; }
     public boolean accessLog() { return accessLogFormat != null; }
     public String accessLogFormat() { return accessLogFormat; }
@@ -653,6 +682,9 @@ public class Aura {
         String maxBody = resolve("aura.max-body-size", "AURA_MAX_BODY_SIZE");
         if (maxBody != null) this.maxBodySize = Long.parseLong(maxBody);
 
+        String maxUpload = resolve("aura.max-upload-size", "AURA_MAX_UPLOAD_SIZE");
+        if (maxUpload != null) this.maxUploadSize = Math.max(0L, Long.parseLong(maxUpload));
+
         String shutdown = resolve("aura.shutdown-timeout", "AURA_SHUTDOWN_TIMEOUT");
         if (shutdown != null) this.shutdownTimeout = Integer.parseInt(shutdown);
 
@@ -676,6 +708,21 @@ public class Aura {
         if (jwtSecret != null && jwtSupport == null) {
             String jwtExpire = resolve("aura.jwt-expire", "AURA_JWT_EXPIRE");
             jwt(jwtSecret, jwtExpire != null ? Long.parseLong(jwtExpire) : 604800);
+        }
+        validateJwtConfiguration();
+    }
+
+    private void validateJwtConfiguration() {
+        if (jwtSupport != null) validateJwtConfiguration(jwtSecret, jwtExpireSeconds);
+    }
+
+    private void validateJwtConfiguration(String secret, long expireSeconds) {
+        if ("dev".equalsIgnoreCase(env)) return;
+        if (expireSeconds <= 0) {
+            throw new IllegalArgumentException("JWT expiration must be positive outside development");
+        }
+        if (secret == null || secret.getBytes(java.nio.charset.StandardCharsets.UTF_8).length < 32) {
+            throw new IllegalArgumentException("JWT secret must be at least 32 bytes outside development");
         }
     }
 

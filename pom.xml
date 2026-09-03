@@ -48,7 +48,7 @@
         <maven.compiler.target>${java.version}</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <aura.version>0.6.1</aura.version>
-        <undertow.version>2.3.12.Final</undertow.version>
+        <undertow.version>2.3.21.Final</undertow.version>
         <fastjson2.version>2.0.47</fastjson2.version>
         <hikaricp.version>5.1.0</hikaricp.version>
         <slf4j.version>2.0.12</slf4j.version>
@@ -121,7 +121,7 @@
             <plugin>
                 <groupId>org.jacoco</groupId>
                 <artifactId>jacoco-maven-plugin</artifactId>
-                <version>0.8.11</version>
+                <version>0.8.13</version>
                 <executions>
                     <execution>
                         <goals><goal>prepare-agent</goal></goals>

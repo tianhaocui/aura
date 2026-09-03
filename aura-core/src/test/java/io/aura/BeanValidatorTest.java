@@ -9,6 +9,13 @@ class BeanValidatorTest {
 
     record ValidRecord(@NotBlank String name, @Min(0) @Max(150) int age) {}
     record PatternRecord(@Pattern("[0-9]+") String phone) {}
+    record UnsafePatternRecord(@Pattern("(a+)+$") String value) {}
+    record OptionalNestedPatternRecord(@Pattern("(a?)+$") String value) {}
+    record RepeatedQuantifierPatternRecord(@Pattern("a*a*a*a*a*a*a*a*a*b") String value) {}
+    record MultipleQuantifierPatternRecord(@Pattern("[a-z]+[0-9]+") String value) {}
+    record GroupPatternRecord(@Pattern("(ab)+") String value) {}
+    record AlternationPatternRecord(@Pattern("cat|dog") String value) {}
+    record FixedRepetitionPatternRecord(@Pattern("[0-9]{4}-[0-9]{2}-[0-9]{2}") String value) {}
     record SizeRecord(@Size(min = 2, max = 10) String code) {}
     record NullableRecord(@NotNull Object ref) {}
 
@@ -57,6 +64,61 @@ class BeanValidatorTest {
         assertThatThrownBy(() -> BeanValidator.validate(new PatternRecord("abc")))
                 .isInstanceOf(Validate.ValidationException.class)
                 .hasMessageContaining("phone");
+    }
+
+    @Test
+    void pattern_inputOverLimit_failsBeforeRegexEvaluation() {
+        assertThatThrownBy(() -> BeanValidator.validate(new PatternRecord("1".repeat(4097))))
+                .isInstanceOf(Validate.ValidationException.class)
+                .hasMessageContaining("length exceeds validation limit");
+    }
+
+    @Test
+    void pattern_nestedQuantifier_isRejected() {
+        assertThatThrownBy(() -> BeanValidator.validate(new UnsafePatternRecord("a")))
+                .isInstanceOf(Validate.ValidationException.class)
+                .hasMessageContaining("unsafe validation pattern");
+    }
+
+    @Test
+    void pattern_nestedOptionalQuantifier_isRejected() {
+        assertThatThrownBy(() -> BeanValidator.validate(new OptionalNestedPatternRecord("a")))
+                .isInstanceOf(Validate.ValidationException.class)
+                .hasMessageContaining("unsafe validation pattern");
+    }
+
+    @Test
+    void pattern_repeatedQuantifiers_isRejectedWithoutEvaluatingLongInput() {
+        assertThatThrownBy(() -> BeanValidator.validate(new RepeatedQuantifierPatternRecord("a")))
+                .isInstanceOf(Validate.ValidationException.class)
+                .hasMessageContaining("unsafe validation pattern");
+    }
+
+    @Test
+    void pattern_multipleVariableQuantifiers_isRejected() {
+        assertThatThrownBy(() -> BeanValidator.validate(new MultipleQuantifierPatternRecord("a1")))
+                .isInstanceOf(Validate.ValidationException.class)
+                .hasMessageContaining("unsafe validation pattern");
+    }
+
+    @Test
+    void pattern_group_isRejectedBySafeSubset() {
+        assertThatThrownBy(() -> BeanValidator.validate(new GroupPatternRecord("ab")))
+                .isInstanceOf(Validate.ValidationException.class)
+                .hasMessageContaining("unsafe validation pattern");
+    }
+
+    @Test
+    void pattern_alternation_isRejectedBySafeSubset() {
+        assertThatThrownBy(() -> BeanValidator.validate(new AlternationPatternRecord("cat")))
+                .isInstanceOf(Validate.ValidationException.class)
+                .hasMessageContaining("unsafe validation pattern");
+    }
+
+    @Test
+    void pattern_multipleFixedRepetitions_remainSupported() {
+        assertThatCode(() -> BeanValidator.validate(new FixedRepetitionPatternRecord("2026-09-03")))
+                .doesNotThrowAnyException();
     }
 
     @Test

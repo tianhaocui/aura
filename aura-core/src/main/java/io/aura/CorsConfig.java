@@ -9,7 +9,15 @@ public class CorsConfig {
     private boolean credentials;
 
     public CorsConfig origins(String... origins) {
-        this.origins = List.of(origins);
+        if (origins == null || origins.length == 0) {
+            this.origins = List.of();
+        } else {
+            this.origins = java.util.Arrays.stream(origins)
+                    .filter(java.util.Objects::nonNull)
+                    .map(String::trim)
+                    .filter(s -> !s.isEmpty())
+                    .toList();
+        }
         return this;
     }
 
@@ -29,10 +37,14 @@ public class CorsConfig {
 
     public String resolveOrigin(String requestOrigin) {
         if (origins.contains("*") && !credentials) return "*";
+        if (origins.contains("*") && credentials) return null;
         if (requestOrigin == null) return null;
         for (String o : origins) {
             if ("*".equals(o) || o.equals(requestOrigin)) return requestOrigin;
         }
         return null;
     }
+
+    /** Wildcard origins must never be emitted with credentialed CORS responses. */
+    public boolean hasWildcardOrigin() { return origins.contains("*"); }
 }

@@ -7,6 +7,13 @@ import static org.assertj.core.api.Assertions.*;
 class JwtSupportTest {
 
     @Test
+    void blankSecret_isRejected() {
+        assertThatThrownBy(() -> new JwtSupport(" ", 3600))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("secret");
+    }
+
+    @Test
     void sign_and_verify_long() {
         JwtSupport jwt = new JwtSupport("test-secret", 3600);
         String token = jwt.sign(42L);
@@ -111,5 +118,16 @@ class JwtSupportTest {
         JwtSupport jwt = new JwtSupport("test-secret", 3600);
         String token = jwt.sign("{\"nested\":\"value\"}");
         assertThat(jwt.verify(token)).isEqualTo("{\"nested\":\"value\"}");
+    }
+
+    @Test
+    void productionJwt_rejectsWeakSecretAndNonPositiveLifetime() {
+        assertThatThrownBy(() -> Aura.create().env("prod").jwt("too-short", 3600))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("32 bytes");
+        assertThatThrownBy(() -> Aura.create().env("prod")
+                .jwt("0123456789abcdef0123456789abcdef", 0))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("positive");
     }
 }

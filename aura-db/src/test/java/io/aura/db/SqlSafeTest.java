@@ -125,4 +125,41 @@ class SqlSafeTest {
         assertThatThrownBy(() -> SqlSafe.columns("name; DROP TABLE users"))
                 .isInstanceOf(IllegalArgumentException.class);
     }
+
+    @Test
+    void whereClause_acceptsParameterizedPredicates() {
+        assertThat(SqlSafe.whereClause("active = ? AND name LIKE ?"))
+                .isEqualTo("active = ? AND name LIKE ?");
+        assertThat(SqlSafe.whereClause("deleted_at IS NULL")).isEqualTo("deleted_at IS NULL");
+        assertThat(SqlSafe.whereClause("id IN (?, ?, ?)")) .isEqualTo("id IN (?, ?, ?)");
+    }
+
+    @Test
+    void whereClause_rejectsLiteralsCommentsAndSubqueries() {
+        assertThatThrownBy(() -> SqlSafe.whereClause("id = 1 OR 1 = 1"))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> SqlSafe.whereClause("id = ? --"))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> SqlSafe.whereClause("id IN (SELECT id FROM admin)"))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void whereClause_rejectsOversizedAdversarialInputWithoutStackOverflow() {
+        String adversarial = "a = ? AND ".repeat(500) + "x = ?";
+
+        assertThatThrownBy(() -> SqlSafe.whereClause(adversarial))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Unsafe SQL where clause");
+    }
+
+    @Test
+    void whereClause_rejectsMalformedQualifiedIdentifiersAndInLists() {
+        assertThatThrownBy(() -> SqlSafe.whereClause("user..id = ?"))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> SqlSafe.whereClause("id IN ?"))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> SqlSafe.whereClause("id IN (?,)"))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
 }

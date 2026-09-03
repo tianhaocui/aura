@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 const http = require('http');
-const readline = require('readline');
+const https = require('https');
 
 const url = process.env.API_URL || process.argv[2];
 if (!url) {
@@ -10,18 +10,45 @@ if (!url) {
 }
 
 const baseUrl = url.endsWith('/') ? url.slice(0, -1) : url;
+let parsedBaseUrl;
+try {
+  parsedBaseUrl = new URL(baseUrl);
+} catch (_) {
+  process.stderr.write('Invalid API_URL\n');
+  process.exit(1);
+}
+if (!['http:', 'https:'].includes(parsedBaseUrl.protocol) || parsedBaseUrl.username || parsedBaseUrl.password) {
+  process.stderr.write('Invalid API_URL: use HTTP(S) without userinfo\n');
+  process.exit(1);
+}
+const MAX_HTTP_BYTES = 1024 * 1024;
+const MAX_LINE_BYTES = 1024 * 1024;
+const schemaToken = process.env.API_SCHEMA_TOKEN || process.env.AURA_SCHEMA_TOKEN || null;
 let routes = null;
 
 function httpRequest(method, path, body) {
   return new Promise((resolve, reject) => {
     const u = new URL(path, baseUrl);
+    if (u.origin !== parsedBaseUrl.origin) return reject(new Error('Cross-origin request target rejected'));
+    const transport = u.protocol === 'https:' ? https : http;
     const opts = { method, hostname: u.hostname, port: u.port, path: u.pathname + u.search };
-    const req = http.request(opts, res => {
+    if (schemaToken && path.endsWith('/__schema__')) opts.headers = { 'X-Aura-Schema-Token': schemaToken };
+    const req = transport.request(opts, res => {
       let data = '';
-      res.on('data', chunk => data += chunk);
+      let size = 0;
+      res.on('data', chunk => {
+        size += chunk.length;
+        if (size > MAX_HTTP_BYTES) {
+          res.destroy(new Error('HTTP response exceeds maximum size'));
+          return;
+        }
+        data += chunk;
+      });
       res.on('end', () => resolve(data));
+      res.on('error', reject);
     });
     req.on('error', reject);
+    req.setTimeout(10000, () => req.destroy(new Error('HTTP request timed out')));
     if (body) {
       req.setHeader('Content-Type', 'application/json');
       req.write(JSON.stringify(body));
@@ -82,8 +109,8 @@ async function handleToolsCall(params) {
   (route.params || []).forEach(p => {
     const val = args[p.name];
     if (val === undefined) return;
-    if (p.source === 'path') path = path.replace(`{${p.name}}`, val);
-    else if (p.source === 'query') query.push(`${p.name}=${encodeURIComponent(val)}`);
+    if (p.source === 'path') path = path.replace(`{${p.name}}`, encodeURIComponent(String(val)));
+    else if (p.source === 'query') query.push(`${encodeURIComponent(p.name)}=${encodeURIComponent(String(val))}`);
   });
 
   const fullPath = baseUrl + path + (query.length ? '?' + query.join('&') : '');
@@ -116,13 +143,27 @@ async function handleMessage(msg) {
 async function main() {
   await loadSchema();
 
-  const rl = readline.createInterface({ input: process.stdin });
-  for await (const line of rl) {
-    if (!line.trim()) continue;
-    const msg = JSON.parse(line);
-    const response = await handleMessage(msg);
-    if (response) {
-      process.stdout.write(JSON.stringify(response) + '\n');
+  let buffered = Buffer.alloc(0);
+  for await (const chunk of process.stdin) {
+    buffered = Buffer.concat([buffered, chunk]);
+    let newline;
+    while ((newline = buffered.indexOf(0x0a)) !== -1) {
+      if (newline > MAX_LINE_BYTES) throw new Error('MCP request exceeds maximum size');
+      const line = buffered.subarray(0, newline).toString('utf8').replace(/\r$/, '');
+      buffered = buffered.subarray(newline + 1);
+      if (!line.trim()) continue;
+      const msg = JSON.parse(line);
+      const response = await handleMessage(msg);
+      if (response) process.stdout.write(JSON.stringify(response) + '\n');
+    }
+    if (buffered.length > MAX_LINE_BYTES) throw new Error('MCP request exceeds maximum size');
+  }
+  if (buffered.length) {
+    const line = buffered.toString('utf8').replace(/\r$/, '');
+    if (line.trim()) {
+      const msg = JSON.parse(line);
+      const response = await handleMessage(msg);
+      if (response) process.stdout.write(JSON.stringify(response) + '\n');
     }
   }
 }

@@ -968,8 +968,8 @@ Total: ~4500 lines. Zero Spring dependencies.
 ```
 aura-web (required)
 ├── aura-core
-├── undertow-core 2.3.12
-├── xnio-nio 3.8.8
+├── undertow-core 2.3.21
+├── xnio-nio 3.8.16
 ├── fastjson2 2.0.47
 └── slf4j-api 2.0.12
 
@@ -1032,4 +1032,3 @@ Drop `AI_GUIDE.md` (120 lines) into your project as:
 - `.github/copilot-instructions.md` — for Copilot
 
 The guide teaches AI to prefer Aura patterns, use `r.crud()` for CRUD, avoid Spring annotations, and generate minimal code with TestClient verification.
-

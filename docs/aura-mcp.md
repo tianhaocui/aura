@@ -197,6 +197,16 @@ McpPackager.generate(
 );
 ```
 
+Private and local targets are rejected by default. For an explicitly trusted local
+development service, use the overload with `allowPrivateUrl` set to `true`:
+
+```java
+McpPackager.generate("http://localhost:8080", "@yourname/my-app-mcp", "./mcp-output", true);
+```
+
+The CLI equivalent is `-Daura.mcp.allow-private-url=true` or
+`AURA_MCP_ALLOW_PRIVATE_URL=true`.
+
 ### Generated files
 
 ```
@@ -218,6 +228,10 @@ The generated npm bridge resolves the API URL at runtime:
 1. **Environment variable**: `AURA_API_URL=http://prod-server:8080`
 2. **Config file**: `aura.properties` in CWD or `$HOME` with `api.url=http://...`
 3. **Baked default**: URL passed to `McpPackager.generate()`
+
+When `/__schema__` is protected in production, set `AURA_SCHEMA_TOKEN` (or
+`API_SCHEMA_TOKEN` for the npm bridge) so the bridge sends
+`X-Aura-Schema-Token` while loading the schema.
 
 Priority: env var > config file > baked default.
 
