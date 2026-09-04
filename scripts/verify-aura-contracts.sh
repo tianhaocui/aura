@@ -5,6 +5,8 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 pom="$repo_root/pom.xml"
 root_version="$(sed -n 's:.*<version>\([^<]*\)</version>.*:\1:p' "$pom" | head -1)"
 test -n "$root_version"
+rg -q '<undertow.version>2\.3\.(2[1-9]|[3-9][0-9])\.Final</undertow.version>' "$pom"
+rg -q '<parameters>true</parameters>' "$pom"
 
 while IFS= read -r module; do
   test -d "$repo_root/$module"
@@ -52,5 +54,18 @@ if rg -n 'context\.routes\(' \
   echo "deprecated Web-specific ModuleContext route API found in first-party modules" >&2
   exit 1
 fi
+
+# Keep bounded-resource and cancellation invariants visible in the release gate.
+rg -q 'CancellationToken\.linked' \
+  "$repo_root/aura-workflow/src/main/java/io/aura/workflow/WorkflowRuntime.java"
+rg -q 'onCancel' \
+  "$repo_root/aura-db/src/main/java/io/aura/db/Db.java"
+if rg -n 'BodyHandlers\.ofString\(' \
+    "$repo_root/aura-web/src/main/java/io/aura/web/SnapshotHttpClient.java"; then
+  echo "unbounded external response body handler found" >&2
+  exit 1
+fi
+rg -q 'JSON\.toJSONString\(validatedAppUrl\.toString\(\)\)' \
+  "$repo_root/aura-mcp/src/main/java/io/aura/mcp/McpPackager.java"
 
 echo "Aura module and documentation contracts passed (version $root_version)"
