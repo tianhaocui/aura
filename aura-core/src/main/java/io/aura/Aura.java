@@ -16,7 +16,7 @@ import io.aura.snapshot.SnapshotOptions;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class Aura {
+public class Aura implements AuraRuntime {
 
     public enum Lifecycle { NEW, STARTING, RUNNING, STOPPING, STOPPED }
 
@@ -110,6 +110,9 @@ public class Aura {
     public static Aura create(AuraConfig config) { return new Aura(config == null ? new AuraConfig() : config, false); }
     public AuraConfig config() { return config; }
     public Lifecycle lifecycle() { return lifecycle.get(); }
+    @Override public io.aura.contract.RuntimeState state() {
+        return io.aura.contract.RuntimeState.valueOf(lifecycle.get().name());
+    }
     public Aura configure(Consumer<AuraConfig> consumer) { consumer.accept(config); config.validate(); syncConfigFields(); return this; }
 
     /** Explicitly install a capability or business module. Modules are ordered by declared dependencies. */
@@ -120,6 +123,9 @@ public class Aura {
 
     public List<AuraModule> modules() { return moduleManager.modules(); }
     public List<io.aura.contract.ModuleMetadata> moduleDescriptors() { return moduleManager.descriptors(); }
+    @Override public <T> java.util.Optional<T> find(Class<T> type) {
+        return java.util.Optional.ofNullable(getBean(type));
+    }
     public Aura observe(AuraEventListener listener) {
         if (listener == null) throw new IllegalArgumentException("event listener must not be null");
         eventListeners.add(listener);
@@ -200,6 +206,8 @@ public class Aura {
         props.put(key, value);
         return this;
     }
+
+    @Override public Aura property(String key, String value) { return set(key, value); }
 
     public Aura staticFiles(String path) {
         this.staticFilesPath = path;
@@ -591,7 +599,7 @@ public class Aura {
     }
 
 
-    public void start(String[] args) {
+    @Override public void start(String[] args) {
         boolean mcpStdio = false;
         for (String arg : args) {
             if (arg.startsWith("--config=")) {
@@ -621,7 +629,7 @@ public class Aura {
         start();
     }
 
-    public void start() {
+    @Override public void start() {
         if (reloadMode && lifecycle.get() == Lifecycle.RUNNING) {
             reloadMode = false;
             selfCheck();
@@ -720,7 +728,7 @@ public class Aura {
         log.error("Aura startup failed", failure);
     }
 
-    public void stop() {
+    @Override public void stop() {
         Lifecycle current = lifecycle.get();
         if (current == Lifecycle.STOPPED || current == Lifecycle.STOPPING) return;
         if (!lifecycle.compareAndSet(current, Lifecycle.STOPPING)) return;
@@ -784,7 +792,7 @@ public class Aura {
     public io.aura.contract.McpRouterSpec mcpRouter() { return mcpRouter; }
 
     /** Installs module contributions without starting external resources; used by TestClient. */
-    public void prepareModules() {
+    @Override public void prepareModules() {
         if (moduleManager.installed()) return;
         installModules(false);
     }

@@ -20,6 +20,15 @@ class RuntimeFoundationTest {
         assertThat(Aura.create().port()).isEqualTo(8080);
     }
 
+    @Test void runtimeContractExposesStableStateAndCapabilityLookup() {
+        AuraRuntime runtime = Aura.create();
+        assertThat(runtime.state()).isEqualTo(io.aura.contract.RuntimeState.NEW);
+        assertThat(runtime.find(String.class)).isEmpty();
+        assertThat(runtime.config()).isNotNull();
+        runtime.close();
+        assertThat(runtime.state()).isEqualTo(io.aura.contract.RuntimeState.STOPPED);
+    }
+
     @Test void cancellationIsAtomicAndObservable() {
         CancellationToken token = new CancellationToken();
         assertThat(token.isCancelled()).isFalse();

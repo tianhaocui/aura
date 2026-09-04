@@ -68,8 +68,10 @@ class AuraModuleTest {
 
         assertThat(app.modules()).extracting(io.aura.contract.ModuleMetadata::id).containsExactly("sample");
         assertThat(app.lifecycle()).isEqualTo(Aura.Lifecycle.NEW);
+        assertThat(app.state()).isEqualTo(io.aura.contract.RuntimeState.NEW);
         app.prepare();
         assertThat(app.lifecycle()).isEqualTo(Aura.Lifecycle.NEW);
+        assertThat(app.state()).isEqualTo(io.aura.contract.RuntimeState.NEW);
     }
 
     @Test

@@ -101,6 +101,13 @@ class ContractTypesTest {
         assertThat(McpRouterSpec.class.getPackageName()).isEqualTo("io.aura.contract");
     }
 
+    @Test
+    void runtimeStateHasStableLifecycleOrder() {
+        assertThat(RuntimeState.values())
+                .containsExactly(RuntimeState.NEW, RuntimeState.STARTING, RuntimeState.RUNNING,
+                        RuntimeState.STOPPING, RuntimeState.STOPPED);
+    }
+
     private static final class SetSupport {
         private static java.util.Set<ModuleRequirement> copy(List<ModuleRequirement> values) {
             return new java.util.LinkedHashSet<>(values);

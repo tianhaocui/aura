@@ -18,6 +18,9 @@ The old `Aura` builder remains an implementation and migration escape hatch. New
 implement `AuraModule`, declare a stable descriptor, and obtain dependencies from `ModuleContext`.
 Do not add new code that reaches through `AuraApp.runtime()`.
 
+Adapters should depend on the replaceable `AuraRuntime` surface and its stable `RuntimeState`
+values rather than on the legacy Builder implementation.
+
 ## API mapping
 
 | Before | Aura 1.0 |

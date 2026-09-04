@@ -5,10 +5,12 @@ import java.util.Optional;
 
 /** Canonical Aura 1.0 application facade for explicit module composition. */
 public final class AuraApp implements AutoCloseable {
-    private final Aura runtime;
+    private final Aura legacyRuntime;
+    private final AuraRuntime runtime;
 
     private AuraApp(AuraConfig config) {
-        this.runtime = Aura.create(config == null ? new AuraConfig() : config);
+        this.legacyRuntime = Aura.create(config == null ? new AuraConfig() : config);
+        this.runtime = legacyRuntime;
     }
 
     public static AuraApp create() { return new AuraApp(new AuraConfig()); }
@@ -39,7 +41,7 @@ public final class AuraApp implements AutoCloseable {
         if (key == null || !key.startsWith(prefix)) {
             throw new IllegalArgumentException("AuraApp properties must use the aura.<module>.* namespace");
         }
-        runtime.set(key, value);
+        runtime.property(key, value);
         return this;
     }
 
@@ -62,20 +64,19 @@ public final class AuraApp implements AutoCloseable {
     public void stop() { runtime.stop(); }
     @Override public void close() { stop(); }
 
-    public Aura.Lifecycle lifecycle() { return runtime.lifecycle(); }
+    public Aura.Lifecycle lifecycle() { return Aura.Lifecycle.valueOf(runtime.state().name()); }
+    public io.aura.contract.RuntimeState state() { return runtime.state(); }
     public AuraConfig config() { return runtime.config(); }
     public io.aura.contract.PermissionRegistry permissions() { return runtime.permissions(); }
     public List<io.aura.contract.ModuleMetadata> modules() { return runtime.moduleDescriptors(); }
-    public <T> Optional<T> find(Class<T> type) { return Optional.ofNullable(runtime.getBean(type)); }
+    public <T> Optional<T> find(Class<T> type) { return runtime.find(type); }
     public <T> T require(Class<T> type) {
-        T value = runtime.getBean(type);
-        if (value == null) throw new IllegalStateException("Aura capability is not installed: " + type.getName());
-        return value;
+        return runtime.require(type);
     }
     /**
      * @deprecated Use {@link #prepare()}, {@link #find(Class)}, or {@link #require(Class)}.
      * This escape hatch will be removed after the 1.0 runtime split.
      */
     @Deprecated
-    public Aura runtime() { return runtime; }
+    public Aura runtime() { return legacyRuntime; }
 }

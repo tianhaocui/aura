@@ -23,6 +23,9 @@ cooperative signal that can be shared by request, AI, and workflow adapters.
 `StructuredError` and `ContractException` preserve a stable error code,
 message, and details map for protocol-specific serialization.
 
+`RuntimeState` defines the stable lifecycle vocabulary used by replaceable Aura
+runtime implementations: `NEW`, `STARTING`, `RUNNING`, `STOPPING`, and `STOPPED`.
+
 `RouteContribution` and `RouteContributor` let optional transport adapters receive
 route descriptions without making `aura-contract` depend on Undertow or a specific
 router implementation. Route metadata can include `ApiParameter` values for
