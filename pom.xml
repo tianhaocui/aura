@@ -42,6 +42,7 @@
         <module>aura-mcp</module>
         <module>aura-ai</module>
         <module>aura-workflow</module>
+        <module>examples/aura-composed</module>
         <module>aura-dev</module>
     </modules>
 
