@@ -54,6 +54,7 @@ routes.post("/orders", handler)
 ```java
 AuraApp.create()
         .authorize((userId, permission) -> acl.allows(userId, permission))
+        .authenticate(ctx -> tokenService.userId(ctx.header("Authorization")))
         .use(new OrderModule())
         .start();
 ```

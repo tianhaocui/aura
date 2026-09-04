@@ -317,6 +317,10 @@ public class Aura implements AuraWebRuntime {
         return this;
     }
 
+    @Override public AuraRuntime authenticate(java.util.function.Function<io.aura.web.BaseContext, String> authenticator) {
+        return auth(authenticator);
+    }
+
     public Aura authorize(java.util.function.BiPredicate<String, String> permissionChecker) {
         this.permissionChecker = permissionChecker;
         return this;

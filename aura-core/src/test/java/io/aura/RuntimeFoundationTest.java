@@ -46,6 +46,13 @@ class RuntimeFoundationTest {
         assertThatThrownBy(token::throwIfCancelled).isInstanceOf(java.util.concurrent.CancellationException.class);
     }
 
+    @Test void modularFacadeExposesStableAuthenticationConfiguration() {
+        AuraApp app = AuraApp.create().authenticate(ctx -> "user-1");
+        AuraWebRuntime runtime = (AuraWebRuntime) app.runtimeView();
+        assertThat(runtime.authFunction()).isNotNull();
+        assertThat(runtime.authFunction().apply(null)).isEqualTo("user-1");
+    }
+
     @Test void lifecycleStopIsIdempotentAndTerminal() {
         Aura app = Aura.create();
         assertThat(app.state()).isEqualTo(io.aura.contract.RuntimeState.NEW);

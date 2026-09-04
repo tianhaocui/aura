@@ -8,7 +8,7 @@ public final class AuraApp implements AutoCloseable {
     private final AuraRuntime runtime;
 
     private AuraApp(AuraConfig config) {
-        this.runtime = new DefaultAuraRuntime(Aura.create(config == null ? new AuraConfig() : config));
+        this.runtime = new ModularRuntime(config == null ? new AuraConfig() : config);
     }
 
     public static AuraApp create() { return new AuraApp(new AuraConfig()); }
@@ -31,6 +31,11 @@ public final class AuraApp implements AutoCloseable {
 
     public AuraApp authorize(java.util.function.BiPredicate<String, String> checker) {
         runtime.authorize(checker);
+        return this;
+    }
+
+    public AuraApp authenticate(java.util.function.Function<io.aura.web.BaseContext, String> authenticator) {
+        runtime.authenticate(authenticator);
         return this;
     }
 

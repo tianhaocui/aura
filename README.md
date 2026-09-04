@@ -45,8 +45,16 @@ AI agent gets 7 tools (create/list/get/update/delete/search/stats todos). [Sourc
 ```
 
 ```java
-Aura.create().port(8080)
-    .get("/hello", () -> "hello world")
+AuraApp.create()
+    .use(new AuraModule() {
+        @Override public ModuleMetadata descriptor() {
+            return ModuleMetadata.of("hello", "1.0.0");
+        }
+        @Override public void install(ModuleContext context) {
+            context.route(new RouteContribution(
+                    "GET", "/hello", (BaseHandler) ctx -> ctx.text("hello world")));
+        }
+    })
     .start();
 ```
 
@@ -63,7 +71,7 @@ Each module declares dependencies and contributes routes, services, health check
 
 New 1.0 applications should follow the [migration and API guide](docs/migration-to-1.0.md).
 
-## Just Service
+## Just Service (Legacy Builder)
 
 Service methods are plain Java. No Controller, no DAO, no annotations required.
 

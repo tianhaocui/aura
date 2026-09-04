@@ -4,6 +4,7 @@ import io.aura.Aura;
 import io.aura.AuraApp;
 import io.aura.AuraRuntime;
 import io.aura.AuraWebRuntime;
+import io.aura.AuraConfig;
 import io.aura.AuraModule;
 import io.aura.ModuleContext;
 import io.aura.contract.ModuleMetadata;
@@ -123,5 +124,26 @@ class ModuleAssemblyTest {
 
         assertThat(TestClient.of((AuraRuntime) runtime)
                 .get("/runtime-proxy").expect(200).body()).isEqualTo("proxy-ok");
+    }
+
+    @Test
+    void auraAppStartsTheIndependentRuntimeThroughTheWebAdapter() {
+        AuraApp app = AuraApp.create(new AuraConfig().port(0)).use(new AuraModule() {
+            @Override public ModuleMetadata descriptor() {
+                return ModuleMetadata.of("runtime-server", "1.0.0");
+            }
+            @Override public void install(ModuleContext context) {
+                context.route(new RouteContribution(
+                        "GET", "/runtime-server", (BaseHandler) ctx -> ctx.text("running")));
+            }
+        });
+
+        try {
+            app.start();
+            assertThat(app.state()).isEqualTo(io.aura.contract.RuntimeState.RUNNING);
+        } finally {
+            app.close();
+        }
+        assertThat(app.state()).isEqualTo(io.aura.contract.RuntimeState.STOPPED);
     }
 }

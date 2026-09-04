@@ -37,6 +37,7 @@ TestClient.of(app.runtimeView()).get("/orders").expect(200);
 |---|---|
 | `Aura.create().plugin(...)` | `AuraApp.create().use(capabilityModule)` |
 | global/static service lookup | `context.require(Type.class)` or `context.find(Type.class)` |
+| `Aura.auth(...)` | `AuraApp.authenticate(...)` |
 | implicit package discovery | explicit `.use(new BusinessModule())` |
 | numeric workflow positions | named steps plus `.before(...)` / `.after(...)` |
 | customer-specific branching in handlers | `WorkflowDefinition.variant(...)` and `WorkflowSelector` |

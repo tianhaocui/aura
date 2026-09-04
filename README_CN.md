@@ -47,8 +47,16 @@ AI agent 获得 7 个工具（创建/列表/获取/更新/删除/搜索/统计 t
 ```
 
 ```java
-Aura.create().port(8080)
-    .get("/hello", () -> "hello world")
+AuraApp.create()
+    .use(new AuraModule() {
+        @Override public ModuleMetadata descriptor() {
+            return ModuleMetadata.of("hello", "1.0.0");
+        }
+        @Override public void install(ModuleContext context) {
+            context.route(new RouteContribution(
+                    "GET", "/hello", (BaseHandler) ctx -> ctx.text("hello world")));
+        }
+    })
     .start();
 ```
 
@@ -66,7 +74,7 @@ AI 能力（可选模块）：
 
 新项目请先阅读 [Aura 1.0 迁移与 API 指南](docs/migration-to-1.0.md)。
 
-## Just Service
+## Just Service（旧 Builder）
 
 Service 方法就是普通 Java 方法。没有 Controller，没有 DAO，不需要注解。
 
