@@ -20,7 +20,23 @@ public interface ModuleContext extends io.aura.contract.CapabilityLookup {
 
     void service(Object service);
 
+    /** @deprecated Use {@link #routes(io.aura.contract.RouteContributor)} for new modules. */
+    @Deprecated
     void routes(Consumer<BaseRouter> routes);
+
+    /** Adds framework-neutral route contributions for an optional transport adapter. */
+    default void routes(io.aura.contract.RouteContributor routes) {
+        if (routes == null) {
+            throw new IllegalArgumentException("route contributor must return routes");
+        }
+        java.util.Collection<io.aura.contract.RouteContribution> contributions = routes.routes();
+        if (contributions == null) {
+            throw new IllegalArgumentException("route contributor must return routes");
+        }
+        contributions.forEach(this::route);
+    }
+
+    void route(io.aura.contract.RouteContribution route);
 
     void before(BaseHandler handler);
 

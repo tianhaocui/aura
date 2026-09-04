@@ -993,6 +993,23 @@ public class Aura {
         @Override public void register(String name, Object value) { Aura.this.register(name, value); trackLifecycle(value); }
         @Override public void service(Object service) { Aura.this.service(service); trackLifecycle(service); }
         @Override public void routes(Consumer<io.aura.web.BaseRouter> routes) { moduleRouteConfigs.add(routes); }
+        @Override public void route(io.aura.contract.RouteContribution route) {
+            if (route == null) {
+                throw new ModuleException("AURA_ROUTE_CONTRIBUTION_INVALID", descriptor.id(),
+                        "Route contribution must not be null");
+            }
+            if (route.handler() == null) {
+                throw new ModuleException("AURA_ROUTE_HANDLER_MISSING", descriptor.id(),
+                        "Route contribution " + route.method() + " " + route.path() + " has no handler");
+            }
+            try {
+                route.parameters();
+            } catch (IllegalArgumentException error) {
+                throw new ModuleException("AURA_ROUTE_CONTRIBUTION_INVALID", descriptor.id(), error.getMessage());
+            }
+            directRoutes.add(new RouteEntry(route.method(), route.path(), route.handler(),
+                    route.description(), route.metadata()));
+        }
         @Override public void before(io.aura.web.BaseHandler handler) { Aura.this.before(handler); }
         @Override public void after(io.aura.web.BaseHandler handler) { Aura.this.after(handler); }
         @Override public void mcp(io.aura.contract.McpRouterSpec router) { Aura.this.mcp(router); }

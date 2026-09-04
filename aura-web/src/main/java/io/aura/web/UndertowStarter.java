@@ -223,7 +223,7 @@ public class UndertowStarter implements AuraStarter {
         for (var entry : app.directRoutes()) {
             BaseHandler handler = entry.handler() instanceof BaseHandler h
                     ? h : new LambdaHandler(entry.handler());
-            switch (entry.method()) {
+            BaseRouteBuilder builder = switch (entry.method()) {
                 case "GET" -> router.get(entry.path(), handler);
                 case "POST" -> router.post(entry.path(), handler);
                 case "PUT" -> router.put(entry.path(), handler);
@@ -231,6 +231,19 @@ public class UndertowStarter implements AuraStarter {
                 case "PATCH" -> router.patch(entry.path(), handler);
                 case "HEAD" -> router.head(entry.path(), handler);
                 case "OPTIONS" -> router.options(entry.path(), handler);
+                default -> throw new IllegalArgumentException("Unsupported route method: " + entry.method());
+            };
+            if (entry.description() != null) builder.describe(entry.description());
+            Object returnType = entry.metadata().get("returnType");
+            if (returnType != null) builder.returnType = returnType.toString();
+            Object parameters = entry.metadata().get("parameters");
+            if (parameters instanceof java.util.Collection<?> values) {
+                for (Object value : values) {
+                    if (value instanceof io.aura.contract.ApiParameter parameter) {
+                        builder.param(parameter.name(), parameter.type(), parameter.source(),
+                                parameter.required(), parameter.description());
+                    }
+                }
             }
         }
     }

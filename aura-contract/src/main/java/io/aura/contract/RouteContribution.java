@@ -28,4 +28,28 @@ public record RouteContribution(String method, String path, Object handler,
     public RouteContribution(String method, String path, Object handler) {
         this(method, path, handler, Map.of());
     }
+
+    public String description() {
+        Object value = metadata.get("description");
+        return value == null ? null : value.toString();
+    }
+
+    public String returnType() {
+        Object value = metadata.get("returnType");
+        return value == null ? null : value.toString();
+    }
+
+    /** Optional explicit parameters for handlers whose signature is not reflectively discoverable. */
+    public java.util.List<ApiParameter> parameters() {
+        Object value = metadata.get("parameters");
+        if (!(value instanceof java.util.Collection<?> values)) return java.util.List.of();
+        java.util.List<ApiParameter> result = new java.util.ArrayList<>();
+        for (Object item : values) {
+            if (!(item instanceof ApiParameter parameter)) {
+                throw new IllegalArgumentException("route metadata parameters must contain ApiParameter values");
+            }
+            result.add(parameter);
+        }
+        return java.util.List.copyOf(result);
+    }
 }

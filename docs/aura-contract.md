@@ -23,6 +23,11 @@ cooperative signal that can be shared by request, AI, and workflow adapters.
 `StructuredError` and `ContractException` preserve a stable error code,
 message, and details map for protocol-specific serialization.
 
+`RouteContribution` and `RouteContributor` let optional transport adapters receive
+route descriptions without making `aura-contract` depend on Undertow or a specific
+router implementation. Route metadata can include `ApiParameter` values for
+handlers that cannot be inspected through reflection.
+
 `PermissionRegistry` provides an explicit, duplicate-checked list of permission
 ids contributed by modules. Authorization implementations can consume its
 snapshot without depending on Aura's runtime registry.
