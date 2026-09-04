@@ -114,4 +114,35 @@ class OpenAiCompatibleProviderTest {
             server.stop(0);
         }
     }
+
+    @Test
+    void aiClientRetriesTransientProviderFailuresWithinTheTotalTimeout() throws Exception {
+        java.util.concurrent.atomic.AtomicInteger calls = new java.util.concurrent.atomic.AtomicInteger();
+        HttpServer server = HttpServer.create(new InetSocketAddress(0), 0);
+        server.createContext("/retry", exchange -> {
+            if (calls.incrementAndGet() == 1) {
+                exchange.sendResponseHeaders(503, -1);
+                exchange.close();
+                return;
+            }
+            byte[] response = "{\"choices\":[{\"message\":{\"content\":\"recovered\"}}]}".getBytes(StandardCharsets.UTF_8);
+            exchange.sendResponseHeaders(200, response.length);
+            try (OutputStream output = exchange.getResponseBody()) { output.write(response); }
+        });
+        server.start();
+        try {
+            OpenAiCompatibleProvider provider = OpenAiCompatibleProvider.create(
+                    "http://localhost:" + server.getAddress().getPort() + "/retry", "", "default");
+            try (AiClient client = new AiClient(provider)) {
+                AiResponse response = client.chat(AiRequest.builder().prompt("retry")
+                        .timeout(Duration.ofSeconds(2))
+                        .retry(AiRetryPolicy.fixed(2, Duration.ZERO))
+                        .build());
+                assertThat(response.content()).isEqualTo("recovered");
+            }
+            assertThat(calls).hasValue(2);
+        } finally {
+            server.stop(0);
+        }
+    }
 }

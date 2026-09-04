@@ -20,6 +20,7 @@ public final class AiRequest {
     private final AiRedactor redactor;
     private final List<AiToolDefinition> tools;
     private final String toolChoice;
+    private final AiRetryPolicy retryPolicy;
 
     public AiRequest(String prompt) {
         this(builder().prompt(prompt));
@@ -40,6 +41,7 @@ public final class AiRequest {
         this.redactor = Objects.requireNonNull(builder.redactor, "redactor");
         this.tools = List.copyOf(builder.tools);
         this.toolChoice = builder.toolChoice;
+        this.retryPolicy = Objects.requireNonNull(builder.retryPolicy, "retryPolicy");
         if (budget.maxInputCharacters() > 0 && prompt.length() > budget.maxInputCharacters()) {
             throw new IllegalArgumentException("prompt exceeds configured AI input budget");
         }
@@ -62,6 +64,7 @@ public final class AiRequest {
     public AiRedactor redactor() { return redactor; }
     public List<AiToolDefinition> tools() { return tools; }
     public String toolChoice() { return toolChoice; }
+    public AiRetryPolicy retryPolicy() { return retryPolicy; }
 
     private static String requireText(String value, String name) {
         if (value == null || value.isBlank()) throw new IllegalArgumentException(name + " must not be blank");
@@ -85,6 +88,7 @@ public final class AiRequest {
         private AiRedactor redactor = AiRedactor.defaultRedactor();
         private final List<AiToolDefinition> tools = new java.util.ArrayList<>();
         private String toolChoice;
+        private AiRetryPolicy retryPolicy = AiRetryPolicy.none();
 
         public Builder prompt(String value) { this.prompt = value; return this; }
         public Builder systemPrompt(String value) { this.systemPrompt = value; return this; }
@@ -106,6 +110,7 @@ public final class AiRequest {
             return this;
         }
         public Builder toolChoice(String value) { this.toolChoice = value; return this; }
+        public Builder retry(AiRetryPolicy value) { this.retryPolicy = Objects.requireNonNull(value, "retryPolicy"); return this; }
         public AiRequest build() { return new AiRequest(this); }
     }
 }

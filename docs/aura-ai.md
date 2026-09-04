@@ -82,3 +82,17 @@ for (AiToolCall call : response.toolCalls()) {
 
 The provider parses JSON arguments but does not execute tools implicitly. Authorization and tool
 dispatch remain explicit application/module responsibilities.
+
+Transient synchronous provider failures can be retried with a bounded policy. The timeout is the
+total budget across all attempts:
+
+```java
+AiRequest request = AiRequest.builder()
+        .prompt("Summarize order 42")
+        .timeout(Duration.ofSeconds(20))
+        .retry(AiRetryPolicy.fixed(3, Duration.ofMillis(200)))
+        .build();
+```
+
+Only HTTP 429/5xx and I/O failures are retried. Streaming calls are not retried automatically,
+because replaying partial tokens would produce ambiguous output.

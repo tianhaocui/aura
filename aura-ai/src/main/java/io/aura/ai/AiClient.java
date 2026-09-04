@@ -47,25 +47,37 @@ public final class AiClient implements AutoCloseable {
     public AiResponse chat(AiRequest request) throws Exception {
         Objects.requireNonNull(request, "request");
         request.cancellationToken().throwIfCancelled();
-        Future<AiResponse> future = submit(() -> {
-            request.cancellationToken().throwIfCancelled();
-            return provider.chat(request);
-        });
-        try {
-            AiResponse response = await(future, request.timeout(), request.cancellationToken());
-            if (request.budget().maxOutputCharacters() > 0
-                    && response.content().length() > request.budget().maxOutputCharacters()) {
-                throw new IllegalStateException("AI response exceeds configured output budget");
+        long deadline = request.timeout() == null || request.timeout().isZero()
+                ? Long.MAX_VALUE : System.nanoTime() + request.timeout().toNanos();
+        for (int attempt = 1; ; attempt++) {
+            Duration remaining = remaining(request.timeout(), deadline);
+            Future<AiResponse> future = submit(() -> {
+                request.cancellationToken().throwIfCancelled();
+                return provider.chat(request);
+            });
+            try {
+                AiResponse response = await(future, remaining, request.cancellationToken());
+                if (request.budget().maxOutputCharacters() > 0
+                        && response.content().length() > request.budget().maxOutputCharacters()) {
+                    throw new IllegalStateException("AI response exceeds configured output budget");
+                }
+                return response;
+            } catch (TimeoutException | CancellationException | InterruptedException error) {
+                request.cancellationToken().cancel();
+                future.cancel(true);
+                if (error instanceof InterruptedException) Thread.currentThread().interrupt();
+                throw error;
+            } catch (ExecutionException error) {
+                future.cancel(true);
+                Throwable cause = unwrap(error);
+                if (attempt >= request.retryPolicy().maxAttempts()
+                        || !request.retryPolicy().shouldRetry(cause)) {
+                    if (cause instanceof Exception exception) throw exception;
+                    if (cause instanceof Error fatal) throw fatal;
+                    throw new RuntimeException(cause);
+                }
+                sleepBackoff(request, remaining, deadline);
             }
-            return response;
-        } catch (TimeoutException | CancellationException | InterruptedException error) {
-            request.cancellationToken().cancel();
-            future.cancel(true);
-            if (error instanceof InterruptedException) Thread.currentThread().interrupt();
-            throw error;
-        } catch (ExecutionException error) {
-            future.cancel(true);
-            return throwCause(error);
         }
     }
 
@@ -113,6 +125,33 @@ public final class AiClient implements AutoCloseable {
         if (cause instanceof Exception exception) throw exception;
         if (cause instanceof Error fatal) throw fatal;
         throw new RuntimeException(cause);
+    }
+
+    private static Duration remaining(Duration configured, long deadline) throws TimeoutException {
+        if (configured == null || configured.isZero()) return Duration.ZERO;
+        long nanos = deadline - System.nanoTime();
+        if (nanos <= 0) throw new TimeoutException("AI request timed out after " + configured);
+        return Duration.ofNanos(nanos);
+    }
+
+    private static void sleepBackoff(AiRequest request, Duration remaining, long deadline) throws Exception {
+        Duration backoff = request.retryPolicy().backoff();
+        if (backoff.isZero()) return;
+        if (remaining != null && !remaining.isZero() && backoff.compareTo(remaining) >= 0) {
+            throw new TimeoutException("AI request timed out during retry backoff");
+        }
+        long millis = backoff.toMillis();
+        int nanos = backoff.minusMillis(millis).getNano();
+        try {
+            Thread.sleep(millis, nanos);
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+            throw interrupted;
+        }
+        request.cancellationToken().throwIfCancelled();
+        if (deadline != Long.MAX_VALUE && deadline <= System.nanoTime()) {
+            throw new TimeoutException("AI request timed out during retry backoff");
+        }
     }
 
     private <T> Future<T> submit(Callable<T> task) {
