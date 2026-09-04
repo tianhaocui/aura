@@ -132,6 +132,15 @@ class RuntimeFoundationTest {
         assertThat(app.config().snapshotOptions().maxBodySize()).isEqualTo(4096);
     }
 
+    @Test void modularRuntimeRejectsPropertyChangesAfterPreparation() {
+        AuraApp app = AuraApp.create().property("aura.orders.timeout", "5");
+        app.prepare();
+
+        assertThatThrownBy(() -> app.property("aura.orders.timeout", "10"))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("before module preparation");
+    }
+
     @Test void healthModuleDeclaresTheStandardHealthRoutes() {
         AuraApp app = AuraApp.create().use(HealthModule.create());
         app.prepare();

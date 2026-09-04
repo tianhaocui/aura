@@ -83,6 +83,9 @@ final class ModularRuntime implements AuraWebRuntime {
         if (key == null || !key.startsWith("aura.")) {
             throw new IllegalArgumentException("AuraApp properties must use the aura.<module>.* namespace");
         }
+        if (moduleManager.installed() || state.get() != RuntimeState.NEW) {
+            throw new IllegalStateException("AuraApp properties must be configured before module preparation");
+        }
         if (value == null) properties.remove(key); else properties.put(key, value);
         return this;
     }

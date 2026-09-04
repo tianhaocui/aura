@@ -79,6 +79,9 @@ AuraApp.create(config).use(new OrderModule()).start();
 `app.config()` and `runtime.config()` expose an immutable `AuraConfigSnapshot`;
 changing the original builder or a returned nested CORS/JSON/Snapshot object
 does not change the runtime.
+Application properties follow the same lifecycle boundary: configure them with
+`AuraApp.property(...)` before `prepare()` or `start()`. Changes after module
+preparation are rejected so module behavior cannot change nondeterministically.
 
 Use `HealthModule.create()` when an application needs the standard health
 contract. It contributes `GET /health/live`, `GET /health/ready`, and
