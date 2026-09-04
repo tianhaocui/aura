@@ -24,7 +24,9 @@ public final class AiModule implements AuraModule {
     }
 
     @Override public ModuleDescriptor descriptor() {
-        return ModuleDescriptor.of("ai", "1.0.0").build();
+        return ModuleDescriptor.of("ai", "1.0.0")
+                .provides("ai.client")
+                .build();
     }
 
     @Override public void install(ModuleContext context) {

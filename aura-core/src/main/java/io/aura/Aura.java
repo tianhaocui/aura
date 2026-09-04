@@ -891,8 +891,57 @@ public class Aura {
     private static boolean versionMatches(String version, String range) {
         if (range == null || range.isBlank() || "*".equals(range.trim())) return true;
         String wanted = range.trim();
-        if (wanted.startsWith("[1.0") || wanted.startsWith("1.")) return version.startsWith("1.");
-        return version.equals(wanted);
+        SemVer actual = SemVer.parse(version);
+        if (wanted.startsWith("[") || wanted.startsWith("(")) {
+            int comma = wanted.indexOf(',');
+            if (comma < 2 || !wanted.endsWith("]") && !wanted.endsWith(")")) return false;
+            String lower = wanted.substring(1, comma).trim();
+            String upper = wanted.substring(comma + 1, wanted.length() - 1).trim();
+            boolean lowerOk = lower.isEmpty() || actual.compareTo(SemVer.parse(lower)) >= (wanted.charAt(0) == '[' ? 0 : 1);
+            boolean upperOk = upper.isEmpty() || actual.compareTo(SemVer.parse(upper)) <= (wanted.charAt(wanted.length() - 1) == ']' ? 0 : -1);
+            return lowerOk && upperOk;
+        }
+        if (wanted.startsWith("^")) {
+            SemVer lower = SemVer.parse(wanted.substring(1));
+            return actual.compareTo(lower) >= 0 && actual.major == lower.major;
+        }
+        if (wanted.startsWith("~")) {
+            SemVer lower = SemVer.parse(wanted.substring(1));
+            return actual.compareTo(lower) >= 0 && actual.major == lower.major && actual.minor == lower.minor;
+        }
+        if (wanted.endsWith(".*")) return actual.major == SemVer.parse(wanted.substring(0, wanted.length() - 2)).major;
+        return actual.compareTo(SemVer.parse(wanted)) == 0;
+    }
+
+    private static final class SemVer implements Comparable<SemVer> {
+        private final int major;
+        private final int minor;
+        private final int patch;
+
+        private SemVer(int major, int minor, int patch) {
+            this.major = major;
+            this.minor = minor;
+            this.patch = patch;
+        }
+
+        private static SemVer parse(String value) {
+            if (value == null || value.isBlank()) return new SemVer(0, 0, 0);
+            String[] parts = value.trim().split("\\.");
+            return new SemVer(number(parts, 0), number(parts, 1), number(parts, 2));
+        }
+
+        private static int number(String[] parts, int index) {
+            if (index >= parts.length || parts[index].isBlank() || "x".equalsIgnoreCase(parts[index])) return 0;
+            try { return Integer.parseInt(parts[index].replaceAll("[^0-9].*", "")); }
+            catch (NumberFormatException ignored) { return 0; }
+        }
+
+        @Override public int compareTo(SemVer other) {
+            int result = Integer.compare(major, other.major);
+            if (result != 0) return result;
+            result = Integer.compare(minor, other.minor);
+            return result != 0 ? result : Integer.compare(patch, other.patch);
+        }
     }
 
     private final class ModuleContextImpl implements ModuleContext {

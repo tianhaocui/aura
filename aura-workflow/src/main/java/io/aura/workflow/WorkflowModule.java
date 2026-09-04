@@ -21,7 +21,9 @@ public final class WorkflowModule implements AuraModule {
     }
 
     @Override public ModuleDescriptor descriptor() {
-        return ModuleDescriptor.of("workflow", "1.0.0").build();
+        return ModuleDescriptor.of("workflow", "1.0.0")
+                .provides("workflow.registry", "workflow.runtime")
+                .build();
     }
 
     @Override public void install(ModuleContext context) {

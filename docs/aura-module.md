@@ -7,6 +7,7 @@ public final class OrderModule implements AuraModule {
     @Override public ModuleDescriptor descriptor() {
         return ModuleDescriptor.of("order", "1.0.0")
                 .requires("workflow")
+                .provides("order.api", "order.workflow")
                 .build();
     }
 
@@ -28,6 +29,7 @@ AuraApp.create()
 ## Rules
 
 - `descriptor().id()` is stable and unique within one application.
+- `descriptor().provides(...)` documents the capabilities contributed by the module for diagnostics and tooling.
 - Dependencies are declared with `requires(...)`; Aura checks missing modules and cycles before starting the server.
 - `install(...)` only registers services, routes and capabilities. `start(...)` opens external resources; `stop(...)` releases them.
 - Module properties must use `aura.<module-id>.*` and are read through `context.property(...)`.

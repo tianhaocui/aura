@@ -18,7 +18,9 @@ public final class McpModule implements AuraModule {
     public static McpModule create(McpRouter router) { return new McpModule(router); }
 
     @Override public ModuleDescriptor descriptor() {
-        return ModuleDescriptor.of("mcp", "1.0.0").build();
+        return ModuleDescriptor.of("mcp", "1.0.0")
+                .provides("mcp.tools", "mcp.resources", "mcp.prompts")
+                .build();
     }
 
     @Override public void install(ModuleContext context) {

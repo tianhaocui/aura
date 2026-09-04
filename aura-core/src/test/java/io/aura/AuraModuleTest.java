@@ -71,6 +71,36 @@ class AuraModuleTest {
         assertThat(app.lifecycle()).isEqualTo(Aura.Lifecycle.NEW);
     }
 
+    @Test
+    void exposesCapabilitiesAndChecksVersionRanges() {
+        AuraModule dependency = new AuraModule() {
+            @Override public ModuleDescriptor descriptor() {
+                return ModuleDescriptor.of("db", "1.4.2").provides("db").build();
+            }
+            @Override public void install(ModuleContext context) { }
+        };
+        AuraModule consumer = new AuraModule() {
+            @Override public ModuleDescriptor descriptor() {
+                return ModuleDescriptor.of("orders", "1.0.0").requires("db", "[1.0,2.0)").build();
+            }
+            @Override public void install(ModuleContext context) { }
+        };
+
+        Aura app = Aura.create().use(consumer).use(dependency);
+        app.prepareModules();
+        assertThat(app.moduleDescriptors().get(0).provides()).containsExactly("db");
+
+        AuraModule incompatible = new AuraModule() {
+            @Override public ModuleDescriptor descriptor() {
+                return ModuleDescriptor.of("bad", "1.0.0").requires("db", "[2.0,3.0)").build();
+            }
+            @Override public void install(ModuleContext context) { }
+        };
+        assertThatThrownBy(() -> Aura.create().use(incompatible).use(dependency).prepareModules())
+                .isInstanceOf(ModuleException.class)
+                .extracting("code").isEqualTo("AURA_MODULE_VERSION_MISMATCH");
+    }
+
     private static AuraModule module(String id, List<String> dependencies, List<String> installed) {
         return new AuraModule() {
             @Override public ModuleDescriptor descriptor() {

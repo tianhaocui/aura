@@ -6,7 +6,11 @@ import java.util.Set;
 import java.util.Collections;
 
 /** Stable metadata used to validate and order explicitly installed modules. */
-public record ModuleDescriptor(String id, String version, Set<ModuleRequirement> requires) {
+public record ModuleDescriptor(String id, String version, Set<ModuleRequirement> requires, Set<String> provides) {
+    public ModuleDescriptor(String id, String version, Set<ModuleRequirement> requires) {
+        this(id, version, requires, Set.of());
+    }
+
     public ModuleDescriptor {
         if (id == null || id.isBlank()) throw new IllegalArgumentException("module id must not be blank");
         if (version == null || version.isBlank()) throw new IllegalArgumentException("module version must not be blank");
@@ -15,6 +19,9 @@ public record ModuleDescriptor(String id, String version, Set<ModuleRequirement>
         requires = requires == null
                 ? Set.of()
                 : Collections.unmodifiableSet(new LinkedHashSet<>(requires));
+        provides = provides == null
+                ? Set.of()
+                : Collections.unmodifiableSet(new LinkedHashSet<>(provides));
     }
 
     public static Builder of(String id, String version) { return new Builder(id, version); }
@@ -22,13 +29,14 @@ public record ModuleDescriptor(String id, String version, Set<ModuleRequirement>
     public io.aura.contract.ModuleMetadata contract() {
         return new io.aura.contract.ModuleMetadata(id, version,
                 requires.stream().map(ModuleRequirement::contract).collect(java.util.stream.Collectors.toCollection(java.util.LinkedHashSet::new)),
-                Set.of());
+                provides);
     }
 
     public static final class Builder {
         private final String id;
         private final String version;
         private final Set<ModuleRequirement> requires = new LinkedHashSet<>();
+        private final Set<String> provides = new LinkedHashSet<>();
 
         private Builder(String id, String version) {
             this.id = id;
@@ -45,6 +53,18 @@ public record ModuleDescriptor(String id, String version, Set<ModuleRequirement>
             return this;
         }
 
-        public ModuleDescriptor build() { return new ModuleDescriptor(id, version, requires); }
+        public Builder provides(String... capabilities) {
+            if (capabilities != null) {
+                for (String capability : capabilities) {
+                    if (capability == null || capability.isBlank()) {
+                        throw new IllegalArgumentException("capability must not be blank");
+                    }
+                    provides.add(capability.trim());
+                }
+            }
+            return this;
+        }
+
+        public ModuleDescriptor build() { return new ModuleDescriptor(id, version, requires, provides); }
     }
 }

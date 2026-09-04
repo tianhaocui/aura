@@ -28,7 +28,9 @@ public final class DatabaseModule implements AuraModule {
     }
 
     @Override public ModuleDescriptor descriptor() {
-        return ModuleDescriptor.of("db", "1.0.0").build();
+        return ModuleDescriptor.of("db", "1.0.0")
+                .provides("db", "db.migrations")
+                .build();
     }
 
     @Override public void install(ModuleContext context) {
