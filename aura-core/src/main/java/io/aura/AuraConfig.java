@@ -1,7 +1,10 @@
 package io.aura;
 
+import io.aura.snapshot.SnapshotOptions;
+
 import java.util.LinkedHashSet;
 import java.util.Set;
+import java.util.function.Consumer;
 
 /** Central, validated runtime configuration for an Aura application. */
 public final class AuraConfig {
@@ -24,6 +27,16 @@ public final class AuraConfig {
     private boolean openApiEnabled;
     private String keyStorePath;
     private String keyStorePassword;
+    private String staticFilesPath;
+    private boolean spa;
+    private String corsOrigin;
+    private CorsConfig corsConfig;
+    private boolean accessLog;
+    private String accessLogFormat;
+    private boolean gzip;
+    private int gzipMinSize = 1024;
+    private final JsonConfig jsonConfig = new JsonConfig();
+    private final SnapshotOptions snapshotOptions = new SnapshotOptions();
 
     public AuraConfig port(int value) { port = value; return this; }
     public AuraConfig env(String value) { env = requireText(value, "env"); return this; }
@@ -49,6 +62,36 @@ public final class AuraConfig {
         return this;
     }
 
+    public AuraConfig staticFiles(String path) { staticFilesPath = blankToNull(path); return this; }
+    public AuraConfig spa(boolean value) { spa = value; return this; }
+    public AuraConfig cors(boolean enabled) { corsOrigin = enabled ? "*" : null; corsConfig = null; return this; }
+    public AuraConfig cors(String origin) { corsOrigin = blankToNull(origin); corsConfig = null; return this; }
+    public AuraConfig cors(Consumer<CorsConfig> consumer) {
+        if (consumer == null) throw new IllegalArgumentException("cors config consumer must not be null");
+        CorsConfig value = new CorsConfig();
+        consumer.accept(value);
+        if (value.credentials() && value.hasWildcardOrigin()) {
+            throw new IllegalArgumentException("Credentialed CORS requires explicit origins; wildcard '*' is not allowed");
+        }
+        corsConfig = value;
+        corsOrigin = "__cors_config__";
+        return this;
+    }
+    public AuraConfig accessLog(boolean enabled) { accessLog = enabled; accessLogFormat = enabled ? "text" : null; return this; }
+    public AuraConfig accessLog(String format) { accessLogFormat = blankToNull(format); accessLog = accessLogFormat != null; return this; }
+    public AuraConfig gzip(boolean enabled) { gzip = enabled; return this; }
+    public AuraConfig gzipMinSize(int bytes) { gzipMinSize = Math.max(0, bytes); return this; }
+    public AuraConfig jsonConfig(Consumer<JsonConfig> consumer) {
+        if (consumer == null) throw new IllegalArgumentException("json config consumer must not be null");
+        consumer.accept(jsonConfig);
+        return this;
+    }
+    public AuraConfig snapshot(Consumer<SnapshotOptions> consumer) {
+        if (consumer == null) throw new IllegalArgumentException("snapshot config consumer must not be null");
+        consumer.accept(snapshotOptions);
+        return this;
+    }
+
     public int port() { return port; }
     public String env() { return env; }
     public int workers() { return workers; }
@@ -66,6 +109,16 @@ public final class AuraConfig {
     public boolean tlsEnabled() { return keyStorePath != null; }
     public String keyStorePath() { return keyStorePath; }
     public String keyStorePassword() { return keyStorePassword; }
+    public String staticFilesPath() { return staticFilesPath; }
+    public boolean spa() { return spa; }
+    public String corsOrigin() { return corsOrigin; }
+    public CorsConfig corsConfig() { return corsConfig; }
+    public boolean accessLog() { return accessLog; }
+    public String accessLogFormat() { return accessLogFormat; }
+    public boolean gzip() { return gzip; }
+    public int gzipMinSize() { return gzipMinSize; }
+    public JsonConfig jsonConfig() { return jsonConfig; }
+    public SnapshotOptions snapshotOptions() { return snapshotOptions; }
 
     /** Validate before binding a listener; zero means disabled only for optional admission controls. */
     public AuraConfig validate() {

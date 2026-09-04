@@ -72,4 +72,24 @@ class RuntimeFoundationTest {
         assertThat(app.concurrencyLimit()).isZero();
         assertThatThrownBy(() -> new AuraConfig().tls("missing.p12", "").validate()).isInstanceOf(IllegalArgumentException.class);
     }
+
+    @Test void modularRuntimeReadsWebSettingsFromCentralConfig() {
+        AuraConfig config = new AuraConfig()
+                .staticFiles("public")
+                .spa(true)
+                .cors(cors -> cors.origins("https://client.example").credentials(true))
+                .accessLog("json")
+                .gzip(true)
+                .gzipMinSize(2048);
+        AuraApp app = AuraApp.create(config);
+        AuraWebRuntime runtime = (AuraWebRuntime) app.runtimeView();
+
+        assertThat(runtime.staticFilesPath()).isEqualTo("public");
+        assertThat(runtime.spa()).isTrue();
+        assertThat(runtime.corsConfig().resolveOrigin("https://client.example"))
+                .isEqualTo("https://client.example");
+        assertThat(runtime.accessLogFormat()).isEqualTo("json");
+        assertThat(runtime.gzip()).isTrue();
+        assertThat(runtime.gzipMinSize()).isEqualTo(2048);
+    }
 }

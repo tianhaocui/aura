@@ -41,22 +41,14 @@ final class ModularRuntime implements AuraWebRuntime {
     private final List<BaseHandler> afterHandlers = new CopyOnWriteArrayList<>();
     private final Map<Class<? extends Exception>, BaseExceptionHandler<?>> exceptionHandlers = new ConcurrentHashMap<>();
     private final PermissionRegistry permissions = new PermissionRegistry();
-    private final SnapshotOptions snapshotOptions = new SnapshotOptions();
-    private final JsonConfig jsonConfig = new JsonConfig();
+    private final SnapshotOptions snapshotOptions;
+    private final JsonConfig jsonConfig;
     private final ModuleManager moduleManager = new ModuleManager();
     private final AtomicReference<RuntimeState> state = new AtomicReference<>(RuntimeState.NEW);
     private final AtomicBoolean shuttingDown = new AtomicBoolean();
     private BiPredicate<String, String> permissionChecker;
     private Function<BaseContext, String> authFunction;
     private Function<Object, Object> resultWrapper;
-    private String corsOrigin;
-    private CorsConfig corsConfig;
-    private String staticFilesPath;
-    private boolean spa;
-    private boolean accessLog;
-    private String accessLogFormat;
-    private boolean gzip;
-    private int gzipMinSize = 1024;
     private int mcpPort = -1;
     private PrintStream mcpStdout;
     private McpRouterSpec mcpRouter;
@@ -67,6 +59,8 @@ final class ModularRuntime implements AuraWebRuntime {
     ModularRuntime(AuraConfig source) {
         this.config = source == null ? new AuraConfig() : source;
         this.config.validate();
+        this.snapshotOptions = config.snapshotOptions();
+        this.jsonConfig = config.jsonConfig();
         registry.put(ModularRuntime.class, this);
     }
 
@@ -182,18 +176,18 @@ final class ModularRuntime implements AuraWebRuntime {
     @Override public List<RouteEntry> directRoutes() { return List.copyOf(directRoutes); }
     @Override public List<String> scanPackages() { return List.of(); }
     @Override public List<Class<?>> serviceClasses() { return List.of(); }
-    @Override public String staticFilesPath() { return staticFilesPath; }
-    @Override public boolean spa() { return spa; }
-    @Override public String corsOrigin() { return corsOrigin; }
-    @Override public CorsConfig corsConfig() { return corsConfig; }
+    @Override public String staticFilesPath() { return config.staticFilesPath(); }
+    @Override public boolean spa() { return config.spa(); }
+    @Override public String corsOrigin() { return config.corsOrigin(); }
+    @Override public CorsConfig corsConfig() { return config.corsConfig(); }
     @Override public long maxBodySize() { return config.maxBodySize(); }
     @Override public long maxUploadSize() { return config.maxUploadSize(); }
     @Override public int shutdownTimeout() { return config.shutdownTimeout(); }
-    @Override public boolean accessLog() { return accessLog; }
-    @Override public String accessLogFormat() { return accessLogFormat; }
+    @Override public boolean accessLog() { return config.accessLog(); }
+    @Override public String accessLogFormat() { return config.accessLogFormat(); }
     @Override public int requestTimeout() { return config.requestTimeout(); }
-    @Override public boolean gzip() { return gzip; }
-    @Override public int gzipMinSize() { return gzipMinSize; }
+    @Override public boolean gzip() { return config.gzip(); }
+    @Override public int gzipMinSize() { return config.gzipMinSize(); }
     @Override public JsonConfig jsonConfig() { return jsonConfig; }
     @Override public int mcpPort() { return mcpPort; }
     @Override public PrintStream mcpStdout() { return mcpStdout; }

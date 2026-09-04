@@ -59,6 +59,16 @@ AuraApp.create()
         .start();
 ```
 
+Web runtime settings belong to the same central configuration passed to `AuraApp`:
+
+```java
+AuraConfig config = new AuraConfig()
+        .cors(cors -> cors.origins("https://console.example").credentials(true))
+        .gzip(true)
+        .accessLog("json");
+AuraApp.create(config).use(new OrderModule()).start();
+```
+
 Inside a route group, use `Aura.requirePermission("orders.read")` after `Aura.requireAuth()`.
 - `TestClient.of(app)` runs module installation but does not start external resources, so module routes can be tested in memory.
 - For application-level capability lookup, call `app.prepare()` followed by `app.find(Type.class)` or `app.require(Type.class)`; use `app.runtimeView()` when an adapter needs the stable runtime contract.
