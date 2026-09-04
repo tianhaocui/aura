@@ -15,6 +15,20 @@ public class McpRouter implements McpRouterSpec {
         return new McpToolBuilder(this, name, description);
     }
 
+    /** Exposes a shared HTTP route contract as a deterministic MCP tool. */
+    public McpRouter tool(io.aura.contract.ApiRoute route, McpHandler handler) {
+        Objects.requireNonNull(route, "route");
+        Objects.requireNonNull(handler, "handler");
+        List<McpParam> params = route.params().stream()
+                .map(parameter -> new McpParam(new io.aura.contract.ApiParameter(
+                        parameter.name(), parameter.type(), "tool", parameter.required(), parameter.description()),
+                        List.of()))
+                .toList();
+        register(new McpTool(McpUtil.buildToolName(route.method(), route.path()),
+                route.description(), params, handler));
+        return this;
+    }
+
     public McpRouter tool(String name, Object service, String method, String description) {
         Method m = resolveMethod(service, method);
         McpHandler handler = buildServiceHandler(service, m);
@@ -141,7 +155,7 @@ public class McpRouter implements McpRouterSpec {
         for (McpParam p : params) {
             io.aura.contract.ApiParameter contract = p.contract();
             var prop = new LinkedHashMap<String, Object>();
-            prop.put("type", contract.type());
+            prop.put("type", McpUtil.jsonType(contract.type()));
             String desc = contract.description();
             if (p.isEnum()) {
                 List<String> enumLabels = p.enumValues().stream().map(McpEnumValue::label).toList();

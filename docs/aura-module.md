@@ -94,6 +94,9 @@ message.
 
 Inside a route group, use `Aura.requirePermission("orders.read")` after `Aura.requireAuth()`.
 - `TestClient.of(app)` runs module installation but does not start external resources, so module routes can be tested in memory.
+- `TestClient.schema()` and `TestClient.openApi()` expose the same generated
+  route documents as `/__schema__` and `/openapi.json`, which lets contract tests
+  run without opening a listener.
 - `healthCheck(...)` registrations are available through `AuraWebRuntime.healthChecks()` and the
   fail-closed `healthStatus()` aggregate for readiness adapters.
 - For application-level capability lookup, call `app.prepare()` followed by `app.find(Type.class)` or `app.require(Type.class)`; use `app.runtimeView()` when an adapter needs the stable runtime contract.

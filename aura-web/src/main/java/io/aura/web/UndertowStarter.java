@@ -444,14 +444,7 @@ public class UndertowStarter implements AuraStarter {
     }
 
     private void serveSchema(HttpServerExchange exchange) {
-        List<io.aura.contract.ApiRoute> routes = new ArrayList<>();
-        for (CompiledRoute cr : compiledRoutes) {
-            routes.add(describeRoute(cr));
-        }
-
-        Map<String, Object> schema = new LinkedHashMap<>();
-        schema.put("name", app.prop("app.name") != null ? app.prop("app.name") : "Aura App");
-        schema.put("routes", routes);
+        Map<String, Object> schema = RouteContract.schema(app, compiledRoutes);
 
         exchange.getResponseHeaders().put(Headers.CONTENT_TYPE, "application/json; charset=utf-8");
         exchange.getResponseHeaders().put(Headers.CACHE_CONTROL, "no-store");
@@ -459,72 +452,10 @@ public class UndertowStarter implements AuraStarter {
     }
 
     private void serveOpenApi(HttpServerExchange exchange) {
-        List<io.aura.contract.ApiRoute> routes = new ArrayList<>();
-        for (CompiledRoute route : compiledRoutes) {
-            routes.add(describeRoute(route));
-        }
-        Map<String, Object> document = OpenApiGenerator.generate(
-                app.prop("app.name") == null ? "Aura API" : app.prop("app.name"), "1.0.0", routes);
+        Map<String, Object> document = RouteContract.openApi(app, compiledRoutes);
         exchange.getResponseHeaders().put(Headers.CONTENT_TYPE, "application/json; charset=utf-8");
         exchange.getResponseHeaders().put(Headers.CACHE_CONTROL, "no-store");
         exchange.getResponseSender().send(JSON.toJSONString(document));
-    }
-
-    private io.aura.contract.ApiRoute describeRoute(CompiledRoute route) {
-        io.aura.contract.ApiRoute description = ApiRouteCatalog.describe(route, null);
-        return new io.aura.contract.ApiRoute(description.method(), description.path(), description.description(),
-                description.returnType(), description.params(), buildCurlExample(route, description.params()));
-    }
-
-    private String buildCurlExample(CompiledRoute cr, List<io.aura.contract.ApiParameter> params) {
-        String base = "http://localhost:" + app.port();
-        String path = cr.rawPath();
-
-        // replace path params with example values
-        for (io.aura.contract.ApiParameter p : params) {
-            if ("path".equals(p.source())) {
-                String example = exampleValue(p.type(), p.name());
-                path = path.replace("{" + p.name() + "}", example);
-            }
-        }
-
-        // build query string for query params (GET only)
-        if ("GET".equals(cr.method())) {
-            List<String> queryParts = new ArrayList<>();
-            for (io.aura.contract.ApiParameter p : params) {
-                if ("query".equals(p.source())) {
-                    queryParts.add(p.name() + "=" + exampleValue(p.type(), p.name()));
-                }
-            }
-            if (!queryParts.isEmpty()) path += "?" + String.join("&", queryParts);
-        }
-
-        StringBuilder curl = new StringBuilder("curl");
-        if (!"GET".equals(cr.method())) {
-            curl.append(" -X ").append(cr.method());
-        }
-        curl.append(" ").append(base).append(path);
-
-        // add body for POST/PUT
-        if ("POST".equals(cr.method()) || "PUT".equals(cr.method())) {
-            for (io.aura.contract.ApiParameter p : params) {
-                if ("body".equals(p.source())) {
-                    curl.append(" -H 'Content-Type: application/json' -d '{}'");
-                    break;
-                }
-            }
-        }
-        return curl.toString();
-    }
-
-    private static String exampleValue(String type, String name) {
-        if (type == null) return "value";
-        return switch (type) {
-            case "int", "Integer", "long", "Long" -> "1";
-            case "boolean", "Boolean" -> "true";
-            case "double", "Double" -> "1.0";
-            default -> "example";
-        };
     }
 
     @SuppressWarnings({"unchecked", "rawtypes"})

@@ -20,6 +20,17 @@ test -f "$repo_root/docs/aura-workflow.md"
 test -f "$repo_root/docs/migration-to-1.0.md"
 test -f "$repo_root/examples/aura-composed/src/main/java/example/ComposedApp.java"
 test -f "$repo_root/examples/aura-composed/src/test/java/example/ComposedAppTest.java"
+test -f "$repo_root/aura-web/src/main/java/io/aura/web/RouteContract.java"
+rg -q 'RouteContract\.schema\(app, compiledRoutes\)' \
+  "$repo_root/aura-web/src/main/java/io/aura/web/UndertowStarter.java"
+rg -q 'RouteContract\.openApi\(app, compiledRoutes\)' \
+  "$repo_root/aura-web/src/main/java/io/aura/web/UndertowStarter.java"
+rg -q 'public Map<String, Object> schema\(\)' \
+  "$repo_root/aura-web/src/main/java/io/aura/web/TestClient.java"
+rg -q 'public Map<String, Object> openApi\(\)' \
+  "$repo_root/aura-web/src/main/java/io/aura/web/TestClient.java"
+rg -q 'tool\(io\.aura\.contract\.ApiRoute route' \
+  "$repo_root/aura-mcp/src/main/java/io/aura/mcp/McpRouter.java"
 
 if rg -n '<version>0\.3\.0</version>|<version>0\.5\.1</version>|No classpath scanning' \
     "$repo_root/README.md" "$repo_root/README_CN.md" "$repo_root/docs"; then

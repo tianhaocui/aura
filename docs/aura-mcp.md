@@ -25,6 +25,11 @@ AuraApp.create()
 
 ## McpRouter (Selective Tool Exposure)
 
+For a route already described by the shared `ApiRoute` contract, use
+`McpRouter.tool(route, handler)`. The generated tool name, parameter names,
+types, required flags, and descriptions then stay aligned with HTTP Schema and
+OpenAPI output. Use the string-based builder below for MCP-only tools.
+
 Not all APIs should be MCP tools. McpRouter lets you explicitly choose which operations to expose, with AI-friendly parameter mapping.
 
 ```java

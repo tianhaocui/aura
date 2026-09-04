@@ -55,6 +55,16 @@ public class TestClient {
     public Request head(String path) { return new Request("HEAD", path); }
     public Request options(String path) { return new Request("OPTIONS", path); }
 
+    /** Returns the same route schema served by the real Web adapter. */
+    public Map<String, Object> schema() {
+        return RouteContract.schema(app, compiled);
+    }
+
+    /** Returns the same OpenAPI document served by the real Web adapter. */
+    public Map<String, Object> openApi() {
+        return RouteContract.openApi(app, compiled);
+    }
+
     public class Request {
         private final String method;
         private String path;

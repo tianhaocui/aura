@@ -15,9 +15,10 @@ public final class McpUtil {
     public static String jsonType(String javaType) {
         if (javaType == null) return "string";
         return switch (javaType) {
+            case "string", "integer", "number", "boolean", "object", "array" -> javaType;
             case "int", "long", "Integer", "Long" -> "integer";
             case "double", "float", "Double", "Float", "BigDecimal" -> "number";
-            case "boolean", "Boolean" -> "boolean";
+            case "Boolean" -> "boolean";
             default -> "string";
         };
     }

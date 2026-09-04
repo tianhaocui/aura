@@ -59,6 +59,29 @@ class McpRouterTest {
     }
 
     @Test
+    void tool_sharedRouteContract_reusesNameAndParameterMetadata() throws Exception {
+        var route = new io.aura.contract.ApiRoute("GET", "/orders/{id}", "Get order", "Order",
+                List.of(new io.aura.contract.ApiParameter("id", "long", "path", true, "Order ID")), null);
+        McpRouter mcp = new McpRouter()
+                .tool(route, ctx -> "order-" + ctx.getLong("id"));
+
+        assertThat(mcp.tools()).singleElement().satisfies(tool -> {
+            assertThat(tool.name()).isEqualTo("get_orders_by_id");
+            assertThat(tool.description()).isEqualTo("Get order");
+            assertThat(tool.params()).singleElement().extracting(McpParam::name).isEqualTo("id");
+        });
+        @SuppressWarnings("unchecked")
+        Map<String, Object> toolSchema = ((List<Map<String, Object>>) mcp.buildSchema().get("tools")).get(0);
+        @SuppressWarnings("unchecked")
+        Map<String, Object> properties = (Map<String, Object>) ((Map<String, Object>) toolSchema.get("inputSchema"))
+                .get("properties");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> idSchema = (Map<String, Object>) properties.get("id");
+        assertThat(idSchema).containsEntry("type", "integer");
+        assertThat(mcp.invoke("get_orders_by_id", Map.of("id", "42"))).isEqualTo("order-42");
+    }
+
+    @Test
     void tool_enumParam_schemaContainsEnumValues() {
         McpRouter mcp = new McpRouter();
         mcp.tool("query", "查询")

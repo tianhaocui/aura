@@ -62,6 +62,29 @@ class TestClientTest {
     }
 
     @Test
+    void schemaAndOpenApiUseTheSameCompiledRouteContract() {
+        Aura app = Aura.create().port(8123);
+        Router router = new Router();
+        router.get("/orders/{id}", ctx -> ctx.text("ok"))
+                .describe("Get order")
+                .param("id", "long", "path", true, "Order identifier");
+        TestClient client = new TestClient(app, router);
+
+        @SuppressWarnings("unchecked")
+        var routes = (java.util.List<io.aura.contract.ApiRoute>) client.schema().get("routes");
+        assertThat(routes).singleElement().satisfies(route -> {
+            assertThat(route.method()).isEqualTo("GET");
+            assertThat(route.params()).singleElement().extracting(io.aura.contract.ApiParameter::name)
+                    .isEqualTo("id");
+            assertThat(route.example()).contains("/orders/1");
+        });
+
+        var paths = (java.util.Map<?, ?>) client.openApi().get("paths");
+        var operation = (java.util.Map<?, ?>) ((java.util.Map<?, ?>) paths.get("/orders/{id}")).get("get");
+        assertThat(operation.get("operationId")).isEqualTo("get_orders_id");
+    }
+
+    @Test
     void expect_throwsAssertionErrorOnMismatch() {
         TestClient client = clientWithRoutes();
         assertThatThrownBy(() -> client.get("/hello").expect(404))
