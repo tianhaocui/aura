@@ -71,6 +71,17 @@ Both `WorkflowRuntime.execute(...)` and `executeAsync(...)` persist the same exe
 transitions. Calling `WorkflowDefinition.execute(...)` directly remains a lightweight operation
 without a runtime store.
 
+An asynchronous execution can also be cancelled by its execution ID:
+
+```java
+String executionId = runtime.executions("order.fulfillment").stream()
+        .findFirst().orElseThrow().executionId();
+runtime.cancel(executionId);
+```
+
+`cancel(...)` returns `false` when the execution is already terminal or unknown. Cancellation is
+cooperative, so business steps should honor interruption or inspect their own shared token.
+
 The default store is in-memory for tests and single-process use. Production modules can provide a
 `WorkflowExecutionStore` implementation to persist state; distributed workers and resume policies
 remain explicit extension responsibilities. Cancellation is cooperative: a running step must

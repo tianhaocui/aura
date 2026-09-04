@@ -250,4 +250,39 @@ class WorkflowTest {
             runtime.close();
         }
     }
+
+    @Test
+    void runtimeCanCancelQueuedOrRunningExecutionById() throws Exception {
+        WorkflowRegistry registry = new WorkflowRegistry();
+        java.util.concurrent.CountDownLatch started = new java.util.concurrent.CountDownLatch(1);
+        registry.register(Workflow.<Object>builder("runtime-cancel")
+                .step("first", context -> {
+                    started.countDown();
+                    Thread.sleep(100);
+                    return null;
+                })
+                .step("second", context -> null)
+                .build());
+        WorkflowRuntime<Object> runtime = new WorkflowRuntime<>(registry);
+        try {
+            java.util.concurrent.CompletableFuture<WorkflowResult> future =
+                    runtime.executeAsync("runtime-cancel", new Object());
+            String executionId = null;
+            for (int i = 0; i < 100 && executionId == null; i++) {
+                executionId = runtime.executions("runtime-cancel").stream()
+                        .findFirst().map(WorkflowExecution::executionId).orElse(null);
+                if (executionId == null) Thread.sleep(5);
+            }
+            assertThat(executionId).isNotNull();
+            assertThat(started.await(2, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+            assertThat(runtime.cancel(executionId)).isTrue();
+            WorkflowResult result = future.get(2, java.util.concurrent.TimeUnit.SECONDS);
+            assertThat(result.cancelled()).isTrue();
+            assertThat(result.execution().step("second").status())
+                    .isEqualTo(StepExecution.Status.PENDING);
+            assertThat(runtime.cancel(executionId)).isFalse();
+        } finally {
+            runtime.close();
+        }
+    }
 }

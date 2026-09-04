@@ -9,11 +9,13 @@ import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.ConcurrentHashMap;
 
 public final class WorkflowRuntime<C> implements AutoCloseable {
     private final WorkflowRegistry registry;
     private final WorkflowExecutionStore store;
     private final ThreadPoolExecutor executor;
+    private final ConcurrentHashMap<String, CancellationToken> activeCancellations = new ConcurrentHashMap<>();
 
     public WorkflowRuntime() { this(new WorkflowRegistry(), new InMemoryWorkflowExecutionStore()); }
     public WorkflowRuntime(WorkflowRegistry registry) { this(registry, new InMemoryWorkflowExecutionStore()); }
@@ -61,7 +63,15 @@ public final class WorkflowRuntime<C> implements AutoCloseable {
                 try {
                     @SuppressWarnings("unchecked") WorkflowDefinition<C> definition =
                             (WorkflowDefinition<C>) registry.get(workflowId);
-                    WorkflowResult result = definition.execute(context, selector, cancellationToken, store::save);
+                    WorkflowResult result = definition.execute(context, selector, cancellationToken, execution -> {
+                        store.save(execution);
+                        if (execution.status() == WorkflowExecution.Status.PENDING
+                                || execution.status() == WorkflowExecution.Status.RUNNING) {
+                            activeCancellations.put(execution.executionId(), cancellationToken);
+                        } else {
+                            activeCancellations.remove(execution.executionId(), cancellationToken);
+                        }
+                    });
                     future.complete(result);
                 } catch (Throwable error) {
                     future.completeExceptionally(error);
@@ -90,6 +100,13 @@ public final class WorkflowRuntime<C> implements AutoCloseable {
     public java.util.List<WorkflowExecution> executions(String workflowId) {
         return store.list(workflowId);
     }
+
+    /** Requests cooperative cancellation of a queued or running execution. */
+    public boolean cancel(String executionId) {
+        if (executionId == null || executionId.isBlank()) return false;
+        CancellationToken token = activeCancellations.get(executionId);
+        return token != null && token.cancel();
+    }
     public WorkflowResult execute(WorkflowDefinition<C> definition, C context, WorkflowSelector<C> selector) {
         return definition.execute(context, selector);
     }
@@ -99,5 +116,9 @@ public final class WorkflowRuntime<C> implements AutoCloseable {
         return definition.execute(context, selector, cancellationToken, store::save);
     }
 
-    @Override public void close() { executor.shutdownNow(); }
+    @Override public void close() {
+        activeCancellations.values().forEach(CancellationToken::cancel);
+        activeCancellations.clear();
+        executor.shutdownNow();
+    }
 }
