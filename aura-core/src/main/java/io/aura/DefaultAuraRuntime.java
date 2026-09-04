@@ -19,6 +19,8 @@ final class DefaultAuraRuntime implements AuraWebRuntime {
 
     DefaultAuraRuntime(Aura delegate) {
         this.delegate = java.util.Objects.requireNonNull(delegate, "delegate");
+        // Make the stable runtime discoverable to modules during install().
+        delegate.register(this);
     }
 
     @Override public io.aura.contract.RuntimeState state() { return delegate.state(); }

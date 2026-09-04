@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -88,6 +89,24 @@ class AuraModuleTest {
         assertThatThrownBy(() -> app.require(Integer.class))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining(Integer.class.getName());
+    }
+
+    @Test
+    void modulesCanRequireTheStableRuntimeContract() {
+        AtomicReference<AuraRuntime> seen = new AtomicReference<>();
+        AuraApp app = AuraApp.create().use(new AuraModule() {
+            @Override public io.aura.contract.ModuleMetadata descriptor() {
+                return io.aura.contract.ModuleMetadata.of("runtime-consumer", "1.0.0");
+            }
+
+            @Override public void install(ModuleContext context) {
+                seen.set(context.require(AuraRuntime.class));
+            }
+        });
+
+        app.prepare();
+
+        assertThat(seen).hasValue(app.runtimeView());
     }
 
     @Test

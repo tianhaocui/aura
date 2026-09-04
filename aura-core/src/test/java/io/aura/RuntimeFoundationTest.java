@@ -32,6 +32,7 @@ class RuntimeFoundationTest {
     @Test void runtimeViewReportsRunningStateWithoutLegacyLifecycleType() {
         AuraApp app = AuraApp.create();
         assertThat(app.runtimeView()).isInstanceOf(AuraRuntime.class);
+        assertThat(app.require(AuraRuntime.class)).isSameAs(app.runtimeView());
         assertThat(app.isRunning()).isFalse();
         app.close();
         assertThat(app.runtimeView().isRunning()).isFalse();
