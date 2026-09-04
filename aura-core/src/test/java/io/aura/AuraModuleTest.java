@@ -68,8 +68,24 @@ class AuraModuleTest {
 
         assertThat(app.modules()).extracting(io.aura.contract.ModuleMetadata::id).containsExactly("sample");
         assertThat(app.lifecycle()).isEqualTo(Aura.Lifecycle.NEW);
-        app.runtime().prepareModules();
+        app.prepare();
         assertThat(app.lifecycle()).isEqualTo(Aura.Lifecycle.NEW);
+    }
+
+    @Test
+    void auraAppExposesCapabilityLookupWithoutLeakingTheRuntime() {
+        AuraApp app = AuraApp.create().use(new AuraModule() {
+            @Override public io.aura.contract.ModuleMetadata descriptor() {
+                return io.aura.contract.ModuleMetadata.of("capability", "1.0.0");
+            }
+            @Override public void install(ModuleContext context) { context.register("ready"); }
+        });
+
+        app.prepare();
+        assertThat(app.find(String.class)).contains("ready");
+        assertThatThrownBy(() -> app.require(Integer.class))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining(Integer.class.getName());
     }
 
     @Test

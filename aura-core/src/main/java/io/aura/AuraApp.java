@@ -1,6 +1,7 @@
 package io.aura;
 
 import java.util.List;
+import java.util.Optional;
 
 /** Canonical Aura 1.0 application facade for explicit module composition. */
 public final class AuraApp implements AutoCloseable {
@@ -52,6 +53,12 @@ public final class AuraApp implements AutoCloseable {
         return this;
     }
 
+    /** Installs modules for in-memory verification without opening listeners. */
+    public AuraApp prepare() {
+        runtime.prepareModules();
+        return this;
+    }
+
     public void stop() { runtime.stop(); }
     @Override public void close() { stop(); }
 
@@ -59,5 +66,16 @@ public final class AuraApp implements AutoCloseable {
     public AuraConfig config() { return runtime.config(); }
     public io.aura.contract.PermissionRegistry permissions() { return runtime.permissions(); }
     public List<io.aura.contract.ModuleMetadata> modules() { return runtime.moduleDescriptors(); }
+    public <T> Optional<T> find(Class<T> type) { return Optional.ofNullable(runtime.getBean(type)); }
+    public <T> T require(Class<T> type) {
+        T value = runtime.getBean(type);
+        if (value == null) throw new IllegalStateException("Aura capability is not installed: " + type.getName());
+        return value;
+    }
+    /**
+     * @deprecated Use {@link #prepare()}, {@link #find(Class)}, or {@link #require(Class)}.
+     * This escape hatch will be removed after the 1.0 runtime split.
+     */
+    @Deprecated
     public Aura runtime() { return runtime; }
 }

@@ -2,6 +2,7 @@ package io.aura.web;
 
 import com.alibaba.fastjson2.JSON;
 import io.aura.Aura;
+import io.aura.AuraApp;
 import io.aura.snapshot.Snapshot;
 import io.aura.snapshot.SnapshotScope;
 
@@ -54,6 +55,12 @@ public class TestClient {
             PackageScanner.scan(app.scanPackages(), router, app);
         }
         return new TestClient(app, router);
+    }
+
+    /** Standard 1.0 verification entry point for explicitly composed applications. */
+    public static TestClient of(AuraApp app) {
+        if (app == null) throw new IllegalArgumentException("app must not be null");
+        return of(app.runtime());
     }
 
     public Request get(String path) { return new Request("GET", path); }
