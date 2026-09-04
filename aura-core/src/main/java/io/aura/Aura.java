@@ -16,7 +16,7 @@ import io.aura.snapshot.SnapshotOptions;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class Aura implements AuraRuntime {
+public class Aura implements AuraWebRuntime {
 
     public enum Lifecycle { NEW, STARTING, RUNNING, STOPPING, STOPPED }
 
@@ -323,6 +323,8 @@ public class Aura implements AuraRuntime {
         return this;
     }
 
+    @Override public java.util.function.BiPredicate<String, String> permissionChecker() { return permissionChecker; }
+
     public Aura jwt(String secret) {
         return jwt(secret, 604800);
     }
@@ -383,11 +385,11 @@ public class Aura implements AuraRuntime {
 
     public static io.aura.web.BaseHandler requireAuth() {
         return ctx -> {
-            Aura app = (Aura) ctx.get("_app", Object.class);
-            if (app == null || app.authFunction == null) {
+            AuraWebRuntime app = (AuraWebRuntime) ctx.get("_app", Object.class);
+            if (app == null || app.authFunction() == null) {
                 throw new IllegalStateException("Auth not configured. Call app.auth() or app.jwt() first.");
             }
-            String userId = app.authFunction.apply(ctx);
+            String userId = app.authFunction().apply(ctx);
             if (userId == null) {
                 ctx.status(401);
                 ctx.json(java.util.Map.of("error", "Unauthorized"));
@@ -403,12 +405,12 @@ public class Aura implements AuraRuntime {
             throw new IllegalArgumentException("permission must not be blank");
         }
         return ctx -> {
-            Aura app = (Aura) ctx.get("_app", Object.class);
+            AuraWebRuntime app = (AuraWebRuntime) ctx.get("_app", Object.class);
             String userId = ctx.get("_userId", String.class);
-            if (app == null || app.permissionChecker == null) {
+            if (app == null || app.permissionChecker() == null) {
                 throw new IllegalStateException("Authorization not configured. Call app.authorize() first.");
             }
-            if (userId == null || !app.permissionChecker.test(userId, permission)) {
+            if (userId == null || !app.permissionChecker().test(userId, permission)) {
                 ctx.status(403).json(java.util.Map.of("error", "Forbidden", "permission", permission));
                 ctx.abort();
             }

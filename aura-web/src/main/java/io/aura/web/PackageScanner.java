@@ -1,6 +1,6 @@
 package io.aura.web;
 
-import io.aura.Aura;
+import io.aura.AuraWebRuntime;
 import io.aura.annotation.Path;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -16,7 +16,7 @@ final class PackageScanner {
     private static final Logger log = LoggerFactory.getLogger(PackageScanner.class);
 
     @Deprecated
-    static void scan(List<String> packages, Router router, Aura app) {
+    static void scan(List<String> packages, Router router, AuraWebRuntime app) {
         java.util.Set<Class<?>> alreadyResolved = new java.util.HashSet<>(app.serviceClasses());
         for (String pkg : packages) {
             List<Class<?>> classes = findClasses(pkg);
@@ -39,7 +39,7 @@ final class PackageScanner {
         }
     }
 
-    private static Object instantiate(Class<?> clazz, Aura app) throws Exception {
+    private static Object instantiate(Class<?> clazz, AuraWebRuntime app) throws Exception {
         java.lang.reflect.Constructor<?>[] ctors = clazz.getConstructors();
         if (ctors.length == 0) {
             return clazz.getDeclaredConstructor().newInstance();

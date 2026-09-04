@@ -98,7 +98,7 @@ public interface BaseContext {
             int size = Integer.parseInt(v.trim());
             int max = 500;
             Object configuredApp = get("_app", Object.class);
-            if (configuredApp instanceof io.aura.Aura app) max = app.config().pageSizeMax();
+            if (configuredApp instanceof io.aura.AuraWebRuntime app) max = app.config().pageSizeMax();
             if (size < 1 || size > max) throw new IllegalArgumentException("pageSize must be between 1 and " + max);
             return size;
         } catch (NumberFormatException e) { throw new IllegalArgumentException("pageSize must be an integer", e); }

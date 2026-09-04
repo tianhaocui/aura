@@ -2,6 +2,7 @@ package io.aura.web;
 
 import com.alibaba.fastjson2.JSON;
 import io.aura.Aura;
+import io.aura.AuraWebRuntime;
 import io.aura.contract.CancellationToken;
 import io.aura.AuraEvent;
 import io.aura.AuraStarter;
@@ -45,7 +46,7 @@ public class UndertowStarter implements AuraStarter {
     private Undertow server;
     private GracefulShutdownHandler shutdownHandler;
     private ScheduledExecutorService timeoutScheduler;
-    private Aura app;
+    private AuraWebRuntime app;
     private Router router;
     private ResourceHandler staticHandler;
     private ClassPathResourceManager resourceManager;
@@ -56,7 +57,7 @@ public class UndertowStarter implements AuraStarter {
 
     @Override
     @SuppressWarnings("unchecked")
-    public void start(Aura app) {
+    public void start(AuraWebRuntime app) {
         this.app = app;
         long t0 = System.currentTimeMillis();
 
@@ -189,7 +190,7 @@ public class UndertowStarter implements AuraStarter {
 
     @Override
     @SuppressWarnings("unchecked")
-    public void reloadRoutes(io.aura.Aura app) {
+    public void reloadRoutes(AuraWebRuntime app) {
         long t0 = System.currentTimeMillis();
         Router newRouter = new Router();
 
@@ -219,7 +220,7 @@ public class UndertowStarter implements AuraStarter {
         log.info("[aura-dev] routes reloaded in {}ms", System.currentTimeMillis() - t0);
     }
 
-    private static void registerDirectRoutes(Aura app, Router router) {
+    private static void registerDirectRoutes(AuraWebRuntime app, Router router) {
         for (var entry : app.directRoutes()) {
             BaseHandler handler = entry.handler() instanceof BaseHandler h
                     ? h : new LambdaHandler(entry.handler());
@@ -625,7 +626,7 @@ public class UndertowStarter implements AuraStarter {
         ExceptionResolver.apply(app, e, ctx);
     }
 
-    static List<CompiledRoute> compileRoutes(BaseRouter router, Aura app) {
+    static List<CompiledRoute> compileRoutes(BaseRouter router, AuraWebRuntime app) {
         List<CompiledRoute> routes = new UndertowStarter().compile(router, "",
                 new ArrayList<>(app.beforeHandlers()), new ArrayList<>(app.afterHandlers()));
         routes.sort(Comparator.comparingInt((CompiledRoute r) -> r.paramNames().size())

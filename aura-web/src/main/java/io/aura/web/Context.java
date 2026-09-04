@@ -2,7 +2,7 @@ package io.aura.web;
 
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONWriter;
-import io.aura.Aura;
+import io.aura.AuraWebRuntime;
 import io.aura.contract.CancellationToken;
 import io.aura.JsonConfig;
 import io.aura.snapshot.Snapshot;
@@ -28,7 +28,7 @@ public class Context implements BaseContext {
 
     private final HttpServerExchange exchange;
     private final Map<String, String> pathParams;
-    private final Aura app;
+    private final AuraWebRuntime app;
     private final String requestId;
     private final Map<Class<?>, Object> attrs = new ConcurrentHashMap<>();
     private final Map<String, Object> namedAttrs = new ConcurrentHashMap<>();
@@ -38,11 +38,11 @@ public class Context implements BaseContext {
     private volatile boolean aborted;
     private final CancellationToken cancellationToken;
 
-    Context(HttpServerExchange exchange, Map<String, String> pathParams, Aura app, String requestId) {
+    Context(HttpServerExchange exchange, Map<String, String> pathParams, AuraWebRuntime app, String requestId) {
         this(exchange, pathParams, app, requestId, new CancellationToken());
     }
 
-    Context(HttpServerExchange exchange, Map<String, String> pathParams, Aura app, String requestId, CancellationToken cancellationToken) {
+    Context(HttpServerExchange exchange, Map<String, String> pathParams, AuraWebRuntime app, String requestId, CancellationToken cancellationToken) {
         this.exchange = exchange;
         this.pathParams = pathParams;
         this.app = app;
@@ -51,7 +51,7 @@ public class Context implements BaseContext {
         if (app != null) namedAttrs.put("_app", app);
     }
 
-    public Aura app() { return app; }
+    public AuraWebRuntime app() { return app; }
     boolean isResponseStarted() { return exchange != null && exchange.isResponseStarted(); }
     String cachedBody() { return cachedBody; }
     @Override public String requestId() { return requestId; }

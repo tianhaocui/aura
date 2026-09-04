@@ -10,7 +10,7 @@ public final class AuraApp implements AutoCloseable {
 
     private AuraApp(AuraConfig config) {
         this.legacyRuntime = Aura.create(config == null ? new AuraConfig() : config);
-        this.runtime = legacyRuntime;
+        this.runtime = new DefaultAuraRuntime(legacyRuntime);
     }
 
     public static AuraApp create() { return new AuraApp(new AuraConfig()); }

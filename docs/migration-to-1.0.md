@@ -23,6 +23,14 @@ values rather than on the legacy Builder implementation.
 
 From an application, obtain that surface with `app.runtimeView()` and use `isRunning()` or
 `state()` for lifecycle checks. `app.runtime()` is retained only for the migration period.
+The returned runtime is an adapter-owned implementation of the stable contract; applications and
+transport adapters should not cast it back to the legacy `Aura` builder.
+
+The in-memory verification adapter accepts the same seam:
+
+```java
+TestClient.of(app.runtimeView()).get("/orders").expect(200);
+```
 
 ## API mapping
 

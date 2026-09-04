@@ -1,6 +1,9 @@
 package io.aura.web;
 
 import io.aura.Aura;
+import io.aura.AuraApp;
+import io.aura.AuraRuntime;
+import io.aura.AuraWebRuntime;
 import io.aura.AuraModule;
 import io.aura.ModuleContext;
 import io.aura.contract.ModuleMetadata;
@@ -81,5 +84,43 @@ class ModuleAssemblyTest {
 
         assertThat(TestClient.of(app).get("/once").expect(200).body()).isEqualTo("ok");
         assertThat(calls).hasValue(1);
+    }
+
+    @Test
+    void testClientAcceptsTheStableRuntimeSeam() {
+        AuraApp app = AuraApp.create().use(new AuraModule() {
+            @Override public ModuleMetadata descriptor() {
+                return ModuleMetadata.of("runtime-client", "1.0.0");
+            }
+            @Override public void install(ModuleContext context) {
+                context.routes(() -> java.util.List.of(new RouteContribution(
+                        "GET", "/runtime-client", (BaseHandler) ctx -> ctx.text("ok"))));
+            }
+        });
+
+        AuraRuntime runtime = app.runtimeView();
+        assertThat(runtime).isNotInstanceOf(Aura.class);
+        assertThat(TestClient.of(runtime).get("/runtime-client").expect(200).body()).isEqualTo("ok");
+    }
+
+    @Test
+    void testClientDoesNotRequireTheConcreteAuraImplementation() {
+        Aura app = Aura.create().use(new AuraModule() {
+            @Override public ModuleMetadata descriptor() {
+                return ModuleMetadata.of("runtime-proxy", "1.0.0");
+            }
+            @Override public void install(ModuleContext context) {
+                context.route(new RouteContribution(
+                        "GET", "/runtime-proxy", (BaseHandler) ctx -> ctx.text("proxy-ok")));
+            }
+        });
+
+        AuraWebRuntime runtime = (AuraWebRuntime) java.lang.reflect.Proxy.newProxyInstance(
+                AuraWebRuntime.class.getClassLoader(),
+                new Class<?>[]{AuraWebRuntime.class},
+                (proxy, method, args) -> method.invoke(app, args));
+
+        assertThat(TestClient.of((AuraRuntime) runtime)
+                .get("/runtime-proxy").expect(200).body()).isEqualTo("proxy-ok");
     }
 }

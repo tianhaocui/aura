@@ -2,7 +2,7 @@ package io.aura.web;
 
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONWriter;
-import io.aura.Aura;
+import io.aura.AuraWebRuntime;
 import io.aura.snapshot.ExceptionSnapshot;
 import io.aura.snapshot.SnapshotOptions;
 import io.aura.snapshot.SnapshotScope;
@@ -29,7 +29,7 @@ class SnapshotRecorder {
 
     private static final String TRUNCATION_MARKER = "...<truncated>";
     private static final String SAFE_PATH_PARAMETER = "redacted";
-    private static final Map<Aura, SnapshotRecorder> RECORDERS = new ConcurrentHashMap<>();
+    private static final Map<AuraWebRuntime, SnapshotRecorder> RECORDERS = new ConcurrentHashMap<>();
     private static final Map<Path, Object> STORAGE_LOCKS = new ConcurrentHashMap<>();
 
     private final SnapshotOptions options;
@@ -40,7 +40,7 @@ class SnapshotRecorder {
     private final AtomicLong dropped = new AtomicLong();
     private volatile boolean closed;
 
-    private SnapshotRecorder(Aura app) {
+    private SnapshotRecorder(AuraWebRuntime app) {
         this.options = app.snapshotOptions();
         this.redactor = new SnapshotRedactor(options);
         this.env = captureEnv(app, options);
@@ -48,22 +48,22 @@ class SnapshotRecorder {
         this.writer = options.async() ? startWriter() : null;
     }
 
-    static SnapshotRecorder of(Aura app) {
+    static SnapshotRecorder of(AuraWebRuntime app) {
         return RECORDERS.computeIfAbsent(app, SnapshotRecorder::new);
     }
 
-    static void close(Aura app) {
+    static void close(AuraWebRuntime app) {
         SnapshotRecorder recorder = RECORDERS.remove(app);
         if (recorder != null) recorder.close();
     }
 
-    static boolean shouldCapture(Aura app) {
+    static boolean shouldCapture(AuraWebRuntime app) {
         SnapshotOptions options = app.snapshotOptions();
         if (!options.enabled()) return false;
         return options.sampleRate() >= 1.0 || Math.random() <= options.sampleRate();
     }
 
-    static long dropped(Aura app) {
+    static long dropped(AuraWebRuntime app) {
         SnapshotRecorder recorder = RECORDERS.get(app);
         return recorder == null ? 0L : recorder.dropped.get();
     }
@@ -310,7 +310,7 @@ class SnapshotRecorder {
         }
     }
 
-    private static ExceptionSnapshot.EnvSnapshot captureEnv(Aura app, SnapshotOptions options) {
+    private static ExceptionSnapshot.EnvSnapshot captureEnv(AuraWebRuntime app, SnapshotOptions options) {
         Map<String, String> env = new LinkedHashMap<>();
         for (String key : options.envAllowlist()) {
             String value = System.getenv(key);
@@ -323,7 +323,7 @@ class SnapshotRecorder {
         props.put("aura.request-timeout", String.valueOf(app.requestTimeout()));
         props.put("aura.gzip", String.valueOf(app.gzip()));
         return new ExceptionSnapshot.EnvSnapshot(
-                Aura.class.getPackage().getImplementationVersion(),
+                AuraWebRuntime.class.getPackage().getImplementationVersion(),
                 app.env(),
                 System.getProperty("java.version"),
                 System.getProperty("os.name"),

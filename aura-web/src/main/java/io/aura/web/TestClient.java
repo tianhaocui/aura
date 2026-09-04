@@ -3,6 +3,8 @@ package io.aura.web;
 import com.alibaba.fastjson2.JSON;
 import io.aura.Aura;
 import io.aura.AuraApp;
+import io.aura.AuraRuntime;
+import io.aura.AuraWebRuntime;
 import io.aura.snapshot.Snapshot;
 import io.aura.snapshot.SnapshotScope;
 
@@ -12,17 +14,21 @@ import java.util.Map;
 
 public class TestClient {
 
-    private final Aura app;
+    private final AuraWebRuntime app;
     private final Router router;
     private final List<CompiledRoute> compiled;
 
-    TestClient(Aura app, Router router) {
+    TestClient(AuraWebRuntime app, Router router) {
         this.app = app;
         this.router = router;
         this.compiled = UndertowStarter.compileRoutes(router, app);
     }
 
     public static TestClient of(Aura app) {
+        return of((AuraWebRuntime) app);
+    }
+
+    private static TestClient of(AuraWebRuntime app) {
         app.prepareModules();
         Router router = new Router();
         // replay direct routes
@@ -57,10 +63,17 @@ public class TestClient {
         return new TestClient(app, router);
     }
 
+    /** Creates the in-memory client from the stable runtime seam. */
+    public static TestClient of(AuraRuntime runtime) {
+        if (runtime == null) throw new IllegalArgumentException("runtime must not be null");
+        if (runtime instanceof AuraWebRuntime app) return of(app);
+        throw new IllegalArgumentException("TestClient requires a runtime with an Aura Web adapter");
+    }
+
     /** Standard 1.0 verification entry point for explicitly composed applications. */
     public static TestClient of(AuraApp app) {
         if (app == null) throw new IllegalArgumentException("app must not be null");
-        return of(app.runtime());
+        return of(app.runtimeView());
     }
 
     public Request get(String path) { return new Request("GET", path); }

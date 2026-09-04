@@ -1,7 +1,7 @@
 package io.aura.web;
 
 import com.alibaba.fastjson2.JSON;
-import io.aura.Aura;
+import io.aura.AuraWebRuntime;
 import io.aura.snapshot.Snapshot;
 
 import java.util.HashMap;
@@ -17,19 +17,19 @@ public class MockContext extends Context {
     private final Map<String, String> headers;
     private final Map<String, String> queryParams;
     private final String body;
-    private final Aura app;
+    private final AuraWebRuntime app;
     private final String requestPath;
     private final Map<Class<?>, Object> attrs = new ConcurrentHashMap<>();
     private final Map<String, Object> namedAttrs = new ConcurrentHashMap<>();
     private final Map<String, String> respHeaders = new HashMap<>();
 
     public MockContext(Map<String, String> pathParams, Map<String, String> queryParams,
-                       Map<String, String> headers, String body, Aura app) {
+                       Map<String, String> headers, String body, AuraWebRuntime app) {
         this(pathParams, queryParams, headers, body, app, "");
     }
 
     public MockContext(Map<String, String> pathParams, Map<String, String> queryParams,
-                       Map<String, String> headers, String body, Aura app, String requestPath) {
+                       Map<String, String> headers, String body, AuraWebRuntime app, String requestPath) {
         super(null, pathParams, app, null);
         this.pathParams = pathParams;
         this.headers = headers;
@@ -94,7 +94,7 @@ public class MockContext extends Context {
     @Override public void set(String key, Object value) { namedAttrs.put(key, value); }
     @Override @SuppressWarnings("unchecked")
     public <T> T get(String key, Class<T> type) { return (T) namedAttrs.get(key); }
-    @Override public Aura app() { return app; }
+    @Override public AuraWebRuntime app() { return app; }
 
     @Override
     public String ip() {

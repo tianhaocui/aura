@@ -1,7 +1,7 @@
 package io.aura.web;
 
 import com.alibaba.fastjson2.JSON;
-import io.aura.Aura;
+import io.aura.AuraWebRuntime;
 import io.aura.Validate;
 
 import java.lang.reflect.InvocationTargetException;
@@ -10,7 +10,7 @@ import java.util.Map;
 class ExceptionResolver {
 
     @SuppressWarnings({"unchecked", "rawtypes"})
-    static boolean apply(Aura app, Exception e, BaseContext ctx) {
+    static boolean apply(AuraWebRuntime app, Exception e, BaseContext ctx) {
         Throwable cause = unwrap(e);
         if (cause instanceof Error err) throw err;
 
@@ -33,7 +33,7 @@ class ExceptionResolver {
         return true;
     }
 
-    static ExceptionResponse resolveDefault(Aura app, Throwable cause) {
+    static ExceptionResponse resolveDefault(AuraWebRuntime app, Throwable cause) {
         if (cause instanceof Validate.ValidationException ve && !ve.errors().isEmpty()) {
             return new ExceptionResponse(400, Map.of(
                     "error", "Validation failed",
