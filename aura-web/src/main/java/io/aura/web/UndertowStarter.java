@@ -478,30 +478,10 @@ public class UndertowStarter implements AuraStarter {
     }
 
     private void serveSchema(HttpServerExchange exchange) {
-        List<Map<String, Object>> routes = new ArrayList<>();
+        List<io.aura.contract.ApiRoute> routes = new ArrayList<>();
         for (CompiledRoute cr : compiledRoutes) {
-            Map<String, Object> entry = new LinkedHashMap<>();
-            entry.put("method", cr.method());
-            entry.put("path", cr.rawPath());
-
-            if (cr.meta() != null) {
-                if (cr.meta().description() != null) {
-                    entry.put("description", cr.meta().description());
-                }
-                if (cr.meta().returnType() != null) {
-                    entry.put("returnType", cr.meta().returnType());
-                }
-            }
-
-            // extract parameter info from MethodRefHandler if available
             List<Map<String, String>> params = buildParamSchema(cr);
-            if (!params.isEmpty()) {
-                entry.put("params", params);
-            }
-
-            entry.put("example", buildCurlExample(cr, params));
-
-            routes.add(entry);
+            routes.add(ApiRouteCatalog.describe(cr, buildCurlExample(cr, params)));
         }
 
         Map<String, Object> schema = new LinkedHashMap<>();

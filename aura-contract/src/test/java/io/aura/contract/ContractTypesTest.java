@@ -75,6 +75,14 @@ class ContractTypesTest {
         assertThatThrownBy(token::throwIfCancelled).isInstanceOf(CancellationException.class);
     }
 
+    @Test
+    void apiRouteContractsAreImmutableAndNormalized() {
+        var route = new ApiRoute(" get ", "/orders", "List orders", "List<Order>",
+                List.of(new ApiParameter("page", "int", "query", false, "Page number")), "curl /orders");
+        assertThat(route.method()).isEqualTo("GET");
+        assertThat(route.params()).singleElement().extracting(ApiParameter::name).isEqualTo("page");
+    }
+
     private static final class SetSupport {
         private static java.util.Set<ModuleRequirement> copy(List<ModuleRequirement> values) {
             return new java.util.LinkedHashSet<>(values);
