@@ -55,6 +55,26 @@ class DuplicateRouteTest {
     }
 
     @Test
+    void testClient_rejectsDuplicateRoutesLikeRealServer() {
+        Aura app = Aura.create().use(new io.aura.AuraModule() {
+            @Override public io.aura.contract.ModuleMetadata descriptor() {
+                return io.aura.contract.ModuleMetadata.of("duplicate-test", "1.0.0");
+            }
+
+            @Override public void install(io.aura.ModuleContext context) {
+                context.route(new io.aura.contract.RouteContribution(
+                        "GET", "/same", (BaseHandler) ctx -> ctx.text("first")));
+                context.route(new io.aura.contract.RouteContribution(
+                        "GET", "/same", (BaseHandler) ctx -> ctx.text("second")));
+            }
+        });
+
+        assertThatThrownBy(() -> TestClient.of(app))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("Duplicate route: GET /same");
+    }
+
+    @Test
     void duplicateParameterizedRoute_throwsOnStart() {
         Aura app = Aura.create().port(0);
         app.routes(r -> {

@@ -22,6 +22,7 @@ public class TestClient {
         this.app = app;
         this.router = router;
         this.compiled = UndertowStarter.compileRoutes(router, app);
+        UndertowStarter.detectDuplicateRoutes(compiled);
     }
 
     public static TestClient of(Aura app) {

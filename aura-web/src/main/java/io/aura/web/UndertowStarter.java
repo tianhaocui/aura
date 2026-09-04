@@ -572,7 +572,7 @@ public class UndertowStarter implements AuraStarter {
         return result;
     }
 
-    private void detectDuplicateRoutes(List<CompiledRoute> routes) {
+    static void detectDuplicateRoutes(List<CompiledRoute> routes) {
         var seen = new java.util.HashSet<String>();
         for (CompiledRoute route : routes) {
             String key = route.method() + " " + route.rawPath();
