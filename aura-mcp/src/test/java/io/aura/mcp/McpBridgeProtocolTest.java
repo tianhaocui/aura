@@ -74,9 +74,9 @@ class McpBridgeProtocolTest {
     }
 
     @Test
-    void nullMethod_returnsNothing() throws Exception {
-        String response = sendRaw("{\"jsonrpc\":\"2.0\",\"id\":5}");
-        assertThat(response).isEmpty();
+    void nullMethodReturnsInvalidRequestError() throws Exception {
+        JSONObject response = JSON.parseObject(sendRaw("{\"jsonrpc\":\"2.0\",\"id\":5}"));
+        assertThat(response.getJSONObject("error").getInteger("code")).isEqualTo(-32600);
     }
 
     @Test
@@ -92,6 +92,28 @@ class McpBridgeProtocolTest {
         assertThat(parseResult(sendRequest("resources/read", 7, new JSONObject())).getJSONArray("contents")).isEmpty();
         assertThat(parseResult(sendRequest("prompts/list", 8, null)).getJSONArray("prompts")).isEmpty();
         assertThat(parseResult(sendRequest("prompts/get", 9, new JSONObject())).getJSONArray("messages")).isEmpty();
+    }
+
+    @Test
+    void unknownMethodReturnsJsonRpcMethodNotFoundError() throws Exception {
+        JSONObject response = JSON.parseObject(sendRequest("unknown/method", 11, null));
+        assertThat(response.getJSONObject("error").getInteger("code")).isEqualTo(-32601);
+        assertThat(response.getJSONObject("error").getString("message")).contains("unknown/method");
+    }
+
+    @Test
+    void invalidParamsReturnsJsonRpcInvalidParamsErrorAndNotificationsStaySilent() throws Exception {
+        JSONObject request = new JSONObject();
+        request.put("jsonrpc", "2.0");
+        request.put("id", 12);
+        request.put("method", "tools/list");
+        request.put("params", "not-an-object");
+
+        JSONObject response = JSON.parseObject(sendRaw(request.toJSONString()));
+        assertThat(response.getJSONObject("error").getInteger("code")).isEqualTo(-32602);
+
+        request.remove("id");
+        assertThat(sendRaw(request.toJSONString())).isBlank();
     }
 
     private String sendRequest(String method, Object id, JSONObject params) throws Exception {

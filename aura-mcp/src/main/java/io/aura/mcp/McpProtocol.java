@@ -79,10 +79,23 @@ public final class McpProtocol {
     }
 
     private JSONObject dispatch(JSONObject request) {
+        Object id = request == null ? null : request.get("id");
+        if (request == null || !"2.0".equals(request.getString("jsonrpc"))) {
+            if (id != null) sendError(id, -32600, "Invalid Request");
+            return null;
+        }
         String method = request.getString("method");
-        Object id = request.get("id");
 
-        if (method == null) return null;
+        if (method == null) {
+            if (id != null) sendError(id, -32600, "Invalid Request: method is required");
+            return null;
+        }
+
+        Object rawParams = request.get("params");
+        if (rawParams != null && !(rawParams instanceof JSONObject)) {
+            if (id != null) sendError(id, -32602, "Invalid params");
+            return null;
+        }
 
         Object result;
         if ("initialize".equals(method)) {
@@ -99,7 +112,11 @@ public final class McpProtocol {
             result = handler.handle(method, request.getJSONObject("params"));
         }
 
-        if (id == null || result == null) return null;
+        if (id == null) return null;
+        if (result == null) {
+            sendError(id, -32601, "Method not found: " + method);
+            return null;
+        }
 
         JSONObject resp = new JSONObject();
         resp.put("jsonrpc", "2.0");

@@ -198,6 +198,18 @@ java -jar aura-mcp-bridge.jar http://localhost:8080
 | `tools/list` | List available tools |
 | `tools/call` | Invoke a tool |
 
+The stdio protocol uses stable JSON-RPC errors for transport-level failures:
+
+| Code | Meaning |
+|------|---------|
+| `-32700` | Invalid JSON |
+| `-32600` | Invalid JSON-RPC request/version |
+| `-32601` | Method is not supported |
+| `-32602` | `params` is not an object or otherwise invalid |
+
+Notifications (requests without an `id`) never receive a response, including
+notifications that contain invalid parameters.
+
 ---
 
 ## McpPackager
