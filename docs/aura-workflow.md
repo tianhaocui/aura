@@ -82,7 +82,8 @@ runtime.cancel(executionId);
 `cancel(...)` returns `false` when the execution is already terminal or unknown. Cancellation is
 cooperative, so business steps should honor interruption or inspect their own shared token.
 
-The default store is in-memory for tests and single-process use. Production modules can provide a
+The default in-memory store is bounded to 10,000 execution records and evicts the oldest records
+when full. Production modules can provide a
 `WorkflowExecutionStore` implementation to persist state; distributed workers and resume policies
 remain explicit extension responsibilities. Cancellation is cooperative: a running step must
 honor interruption or inspect its token through the surrounding context to stop promptly.

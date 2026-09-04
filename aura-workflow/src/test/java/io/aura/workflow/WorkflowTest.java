@@ -285,4 +285,21 @@ class WorkflowTest {
             runtime.close();
         }
     }
+
+    @Test
+    void defaultExecutionStoreIsBoundedAndEvictsOldestRecords() {
+        InMemoryWorkflowExecutionStore store = new InMemoryWorkflowExecutionStore(2);
+        WorkflowExecution first = new WorkflowExecution("flow", null);
+        WorkflowExecution second = new WorkflowExecution("flow", null);
+        WorkflowExecution third = new WorkflowExecution("flow", null);
+
+        store.save(first);
+        store.save(second);
+        store.save(third);
+
+        assertThat(store.maxExecutions()).isEqualTo(2);
+        assertThat(store.list("flow")).extracting(WorkflowExecution::executionId)
+                .containsExactly(second.executionId(), third.executionId());
+        assertThat(store.find(first.executionId())).isEmpty();
+    }
 }
