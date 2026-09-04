@@ -310,6 +310,16 @@ public class UndertowStarter implements AuraStarter {
             return;
         }
 
+        if ("GET".equals(method) && "/openapi.json".equals(path)) {
+            if (!app.openApiEnabled() && !Aura.isDevMode()) {
+                exchange.setStatusCode(404);
+                exchange.endExchange();
+                return;
+            }
+            serveOpenApi(exchange);
+            return;
+        }
+
         // WebSocket upgrade
         if ("GET".equals(method) && isWebSocketUpgrade(exchange)) {
             if (!checkWsOrigin(exchange)) {
@@ -491,6 +501,19 @@ public class UndertowStarter implements AuraStarter {
         exchange.getResponseHeaders().put(Headers.CONTENT_TYPE, "application/json; charset=utf-8");
         exchange.getResponseHeaders().put(Headers.CACHE_CONTROL, "no-store");
         exchange.getResponseSender().send(JSON.toJSONString(schema));
+    }
+
+    private void serveOpenApi(HttpServerExchange exchange) {
+        List<io.aura.contract.ApiRoute> routes = new ArrayList<>();
+        for (CompiledRoute route : compiledRoutes) {
+            List<Map<String, String>> params = buildParamSchema(route);
+            routes.add(ApiRouteCatalog.describe(route, buildCurlExample(route, params)));
+        }
+        Map<String, Object> document = OpenApiGenerator.generate(
+                app.prop("app.name") == null ? "Aura API" : app.prop("app.name"), "1.0.0", routes);
+        exchange.getResponseHeaders().put(Headers.CONTENT_TYPE, "application/json; charset=utf-8");
+        exchange.getResponseHeaders().put(Headers.CACHE_CONTROL, "no-store");
+        exchange.getResponseSender().send(JSON.toJSONString(document));
     }
 
     private String buildCurlExample(CompiledRoute cr, List<Map<String, String>> params) {
