@@ -1,5 +1,6 @@
 package io.aura.ai;
 
+import com.alibaba.fastjson2.JSON;
 import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.Test;
 
@@ -8,6 +9,8 @@ import java.net.InetSocketAddress;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -68,5 +71,47 @@ class OpenAiCompatibleProviderTest {
 
         assertThatThrownBy(() -> OpenAiCompatibleProvider.create("file:///tmp/ai", "", "model"))
                 .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void sendsTypedToolsAndParsesToolCallsWithoutExposingRawErrors() throws Exception {
+        AtomicReference<String> requestBody = new AtomicReference<>();
+        HttpServer server = HttpServer.create(new InetSocketAddress(0), 0);
+        server.createContext("/tools", exchange -> {
+            requestBody.set(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
+            Map<String, Object> function = new java.util.LinkedHashMap<>();
+            function.put("name", "lookup_order");
+            function.put("arguments", JSON.toJSONString(Map.of("id", 42)));
+            Map<String, Object> call = new java.util.LinkedHashMap<>();
+            call.put("id", "call-1");
+            call.put("function", function);
+            Map<String, Object> message = new java.util.LinkedHashMap<>();
+            message.put("content", null);
+            message.put("tool_calls", List.of(call));
+            byte[] response = JSON.toJSONString(Map.of(
+                    "choices", List.of(Map.of("message", message))))
+                    .getBytes(StandardCharsets.UTF_8);
+            exchange.sendResponseHeaders(200, response.length);
+            try (OutputStream output = exchange.getResponseBody()) { output.write(response); }
+        });
+        server.start();
+        try {
+            OpenAiCompatibleProvider provider = OpenAiCompatibleProvider.create(
+                    "http://localhost:" + server.getAddress().getPort() + "/tools", "", "default");
+            AiResponse response = provider.chat(AiRequest.builder().prompt("find order")
+                    .tool(new AiToolDefinition("lookup_order", "Look up an order",
+                            java.util.Map.of("type", "object", "properties", java.util.Map.of(
+                                    "id", java.util.Map.of("type", "integer")))))
+                    .toolChoice("auto").build());
+
+            assertThat(response.content()).isEmpty();
+            assertThat(response.toolCalls()).singleElement().satisfies(call -> {
+                assertThat(call.name()).isEqualTo("lookup_order");
+                assertThat(call.arguments()).containsEntry("id", 42);
+            });
+            assertThat(requestBody.get()).contains("lookup_order", "tool_choice", "parameters");
+        } finally {
+            server.stop(0);
+        }
     }
 }

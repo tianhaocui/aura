@@ -64,3 +64,21 @@ AuraApp.create()
 The adapter sends redacted prompts, applies request timeouts, caps response bytes, supports SSE
 `data:` chunks, and reports provider failures with `AiProviderException.code()`. Keep the endpoint
 and key in deployment configuration; they are never included in provider error messages.
+
+Typed tool calling is available without provider-specific request maps:
+
+```java
+AiRequest request = AiRequest.builder()
+        .prompt("Find order 42")
+        .tool(new AiToolDefinition("lookup_order", "Look up an order",
+                Map.of("type", "object")))
+        .toolChoice("auto")
+        .build();
+AiResponse response = client.chat(request);
+for (AiToolCall call : response.toolCalls()) {
+    // Dispatch the call through the application's selected tool/MCP adapter.
+}
+```
+
+The provider parses JSON arguments but does not execute tools implicitly. Authorization and tool
+dispatch remain explicit application/module responsibilities.

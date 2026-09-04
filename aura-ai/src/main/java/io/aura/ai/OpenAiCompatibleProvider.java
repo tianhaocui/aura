@@ -118,6 +118,16 @@ public final class OpenAiCompatibleProvider implements AiProvider {
             }
         });
         if (stream) payload.put("stream", true);
+        if (!request.tools().isEmpty()) {
+            payload.put("tools", request.tools().stream().map(tool -> Map.of(
+                    "type", "function",
+                    "function", Map.of("name", tool.name(), "description",
+                            tool.description() == null ? "" : tool.description(),
+                            "parameters", tool.inputSchema()))).toList());
+        }
+        if (request.toolChoice() != null && !request.toolChoice().isBlank()) {
+            payload.put("tool_choice", request.toolChoice());
+        }
         HttpRequest.Builder builder = HttpRequest.newBuilder(endpoint)
                 .header("Content-Type", "application/json")
                 .timeout(effectiveTimeout(request));
@@ -134,12 +144,36 @@ public final class OpenAiCompatibleProvider implements AiProvider {
             Map<String, Object> message = (Map<String, Object>) choices.get(0).get("message");
             Object content = message == null ? null : message.get("content");
             if (content == null) content = choices.get(0).get("text");
-            if (content == null) throw new IllegalArgumentException("response content is missing");
+            List<AiToolCall> toolCalls = parseToolCalls(message);
+            if (content == null && toolCalls.isEmpty()) throw new IllegalArgumentException("response content is missing");
             Object usage = root.get("usage");
-            return new AiResponse(content.toString(), modelValue(root, requestedModel),
-                    usage instanceof Map<?, ?> map ? (Map<String, ?>) map : Map.of(), root);
+            return new AiResponse(content == null ? "" : content.toString(), modelValue(root, requestedModel),
+                    usage instanceof Map<?, ?> map ? (Map<String, ?>) map : Map.of(), root, toolCalls);
         } catch (RuntimeException error) {
             throw new AiProviderException("AI_RESPONSE_INVALID", 200, "AI provider returned invalid response");
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private static List<AiToolCall> parseToolCalls(Map<String, Object> message) throws AiProviderException {
+        if (message == null || !(message.get("tool_calls") instanceof List<?> rawCalls)) return List.of();
+        List<AiToolCall> calls = new ArrayList<>();
+        try {
+            for (Object raw : rawCalls) {
+                if (!(raw instanceof Map<?, ?> call)) continue;
+                String id = call.get("id") == null ? null : call.get("id").toString();
+                Map<String, Object> function = (Map<String, Object>) call.get("function");
+                if (function == null || function.get("name") == null) continue;
+                Object rawArguments = function.get("arguments");
+                Map<String, Object> arguments = rawArguments instanceof Map<?, ?> map
+                        ? (Map<String, Object>) map
+                        : rawArguments == null ? Map.of() : JSON.parseObject(rawArguments.toString(), Map.class);
+                calls.add(new AiToolCall(id, function.get("name").toString(), arguments));
+            }
+            return List.copyOf(calls);
+        } catch (RuntimeException error) {
+            throw new AiProviderException("AI_TOOL_CALL_INVALID", 200,
+                    "AI provider returned invalid tool call arguments");
         }
     }
 

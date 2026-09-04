@@ -5,6 +5,7 @@ import java.time.Duration;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.List;
 import java.util.Objects;
 
 /** Provider-neutral input for one chat completion. */
@@ -17,6 +18,8 @@ public final class AiRequest {
     private final CancellationToken cancellationToken;
     private final AiBudget budget;
     private final AiRedactor redactor;
+    private final List<AiToolDefinition> tools;
+    private final String toolChoice;
 
     public AiRequest(String prompt) {
         this(builder().prompt(prompt));
@@ -35,6 +38,8 @@ public final class AiRequest {
         this.cancellationToken = Objects.requireNonNull(builder.cancellationToken, "cancellationToken");
         this.budget = Objects.requireNonNull(builder.budget, "budget");
         this.redactor = Objects.requireNonNull(builder.redactor, "redactor");
+        this.tools = List.copyOf(builder.tools);
+        this.toolChoice = builder.toolChoice;
         if (budget.maxInputCharacters() > 0 && prompt.length() > budget.maxInputCharacters()) {
             throw new IllegalArgumentException("prompt exceeds configured AI input budget");
         }
@@ -55,6 +60,8 @@ public final class AiRequest {
     public CancellationToken cancellationToken() { return cancellationToken; }
     public AiBudget budget() { return budget; }
     public AiRedactor redactor() { return redactor; }
+    public List<AiToolDefinition> tools() { return tools; }
+    public String toolChoice() { return toolChoice; }
 
     private static String requireText(String value, String name) {
         if (value == null || value.isBlank()) throw new IllegalArgumentException(name + " must not be blank");
@@ -76,6 +83,8 @@ public final class AiRequest {
         private CancellationToken cancellationToken = new CancellationToken();
         private AiBudget budget = AiBudget.unlimited();
         private AiRedactor redactor = AiRedactor.defaultRedactor();
+        private final List<AiToolDefinition> tools = new java.util.ArrayList<>();
+        private String toolChoice;
 
         public Builder prompt(String value) { this.prompt = value; return this; }
         public Builder systemPrompt(String value) { this.systemPrompt = value; return this; }
@@ -90,6 +99,13 @@ public final class AiRequest {
         public Builder cancellationToken(CancellationToken value) { this.cancellationToken = value; return this; }
         public Builder budget(AiBudget value) { this.budget = value; return this; }
         public Builder redactor(AiRedactor value) { this.redactor = value; return this; }
+        public Builder tool(AiToolDefinition value) { tools.add(Objects.requireNonNull(value, "tool")); return this; }
+        public Builder tools(List<AiToolDefinition> values) {
+            tools.clear();
+            if (values != null) values.forEach(this::tool);
+            return this;
+        }
+        public Builder toolChoice(String value) { this.toolChoice = value; return this; }
         public AiRequest build() { return new AiRequest(this); }
     }
 }
