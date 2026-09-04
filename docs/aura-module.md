@@ -45,6 +45,9 @@ routes.post("/orders", handler)
   the Web adapter executes the handler and preserves the same metadata. The older
   Web-specific `ModuleContext` route/middleware methods are not part of the 1.0 contract.
 - Dependencies are declared with `requires(...)`; Aura checks missing modules and cycles before starting the server.
+- Modular startup rejects service methods compiled without Java parameter names with
+  `AURA_PARAMETER_NAMES_MISSING`; compile application modules with Maven's
+  `<parameters>true</parameters>` setting so binding and generated schemas agree.
 - `install(...)` only registers services, routes and capabilities. `start(...)` opens external resources; `stop(...)` releases them.
 - Module properties must use `aura.<module-id>.*` and are read through `context.property(...)`.
 - Record configuration is bound with `context.config(OrderConfig.class)`, using only the current module's `aura.<module-id>.*` prefix.

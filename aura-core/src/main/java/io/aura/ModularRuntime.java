@@ -120,7 +120,7 @@ final class ModularRuntime implements AuraWebRuntime {
         if (!state.compareAndSet(RuntimeState.NEW, RuntimeState.STARTING)) return;
         try {
             moduleManager.install(this::moduleContext, true);
-            StartupCheck.checkParameterNames(services);
+            StartupCheck.requireParameterNames(services);
             starter = java.util.ServiceLoader.load(AuraStarter.class).findFirst()
                     .orElseThrow(() -> new IllegalStateException("No AuraStarter found. Add aura-web to your dependencies."));
             starter.start(this);
