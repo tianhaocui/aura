@@ -17,6 +17,8 @@ done < <(sed -n 's:.*<module>\([^<]*\)</module>.*:\1:p' "$pom")
 
 test -f "$repo_root/aura-ai/src/main/java/io/aura/ai/AiClient.java"
 test -f "$repo_root/aura-workflow/src/main/java/io/aura/workflow/WorkflowModule.java"
+test -f "$repo_root/AI_GUIDE.md"
+test -f "$repo_root/docs/legacy-ai-guide-0.6.md"
 test -f "$repo_root/docs/aura-module.md"
 test -f "$repo_root/docs/aura-workflow.md"
 test -f "$repo_root/docs/migration-to-1.0.md"
@@ -48,6 +50,12 @@ if rg -n 'app\.runtime\(\)|app\.lifecycle\(\)' \
   echo "deprecated AuraApp runtime/lifecycle API found in first-party contracts" >&2
   exit 1
 fi
+
+if rg -n '0\.6\.1|Aura\.create\(|\.plugin\(' "$repo_root/AI_GUIDE.md"; then
+  echo "legacy API found in the canonical AI 1.0 guide" >&2
+  exit 1
+fi
+rg -q 'AuraApp\.create\(\)' "$repo_root/AI_GUIDE.md"
 
 if rg -n 'context\.routes\(' \
     "$repo_root/aura-"*/src/main "$repo_root/examples"; then
