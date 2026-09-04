@@ -146,4 +146,25 @@ class ModuleAssemblyTest {
         }
         assertThat(app.state()).isEqualTo(io.aura.contract.RuntimeState.STOPPED);
     }
+
+    @Test
+    void modularRuntimeAuthenticationFlowsThroughTestClientContext() {
+        AuraApp app = AuraApp.create()
+                .authenticate(ctx -> "user-42")
+                .use(new AuraModule() {
+                    @Override public ModuleMetadata descriptor() {
+                        return ModuleMetadata.of("authenticated-route", "1.0.0");
+                    }
+                    @Override public void install(ModuleContext context) {
+                        context.route(new RouteContribution(
+                                "GET", "/authenticated",
+                                (BaseHandler) ctx -> {
+                                    Aura.requireAuth().handle(ctx);
+                                    if (!ctx.isAborted()) ctx.text(ctx.userId());
+                                }));
+                    }
+                });
+
+        assertThat(TestClient.of(app).get("/authenticated").expect(200).body()).isEqualTo("user-42");
+    }
 }
