@@ -38,7 +38,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.function.Consumer;
 
 public class UndertowStarter implements AuraStarter {
 
@@ -61,22 +60,7 @@ public class UndertowStarter implements AuraStarter {
         this.app = app;
         long t0 = System.currentTimeMillis();
 
-        router = new Router();
-
-        registerDirectRoutes(app, router);
-
-        Consumer<?> config = app.routeConfig();
-        if (config != null) {
-            ((Consumer<BaseRouter>) config).accept(router);
-        }
-
-        for (Object service : app.services()) {
-            ServiceRegistrar.register(service, router);
-        }
-
-        if (!app.scanPackages().isEmpty()) {
-            PackageScanner.scan(app.scanPackages(), router, app);
-        }
+        router = RouteAssembler.assemble(app);
 
         compiledRoutes = compile(router, "", new ArrayList<>(app.beforeHandlers()), new ArrayList<>(app.afterHandlers()));
         compiledRoutes.sort(Comparator.comparingInt((CompiledRoute r) -> r.paramNames().size())
@@ -192,20 +176,7 @@ public class UndertowStarter implements AuraStarter {
     @SuppressWarnings("unchecked")
     public void reloadRoutes(AuraWebRuntime app) {
         long t0 = System.currentTimeMillis();
-        Router newRouter = new Router();
-
-        registerDirectRoutes(app, newRouter);
-
-        var config = (java.util.function.Consumer<BaseRouter>) app.routeConfig();
-        if (config != null) config.accept(newRouter);
-
-        for (Object service : app.services()) {
-            ServiceRegistrar.register(service, newRouter);
-        }
-
-        if (!app.scanPackages().isEmpty()) {
-            PackageScanner.scan(app.scanPackages(), newRouter, app);
-        }
+        Router newRouter = RouteAssembler.assemble(app);
 
         var newCompiled = compile(newRouter, "",
                 new java.util.ArrayList<>(app.beforeHandlers()), new java.util.ArrayList<>(app.afterHandlers()));
@@ -218,35 +189,6 @@ public class UndertowStarter implements AuraStarter {
         this.router = newRouter;
 
         log.info("[aura-dev] routes reloaded in {}ms", System.currentTimeMillis() - t0);
-    }
-
-    private static void registerDirectRoutes(AuraWebRuntime app, Router router) {
-        for (var entry : app.directRoutes()) {
-            BaseHandler handler = entry.handler() instanceof BaseHandler h
-                    ? h : new LambdaHandler(entry.handler());
-            BaseRouteBuilder builder = switch (entry.method()) {
-                case "GET" -> router.get(entry.path(), handler);
-                case "POST" -> router.post(entry.path(), handler);
-                case "PUT" -> router.put(entry.path(), handler);
-                case "DELETE" -> router.delete(entry.path(), handler);
-                case "PATCH" -> router.patch(entry.path(), handler);
-                case "HEAD" -> router.head(entry.path(), handler);
-                case "OPTIONS" -> router.options(entry.path(), handler);
-                default -> throw new IllegalArgumentException("Unsupported route method: " + entry.method());
-            };
-            if (entry.description() != null) builder.describe(entry.description());
-            Object returnType = entry.metadata().get("returnType");
-            if (returnType != null) builder.returnType = returnType.toString();
-            Object parameters = entry.metadata().get("parameters");
-            if (parameters instanceof java.util.Collection<?> values) {
-                for (Object value : values) {
-                    if (value instanceof io.aura.contract.ApiParameter parameter) {
-                        builder.param(parameter.name(), parameter.type(), parameter.source(),
-                                parameter.required(), parameter.description());
-                    }
-                }
-            }
-        }
     }
 
     private void dispatch(HttpServerExchange exchange) {

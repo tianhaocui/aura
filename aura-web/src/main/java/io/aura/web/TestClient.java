@@ -29,37 +29,7 @@ public class TestClient {
     }
 
     private static TestClient of(AuraWebRuntime app) {
-        app.prepareModules();
-        Router router = new Router();
-        // replay direct routes
-        for (var entry : app.directRoutes()) {
-            BaseHandler handler;
-            if (entry.handler() instanceof BaseHandler h) {
-                handler = h;
-            } else {
-                handler = new LambdaHandler(entry.handler());
-            }
-            switch (entry.method()) {
-                case "GET" -> router.get(entry.path(), handler);
-                case "POST" -> router.post(entry.path(), handler);
-                case "PUT" -> router.put(entry.path(), handler);
-                case "DELETE" -> router.delete(entry.path(), handler);
-                case "PATCH" -> router.patch(entry.path(), handler);
-                case "HEAD" -> router.head(entry.path(), handler);
-                case "OPTIONS" -> router.options(entry.path(), handler);
-            }
-        }
-        // replay routes config
-        @SuppressWarnings("unchecked")
-        var config = (java.util.function.Consumer<BaseRouter>) app.routeConfig();
-        if (config != null) config.accept(router);
-        // replay services
-        for (Object service : app.services()) {
-            ServiceRegistrar.register(service, router);
-        }
-        if (!app.scanPackages().isEmpty()) {
-            PackageScanner.scan(app.scanPackages(), router, app);
-        }
+        Router router = RouteAssembler.assemble(app);
         return new TestClient(app, router);
     }
 
