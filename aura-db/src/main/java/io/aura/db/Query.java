@@ -133,7 +133,7 @@ public class Query {
 
     public int count(CancellationToken cancellationToken) {
         String sql = "SELECT COUNT(*) FROM " + table + buildWhere();
-        Row row = db.findOne(sql, cancellationToken, params.toArray());
+        Row row = db.findOneCancellable(sql, cancellationToken, params.toArray());
         return row == null ? 0 : ((Number) row.values().iterator().next()).intValue();
     }
 
@@ -168,7 +168,7 @@ public class Query {
         }
         allParams.addAll(params);
         String sql = "UPDATE " + table + " SET " + String.join(", ", setCols) + buildWhere();
-        return db.execute(sql, cancellationToken, allParams.toArray());
+        return db.executeCancellable(sql, cancellationToken, allParams.toArray());
     }
 
     public int delete() {
@@ -178,7 +178,7 @@ public class Query {
 
     public int delete(CancellationToken cancellationToken) {
         String sql = "DELETE FROM " + table + buildWhere();
-        return db.execute(sql, cancellationToken, params.toArray());
+        return db.executeCancellable(sql, cancellationToken, params.toArray());
     }
 
     private String buildSql() {

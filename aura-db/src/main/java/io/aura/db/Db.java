@@ -145,19 +145,20 @@ public class Db implements AutoCloseable {
     // --- Row query ---
 
     public List<Row> find(String sql, Object... params) {
-        return find(sql, new CancellationToken(), params);
+        return query(sql, params, Db::rsToRow);
     }
 
-    public List<Row> find(String sql, CancellationToken cancellationToken, Object... params) {
+    public List<Row> findCancellable(String sql, CancellationToken cancellationToken, Object... params) {
         return query(sql, params, Db::rsToRow, cancellationToken);
     }
 
     public Row findOne(String sql, Object... params) {
-        return findOne(sql, new CancellationToken(), params);
+        List<Row> list = find(sql, params);
+        return list.isEmpty() ? null : list.get(0);
     }
 
-    public Row findOne(String sql, CancellationToken cancellationToken, Object... params) {
-        List<Row> list = find(sql, cancellationToken, params);
+    public Row findOneCancellable(String sql, CancellationToken cancellationToken, Object... params) {
+        List<Row> list = findCancellable(sql, cancellationToken, params);
         return list.isEmpty() ? null : list.get(0);
     }
 
@@ -241,11 +242,15 @@ public class Db implements AutoCloseable {
     // --- execute ---
 
     public int execute(String sql, Object... params) {
-        return execute(sql, new CancellationToken(), params);
+        return executeInternal(sql, new CancellationToken(), params);
     }
 
     /** Executes an update that can cancel its JDBC statement through the token. */
-    public int execute(String sql, CancellationToken cancellationToken, Object... params) {
+    public int executeCancellable(String sql, CancellationToken cancellationToken, Object... params) {
+        return executeInternal(sql, cancellationToken, params);
+    }
+
+    private int executeInternal(String sql, CancellationToken cancellationToken, Object... params) {
         Objects.requireNonNull(cancellationToken, "cancellationToken");
         cancellationToken.throwIfCancelled();
         boolean inTx = transactionConnection() != null;

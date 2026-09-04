@@ -59,11 +59,11 @@ class DbIntegrationTest {
         CancellationToken token = new CancellationToken();
         token.cancel();
 
-        assertThatThrownBy(() -> db.find("SELECT * FROM users", token))
+        assertThatThrownBy(() -> db.findCancellable("SELECT * FROM users", token))
                 .isInstanceOf(java.util.concurrent.CancellationException.class);
         assertThatThrownBy(() -> db.table("users").find(token))
                 .isInstanceOf(java.util.concurrent.CancellationException.class);
-        assertThatThrownBy(() -> db.execute("DELETE FROM users", token))
+        assertThatThrownBy(() -> db.executeCancellable("DELETE FROM users", token))
                 .isInstanceOf(java.util.concurrent.CancellationException.class);
     }
 
