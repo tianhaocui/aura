@@ -1,10 +1,6 @@
 package io.aura;
 
-import io.aura.web.BaseHandler;
-import io.aura.web.BaseRouter;
-
 import java.util.Optional;
-import java.util.function.Consumer;
 
 /** Restricted contribution context exposed to one module during installation. */
 public interface ModuleContext extends io.aura.contract.CapabilityLookup {
@@ -20,10 +16,6 @@ public interface ModuleContext extends io.aura.contract.CapabilityLookup {
 
     void service(Object service);
 
-    /** @deprecated Use {@link #routes(io.aura.contract.RouteContributor)} for new modules. */
-    @Deprecated
-    void routes(Consumer<BaseRouter> routes);
-
     /** Adds framework-neutral route contributions for an optional transport adapter. */
     default void routes(io.aura.contract.RouteContributor routes) {
         if (routes == null) {
@@ -37,12 +29,6 @@ public interface ModuleContext extends io.aura.contract.CapabilityLookup {
     }
 
     void route(io.aura.contract.RouteContribution route);
-
-    void before(BaseHandler handler);
-
-    void after(BaseHandler handler);
-
-    void mcp(io.aura.contract.McpRouterSpec router);
 
     void healthCheck(io.aura.contract.HealthCheck healthCheck);
 

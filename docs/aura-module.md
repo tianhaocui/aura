@@ -41,9 +41,9 @@ routes.post("/orders", handler)
 ```
 
   These declarations feed `/__schema__`, OpenAPI, and other adapters from the same contract.
-- New transport-neutral modules can return `RouteContribution` values through `context.route(...)`;
+- New transport-neutral modules contribute `RouteContribution` values through `context.route(...)`;
   the Web adapter executes the handler and preserves the same metadata. The older
-  `Consumer<BaseRouter>` overload is retained only for migration.
+  Web-specific `ModuleContext` route/middleware methods are not part of the 1.0 contract.
 - Dependencies are declared with `requires(...)`; Aura checks missing modules and cycles before starting the server.
 - `install(...)` only registers services, routes and capabilities. `start(...)` opens external resources; `stop(...)` releases them.
 - Module properties must use `aura.<module-id>.*` and are read through `context.property(...)`.

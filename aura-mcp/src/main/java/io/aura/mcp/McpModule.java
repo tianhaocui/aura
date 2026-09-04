@@ -25,7 +25,6 @@ public final class McpModule implements AuraModule {
     @Override public void install(ModuleContext context) {
         context.register(router);
         context.register("mcp", router);
-        context.mcp(router);
     }
 
     public McpRouter router() { return router; }

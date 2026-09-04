@@ -39,7 +39,6 @@ public class Aura implements AuraWebRuntime {
     private final List<AutoCloseable> closeables = new ArrayList<>();
     private final List<AuraPlugin> plugins = new ArrayList<>();
     private final ModuleManager moduleManager = new ModuleManager();
-    private final List<Consumer<io.aura.web.BaseRouter>> moduleRouteConfigs = new CopyOnWriteArrayList<>();
     private String staticFilesPath;
     private boolean spaMode;
     private String corsOrigin;
@@ -766,11 +765,7 @@ public class Aura implements AuraWebRuntime {
     public String env() { return config.env(); }
     public int workers() { return config.workers(); }
     public Consumer<?> routeConfig() {
-        if (routeConfig == null && moduleRouteConfigs.isEmpty()) return null;
-        return (Consumer<io.aura.web.BaseRouter>) router -> {
-            if (routeConfig != null) ((Consumer<io.aura.web.BaseRouter>) routeConfig).accept(router);
-            for (Consumer<io.aura.web.BaseRouter> contribution : moduleRouteConfigs) contribution.accept(router);
-        };
+        return routeConfig;
     }
     public List<Object> services() { return services; }
     public List<RouteEntry> directRoutes() { return directRoutes; }
@@ -791,7 +786,10 @@ public class Aura implements AuraWebRuntime {
     public JsonConfig jsonConfig() { return jsonConfig; }
     public int mcpPort() { return mcpPort; }
     public java.io.PrintStream mcpStdout() { return mcpStdout; }
-    public io.aura.contract.McpRouterSpec mcpRouter() { return mcpRouter; }
+    public io.aura.contract.McpRouterSpec mcpRouter() {
+        if (mcpRouter != null) return mcpRouter;
+        return getBean(io.aura.contract.McpRouterSpec.class);
+    }
 
     /** Installs module contributions without starting external resources; used by TestClient. */
     @Override public void prepareModules() {
@@ -829,7 +827,6 @@ public class Aura implements AuraWebRuntime {
         @Override public void register(Object value) { Aura.this.register(value); trackLifecycle(value); }
         @Override public void register(String name, Object value) { Aura.this.register(name, value); trackLifecycle(value); }
         @Override public void service(Object service) { Aura.this.service(service); trackLifecycle(service); }
-        @Override public void routes(Consumer<io.aura.web.BaseRouter> routes) { moduleRouteConfigs.add(routes); }
         @Override public void route(io.aura.contract.RouteContribution route) {
             if (route == null) {
                 throw new ModuleException("AURA_ROUTE_CONTRIBUTION_INVALID", descriptor.id(),
@@ -847,9 +844,6 @@ public class Aura implements AuraWebRuntime {
             directRoutes.add(new RouteEntry(route.method(), route.path(), route.handler(),
                     route.description(), route.metadata()));
         }
-        @Override public void before(io.aura.web.BaseHandler handler) { Aura.this.before(handler); }
-        @Override public void after(io.aura.web.BaseHandler handler) { Aura.this.after(handler); }
-        @Override public void mcp(io.aura.contract.McpRouterSpec router) { Aura.this.mcp(router); }
         @Override public void healthCheck(io.aura.contract.HealthCheck healthCheck) { Aura.this.healthCheck(healthCheck); }
         @Override public io.aura.contract.PermissionRegistry permissions() { return permissionRegistry; }
         @Override public String property(String key) {

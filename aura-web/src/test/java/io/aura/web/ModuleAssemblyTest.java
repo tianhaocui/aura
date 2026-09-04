@@ -22,7 +22,8 @@ class ModuleAssemblyTest {
             }
 
             @Override public void install(ModuleContext context) {
-                context.routes(routes -> routes.get("/greeting", ctx -> ctx.text("hello")));
+                context.route(new RouteContribution("GET", "/greeting",
+                        (BaseHandler) ctx -> ctx.text("hello")));
             }
         });
 
