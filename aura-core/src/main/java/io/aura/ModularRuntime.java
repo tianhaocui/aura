@@ -137,6 +137,7 @@ final class ModularRuntime implements AuraWebRuntime {
                     .orElseThrow(() -> new IllegalStateException("No AuraStarter found. Add aura-web to your dependencies."));
             starter.start(this);
             state.set(RuntimeState.RUNNING);
+            Runtime.getRuntime().addShutdownHook(new Thread(this::stop, "aura-shutdown"));
             if (mcpPort >= 0 || mcpPort == -2) {
                 mcpStarter = java.util.ServiceLoader.load(McpStarter.class).findFirst().orElse(null);
                 if (mcpStarter == null) {
