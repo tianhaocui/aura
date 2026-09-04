@@ -2,6 +2,16 @@
 
 `aura-ai` 是 Aura 的可选 AI 客户端模块。它不绑定具体模型厂商，应用只依赖稳定的 `AiProvider` SPI，便于 AI 生成代码时只学习一套调用方式。
 
+作为 Aura 模块使用：
+
+```java
+AuraApp.create()
+        .use(AiModule.create(provider))
+        .start();
+```
+
+业务模块通过 `context.require(AiClient.class)` 获取客户端；模块停止时客户端会自动关闭。
+
 ```java
 AiClient client = new AiClient(provider);
 AiRequest request = AiRequest.builder()

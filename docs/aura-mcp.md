@@ -13,6 +13,16 @@ Aura.create()
 // HTTP on :8080, MCP available via --mcp-stdio
 ```
 
+模块化应用可以显式安装 `McpModule`：
+
+```java
+AuraApp.create()
+    .use(McpModule.create(mcpRouter))
+    .start("--mcp-stdio");
+```
+
+`McpModule` 只注册 router，不隐式打开网络监听；传输方式由启动参数显式决定。
+
 ## McpRouter (Selective Tool Exposure)
 
 Not all APIs should be MCP tools. McpRouter lets you explicitly choose which operations to expose, with AI-friendly parameter mapping.

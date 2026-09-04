@@ -19,6 +19,8 @@ public final class OrderModule implements AuraModule {
 AuraApp.create()
         .use(WorkflowModule.create())
         .use(DatabaseModule.create(db))
+        .use(AiModule.create(provider))
+        .use(McpModule.create(mcpRouter))
         .use(new OrderModule())
         .start();
 ```
@@ -32,6 +34,7 @@ AuraApp.create()
 - `TestClient.of(app)` runs module installation but does not start external resources, so module routes can be tested in memory.
 - `aura-db` provides `DatabaseModule.create(db)`. A business module can declare `requires("db")` and obtain the same `Db` instance with `context.require(Db.class)`.
 - New applications should use `AuraApp`; the older `Aura` builder is an implementation detail and is not the recommended module authoring API.
+- `AiModule` contributes an `AiClient`; `McpModule` contributes an `McpRouter`. They do not silently open network listeners. Use the application's explicit MCP transport flag or configuration when starting.
 - Do not use global registries, static tenant state, reflection-based module discovery, or numeric step positions.
 
 ## Business workflow extensions
