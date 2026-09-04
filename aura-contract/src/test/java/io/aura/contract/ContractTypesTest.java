@@ -76,6 +76,23 @@ class ContractTypesTest {
     }
 
     @Test
+    void linkedCancellationObservesParentsWithoutMutatingThem() {
+        CancellationToken caller = new CancellationToken();
+        CancellationToken runtime = new CancellationToken();
+        CancellationToken linked = CancellationToken.linked(caller, runtime);
+
+        assertThat(linked.isCancelled()).isFalse();
+        caller.cancel();
+        assertThat(linked.isCancelled()).isTrue();
+        assertThat(runtime.isCancelled()).isFalse();
+
+        CancellationToken child = runtime.child();
+        child.cancel();
+        assertThat(child.isCancelled()).isTrue();
+        assertThat(runtime.isCancelled()).isFalse();
+    }
+
+    @Test
     void apiRouteContractsAreImmutableAndNormalized() {
         var route = new ApiRoute(" get ", "/orders", "List orders", "List<Order>",
                 List.of(new ApiParameter("page", "int", "query", false, "Page number")), "curl /orders");

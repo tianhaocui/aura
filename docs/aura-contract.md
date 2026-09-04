@@ -20,6 +20,9 @@ descriptors without prescribing an HTTP server implementation.
 
 `HealthCheck` reports `UP`, `DOWN`, or `UNKNOWN`. `CancellationToken` is a
 cooperative signal that can be shared by request, AI, and workflow adapters.
+Use `token.child()` for a child operation or `CancellationToken.linked(a, b)`
+when an operation must stop if any parent (for example the caller or runtime
+shutdown) is cancelled. Cancelling a child does not cancel its parents.
 `StructuredError` and `ContractException` preserve a stable error code,
 message, and details map for protocol-specific serialization.
 

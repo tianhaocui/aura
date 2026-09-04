@@ -256,6 +256,41 @@ class WorkflowTest {
     }
 
     @Test
+    void runtimeShutdownCancelsExecutionWithoutCancellingCallerToken() throws Exception {
+        WorkflowRegistry registry = new WorkflowRegistry();
+        java.util.concurrent.CountDownLatch started = new java.util.concurrent.CountDownLatch(1);
+        registry.register(Workflow.<Object>builder("shutdown-cancel")
+                .step("long-step", context -> {
+                    started.countDown();
+                    Thread.sleep(10_000);
+                    return null;
+                })
+                .build());
+        WorkflowRuntime<Object> runtime = new WorkflowRuntime<>(registry);
+        CancellationToken caller = new CancellationToken();
+        try {
+            runtime.executeAsync("shutdown-cancel", new Object(),
+                    WorkflowSelector.defaultVariant(), caller);
+            assertThat(started.await(2, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+            String executionId = runtime.executions("shutdown-cancel").stream()
+                    .findFirst().map(WorkflowExecution::executionId).orElse(null);
+            assertThat(executionId).isNotNull();
+            runtime.close();
+            for (int i = 0; i < 100; i++) {
+                if (runtime.execution(executionId)
+                        .map(execution -> execution.status() == WorkflowExecution.Status.CANCELLED)
+                        .orElse(false)) break;
+                Thread.sleep(10);
+            }
+            assertThat(runtime.executions("shutdown-cancel"))
+                    .anyMatch(execution -> execution.status() == WorkflowExecution.Status.CANCELLED);
+            assertThat(caller.isCancelled()).isFalse();
+        } finally {
+            runtime.close();
+        }
+    }
+
+    @Test
     void synchronousRuntimeExecutionIsInspectableThroughTheSameStore() {
         WorkflowRegistry registry = new WorkflowRegistry();
         registry.register(Workflow.<Object>builder("sync-flow")

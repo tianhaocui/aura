@@ -67,6 +67,11 @@ CompletableFuture<WorkflowResult> future = runtime.executeAsync(
 token.cancel();
 ```
 
+`WorkflowRuntime` links the caller token with its own runtime-shutdown token.
+Closing the runtime therefore cancels queued or running executions without
+mutating a caller-owned token; a workflow step can still inspect the token it
+receives through its surrounding context and honor interruption promptly.
+
 The same token overload is available for synchronous `execute(...)` calls.
 
 When cancellation is observed, the workflow and the currently running step are both marked

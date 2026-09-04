@@ -106,12 +106,18 @@ public final class WorkflowDefinition<C> implements AuraWorkflow<C> {
                     } catch (java.util.concurrent.CancellationException cancelled) {
                         throw cancelled;
                     } catch (Exception error) {
+                        if (cancellationToken.isCancelled()) {
+                            throw new java.util.concurrent.CancellationException("Workflow cancelled");
+                        }
                         failure = error;
                         if (attempt >= spec.retryPolicy().maxAttempts() || !spec.retryPolicy().shouldRetry(error)) break;
                         if (!spec.retryPolicy().delay().isZero()) {
                             try { Thread.sleep(spec.retryPolicy().delay().toMillis()); }
                             catch (InterruptedException interrupted) {
                                 Thread.currentThread().interrupt();
+                                if (cancellationToken.isCancelled()) {
+                                    throw new java.util.concurrent.CancellationException("Workflow cancelled");
+                                }
                                 failure = interrupted;
                                 break;
                             }

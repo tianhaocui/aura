@@ -19,6 +19,7 @@ public final class WorkflowRuntime<C> implements AutoCloseable {
     private final ConcurrentHashMap<String, CancellationToken> activeCancellations = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, CompletableFuture<WorkflowResult>> inFlightByKey = new ConcurrentHashMap<>();
     private final AtomicLong rejectedExecutions = new AtomicLong();
+    private final CancellationToken runtimeCancellation = new CancellationToken();
 
     public WorkflowRuntime() { this(new WorkflowRegistry(), new InMemoryWorkflowExecutionStore()); }
     public WorkflowRuntime(WorkflowRegistry registry) { this(registry, new InMemoryWorkflowExecutionStore()); }
@@ -61,12 +62,13 @@ public final class WorkflowRuntime<C> implements AutoCloseable {
     public WorkflowResult execute(String workflowId, C context, WorkflowSelector<C> selector,
                                   CancellationToken cancellationToken, String idempotencyKey) {
         @SuppressWarnings("unchecked") WorkflowDefinition<C> definition = (WorkflowDefinition<C>) registry.get(workflowId);
+        CancellationToken executionToken = linkedToken(cancellationToken);
         String key = normalizeKey(idempotencyKey);
         if (key != null) {
             java.util.Optional<WorkflowExecution> existing = store.findByIdempotencyKey(workflowId, key);
             if (existing.isPresent()) return new WorkflowResult(existing.get(), null);
         }
-        return definition.execute(context, selector, cancellationToken, store::save, key);
+        return definition.execute(context, selector, executionToken, store::save, key);
     }
     public WorkflowResult execute(String workflowId, C context) {
         return execute(workflowId, context, WorkflowSelector.defaultVariant());
@@ -95,6 +97,7 @@ public final class WorkflowRuntime<C> implements AutoCloseable {
                                                            String idempotencyKey) {
         Objects.requireNonNull(selector, "selector");
         Objects.requireNonNull(cancellationToken, "cancellationToken");
+        CancellationToken executionToken = linkedToken(cancellationToken);
         String key = normalizeKey(idempotencyKey);
         String inFlightKey = key == null ? null : workflowId + "\u0000" + key;
         if (inFlightKey != null) {
@@ -115,13 +118,13 @@ public final class WorkflowRuntime<C> implements AutoCloseable {
                 try {
                     @SuppressWarnings("unchecked") WorkflowDefinition<C> definition =
                             (WorkflowDefinition<C>) registry.get(workflowId);
-                    WorkflowResult result = definition.execute(context, selector, cancellationToken, execution -> {
+                    WorkflowResult result = definition.execute(context, selector, executionToken, execution -> {
                         store.save(execution);
                         if (execution.status() == WorkflowExecution.Status.PENDING
                                 || execution.status() == WorkflowExecution.Status.RUNNING) {
-                            activeCancellations.put(execution.executionId(), cancellationToken);
+                            activeCancellations.put(execution.executionId(), executionToken);
                         } else {
-                            activeCancellations.remove(execution.executionId(), cancellationToken);
+                            activeCancellations.remove(execution.executionId(), executionToken);
                         }
                     }, key);
                     future.complete(result);
@@ -169,12 +172,12 @@ public final class WorkflowRuntime<C> implements AutoCloseable {
         return token != null && token.cancel();
     }
     public WorkflowResult execute(WorkflowDefinition<C> definition, C context, WorkflowSelector<C> selector) {
-        return definition.execute(context, selector);
+        return definition.execute(context, selector, linkedToken(new CancellationToken()), store::save);
     }
 
     public WorkflowResult execute(WorkflowDefinition<C> definition, C context,
                                   WorkflowSelector<C> selector, CancellationToken cancellationToken) {
-        return definition.execute(context, selector, cancellationToken, store::save);
+        return definition.execute(context, selector, linkedToken(cancellationToken), store::save);
     }
 
     public WorkflowResult execute(WorkflowDefinition<C> definition, C context,
@@ -185,7 +188,7 @@ public final class WorkflowRuntime<C> implements AutoCloseable {
             java.util.Optional<WorkflowExecution> existing = store.findByIdempotencyKey(definition.id(), key);
             if (existing.isPresent()) return new WorkflowResult(existing.get(), null);
         }
-        return definition.execute(context, selector, cancellationToken, store::save, key);
+        return definition.execute(context, selector, linkedToken(cancellationToken), store::save, key);
     }
 
     private static String normalizeKey(String idempotencyKey) {
@@ -195,11 +198,17 @@ public final class WorkflowRuntime<C> implements AutoCloseable {
     }
 
     @Override public void close() {
+        runtimeCancellation.cancel();
         activeCancellations.values().forEach(CancellationToken::cancel);
         activeCancellations.clear();
         inFlightByKey.values().forEach(future -> future.cancel(true));
         inFlightByKey.clear();
         executor.shutdownNow();
+    }
+
+    private CancellationToken linkedToken(CancellationToken callerToken) {
+        return CancellationToken.linked(runtimeCancellation,
+                Objects.requireNonNull(callerToken, "cancellationToken"));
     }
 
     private static int defaultWorkers() {
