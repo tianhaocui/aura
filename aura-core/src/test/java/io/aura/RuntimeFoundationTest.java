@@ -1,5 +1,8 @@
 package io.aura;
 
+import io.aura.contract.CancellationToken;
+import io.aura.contract.HealthStatus;
+
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.*;

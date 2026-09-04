@@ -3,7 +3,7 @@ package io.aura.ai;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import io.aura.CancellationToken;
+import io.aura.contract.CancellationToken;
 import java.time.Duration;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.CancellationException;

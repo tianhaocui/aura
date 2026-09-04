@@ -23,7 +23,7 @@ public final class AuraApp implements AutoCloseable {
         return this;
     }
 
-    public AuraApp healthCheck(HealthCheck check) {
+    public AuraApp healthCheck(io.aura.contract.HealthCheck check) {
         runtime.healthCheck(check);
         return this;
     }

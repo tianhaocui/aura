@@ -70,7 +70,7 @@ public class Aura {
     private final SnapshotOptions snapshotOptions = new SnapshotOptions();
     private final AuraConfig config;
     private final AtomicReference<Lifecycle> lifecycle = new AtomicReference<>(Lifecycle.NEW);
-    private final List<HealthCheck> healthChecks = new CopyOnWriteArrayList<>();
+    private final List<io.aura.contract.HealthCheck> healthChecks = new CopyOnWriteArrayList<>();
     private final List<AuraEventListener> eventListeners = new CopyOnWriteArrayList<>();
     private volatile boolean modulesInstalled;
     private volatile boolean modulesStarted;
@@ -273,18 +273,19 @@ public class Aura {
         });
         get("/health/live", (io.aura.web.BaseHandler) ctx -> ctx.json(java.util.Map.of("status", "UP")));
         get("/health/ready", (io.aura.web.BaseHandler) ctx -> {
-            boolean ready = lifecycle.get() == Lifecycle.RUNNING && healthStatus() == HealthStatus.UP;
+            boolean ready = lifecycle.get() == Lifecycle.RUNNING
+                    && healthStatus() == io.aura.contract.HealthStatus.UP;
             ctx.status(ready ? 200 : 503).json(java.util.Map.of("status", ready ? "UP" : "DOWN"));
         });
         return this;
     }
 
-    public Aura healthCheck(HealthCheck check) { if (check != null) healthChecks.add(check); return this; }
-    public List<HealthCheck> healthChecks() { return List.copyOf(healthChecks); }
-    public HealthStatus healthStatus() {
-        if (shuttingDown) return HealthStatus.DOWN;
-        for (HealthCheck check : healthChecks) try { if (check.check() != HealthStatus.UP) return HealthStatus.DOWN; } catch (Exception e) { return HealthStatus.DOWN; }
-        return HealthStatus.UP;
+    public Aura healthCheck(io.aura.contract.HealthCheck check) { if (check != null) healthChecks.add(check); return this; }
+    public List<io.aura.contract.HealthCheck> healthChecks() { return List.copyOf(healthChecks); }
+    public io.aura.contract.HealthStatus healthStatus() {
+        if (shuttingDown) return io.aura.contract.HealthStatus.DOWN;
+        for (io.aura.contract.HealthCheck check : healthChecks) try { if (check.check() != io.aura.contract.HealthStatus.UP) return io.aura.contract.HealthStatus.DOWN; } catch (Exception e) { return io.aura.contract.HealthStatus.DOWN; }
+        return io.aura.contract.HealthStatus.UP;
     }
 
     public boolean isShuttingDown() { return shuttingDown; }
@@ -970,7 +971,7 @@ public class Aura {
         @Override public void before(io.aura.web.BaseHandler handler) { Aura.this.before(handler); }
         @Override public void after(io.aura.web.BaseHandler handler) { Aura.this.after(handler); }
         @Override public void mcp(McpRouterSpec router) { Aura.this.mcp(router); }
-        @Override public void healthCheck(HealthCheck healthCheck) { Aura.this.healthCheck(healthCheck); }
+        @Override public void healthCheck(io.aura.contract.HealthCheck healthCheck) { Aura.this.healthCheck(healthCheck); }
         @Override public String property(String key) {
             String prefix = "aura." + descriptor.id() + ".";
             if (key == null || !key.startsWith(prefix)) {

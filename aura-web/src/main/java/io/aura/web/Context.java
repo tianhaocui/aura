@@ -3,7 +3,7 @@ package io.aura.web;
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONWriter;
 import io.aura.Aura;
-import io.aura.CancellationToken;
+import io.aura.contract.CancellationToken;
 import io.aura.JsonConfig;
 import io.aura.snapshot.Snapshot;
 import io.undertow.server.HttpServerExchange;

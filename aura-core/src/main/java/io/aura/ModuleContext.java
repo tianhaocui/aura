@@ -28,7 +28,7 @@ public interface ModuleContext extends io.aura.contract.CapabilityLookup {
 
     void mcp(McpRouterSpec router);
 
-    void healthCheck(HealthCheck healthCheck);
+    void healthCheck(io.aura.contract.HealthCheck healthCheck);
 
     String property(String key);
 }

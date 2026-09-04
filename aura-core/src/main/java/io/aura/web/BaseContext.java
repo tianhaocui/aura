@@ -139,9 +139,9 @@ public interface BaseContext {
     default String ip() { return null; }
 
     /** Cooperative cancellation state for timeout, disconnect, and application shutdown. */
-    default io.aura.CancellationToken cancellationToken() { return null; }
+    default io.aura.contract.CancellationToken cancellationToken() { return null; }
     default boolean isCancelled() {
-        io.aura.CancellationToken token = cancellationToken();
+        io.aura.contract.CancellationToken token = cancellationToken();
         return token != null && token.isCancelled();
     }
 }

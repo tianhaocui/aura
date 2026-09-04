@@ -1,6 +1,6 @@
 package io.aura.ai;
 
-import io.aura.CancellationToken;
+import io.aura.contract.CancellationToken;
 import java.time.Duration;
 import java.util.Collections;
 import java.util.LinkedHashMap;
