@@ -83,6 +83,19 @@ class ContractTypesTest {
         assertThat(route.params()).singleElement().extracting(ApiParameter::name).isEqualTo("page");
     }
 
+    @Test
+    void permissionRegistryRejectsDuplicatesAndPreservesRegistrationOrder() {
+        PermissionRegistry registry = new PermissionRegistry()
+                .register("order.read", "Read orders")
+                .register("order.write", "Write orders");
+
+        assertThat(registry.list()).extracting(Permission::id)
+                .containsExactly("order.read", "order.write");
+        assertThatThrownBy(() -> registry.register("order.read", "Duplicate"))
+                .isInstanceOf(ContractException.class)
+                .hasMessageContaining("already registered");
+    }
+
     private static final class SetSupport {
         private static java.util.Set<ModuleRequirement> copy(List<ModuleRequirement> values) {
             return new java.util.LinkedHashSet<>(values);

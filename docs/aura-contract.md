@@ -22,3 +22,7 @@ descriptors without prescribing an HTTP server implementation.
 cooperative signal that can be shared by request, AI, and workflow adapters.
 `StructuredError` and `ContractException` preserve a stable error code,
 message, and details map for protocol-specific serialization.
+
+`PermissionRegistry` provides an explicit, duplicate-checked list of permission
+ids contributed by modules. Authorization implementations can consume its
+snapshot without depending on Aura's runtime registry.

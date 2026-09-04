@@ -71,6 +71,7 @@ public class Aura {
     private final AuraConfig config;
     private final AtomicReference<Lifecycle> lifecycle = new AtomicReference<>(Lifecycle.NEW);
     private final List<io.aura.contract.HealthCheck> healthChecks = new CopyOnWriteArrayList<>();
+    private final io.aura.contract.PermissionRegistry permissionRegistry = new io.aura.contract.PermissionRegistry();
     private final List<AuraEventListener> eventListeners = new CopyOnWriteArrayList<>();
     private volatile boolean modulesInstalled;
     private volatile boolean modulesStarted;
@@ -287,6 +288,7 @@ public class Aura {
         for (io.aura.contract.HealthCheck check : healthChecks) try { if (check.check() != io.aura.contract.HealthStatus.UP) return io.aura.contract.HealthStatus.DOWN; } catch (Exception e) { return io.aura.contract.HealthStatus.DOWN; }
         return io.aura.contract.HealthStatus.UP;
     }
+    public io.aura.contract.PermissionRegistry permissions() { return permissionRegistry; }
 
     public boolean isShuttingDown() { return shuttingDown; }
 
@@ -972,6 +974,7 @@ public class Aura {
         @Override public void after(io.aura.web.BaseHandler handler) { Aura.this.after(handler); }
         @Override public void mcp(McpRouterSpec router) { Aura.this.mcp(router); }
         @Override public void healthCheck(io.aura.contract.HealthCheck healthCheck) { Aura.this.healthCheck(healthCheck); }
+        @Override public io.aura.contract.PermissionRegistry permissions() { return permissionRegistry; }
         @Override public String property(String key) {
             String prefix = "aura." + descriptor.id() + ".";
             if (key == null || !key.startsWith(prefix)) {

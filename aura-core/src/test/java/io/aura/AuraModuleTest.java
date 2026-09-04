@@ -122,6 +122,21 @@ class AuraModuleTest {
                 .prepareModules();
     }
 
+    @Test
+    void moduleContributesPermissionsThroughSharedRegistry() {
+        Aura app = Aura.create().use(new AuraModule() {
+            @Override public io.aura.contract.ModuleMetadata descriptor() {
+                return io.aura.contract.ModuleMetadata.of("orders", "1.0.0");
+            }
+            @Override public void install(ModuleContext context) {
+                context.permissions().register("orders.read", "Read orders");
+            }
+        });
+
+        app.prepareModules();
+        assertThat(app.permissions().contains("orders.read")).isTrue();
+    }
+
     private static AuraModule module(String id, List<String> dependencies, List<String> installed) {
         return new AuraModule() {
             @Override public io.aura.contract.ModuleMetadata descriptor() {
