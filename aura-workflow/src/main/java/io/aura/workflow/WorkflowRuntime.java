@@ -1,5 +1,7 @@
 package io.aura.workflow;
 
+import io.aura.contract.CancellationToken;
+
 import java.util.Objects;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.CompletableFuture;
@@ -31,8 +33,13 @@ public final class WorkflowRuntime<C> implements AutoCloseable {
     public WorkflowExecutionStore store() { return store; }
 
     public WorkflowResult execute(String workflowId, C context, WorkflowSelector<C> selector) {
+        return execute(workflowId, context, selector, new CancellationToken());
+    }
+
+    public WorkflowResult execute(String workflowId, C context, WorkflowSelector<C> selector,
+                                  CancellationToken cancellationToken) {
         @SuppressWarnings("unchecked") WorkflowDefinition<C> definition = (WorkflowDefinition<C>) registry.get(workflowId);
-        return definition.execute(context, selector);
+        return definition.execute(context, selector, cancellationToken, ignored -> { });
     }
     public WorkflowResult execute(String workflowId, C context) {
         return execute(workflowId, context, WorkflowSelector.defaultVariant());
@@ -40,13 +47,21 @@ public final class WorkflowRuntime<C> implements AutoCloseable {
 
     public CompletableFuture<WorkflowResult> executeAsync(String workflowId, C context,
                                                            WorkflowSelector<C> selector) {
+        return executeAsync(workflowId, context, selector, new CancellationToken());
+    }
+
+    public CompletableFuture<WorkflowResult> executeAsync(String workflowId, C context,
+                                                           WorkflowSelector<C> selector,
+                                                           CancellationToken cancellationToken) {
         Objects.requireNonNull(selector, "selector");
+        Objects.requireNonNull(cancellationToken, "cancellationToken");
         CompletableFuture<WorkflowResult> future = new CompletableFuture<>();
         try {
             executor.execute(() -> {
                 try {
-                    WorkflowResult result = execute(workflowId, context, selector);
-                    store.save(result.execution());
+                    @SuppressWarnings("unchecked") WorkflowDefinition<C> definition =
+                            (WorkflowDefinition<C>) registry.get(workflowId);
+                    WorkflowResult result = definition.execute(context, selector, cancellationToken, store::save);
                     future.complete(result);
                 } catch (Throwable error) {
                     future.completeExceptionally(error);
@@ -63,6 +78,11 @@ public final class WorkflowRuntime<C> implements AutoCloseable {
         return executeAsync(workflowId, context, WorkflowSelector.defaultVariant());
     }
 
+    public CompletableFuture<WorkflowResult> executeAsync(String workflowId, C context,
+                                                           CancellationToken cancellationToken) {
+        return executeAsync(workflowId, context, WorkflowSelector.defaultVariant(), cancellationToken);
+    }
+
     public java.util.Optional<WorkflowExecution> execution(String executionId) {
         return store.find(executionId);
     }
@@ -72,6 +92,11 @@ public final class WorkflowRuntime<C> implements AutoCloseable {
     }
     public WorkflowResult execute(WorkflowDefinition<C> definition, C context, WorkflowSelector<C> selector) {
         return definition.execute(context, selector);
+    }
+
+    public WorkflowResult execute(WorkflowDefinition<C> definition, C context,
+                                  WorkflowSelector<C> selector, CancellationToken cancellationToken) {
+        return definition.execute(context, selector, cancellationToken, ignored -> { });
     }
 
     @Override public void close() { executor.shutdownNow(); }

@@ -14,5 +14,6 @@ public final class WorkflowResult {
     public Object value() { return value; }
     public Object result() { return value; }
     public boolean succeeded() { return execution.status() == WorkflowExecution.Status.SUCCEEDED; }
-    public boolean failed() { return !succeeded(); }
+    public boolean failed() { return execution.status() == WorkflowExecution.Status.FAILED; }
+    public boolean cancelled() { return execution.status() == WorkflowExecution.Status.CANCELLED; }
 }

@@ -51,4 +51,23 @@ CompletableFuture<WorkflowResult> future = runtime.executeAsync(
         "order.fulfillment", orderContext, WorkflowSelector.by(OrderContext::variant));
 ```
 
-The default store is in-memory for tests and single-process use. Production modules can provide a `WorkflowExecutionStore` implementation to persist state; distributed workers and resume policies remain explicit extension responsibilities.
+For cooperative cancellation, pass a shared token. The runtime persists the execution as
+`PENDING`, `RUNNING`, and finally `SUCCEEDED`, `FAILED`, or `CANCELLED`:
+
+```java
+CancellationToken token = new CancellationToken();
+CompletableFuture<WorkflowResult> future = runtime.executeAsync(
+        "order.fulfillment", orderContext,
+        WorkflowSelector.by(OrderContext::variant), token);
+token.cancel();
+```
+
+The same token overload is available for synchronous `execute(...)` calls.
+
+When cancellation is observed, the workflow and the currently running step are both marked
+`CANCELLED`; steps that have not started remain `PENDING`.
+
+The default store is in-memory for tests and single-process use. Production modules can provide a
+`WorkflowExecutionStore` implementation to persist state; distributed workers and resume policies
+remain explicit extension responsibilities. Cancellation is cooperative: a running step must
+honor interruption or inspect its token through the surrounding context to stop promptly.

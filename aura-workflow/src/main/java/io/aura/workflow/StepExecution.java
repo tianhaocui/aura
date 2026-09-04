@@ -3,7 +3,7 @@ package io.aura.workflow;
 import java.time.Instant;
 
 public final class StepExecution {
-    public enum Status { PENDING, RUNNING, SUCCEEDED, FAILED, COMPENSATED }
+    public enum Status { PENDING, RUNNING, SUCCEEDED, FAILED, COMPENSATED, CANCELLED }
 
     private final String stepId;
     private final StepMode mode;
@@ -24,6 +24,7 @@ public final class StepExecution {
     void start() { status = Status.RUNNING; startedAt = Instant.now(); }
     void success(Object value) { result = value; status = Status.SUCCEEDED; finishedAt = Instant.now(); }
     void fail(Throwable cause) { error = cause; status = Status.FAILED; finishedAt = Instant.now(); }
+    void cancel(Throwable cause) { error = cause; status = Status.CANCELLED; finishedAt = Instant.now(); }
     void compensated() { status = Status.COMPENSATED; }
     void attempt() { attempts++; }
     public String stepId() { return stepId; }

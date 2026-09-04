@@ -1,5 +1,7 @@
 package io.aura.workflow;
 
+import io.aura.contract.CancellationToken;
+
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -51,7 +53,15 @@ public final class WorkflowDefinition<C> implements AuraWorkflow<C> {
 
     @Override
     public WorkflowResult execute(C context, WorkflowSelector<C> selector) {
+        return execute(context, selector, new CancellationToken(), ignored -> { });
+    }
+
+    WorkflowResult execute(C context, WorkflowSelector<C> selector,
+                            CancellationToken cancellationToken,
+                            Consumer<WorkflowExecution> observer) {
         Objects.requireNonNull(selector, "selector");
+        Objects.requireNonNull(cancellationToken, "cancellationToken");
+        Objects.requireNonNull(observer, "observer");
         String variant = selector.select(context);
         Resolved<C> resolved = resolve(variant);
         List<String> order = topologicalOrder(resolved.steps, resolved.edges);
@@ -60,22 +70,34 @@ public final class WorkflowDefinition<C> implements AuraWorkflow<C> {
             WorkflowStepSpec<C> spec = resolved.steps.get(stepId);
             execution.add(new StepExecution(stepId, spec.mode(), spec.retryPolicy()));
         }
-        execution.start();
+        observer.accept(execution);
         Object value = null;
         List<WorkflowStepSpec<C>> completed = new ArrayList<>();
+        StepExecution currentStep = null;
         try {
+            cancellationToken.throwIfCancelled();
+            execution.start();
+            observer.accept(execution);
             for (String stepId : order) {
+                cancellationToken.throwIfCancelled();
                 WorkflowStepSpec<C> spec = resolved.steps.get(stepId);
                 StepExecution state = execution.step(stepId);
+                currentStep = state;
                 state.start();
+                observer.accept(execution);
                 Throwable failure = null;
                 for (int attempt = 1; attempt <= spec.retryPolicy().maxAttempts(); attempt++) {
+                    cancellationToken.throwIfCancelled();
                     state.attempt();
+                    observer.accept(execution);
                     try {
                         value = spec.step().execute(context);
                         state.success(value);
+                        observer.accept(execution);
                         failure = null;
                         break;
+                    } catch (java.util.concurrent.CancellationException cancelled) {
+                        throw cancelled;
                     } catch (Exception error) {
                         failure = error;
                         if (attempt >= spec.retryPolicy().maxAttempts() || !spec.retryPolicy().shouldRetry(error)) break;
@@ -93,14 +115,24 @@ public final class WorkflowDefinition<C> implements AuraWorkflow<C> {
                     state.fail(failure);
                     compensate(context, completed, execution);
                     execution.fail(failure);
+                    observer.accept(execution);
                     return new WorkflowResult(execution, null);
                 }
                 completed.add(spec);
             }
             execution.success();
+            observer.accept(execution);
             return new WorkflowResult(execution, value);
+        } catch (java.util.concurrent.CancellationException cancelled) {
+            if (currentStep != null && currentStep.status() == StepExecution.Status.RUNNING) {
+                currentStep.cancel(cancelled);
+            }
+            execution.cancel(cancelled);
+            observer.accept(execution);
+            return new WorkflowResult(execution, null);
         } catch (Exception error) {
             execution.fail(error);
+            observer.accept(execution);
             return new WorkflowResult(execution, null);
         }
     }

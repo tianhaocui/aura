@@ -5,6 +5,7 @@ import io.aura.Aura;
 import io.aura.AuraModule;
 import io.aura.ModuleContext;
 import io.aura.contract.ModuleMetadata;
+import io.aura.contract.CancellationToken;
 
 import java.time.Duration;
 import java.util.ArrayList;
@@ -169,6 +170,64 @@ class WorkflowTest {
             assertThat(result.succeeded()).isTrue();
             assertThat(runtime.execution(result.execution().executionId())).isPresent();
             assertThat(events).containsExactly("one");
+        } finally {
+            runtime.close();
+        }
+    }
+
+    @Test
+    void propagatesCancellationAndPersistsCancelledExecution() throws Exception {
+        WorkflowRegistry registry = new WorkflowRegistry();
+        java.util.concurrent.CountDownLatch started = new java.util.concurrent.CountDownLatch(1);
+        java.util.concurrent.atomic.AtomicReference<CancellationToken> tokenRef =
+                new java.util.concurrent.atomic.AtomicReference<>();
+        registry.register(Workflow.<Object>builder("cancel-flow")
+                .step("long-step", context -> {
+                    started.countDown();
+                    while (!tokenRef.get().isCancelled()) Thread.sleep(10);
+                    tokenRef.get().throwIfCancelled();
+                    return null;
+                })
+                .step("never-run", context -> null)
+                .before("long-step", "never-run")
+                .build());
+        WorkflowRuntime<Object> runtime = new WorkflowRuntime<>(registry);
+        try {
+            CancellationToken token = new CancellationToken();
+            tokenRef.set(token);
+            java.util.concurrent.CompletableFuture<WorkflowResult> future =
+                    runtime.executeAsync("cancel-flow", new Object(), token);
+            assertThat(started.await(2, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+            token.cancel();
+            WorkflowResult result = future.get(2, java.util.concurrent.TimeUnit.SECONDS);
+            assertThat(result.cancelled()).isTrue();
+            assertThat(result.failed()).isFalse();
+            assertThat(runtime.execution(result.execution().executionId())).contains(result.execution());
+            assertThat(result.execution().step("never-run").status())
+                    .isEqualTo(StepExecution.Status.PENDING);
+            assertThat(result.execution().step("long-step").status())
+                    .isEqualTo(StepExecution.Status.CANCELLED);
+        } finally {
+            runtime.close();
+        }
+    }
+
+    @Test
+    void preCancelledSynchronousExecutionFailsWithStableCancellationState() {
+        WorkflowDefinition<Object> workflow = Workflow.<Object>builder("pre-cancelled")
+                .step("never-run", context -> null)
+                .build();
+        CancellationToken token = new CancellationToken();
+        token.cancel();
+
+        WorkflowRuntime<Object> runtime = new WorkflowRuntime<>();
+        try {
+            WorkflowResult result = runtime.execute(
+                    workflow, new Object(), WorkflowSelector.defaultVariant(), token);
+
+            assertThat(result.cancelled()).isTrue();
+            assertThat(result.failed()).isFalse();
+            assertThat(result.execution().status()).isEqualTo(WorkflowExecution.Status.CANCELLED);
         } finally {
             runtime.close();
         }

@@ -7,7 +7,7 @@ import java.util.Map;
 import java.util.UUID;
 
 public final class WorkflowExecution {
-    public enum Status { PENDING, RUNNING, SUCCEEDED, FAILED }
+    public enum Status { PENDING, RUNNING, SUCCEEDED, FAILED, CANCELLED }
 
     private final String executionId = UUID.randomUUID().toString();
     private final String workflowId;
@@ -25,6 +25,7 @@ public final class WorkflowExecution {
     void start() { status = Status.RUNNING; }
     void success() { status = Status.SUCCEEDED; finishedAt = Instant.now(); }
     void fail(Throwable cause) { status = Status.FAILED; error = cause; finishedAt = Instant.now(); }
+    void cancel(Throwable cause) { status = Status.CANCELLED; error = cause; finishedAt = Instant.now(); }
     void add(StepExecution step) { steps.put(step.stepId(), step); }
     public String executionId() { return executionId; }
     public String workflowId() { return workflowId; }
