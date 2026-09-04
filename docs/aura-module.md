@@ -12,7 +12,8 @@ public final class OrderModule implements AuraModule {
     }
 
     @Override public void install(ModuleContext context) {
-        context.routes(routes -> routes.get("/orders", ctx -> ctx.text("ok")));
+        context.route(new RouteContribution("GET", "/orders",
+                (BaseHandler) ctx -> ctx.text("ok")));
         context.register(new OrderService());
     }
 }
@@ -40,7 +41,7 @@ routes.post("/orders", handler)
 ```
 
   These declarations feed `/__schema__`, OpenAPI, and other adapters from the same contract.
-- New transport-neutral modules can return `RouteContribution` values through `context.routes(...)`;
+- New transport-neutral modules can return `RouteContribution` values through `context.route(...)`;
   the Web adapter executes the handler and preserves the same metadata. The older
   `Consumer<BaseRouter>` overload is retained only for migration.
 - Dependencies are declared with `requires(...)`; Aura checks missing modules and cycles before starting the server.

@@ -58,7 +58,8 @@ public final class OrderModule implements AuraModule {
 
     @Override public void install(ModuleContext context) {
         WorkflowRegistry workflows = context.require(WorkflowRegistry.class);
-        context.routes(routes -> routes.get("/orders", request -> request.text("ok")));
+        context.route(new RouteContribution("GET", "/orders",
+                (BaseHandler) request -> request.text("ok")));
     }
 }
 ```

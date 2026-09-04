@@ -4,6 +4,8 @@ import io.aura.AuraApp;
 import io.aura.AuraModule;
 import io.aura.ModuleContext;
 import io.aura.contract.ModuleMetadata;
+import io.aura.contract.RouteContribution;
+import io.aura.web.BaseHandler;
 import io.aura.workflow.Workflow;
 import io.aura.workflow.WorkflowModule;
 import io.aura.workflow.WorkflowRegistry;
@@ -29,7 +31,8 @@ public final class ComposedApp {
 
         @Override public void install(ModuleContext context) {
             WorkflowRegistry workflows = context.require(WorkflowRegistry.class);
-            context.routes(routes -> routes.get("/orders", request -> request.json(List.of("ready"))));
+            context.route(new RouteContribution("GET", "/orders",
+                    (BaseHandler) request -> request.json(List.of("ready"))));
             workflows.register(Workflow.<List<String>>builder("orders.fulfillment")
                     .step("place-order", events -> { events.add("place-order"); return null; })
                     .step("outbound", events -> { events.add("outbound"); return null; })

@@ -3,6 +3,8 @@ package io.aura.workflow;
 import io.aura.AuraModule;
 import io.aura.ModuleContext;
 import io.aura.contract.ModuleMetadata;
+import io.aura.contract.RouteContribution;
+import io.aura.web.BaseHandler;
 
 /** Aura module that exposes one shared workflow registry and runtime. */
 public final class WorkflowModule implements AuraModule {
@@ -36,7 +38,8 @@ public final class WorkflowModule implements AuraModule {
         context.register(registry);
         context.register(store);
         context.register(new WorkflowRuntime<>(registry, store));
-        context.routes(routes -> routes.get("/__schema__/workflows", request -> request.json(registry.schema())));
+        context.route(new RouteContribution("GET", "/__schema__/workflows",
+                (BaseHandler) request -> request.json(registry.schema())));
     }
 
     public WorkflowRegistry registry() { return registry; }
