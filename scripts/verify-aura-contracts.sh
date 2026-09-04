@@ -27,4 +27,19 @@ if rg -n '<version>0\.3\.0</version>|<version>0\.5\.1</version>|No classpath sca
   exit 1
 fi
 
+# Keep the 1.0 authoring path deterministic: deprecated escape hatches must not
+# leak back into first-party production code or examples.
+if rg -n 'app\.runtime\(\)|app\.lifecycle\(\)' \
+    "$repo_root/aura-"*/src/main "$repo_root/examples" "$repo_root/docs" \
+    "$repo_root/README.md" "$repo_root/README_CN.md"; then
+  echo "deprecated AuraApp runtime/lifecycle API found in first-party contracts" >&2
+  exit 1
+fi
+
+if rg -n 'context\.routes\(' \
+    "$repo_root/aura-"*/src/main "$repo_root/examples"; then
+  echo "deprecated Web-specific ModuleContext route API found in first-party modules" >&2
+  exit 1
+fi
+
 echo "Aura module and documentation contracts passed (version $root_version)"
