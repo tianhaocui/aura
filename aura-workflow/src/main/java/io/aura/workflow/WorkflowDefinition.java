@@ -31,6 +31,19 @@ public final class WorkflowDefinition<C> implements AuraWorkflow<C> {
 
     public String id() { return id; }
     public Set<String> variants() { return variants.keySet(); }
+
+    /** Returns a deterministic JSON-friendly description for AI/tooling discovery. */
+    public Map<String, Object> schema() {
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("id", id);
+        result.put("defaultSteps", order(null));
+        List<Map<String, Object>> variantSchemas = new ArrayList<>();
+        for (String variant : variants.keySet()) {
+            variantSchemas.add(Map.of("id", variant, "steps", order(variant)));
+        }
+        result.put("variants", variantSchemas);
+        return result;
+    }
     public List<String> order(String variant) {
         Resolved<C> resolved = resolve(variant);
         return topologicalOrder(resolved.steps, resolved.edges);

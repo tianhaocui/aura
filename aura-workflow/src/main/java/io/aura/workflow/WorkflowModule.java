@@ -29,6 +29,7 @@ public final class WorkflowModule implements AuraModule {
     @Override public void install(ModuleContext context) {
         context.register(registry);
         context.register(new WorkflowRuntime<>(registry));
+        context.routes(routes -> routes.get("/__schema__/workflows", request -> request.json(registry.schema())));
     }
 
     public WorkflowRegistry registry() { return registry; }

@@ -141,4 +141,18 @@ class WorkflowTest {
         assertThat(result.succeeded()).isTrue();
         assertThat(events).containsExactly("place-order", "outbound");
     }
+
+    @Test
+    void exposesDeterministicWorkflowSchemaForDiscovery() {
+        WorkflowRegistry registry = new WorkflowRegistry();
+        registry.register(Workflow.<List<String>>builder("fulfillment")
+                .step("place-order", events -> null)
+                .step("outbound", events -> null)
+                .before("place-order", "outbound")
+                .variant("quality", flow -> flow.insertBefore("outbound", "quality-check", events -> null))
+                .build());
+
+        assertThat(registry.schema().toString())
+                .contains("fulfillment", "place-order", "quality-check");
+    }
 }
