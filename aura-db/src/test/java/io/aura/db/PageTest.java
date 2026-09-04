@@ -8,6 +8,14 @@ import static org.assertj.core.api.Assertions.*;
 
 class PageTest {
 
+    @Test
+    void rejectsInvalidPageMetadata() {
+        assertThatIllegalArgumentException().isThrownBy(() -> new Page<>(List.of(), 0, 20, 0));
+        assertThatIllegalArgumentException().isThrownBy(() -> new Page<>(List.of(), 1, 0, 0));
+        assertThatIllegalArgumentException().isThrownBy(() -> new Page<>(List.of(), 1, Page.MAX_PAGE_SIZE + 1, 0));
+        assertThatIllegalArgumentException().isThrownBy(() -> new Page<>(List.of(), 1, 20, -1));
+    }
+
     // --- totalPages ---
 
     @Test

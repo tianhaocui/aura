@@ -6,7 +6,9 @@
 
 AI 原生 Java 后端框架。**AI 开发 → AI 测试 → AI 使用。**
 
-4 个模块，约 5000 行代码。一个依赖启动。无选择、无魔法、无样板代码。
+设计红线：稳定性第一；在不牺牲稳定性的前提下，一切 API、错误信息、文档和测试都优先服务于 AI 的准确、快速、少出错、可验证、省 Token 和易学习。
+
+核心运行模块保持轻量，能力按模块按需引入。一个依赖启动。无选择、无魔法、无样板代码。
 
 ## 为什么选 Aura
 
@@ -39,7 +41,7 @@ AI agent 获得 7 个工具（创建/列表/获取/更新/删除/搜索/统计 t
 <dependency>
     <groupId>io.github.tianhaocui</groupId>
     <artifactId>aura-web</artifactId>
-    <version>0.5.1</version>
+    <version>0.6.1</version>
 </dependency>
 <!-- 需要添加 SLF4J 实现，如 logback-classic -->
 ```
@@ -49,6 +51,18 @@ Aura.create().port(8080)
     .get("/hello", () -> "hello world")
     .start();
 ```
+
+AI 能力（可选模块）：
+
+```xml
+<dependency>
+    <groupId>io.github.tianhaocui</groupId>
+    <artifactId>aura-ai</artifactId>
+    <version>0.6.1</version>
+</dependency>
+```
+
+`aura-ai` 提供 provider-neutral 的 `AiClient`、同步/流式调用、超时与取消、结构化 JSON 输出、预算和会话/RAG 扩展接口；具体模型厂商通过 `AiProvider` SPI 接入。
 
 ## Just Service
 
@@ -261,7 +275,7 @@ app.routes(r -> {
 ## 配置
 
 ```java
-Aura.create()
+AuraApp.create()
     .port(8080)              // HTTP 端口
     .cors(true)              // CORS 允许所有来源
     .maxBodySize(10 * 1024 * 1024L) // 请求体大小限制（默认 10MB）
@@ -283,10 +297,14 @@ Aura.create()
 
 | 模块 | 用途 | 必需 |
 |------|------|------|
+| aura-contract | 无运行时依赖的模块、路由、健康、取消和错误契约 | 可选 |
 | aura-core | 应用生命周期、配置、注册表 | 是（传递依赖） |
 | aura-web | HTTP 路由、上下文、中间件、TestClient | 是 |
 | aura-db | 数据库、Row、Query builder、动态 SQL | 可选 |
 | aura-mcp | MCP 服务器、工具自动生成、npm 打包 | 可选 |
+| aura-ai | Provider-neutral AI 客户端、流式调用、结构化输出 | 可选 |
+| aura-workflow | 类型安全流程变体、重试和补偿 | 可选 |
+| aura-dev | 开发期源码监听与热重载 | 可选 |
 
 最小依赖：`aura-web`（自动引入 `aura-core`）。
 

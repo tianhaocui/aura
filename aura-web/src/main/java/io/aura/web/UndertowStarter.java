@@ -2,6 +2,8 @@ package io.aura.web;
 
 import com.alibaba.fastjson2.JSON;
 import io.aura.Aura;
+import io.aura.CancellationToken;
+import io.aura.AuraEvent;
 import io.aura.AuraStarter;
 import io.aura.snapshot.Snapshot;
 import io.aura.snapshot.SnapshotScope;
@@ -33,6 +35,8 @@ import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
 
 public class UndertowStarter implements AuraStarter {
@@ -47,6 +51,8 @@ public class UndertowStarter implements AuraStarter {
     private ClassPathResourceManager resourceManager;
     private volatile List<CompiledRoute> compiledRoutes;
     private volatile List<CompiledWsRoute> compiledWsRoutes;
+    private final ConcurrentHashMap<String, WindowCounter> rateCounters = new ConcurrentHashMap<>();
+    private final AtomicInteger inFlight = new AtomicInteger();
 
     @Override
     @SuppressWarnings("unchecked")
@@ -130,10 +136,16 @@ public class UndertowStarter implements AuraStarter {
             });
         }
 
-        var builder = Undertow.builder()
-                .addHttpListener(app.port(), "0.0.0.0")
-                .setWorkerThreads(app.workers())
-                .setHandler(rootHandler);
+        var builder = Undertow.builder().setWorkerThreads(app.workers()).setHandler(rootHandler);
+        if (app.config().tlsEnabled()) {
+            try {
+                builder.addHttpsListener(app.port(), "0.0.0.0", tlsContext(app.config().keyStorePath(), app.config().keyStorePassword()));
+            } catch (Exception e) {
+                throw new IllegalArgumentException("TLS configuration is invalid; HTTPS listener was not started", e);
+            }
+        } else {
+            builder.addHttpListener(app.port(), "0.0.0.0");
+        }
 
         if (app.maxBodySize() > 0) {
             builder.setServerOption(io.undertow.UndertowOptions.MAX_ENTITY_SIZE, app.maxBodySize());
@@ -226,6 +238,18 @@ public class UndertowStarter implements AuraStarter {
     private void dispatch(HttpServerExchange exchange) {
         String method = exchange.getRequestMethod().toString();
         String path = exchange.getRequestURI();
+
+        if (!hostAllowed(exchange)) { app.emit(AuraEvent.of("request.rejected.host", java.util.Map.of("method", method))); reject(exchange, 421, "Misdirected Request"); return; }
+        if (!admit(exchange)) return;
+        if (app.concurrencyLimit() > 0) {
+            exchange.addExchangeCompleteListener((completed, next) -> { inFlight.decrementAndGet(); next.proceed(); });
+        }
+        if (app.securityHeaders()) {
+            exchange.getResponseHeaders().put(new HttpString("X-Content-Type-Options"), "nosniff");
+            exchange.getResponseHeaders().put(new HttpString("X-Frame-Options"), "DENY");
+            exchange.getResponseHeaders().put(new HttpString("Referrer-Policy"), "no-referrer");
+            if (exchange.isSecure()) exchange.getResponseHeaders().put(new HttpString("Strict-Transport-Security"), "max-age=31536000; includeSubDomains");
+        }
 
         if (isCsrfRejected(exchange, method)) {
             exchange.setStatusCode(403);
@@ -326,7 +350,10 @@ public class UndertowStarter implements AuraStarter {
             exchange.getResponseHeaders().put(new HttpString("X-Request-Id"), reqId);
             MDC.put("requestId", reqId);
 
-            Context ctx = new Context(exchange, params, app, reqId);
+            CancellationToken cancellationToken = new CancellationToken();
+            exchange.addExchangeCompleteListener((completed, next) -> { cancellationToken.cancel(); next.proceed(); });
+            if (exchange.getConnection() != null) exchange.getConnection().addCloseListener(connection -> cancellationToken.cancel());
+            Context ctx = new Context(exchange, params, app, reqId, cancellationToken);
             long start = System.currentTimeMillis();
             java.util.concurrent.ScheduledFuture<?> timeoutFuture = null;
             var responded = new AtomicBoolean(false);
@@ -352,6 +379,8 @@ public class UndertowStarter implements AuraStarter {
                             if (timeoutWon) timedOut.set(true);
                         }
                         if (timeoutWon) {
+                            app.emit(AuraEvent.of("request.timeout", java.util.Map.of("method", method, "path", route.rawPath())));
+                            cancellationToken.cancel();
                             ctx.abort();
                             handlerThread.interrupt();
                             exchange.setPersistent(false);
@@ -369,6 +398,7 @@ public class UndertowStarter implements AuraStarter {
 
             try {
                 RouteExecutor.execute(route, ctx, (e, c) -> {
+                    app.emit(AuraEvent.of("request.error", java.util.Map.of("method", method, "path", route.rawPath(), "error", ExceptionResolver.unwrap(e).getClass().getName())));
                     handleException(e, (Context) c);
                     long elapsed = System.currentTimeMillis() - start;
                     if (activeSnapshotScope != null) {
@@ -395,6 +425,7 @@ public class UndertowStarter implements AuraStarter {
                         log.info("{} {} → {} ({}ms)", safeLog(method, 16), safeLog(route.rawPath(), 512), exchange.getStatusCode(), elapsed);
                     }
                 }
+                app.emit(AuraEvent.of("request.completed", java.util.Map.of("method", method, "path", route.rawPath(), "status", exchange.getStatusCode(), "elapsedMs", System.currentTimeMillis() - start)));
             } finally {
                 if (timeoutFuture != null) timeoutFuture.cancel(false);
                 if (timedOut.get()) {
@@ -686,7 +717,8 @@ public class UndertowStarter implements AuraStarter {
 
     private boolean isCsrfRejected(HttpServerExchange exchange, String method) {
         String enabled = property("aura.csrf.enabled");
-        boolean enforce = enabled != null && Boolean.parseBoolean(enabled);
+        boolean enforce = enabled != null ? Boolean.parseBoolean(enabled)
+                : (app.publicOrigin() != null && !"dev".equalsIgnoreCase(app.env()));
         if (!enforce || !isUnsafeMethod(method)) return false;
         String headerName = propertyOrDefault("aura.csrf.header", "X-CSRF-Token");
         String cookieName = propertyOrDefault("aura.csrf.cookie", "csrf_token");
@@ -710,7 +742,8 @@ public class UndertowStarter implements AuraStarter {
     }
 
     private String expectedPublicOrigin(HttpServerExchange exchange) {
-        String configured = property("aura.public-origin");
+        String configured = app.publicOrigin();
+        if (configured == null) configured = property("aura.public-origin");
         if (configured != null && !configured.isBlank()) return configured.trim();
         String scheme = exchange.getRequestScheme();
         String host = exchange.getHostAndPort();
@@ -723,6 +756,54 @@ public class UndertowStarter implements AuraStarter {
             if (forwardedHost != null && forwardedHost.matches("[A-Za-z0-9.-]+(?::[0-9]{1,5})?")) host = forwardedHost;
         }
         return scheme + "://" + host;
+    }
+
+    private boolean hostAllowed(HttpServerExchange exchange) {
+        String host = exchange.getHostName();
+        if (host == null) return false;
+        if (!app.allowedHosts().isEmpty()) return app.allowedHosts().contains(host.toLowerCase());
+        if (app.publicOrigin() == null) return true;
+        try { return host.equalsIgnoreCase(java.net.URI.create(app.publicOrigin()).getHost()); }
+        catch (IllegalArgumentException e) { return false; }
+    }
+
+    private boolean admit(HttpServerExchange exchange) {
+        int limit = app.concurrencyLimit();
+        if (limit > 0 && inFlight.incrementAndGet() > limit) {
+            app.emit(AuraEvent.of("request.rejected.concurrency", java.util.Map.of("limit", limit)));
+            inFlight.decrementAndGet(); reject(exchange, 503, "Service Unavailable"); return false;
+        }
+        int rate = app.rateLimitPerSecond();
+        if (rate > 0) {
+            String key = exchange.getSourceAddress() == null ? "unknown" : exchange.getSourceAddress().getHostString();
+            long now = System.currentTimeMillis() / 1000;
+            WindowCounter counter = rateCounters.compute(key, (k, old) -> old == null || old.second != now ? new WindowCounter(now) : old);
+            if (counter.count.incrementAndGet() > rate) {
+                app.emit(AuraEvent.of("request.rejected.rate", java.util.Map.of("ratePerSecond", rate, "key", key)));
+                if (limit > 0) inFlight.decrementAndGet();
+                exchange.getResponseHeaders().put(new HttpString("Retry-After"), "1");
+                reject(exchange, 429, "Too Many Requests"); return false;
+            }
+        }
+        return true;
+    }
+
+    private static void reject(HttpServerExchange exchange, int status, String message) {
+        exchange.setStatusCode(status);
+        exchange.getResponseHeaders().put(Headers.CONTENT_TYPE, "application/json; charset=utf-8");
+        exchange.getResponseSender().send("{\"error\":\"" + message + "\"}");
+    }
+
+    private static javax.net.ssl.SSLContext tlsContext(String path, String password) throws Exception {
+        java.security.KeyStore ks = java.security.KeyStore.getInstance(java.security.KeyStore.getDefaultType());
+        try (var in = java.nio.file.Files.newInputStream(java.nio.file.Path.of(path))) { ks.load(in, password.toCharArray()); }
+        var kmf = javax.net.ssl.KeyManagerFactory.getInstance(javax.net.ssl.KeyManagerFactory.getDefaultAlgorithm());
+        kmf.init(ks, password.toCharArray());
+        var ssl = javax.net.ssl.SSLContext.getInstance("TLS"); ssl.init(kmf.getKeyManagers(), null, null); return ssl;
+    }
+
+    private static final class WindowCounter {
+        final long second; final AtomicInteger count = new AtomicInteger(); WindowCounter(long second) { this.second = second; }
     }
 
     private static boolean isUnsafeMethod(String method) {

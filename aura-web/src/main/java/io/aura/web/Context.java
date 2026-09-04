@@ -3,6 +3,7 @@ package io.aura.web;
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONWriter;
 import io.aura.Aura;
+import io.aura.CancellationToken;
 import io.aura.JsonConfig;
 import io.aura.snapshot.Snapshot;
 import io.undertow.server.HttpServerExchange;
@@ -35,12 +36,18 @@ public class Context implements BaseContext {
     private FormDataParser cachedFormParser;
     private FormData cachedFormData;
     private volatile boolean aborted;
+    private final CancellationToken cancellationToken;
 
     Context(HttpServerExchange exchange, Map<String, String> pathParams, Aura app, String requestId) {
+        this(exchange, pathParams, app, requestId, new CancellationToken());
+    }
+
+    Context(HttpServerExchange exchange, Map<String, String> pathParams, Aura app, String requestId, CancellationToken cancellationToken) {
         this.exchange = exchange;
         this.pathParams = pathParams;
         this.app = app;
         this.requestId = requestId;
+        this.cancellationToken = cancellationToken;
         if (app != null) namedAttrs.put("_app", app);
     }
 
@@ -48,6 +55,7 @@ public class Context implements BaseContext {
     boolean isResponseStarted() { return exchange != null && exchange.isResponseStarted(); }
     String cachedBody() { return cachedBody; }
     @Override public String requestId() { return requestId; }
+    @Override public CancellationToken cancellationToken() { return cancellationToken; }
 
     @Override
     public UploadedFile file(String field) throws Exception {

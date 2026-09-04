@@ -9,12 +9,16 @@ import java.util.Properties;
 import java.util.ServiceLoader;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicReference;
 
 import io.aura.snapshot.SnapshotOptions;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 public class Aura {
+
+    public enum Lifecycle { NEW, STARTING, RUNNING, STOPPING, STOPPED }
 
     private static final Logger log = LoggerFactory.getLogger(Aura.class);
 
@@ -34,6 +38,9 @@ public class Aura {
     private final List<Reloadable> reloadables = new ArrayList<>();
     private final List<AutoCloseable> closeables = new ArrayList<>();
     private final List<AuraPlugin> plugins = new ArrayList<>();
+    private final List<AuraModule> modules = new CopyOnWriteArrayList<>();
+    private final List<ModuleDescriptor> installedModuleDescriptors = new CopyOnWriteArrayList<>();
+    private final List<Consumer<io.aura.web.BaseRouter>> moduleRouteConfigs = new CopyOnWriteArrayList<>();
     private String staticFilesPath;
     private boolean spaMode;
     private String corsOrigin;
@@ -61,15 +68,30 @@ public class Aura {
     private final List<io.aura.web.BaseHandler> afterHandlers = new ArrayList<>();
     private java.util.function.Function<Object, Object> resultWrapper;
     private final SnapshotOptions snapshotOptions = new SnapshotOptions();
+    private final AuraConfig config;
+    private final AtomicReference<Lifecycle> lifecycle = new AtomicReference<>(Lifecycle.NEW);
+    private final List<HealthCheck> healthChecks = new CopyOnWriteArrayList<>();
+    private final List<AuraEventListener> eventListeners = new CopyOnWriteArrayList<>();
+    private volatile boolean modulesInstalled;
+    private volatile boolean modulesStarted;
+    private final List<AuraModule> startedModules = new CopyOnWriteArrayList<>();
 
     private AuraStarter starter;
     private McpStarter mcpStarter;
     private boolean reloadMode;
 
-    private Aura() {
-        loadConfig("aura.properties");
-        applyFrameworkProps();
-        loadConfig("aura-" + env + ".properties");
+    private Aura() { this(new AuraConfig(), true); }
+
+    private Aura(AuraConfig config, boolean loadDefaults) {
+        this.config = config.validate();
+        this.port = config.port(); this.env = config.env(); this.workers = config.workers();
+        this.maxBodySize = config.maxBodySize(); this.maxUploadSize = config.maxUploadSize();
+        this.shutdownTimeout = config.shutdownTimeout(); this.requestTimeout = config.requestTimeout();
+        if (loadDefaults) {
+            loadConfig("aura.properties");
+            applyFrameworkProps();
+            loadConfig("aura-" + env + ".properties");
+        }
     }
 
     public static Aura create() {
@@ -85,6 +107,47 @@ public class Aura {
             return app;
         }
         return new Aura();
+    }
+
+    public static Aura create(AuraConfig config) { return new Aura(config == null ? new AuraConfig() : config, false); }
+    public AuraConfig config() { return config; }
+    public Lifecycle lifecycle() { return lifecycle.get(); }
+    public Aura configure(Consumer<AuraConfig> consumer) { consumer.accept(config); config.validate(); syncConfigFields(); return this; }
+
+    /** Explicitly install a capability or business module. Modules are ordered by declared dependencies. */
+    public Aura use(AuraModule module) {
+        if (module == null) throw new IllegalArgumentException("module must not be null");
+        if (modulesInstalled) throw new IllegalStateException("Modules cannot be added after module preparation");
+        ModuleDescriptor descriptor = module.descriptor();
+        if (descriptor == null) throw new ModuleException("AURA_MODULE_DESCRIPTOR_MISSING", "?", "Module descriptor must not be null");
+        if (modules.stream().anyMatch(existing -> existing.descriptor().id().equals(descriptor.id()))) {
+            throw new ModuleException("AURA_MODULE_DUPLICATE", descriptor.id(), "Duplicate module id: " + descriptor.id());
+        }
+        modules.add(module);
+        return this;
+    }
+
+    public List<AuraModule> modules() { return List.copyOf(modules); }
+    public List<ModuleDescriptor> moduleDescriptors() {
+        if (!installedModuleDescriptors.isEmpty()) return List.copyOf(installedModuleDescriptors);
+        return modules.stream().map(AuraModule::descriptor).toList();
+    }
+    public Aura observe(AuraEventListener listener) {
+        if (listener == null) throw new IllegalArgumentException("event listener must not be null");
+        eventListeners.add(listener);
+        return this;
+    }
+    public List<AuraEventListener> eventListeners() { return List.copyOf(eventListeners); }
+    public void emit(AuraEvent event) {
+        if (event == null) return;
+        for (AuraEventListener listener : eventListeners) {
+            try { listener.onEvent(event); }
+            catch (RuntimeException ignored) { log.warn("Aura event listener failed for {}", event.type()); }
+        }
+    }
+    private void syncConfigFields() {
+        port = config.port(); env = config.env(); workers = config.workers(); maxBodySize = config.maxBodySize();
+        maxUploadSize = config.maxUploadSize(); shutdownTimeout = config.shutdownTimeout(); requestTimeout = config.requestTimeout();
     }
 
     public static void setReloadInstance(Aura app) { ReloadState.RELOAD_INSTANCE = app; }
@@ -116,20 +179,32 @@ public class Aura {
 
 
     public Aura port(int port) {
-        this.port = port;
+        config.port(port).validate(); this.port = port;
         return this;
     }
 
     public Aura env(String env) {
-        this.env = env;
+        config.env(env); this.env = env;
         validateJwtConfiguration();
         return this;
     }
 
     public Aura workers(int workers) {
-        this.workers = workers;
+        config.workers(workers).validate(); this.workers = workers;
         return this;
     }
+
+    public Aura rateLimit(int requestsPerSecond) { config.rateLimitPerSecond(requestsPerSecond).validate(); return this; }
+    public Aura concurrencyLimit(int maxConcurrent) { config.concurrencyLimit(maxConcurrent).validate(); return this; }
+    public Aura publicOrigin(String origin) { config.publicOrigin(origin); return this; }
+    public Aura allowedHosts(String... hosts) { config.allowedHosts(hosts); return this; }
+    public Aura securityHeaders(boolean enabled) { config.securityHeaders(enabled); return this; }
+    public Aura tls(String keyStorePath, String password) { config.tls(keyStorePath, password).validate(); return this; }
+    public int rateLimitPerSecond() { return config.rateLimitPerSecond(); }
+    public int concurrencyLimit() { return config.concurrencyLimit(); }
+    public String publicOrigin() { return config.publicOrigin(); }
+    public java.util.Set<String> allowedHosts() { return config.allowedHosts(); }
+    public boolean securityHeaders() { return config.securityHeaders(); }
 
     public Aura set(String key, String value) {
         props.put(key, value);
@@ -169,17 +244,20 @@ public class Aura {
     }
 
     public Aura maxBodySize(long bytes) {
-        this.maxBodySize = bytes;
+        config.maxBodySize(bytes).validate(); this.maxBodySize = bytes;
         return this;
     }
 
     public Aura maxUploadSize(long bytes) {
-        this.maxUploadSize = Math.max(0L, bytes);
+        // Preserve the legacy fluent API's disabled-upload sentinel; AuraConfig itself is strict.
+        if (bytes < 0) { this.maxUploadSize = 0; return this; }
+        if (bytes == 0) { this.maxUploadSize = 0; return this; }
+        config.maxUploadSize(bytes).validate(); this.maxUploadSize = bytes;
         return this;
     }
 
     public Aura shutdownTimeout(int seconds) {
-        this.shutdownTimeout = seconds;
+        config.shutdownTimeout(seconds).validate(); this.shutdownTimeout = seconds;
         return this;
     }
 
@@ -191,7 +269,20 @@ public class Aura {
                 ctx.json(java.util.Map.of("status", "UP"));
             }
         });
+        get("/health/live", (io.aura.web.BaseHandler) ctx -> ctx.json(java.util.Map.of("status", "UP")));
+        get("/health/ready", (io.aura.web.BaseHandler) ctx -> {
+            boolean ready = lifecycle.get() == Lifecycle.RUNNING && healthStatus() == HealthStatus.UP;
+            ctx.status(ready ? 200 : 503).json(java.util.Map.of("status", ready ? "UP" : "DOWN"));
+        });
         return this;
+    }
+
+    public Aura healthCheck(HealthCheck check) { if (check != null) healthChecks.add(check); return this; }
+    public List<HealthCheck> healthChecks() { return List.copyOf(healthChecks); }
+    public HealthStatus healthStatus() {
+        if (shuttingDown) return HealthStatus.DOWN;
+        for (HealthCheck check : healthChecks) try { if (check.check() != HealthStatus.UP) return HealthStatus.DOWN; } catch (Exception e) { return HealthStatus.DOWN; }
+        return HealthStatus.UP;
     }
 
     public boolean isShuttingDown() { return shuttingDown; }
@@ -207,7 +298,8 @@ public class Aura {
     }
 
     public Aura requestTimeout(int seconds) {
-        this.requestTimeout = Math.max(0, seconds);
+        seconds = Math.max(0, seconds);
+        config.requestTimeout(seconds).validate(); this.requestTimeout = seconds;
         return this;
     }
 
@@ -516,12 +608,21 @@ public class Aura {
     }
 
     public void start() {
-        validateJwtConfiguration();
-        if (reloadMode) {
+        if (reloadMode && lifecycle.get() == Lifecycle.RUNNING) {
             reloadMode = false;
             selfCheck();
             starter.reloadRoutes(this);
             return;
+        }
+        Lifecycle current = lifecycle.get();
+        if (current == Lifecycle.RUNNING || current == Lifecycle.STARTING) return;
+        if (current == Lifecycle.STOPPING || current == Lifecycle.STOPPED) throw new IllegalStateException("Aura cannot be started after stopping");
+        if (!lifecycle.compareAndSet(Lifecycle.NEW, Lifecycle.STARTING)) return;
+        try {
+        config.validate();
+        validateJwtConfiguration();
+        if (reloadMode) {
+            reloadMode = false;
         }
         ServiceLoader.load(AuraPlugin.class).forEach(p -> {
             if (!plugins.contains(p)) plugins.add(p);
@@ -530,6 +631,7 @@ public class Aura {
             plugin.install(this);
         }
         registry.putIfAbsent(Aura.class, this);
+        installModules(true);
         if (!serviceClasses.isEmpty()) {
             List<Object> resolved = ServiceResolver.resolve(serviceClasses, registry);
             for (Object bean : resolved) {
@@ -545,7 +647,12 @@ public class Aura {
                 .orElseThrow(() -> new IllegalStateException(
                         "No AuraStarter found. Add aura-web to your dependencies."));
         selfCheck();
-        starter.start(this);
+        try { starter.start(this); } catch (RuntimeException e) {
+            stopStartedModules();
+            lifecycle.set(Lifecycle.STOPPED);
+            throw e;
+        }
+        lifecycle.set(Lifecycle.RUNNING);
         fireStart();
 
         if (mcpPort >= 0) {
@@ -577,10 +684,33 @@ public class Aura {
         }, "aura-main");
         keepAliveThread.setDaemon(false);
         keepAliveThread.start();
+        } catch (RuntimeException | Error failure) {
+            failStart(failure);
+            throw failure;
+        }
+    }
+
+    private void failStart(Throwable failure) {
+        shuttingDown = true;
+        if (keepAliveThread != null) keepAliveThread.interrupt();
+        if (mcpStarter != null) {
+            try { mcpStarter.stop(); } catch (RuntimeException ignored) { }
+            mcpStarter = null;
+        }
+        if (starter != null) {
+            try { starter.stop(); } catch (RuntimeException ignored) { }
+            starter = null;
+        }
+        stopStartedModules();
+        lifecycle.set(Lifecycle.STOPPED);
+        log.error("Aura startup failed", failure);
     }
 
     public void stop() {
-        if (!stopped.compareAndSet(false, true)) return;
+        Lifecycle current = lifecycle.get();
+        if (current == Lifecycle.STOPPED || current == Lifecycle.STOPPING) return;
+        if (!lifecycle.compareAndSet(current, Lifecycle.STOPPING)) return;
+        stopped.set(true);
         shuttingDown = true;
         if (keepAliveThread != null) keepAliveThread.interrupt();
         if (mcpStarter != null) {
@@ -591,11 +721,23 @@ public class Aura {
             starter.stop();
             starter = null;
         }
+        if (modulesStarted || !startedModules.isEmpty()) {
+            for (int i = startedModules.size() - 1; i >= 0; i--) {
+                AuraModule module = startedModules.get(i);
+                try {
+                    module.stop(new ModuleContextImpl(module, module.descriptor()));
+                } catch (Exception e) {
+                    log.error("Error stopping module {}", module.descriptor().id(), e);
+                }
+            }
+            startedModules.clear();
+        }
         for (int i = closeables.size() - 1; i >= 0; i--) {
             try { closeables.get(i).close(); }
             catch (Exception e) { log.error("Error closing {}", closeables.get(i).getClass().getSimpleName(), e); }
         }
         fireStop();
+        lifecycle.set(Lifecycle.STOPPED);
     }
 
     public void reloadConfig() {
@@ -606,10 +748,16 @@ public class Aura {
     }
 
 
-    public int port() { return port; }
-    public String env() { return env; }
-    public int workers() { return workers; }
-    public Consumer<?> routeConfig() { return routeConfig; }
+    public int port() { return config.port(); }
+    public String env() { return config.env(); }
+    public int workers() { return config.workers(); }
+    public Consumer<?> routeConfig() {
+        if (routeConfig == null && moduleRouteConfigs.isEmpty()) return null;
+        return (Consumer<io.aura.web.BaseRouter>) router -> {
+            if (routeConfig != null) ((Consumer<io.aura.web.BaseRouter>) routeConfig).accept(router);
+            for (Consumer<io.aura.web.BaseRouter> contribution : moduleRouteConfigs) contribution.accept(router);
+        };
+    }
     public List<Object> services() { return services; }
     public List<RouteEntry> directRoutes() { return directRoutes; }
     public List<String> scanPackages() { return scanPackages; }
@@ -618,18 +766,173 @@ public class Aura {
     public boolean spa() { return spaMode; }
     public String corsOrigin() { return corsOrigin; }
     public CorsConfig corsConfig() { return corsConfig; }
-    public long maxBodySize() { return maxBodySize; }
+    public long maxBodySize() { return config.maxBodySize(); }
     public long maxUploadSize() { return maxUploadSize; }
-    public int shutdownTimeout() { return shutdownTimeout; }
+    public int shutdownTimeout() { return config.shutdownTimeout(); }
     public boolean accessLog() { return accessLogFormat != null; }
     public String accessLogFormat() { return accessLogFormat; }
-    public int requestTimeout() { return requestTimeout; }
+    public int requestTimeout() { return config.requestTimeout(); }
     public boolean gzip() { return gzip; }
     public int gzipMinSize() { return gzipMinSize; }
     public JsonConfig jsonConfig() { return jsonConfig; }
     public int mcpPort() { return mcpPort; }
     public java.io.PrintStream mcpStdout() { return mcpStdout; }
     public McpRouterSpec mcpRouter() { return mcpRouter; }
+
+    /** Installs module contributions without starting external resources; used by TestClient. */
+    public void prepareModules() {
+        if (modulesInstalled) return;
+        installModules(false);
+    }
+
+    private synchronized void installModules(boolean startModules) {
+        if (modulesInstalled) {
+            if (startModules && !modulesStarted) startInstalledModules();
+            return;
+        }
+        List<AuraModule> ordered = orderModules();
+        for (AuraModule module : ordered) {
+            ModuleDescriptor descriptor = module.descriptor();
+            ModuleContextImpl context = new ModuleContextImpl(module, descriptor);
+            try {
+                module.install(context);
+                installedModuleDescriptors.add(descriptor);
+            } catch (RuntimeException e) {
+                throw e;
+            } catch (Exception e) {
+                throw new ModuleException("AURA_MODULE_INSTALL_FAILED", descriptor.id(),
+                        "Failed to install module " + descriptor.id() + ": " + e.getMessage());
+            }
+        }
+        modules.clear();
+        modules.addAll(ordered);
+        modulesInstalled = true;
+        if (startModules) startInstalledModules();
+    }
+
+    private void startInstalledModules() {
+        if (modulesStarted) return;
+        for (AuraModule module : modules) {
+            try {
+                module.start(new ModuleContextImpl(module, module.descriptor()));
+                startedModules.add(module);
+            } catch (Exception e) {
+                for (int i = startedModules.size() - 1; i >= 0; i--) {
+                    AuraModule started = startedModules.get(i);
+                    try {
+                        started.stop(new ModuleContextImpl(started, started.descriptor()));
+                    } catch (Exception stopError) {
+                        log.error("Error rolling back module {} after startup failure", started.descriptor().id(), stopError);
+                    }
+                }
+                startedModules.clear();
+                throw new ModuleException("AURA_MODULE_START_FAILED", module.descriptor().id(),
+                        "Failed to start module " + module.descriptor().id() + ": " + e.getMessage());
+            }
+        }
+        modulesStarted = true;
+    }
+
+    private void stopStartedModules() {
+        for (int i = startedModules.size() - 1; i >= 0; i--) {
+            AuraModule module = startedModules.get(i);
+            try {
+                module.stop(new ModuleContextImpl(module, module.descriptor()));
+            } catch (Exception stopError) {
+                log.error("Error stopping module {} during rollback", module.descriptor().id(), stopError);
+            }
+        }
+        startedModules.clear();
+        modulesStarted = false;
+    }
+
+    private List<AuraModule> orderModules() {
+        Map<String, AuraModule> byId = new java.util.LinkedHashMap<>();
+        for (AuraModule module : modules) {
+            ModuleDescriptor descriptor = module.descriptor();
+            if (byId.putIfAbsent(descriptor.id(), module) != null) {
+                throw new ModuleException("AURA_MODULE_DUPLICATE", descriptor.id(), "Duplicate module id: " + descriptor.id());
+            }
+        }
+        List<AuraModule> sorted = new ArrayList<>();
+        java.util.Set<String> visiting = new java.util.LinkedHashSet<>();
+        java.util.Set<String> visited = new java.util.LinkedHashSet<>();
+        for (AuraModule module : modules) orderModule(module, byId, visiting, visited, sorted);
+        return sorted;
+    }
+
+    private void orderModule(AuraModule module, Map<String, AuraModule> byId,
+                             java.util.Set<String> visiting, java.util.Set<String> visited,
+                             List<AuraModule> sorted) {
+        String id = module.descriptor().id();
+        if (visited.contains(id)) return;
+        if (!visiting.add(id)) {
+            throw new ModuleException("AURA_MODULE_DEPENDENCY_CYCLE", id,
+                    "Circular module dependency involving " + String.join(" -> ", visiting) + " -> " + id);
+        }
+        for (ModuleRequirement requirement : module.descriptor().requires()) {
+            AuraModule dependency = byId.get(requirement.id());
+            if (dependency == null) {
+                throw new ModuleException("AURA_MODULE_DEPENDENCY_MISSING", id,
+                        "Module " + id + " requires " + requirement.id());
+            }
+            if (requirement.versionRange() != null && !versionMatches(dependency.descriptor().version(), requirement.versionRange())) {
+                throw new ModuleException("AURA_MODULE_VERSION_MISMATCH", id,
+                        "Module " + id + " requires " + requirement.id() + " " + requirement.versionRange()
+                                + " but found " + dependency.descriptor().version());
+            }
+            orderModule(dependency, byId, visiting, visited, sorted);
+        }
+        visiting.remove(id);
+        visited.add(id);
+        sorted.add(module);
+    }
+
+    private static boolean versionMatches(String version, String range) {
+        if (range == null || range.isBlank() || "*".equals(range.trim())) return true;
+        String wanted = range.trim();
+        if (wanted.startsWith("[1.0") || wanted.startsWith("1.")) return version.startsWith("1.");
+        return version.equals(wanted);
+    }
+
+    private final class ModuleContextImpl implements ModuleContext {
+        private final AuraModule module;
+        private final ModuleDescriptor descriptor;
+
+        private ModuleContextImpl(AuraModule module, ModuleDescriptor descriptor) {
+            this.module = module;
+            this.descriptor = descriptor;
+        }
+
+        @Override public ModuleDescriptor currentModule() { return descriptor; }
+        @Override public <T> T require(Class<T> type) {
+            T value = Aura.this.getBean(type);
+            if (value == null) throw new ModuleException("AURA_CAPABILITY_MISSING", descriptor.id(),
+                    "Module " + descriptor.id() + " requires capability " + type.getName());
+            return value;
+        }
+        @Override public <T> java.util.Optional<T> find(Class<T> type) { return java.util.Optional.ofNullable(Aura.this.getBean(type)); }
+        @Override public void register(Object value) { Aura.this.register(value); trackLifecycle(value); }
+        @Override public void register(String name, Object value) { Aura.this.register(name, value); trackLifecycle(value); }
+        @Override public void service(Object service) { Aura.this.service(service); trackLifecycle(service); }
+        @Override public void routes(Consumer<io.aura.web.BaseRouter> routes) { moduleRouteConfigs.add(routes); }
+        @Override public void before(io.aura.web.BaseHandler handler) { Aura.this.before(handler); }
+        @Override public void after(io.aura.web.BaseHandler handler) { Aura.this.after(handler); }
+        @Override public void healthCheck(HealthCheck healthCheck) { Aura.this.healthCheck(healthCheck); }
+        @Override public String property(String key) {
+            String prefix = "aura." + descriptor.id() + ".";
+            if (key == null || !key.startsWith(prefix)) {
+                throw new ModuleException("AURA_MODULE_PROPERTY_SCOPE", descriptor.id(),
+                        "Module properties must use prefix " + prefix);
+            }
+            return Aura.this.prop(key);
+        }
+
+        private void trackLifecycle(Object value) {
+            if (value instanceof Reloadable reloadable && !reloadables.contains(reloadable)) reloadables.add(reloadable);
+            if (value instanceof AutoCloseable closeable && !closeables.contains(closeable)) closeables.add(closeable);
+        }
+    }
 
     private void selfCheck() {
         StartupCheck.checkParameterNames(services);
@@ -668,25 +971,25 @@ public class Aura {
     private void applyFrameworkProps() {
         // env var > config file; helper reads env first, falls back to props map
         String port = resolve("aura.port", "AURA_PORT");
-        if (port != null) this.port = Integer.parseInt(port);
+        if (port != null) this.port(Integer.parseInt(port));
 
         String env = resolve("aura.env", "AURA_ENV");
-        if (env != null) this.env = env;
+        if (env != null) this.env(env);
 
         String workers = resolve("aura.workers", "AURA_WORKERS");
-        if (workers != null) this.workers = Integer.parseInt(workers);
+        if (workers != null) this.workers(Integer.parseInt(workers));
 
         String cors = resolve("aura.cors", "AURA_CORS");
         if (cors != null) this.corsOrigin = cors.equals("true") ? "*" : cors;
 
         String maxBody = resolve("aura.max-body-size", "AURA_MAX_BODY_SIZE");
-        if (maxBody != null) this.maxBodySize = Long.parseLong(maxBody);
+        if (maxBody != null) this.maxBodySize(Long.parseLong(maxBody));
 
         String maxUpload = resolve("aura.max-upload-size", "AURA_MAX_UPLOAD_SIZE");
-        if (maxUpload != null) this.maxUploadSize = Math.max(0L, Long.parseLong(maxUpload));
+        if (maxUpload != null) this.maxUploadSize(Long.parseLong(maxUpload));
 
         String shutdown = resolve("aura.shutdown-timeout", "AURA_SHUTDOWN_TIMEOUT");
-        if (shutdown != null) this.shutdownTimeout = Integer.parseInt(shutdown);
+        if (shutdown != null) this.shutdownTimeout(Integer.parseInt(shutdown));
 
         String accessLog = resolve("aura.access-log", "AURA_ACCESS_LOG");
         if (accessLog != null) {
@@ -696,7 +999,7 @@ public class Aura {
         }
 
         String requestTimeout = resolve("aura.request-timeout", "AURA_REQUEST_TIMEOUT");
-        if (requestTimeout != null) this.requestTimeout = Math.max(0, Integer.parseInt(requestTimeout));
+        if (requestTimeout != null) this.requestTimeout(Integer.parseInt(requestTimeout));
 
         String gzip = resolve("aura.gzip", "AURA_GZIP");
         if (gzip != null) this.gzip = "true".equalsIgnoreCase(gzip);

@@ -21,6 +21,9 @@ jobs:
       - name: Test + Coverage Check
         run: mvn verify --batch-mode --fail-at-end
 
+      - name: Module and Documentation Contract
+        run: bash scripts/verify-aura-contracts.sh
+
       - name: Upload Coverage Report
         if: always()
         uses: actions/upload-artifact@v4

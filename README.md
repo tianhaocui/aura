@@ -6,7 +6,7 @@
 
 AI-native Java backend framework. **AI writes it → AI tests it → AI uses it.**
 
-4 modules, ~5000 lines. One dependency to start. No choices, no magic, no boilerplate.
+Capability and business modules compose explicitly through `use(...)`. One dependency to start. No hidden module startup, no magic, no boilerplate.
 
 ## Why Aura
 
@@ -39,7 +39,7 @@ AI agent gets 7 tools (create/list/get/update/delete/search/stats todos). [Sourc
 <dependency>
     <groupId>io.github.tianhaocui</groupId>
     <artifactId>aura-web</artifactId>
-    <version>0.5.1</version>
+    <version>0.6.1</version>
 </dependency>
 <!-- Add an SLF4J provider, e.g. logback-classic -->
 ```
@@ -49,6 +49,17 @@ Aura.create().port(8080)
     .get("/hello", () -> "hello world")
     .start();
 ```
+
+Compose reusable capability and business modules explicitly:
+
+```java
+AuraApp.create()
+    .use(WorkflowModule.create())
+    .use(OrderModule.create())
+    .start();
+```
+
+Each module declares dependencies and contributes routes, services, health checks, migrations, MCP tools, or workflow variants through `ModuleContext`. See [module development](docs/aura-module.md).
 
 ## Just Service
 
@@ -283,10 +294,14 @@ Duplicate routes (same method + path) are detected at startup and throw `Illegal
 
 | Module | Purpose | Required |
 |--------|---------|----------|
+| aura-contract | Dependency-free module, route, health, cancellation, and error contracts | Optional |
 | aura-core | App lifecycle, config, registry | Yes (transitive) |
 | aura-web | HTTP routing, context, middleware, TestClient | Yes |
 | aura-db | Database, Row, Query builder, dynamic SQL | Optional |
 | aura-mcp | MCP Server, tool auto-generation, npm packager | Optional |
+| aura-ai | Provider-neutral AI client, streaming, structured output | Optional |
+| aura-workflow | Typed workflow variants, retries, compensation | Optional |
+| aura-dev | Development source watcher and hot reload | Optional |
 
 Minimum: `aura-web` (brings `aura-core`).
 

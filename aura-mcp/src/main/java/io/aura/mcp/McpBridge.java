@@ -45,6 +45,10 @@ public class McpBridge {
         McpProtocol protocol = new McpProtocol(out, "aura-mcp-bridge", (method, params) -> switch (method) {
             case "tools/list" -> handleToolsList();
             case "tools/call" -> handleToolsCall(params);
+            case "resources/list" -> Map.of("resources", List.of());
+            case "resources/read" -> Map.of("contents", List.of());
+            case "prompts/list" -> Map.of("prompts", List.of());
+            case "prompts/get" -> Map.of("messages", List.of());
             default -> null;
         });
         protocol.runStdio();
@@ -78,7 +82,7 @@ public class McpBridge {
 
             try {
                 String result = callHttp(route, args);
-                return Map.of("content", List.of(Map.of("type", "text", "text", result)));
+                return McpContent.result(result);
             } catch (Exception e) {
                 return Map.of("isError", true,
                         "content", List.of(Map.of("type", "text", "text", "Error: " + e.getMessage())));

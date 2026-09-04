@@ -300,15 +300,15 @@ starter.startStdio(app);
 
 ## Protocol
 
-Aura MCP implements [Model Context Protocol](https://modelcontextprotocol.io/) version `2024-11-05`.
+Aura MCP implements [Model Context Protocol](https://modelcontextprotocol.io/) version `2025-03-26`.
 
 ### Initialize response
 
 ```json
 {
-  "protocolVersion": "2024-11-05",
+  "protocolVersion": "2025-03-26",
   "capabilities": {"tools": {}},
-  "serverInfo": {"name": "aura-mcp", "version": "0.3.0"}
+  "serverInfo": {"name": "aura-mcp", "version": "0.6.1"}
 }
 ```
 

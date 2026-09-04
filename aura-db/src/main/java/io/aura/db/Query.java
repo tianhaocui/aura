@@ -7,6 +7,9 @@ import java.util.StringJoiner;
 
 public class Query {
 
+    public static final int MAX_LIMIT = 10_000;
+    public static final int MAX_OFFSET = 1_000_000;
+
     private final Db db;
     private final String table;
     private String select = "*";
@@ -86,11 +89,13 @@ public class Query {
     }
 
     public Query limit(int limit) {
+        requireRange("limit", limit, 0, MAX_LIMIT);
         this.limit = limit;
         return this;
     }
 
     public Query offset(int offset) {
+        requireRange("offset", offset, 0, MAX_OFFSET);
         this.offset = offset;
         return this;
     }
@@ -149,5 +154,11 @@ public class Query {
     private String buildWhere() {
         if (conditions.isEmpty()) return "";
         return " WHERE " + String.join(" AND ", conditions);
+    }
+
+    private static void requireRange(String name, int value, int min, int max) {
+        if (value < min || value > max) {
+            throw new IllegalArgumentException(name + " must be between " + min + " and " + max + ": " + value);
+        }
     }
 }

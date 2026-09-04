@@ -219,6 +219,14 @@ class DbIntegrationTest {
     }
 
     @Test
+    void paginate_rejectsInvalidBoundsBeforeQuerying() {
+        assertThatIllegalArgumentException().isThrownBy(() -> db.paginate("SELECT * FROM users", new Object[0], 0, 20));
+        assertThatIllegalArgumentException().isThrownBy(() -> db.paginate("SELECT * FROM users", new Object[0], 1, 0));
+        assertThatIllegalArgumentException().isThrownBy(() ->
+                db.paginate("SELECT * FROM users", new Object[0], 1, Page.MAX_PAGE_SIZE + 1));
+    }
+
+    @Test
     void query_delete_removesMatchingRows() {
         Row.of("users").set("name", "Keep").set("active", true).insert(db);
         Row.of("users").set("name", "Remove").set("active", false).insert(db);
@@ -260,6 +268,24 @@ class DbIntegrationTest {
         });
         Row found = db.findOne("SELECT * FROM users WHERE name = ?", "TxCommit");
         assertThat(found).isNotNull();
+    }
+
+    @Test
+    void transactionContext_exposesBoundConnectionAndReusesNestedContext() {
+        String result = db.transactionContext(context -> {
+            assertThat(context.db()).isSameAs(db);
+            assertThat(context.connection()).isNotNull();
+            assertThat(db.currentTransactionContext()).isSameAs(context);
+            return db.transactionContext(nested -> {
+                assertThat(nested).isSameAs(context);
+                db.execute("INSERT INTO users (name, active) VALUES (?, ?)", "Context", true);
+                return "done";
+            });
+        });
+
+        assertThat(result).isEqualTo("done");
+        assertThat(db.currentTransactionContext()).isNull();
+        assertThat(db.findOne("SELECT * FROM users WHERE name = ?", "Context")).isNotNull();
     }
 
     @Test
@@ -309,6 +335,18 @@ class DbIntegrationTest {
             tx.commit();
         }
         assertThat(db.findOne("SELECT * FROM users WHERE name = ?", "Manual")).isNotNull();
+    }
+
+    @Test
+    void beginTransactionHandle_exposesContextAndLifecycle() {
+        try (TransactionHandle handle = db.beginTransactionHandle()) {
+            assertThat(handle.isActive()).isTrue();
+            assertThat(handle.context()).isSameAs(db.currentTransactionContext());
+            db.execute("INSERT INTO users (name, active) VALUES (?, ?)", "Handle", true);
+            handle.commit();
+            assertThat(handle.isActive()).isFalse();
+        }
+        assertThat(db.findOne("SELECT * FROM users WHERE name = ?", "Handle")).isNotNull();
     }
 
     @Test

@@ -6,6 +6,25 @@ Application lifecycle, configuration, validation, and annotations.
 
 Main entry point. Fluent builder for configuring and starting the application.
 
+### Explicit modules
+
+Aura 1.0 applications use `AuraApp`. Modules are installed with `use(...)`. A module has one public entry point,
+declares stable dependencies, and contributes services, routes, health checks or
+other capabilities through `ModuleContext`.
+
+```java
+AuraApp.create()
+    .use(WorkflowModule.create())
+    .use(OrderModule.create())
+    .start();
+```
+
+Module dependencies are validated and topologically ordered before the HTTP
+starter runs. `AuraModule.install(...)` registers contributions; `start(...)`
+and `stop(...)` own external resources. `TestClient.of(app)` runs the install
+phase without starting external resources, so module routes remain testable in
+memory.
+
 ### Quick Start
 
 ```java

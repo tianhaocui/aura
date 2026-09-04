@@ -18,7 +18,7 @@ Three principles:
 What Aura deliberately does NOT do:
 - No DI/IoC container
 - No ORM/Entity mapping
-- No classpath scanning
+- Optional explicit classpath scanning via `services(...)` / `scan(...)`
 - No XML/YAML configuration required
 - No annotation-driven programming (annotations optional, not required)
 - No implicit behavior
@@ -34,21 +34,21 @@ What Aura deliberately does NOT do:
 <dependency>
     <groupId>io.github.tianhaocui</groupId>
     <artifactId>aura-web</artifactId>
-    <version>0.3.0</version>
+    <version>0.6.1</version>
 </dependency>
 
 <!-- Optional: Database -->
 <dependency>
     <groupId>io.github.tianhaocui</groupId>
     <artifactId>aura-db</artifactId>
-    <version>0.3.0</version>
+    <version>0.6.1</version>
 </dependency>
 
 <!-- Optional: MCP for AI agents -->
 <dependency>
     <groupId>io.github.tianhaocui</groupId>
     <artifactId>aura-mcp</artifactId>
-    <version>0.3.0</version>
+    <version>0.6.1</version>
 </dependency>
 ```
 

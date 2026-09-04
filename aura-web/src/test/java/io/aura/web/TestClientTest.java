@@ -206,22 +206,22 @@ class TestClientTest {
     }
 
     @Test
-    void pageNum_clampedToMin1() {
+    void pageNum_rejectsNonPositiveValues() {
         Aura app = Aura.create();
         Router router = new Router();
         router.get("/page", ctx -> ctx.text(String.valueOf(ctx.pageNum())));
         TestClient client = new TestClient(app, router);
-        assertThat(client.get("/page?page=0").execute().body()).isEqualTo("1");
-        assertThat(client.get("/page?page=-5").execute().body()).isEqualTo("1");
+        assertThat(client.get("/page?page=0").execute().status()).isEqualTo(400);
+        assertThat(client.get("/page?page=-5").execute().status()).isEqualTo(400);
     }
 
     @Test
-    void pageNum_invalidString_defaultsTo1() {
+    void pageNum_rejectsInvalidString() {
         Aura app = Aura.create();
         Router router = new Router();
         router.get("/page", ctx -> ctx.text(String.valueOf(ctx.pageNum())));
         TestClient client = new TestClient(app, router);
-        assertThat(client.get("/page?page=abc").execute().body()).isEqualTo("1");
+        assertThat(client.get("/page?page=abc").execute().status()).isEqualTo(400);
     }
 
     @Test
@@ -234,21 +234,21 @@ class TestClientTest {
     }
 
     @Test
-    void pageSize_clampedToMax500() {
+    void pageSize_rejectsAboveMax500() {
         Aura app = Aura.create();
         Router router = new Router();
         router.get("/page", ctx -> ctx.text(String.valueOf(ctx.pageSize())));
         TestClient client = new TestClient(app, router);
-        assertThat(client.get("/page?pageSize=9999").execute().body()).isEqualTo("500");
+        assertThat(client.get("/page?pageSize=9999").execute().status()).isEqualTo(400);
     }
 
     @Test
-    void pageSize_clampedToMin1() {
+    void pageSize_rejectsBelowMin1() {
         Aura app = Aura.create();
         Router router = new Router();
         router.get("/page", ctx -> ctx.text(String.valueOf(ctx.pageSize())));
         TestClient client = new TestClient(app, router);
-        assertThat(client.get("/page?pageSize=0").execute().body()).isEqualTo("1");
+        assertThat(client.get("/page?pageSize=0").execute().status()).isEqualTo(400);
     }
 
     // --- SSE ---

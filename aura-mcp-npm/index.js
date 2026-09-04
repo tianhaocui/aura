@@ -83,7 +83,7 @@ function buildInputSchema(params) {
 }
 
 function handleInitialize() {
-  return { protocolVersion: '2024-11-05', capabilities: { tools: {} },
+  return { protocolVersion: '2025-03-26', capabilities: { tools: {}, resources: {}, prompts: {} },
     serverInfo: { name: 'aura-mcp', version: '0.1.0' } };
 }
 

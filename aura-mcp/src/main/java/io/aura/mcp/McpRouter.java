@@ -7,7 +7,9 @@ import java.util.*;
 
 public class McpRouter implements McpRouterSpec {
 
-    private final List<McpTool> tools = new ArrayList<>();
+    private final List<McpTool> tools = new java.util.concurrent.CopyOnWriteArrayList<>();
+    private final Map<String, McpResource> resources = Collections.synchronizedMap(new LinkedHashMap<>());
+    private final Map<String, McpPrompt> prompts = Collections.synchronizedMap(new LinkedHashMap<>());
 
     public McpToolBuilder tool(String name, String description) {
         return new McpToolBuilder(this, name, description);
@@ -23,6 +25,73 @@ public class McpRouter implements McpRouterSpec {
 
     public List<McpTool> tools() {
         return Collections.unmodifiableList(tools);
+    }
+
+    public McpRouter resource(String uri, String name, String description, String mimeType, String text) {
+        resources.put(uri, new McpResource(uri, name, description, mimeType, text));
+        return this;
+    }
+
+    public McpRouter prompt(String name, String description, String template, String... arguments) {
+        prompts.put(name, new McpPrompt(name, description, template,
+                arguments == null ? List.of() : List.of(arguments)));
+        return this;
+    }
+
+    public Map<String, Object> listResources() {
+        List<Map<String, Object>> entries = new ArrayList<>();
+        synchronized (resources) {
+        for (McpResource resource : resources.values()) {
+            Map<String, Object> entry = new LinkedHashMap<>();
+            entry.put("uri", resource.uri());
+            entry.put("name", resource.name());
+            if (resource.description() != null) entry.put("description", resource.description());
+            if (resource.mimeType() != null) entry.put("mimeType", resource.mimeType());
+            entries.add(entry);
+        }
+        }
+        return Map.of("resources", entries);
+    }
+
+    public Map<String, Object> readResource(String uri) {
+        McpResource resource = resources.get(uri);
+        if (resource == null) return Map.of("contents", List.of());
+        Map<String, Object> content = new LinkedHashMap<>();
+        content.put("uri", resource.uri());
+        if (resource.mimeType() != null) content.put("mimeType", resource.mimeType());
+        content.put("text", resource.text());
+        return Map.of("contents", List.of(content));
+    }
+
+    public Map<String, Object> listPrompts() {
+        List<Map<String, Object>> entries = new ArrayList<>();
+        synchronized (prompts) {
+        for (McpPrompt prompt : prompts.values()) {
+            Map<String, Object> entry = new LinkedHashMap<>();
+            entry.put("name", prompt.name());
+            if (prompt.description() != null) entry.put("description", prompt.description());
+            if (!prompt.arguments().isEmpty()) {
+                entry.put("arguments", prompt.arguments().stream()
+                        .map(name -> Map.<String, Object>of("name", name, "required", true))
+                        .toList());
+            }
+            entries.add(entry);
+        }
+        }
+        return Map.of("prompts", entries);
+    }
+
+    public Map<String, Object> getPrompt(String name, Map<String, Object> arguments) {
+        McpPrompt prompt = prompts.get(name);
+        if (prompt == null) return Map.of("messages", List.of());
+        String text = prompt.template();
+        for (String argument : prompt.arguments()) {
+            Object value = arguments == null ? null : arguments.get(argument);
+            text = text.replace("{" + argument + "}", value == null ? "" : value.toString());
+        }
+        return Map.of("messages", List.of(Map.of(
+                "role", "user",
+                "content", Map.of("type", "text", "text", text))));
     }
 
     void register(McpTool tool) {

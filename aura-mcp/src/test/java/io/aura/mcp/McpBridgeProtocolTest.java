@@ -33,7 +33,7 @@ class McpBridgeProtocolTest {
     void initialize_returnsProtocolVersion() throws Exception {
         String response = sendRequest("initialize", 1, null);
         JSONObject result = parseResult(response);
-        assertThat(result.getString("protocolVersion")).isEqualTo("2024-11-05");
+        assertThat(result.getString("protocolVersion")).isEqualTo("2025-03-26");
         assertThat(result.getJSONObject("capabilities")).containsKey("tools");
         assertThat(result.getJSONObject("serverInfo").getString("name")).isEqualTo("aura-mcp");
     }
@@ -85,6 +85,15 @@ class McpBridgeProtocolTest {
         assertThat(response).isEmpty();
     }
 
+    @Test
+    void protocolExtensions_areDeterministic() throws Exception {
+        assertThat(parseResult(sendRequest("ping", 5, null))).isEmpty();
+        assertThat(parseResult(sendRequest("resources/list", 6, null)).getJSONArray("resources")).isEmpty();
+        assertThat(parseResult(sendRequest("resources/read", 7, new JSONObject())).getJSONArray("contents")).isEmpty();
+        assertThat(parseResult(sendRequest("prompts/list", 8, null)).getJSONArray("prompts")).isEmpty();
+        assertThat(parseResult(sendRequest("prompts/get", 9, new JSONObject())).getJSONArray("messages")).isEmpty();
+    }
+
     private String sendRequest(String method, Object id, JSONObject params) throws Exception {
         JSONObject request = new JSONObject();
         request.put("jsonrpc", "2.0");
@@ -102,6 +111,11 @@ class McpBridgeProtocolTest {
             PrintStream out = new PrintStream(baos, true, StandardCharsets.UTF_8);
 
             McpProtocol protocol = new McpProtocol(out, "aura-mcp", (method, params) -> switch (method) {
+                case "ping" -> Map.of();
+                case "resources/list" -> Map.of("resources", List.of());
+                case "resources/read" -> Map.of("contents", List.of());
+                case "prompts/list" -> Map.of("prompts", List.of());
+                case "prompts/get" -> Map.of("messages", List.of());
                 case "tools/list" -> router.buildSchema();
                 case "tools/call" -> {
                     String toolName = params.getString("name");

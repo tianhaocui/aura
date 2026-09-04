@@ -84,13 +84,24 @@ public interface BaseContext {
     default int pageNum() {
         String v = query("page");
         if (v == null || v.isBlank()) return 1;
-        try { return Math.max(1, Integer.parseInt(v.trim())); } catch (NumberFormatException e) { return 1; }
+        try {
+            int page = Integer.parseInt(v.trim());
+            if (page < 1) throw new IllegalArgumentException("page must be positive");
+            return page;
+        } catch (NumberFormatException e) { throw new IllegalArgumentException("page must be an integer", e); }
     }
 
     default int pageSize() {
         String v = query("pageSize");
         if (v == null || v.isBlank()) return 20;
-        try { return Math.max(1, Math.min(500, Integer.parseInt(v.trim()))); } catch (NumberFormatException e) { return 20; }
+        try {
+            int size = Integer.parseInt(v.trim());
+            int max = 500;
+            Object configuredApp = get("_app", Object.class);
+            if (configuredApp instanceof io.aura.Aura app) max = app.config().pageSizeMax();
+            if (size < 1 || size > max) throw new IllegalArgumentException("pageSize must be between 1 and " + max);
+            return size;
+        } catch (NumberFormatException e) { throw new IllegalArgumentException("pageSize must be an integer", e); }
     }
 
     // --- file upload ---
@@ -126,4 +137,11 @@ public interface BaseContext {
 
     // --- client ip ---
     default String ip() { return null; }
+
+    /** Cooperative cancellation state for timeout, disconnect, and application shutdown. */
+    default io.aura.CancellationToken cancellationToken() { return null; }
+    default boolean isCancelled() {
+        io.aura.CancellationToken token = cancellationToken();
+        return token != null && token.isCancelled();
+    }
 }

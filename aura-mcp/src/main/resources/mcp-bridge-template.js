@@ -98,9 +98,15 @@ function buildInputSchema(params) {
 }
 
 function handleInitialize() {
-  return { protocolVersion: '2024-11-05', capabilities: { tools: {} },
+  return { protocolVersion: '2025-03-26', capabilities: { tools: {}, resources: {}, prompts: {} },
     serverInfo: { name: 'aura-mcp', version: '0.1.0' } };
 }
+
+function handlePing() { return {}; }
+function handleResourcesList() { return { resources: [] }; }
+function handleResourcesRead() { return { contents: [] }; }
+function handlePromptsList() { return { prompts: [] }; }
+function handlePromptsGet() { return { messages: [] }; }
 
 function handleToolsList() {
   const tools = routes.map(r => ({
@@ -133,7 +139,14 @@ async function handleToolsCall(params) {
 
   try {
     const result = await httpRequest(route.method, fullPath, body);
-    return { content: [{ type: 'text', text: result }] };
+    const response = { content: [{ type: 'text', text: result }] };
+    try {
+      const structured = JSON.parse(result);
+      if (structured && typeof structured === 'object' && !Array.isArray(structured)) {
+        response.structuredContent = structured;
+      }
+    } catch (_) {}
+    return response;
   } catch (e) {
     return { isError: true, content: [{ type: 'text', text: 'Error: ' + e.message }] };
   }
@@ -145,9 +158,14 @@ async function handleMessage(msg) {
 
   switch (method) {
     case 'initialize': result = handleInitialize(); break;
+    case 'ping': result = handlePing(); break;
     case 'notifications/initialized': return null;
     case 'tools/list': result = handleToolsList(); break;
     case 'tools/call': result = await handleToolsCall(params); break;
+    case 'resources/list': result = handleResourcesList(); break;
+    case 'resources/read': result = handleResourcesRead(params); break;
+    case 'prompts/list': result = handlePromptsList(); break;
+    case 'prompts/get': result = handlePromptsGet(params); break;
     default: return null;
   }
 

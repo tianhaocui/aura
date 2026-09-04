@@ -22,6 +22,7 @@ public class TestClient {
     }
 
     public static TestClient of(Aura app) {
+        app.prepareModules();
         Router router = new Router();
         // replay direct routes
         for (var entry : app.directRoutes()) {

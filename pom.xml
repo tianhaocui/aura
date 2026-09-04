@@ -35,10 +35,13 @@
     </scm>
 
     <modules>
+        <module>aura-contract</module>
         <module>aura-core</module>
         <module>aura-web</module>
         <module>aura-db</module>
         <module>aura-mcp</module>
+        <module>aura-ai</module>
+        <module>aura-workflow</module>
         <module>aura-dev</module>
     </modules>
 
@@ -58,12 +61,27 @@
         <dependencies>
             <dependency>
                 <groupId>io.github.tianhaocui</groupId>
+                <artifactId>aura-contract</artifactId>
+                <version>${aura.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.github.tianhaocui</groupId>
                 <artifactId>aura-core</artifactId>
                 <version>${aura.version}</version>
             </dependency>
             <dependency>
                 <groupId>io.github.tianhaocui</groupId>
                 <artifactId>aura-web</artifactId>
+                <version>${aura.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.github.tianhaocui</groupId>
+                <artifactId>aura-ai</artifactId>
+                <version>${aura.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.github.tianhaocui</groupId>
+                <artifactId>aura-workflow</artifactId>
                 <version>${aura.version}</version>
             </dependency>
             <dependency>

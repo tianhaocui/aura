@@ -207,6 +207,26 @@ class QueryBuildTest {
         assertThat(buildSql(q)).isEqualTo("SELECT * FROM users LIMIT 10 OFFSET 20");
     }
 
+    @Test
+    void limit_rejectsNegativeAndExcessiveValues() throws Exception {
+        Query q = newQuery("users");
+        assertThatIllegalArgumentException().isThrownBy(() -> q.limit(-1));
+        assertThatIllegalArgumentException().isThrownBy(() -> q.limit(Query.MAX_LIMIT + 1));
+    }
+
+    @Test
+    void offset_rejectsNegativeAndExcessiveValues() throws Exception {
+        Query q = newQuery("users");
+        assertThatIllegalArgumentException().isThrownBy(() -> q.offset(-1));
+        assertThatIllegalArgumentException().isThrownBy(() -> q.offset(Query.MAX_OFFSET + 1));
+    }
+
+    @Test
+    void limitAndOffset_acceptBoundaryValues() throws Exception {
+        Query q = newQuery("users").limit(0).offset(Query.MAX_OFFSET);
+        assertThat(buildSql(q)).isEqualTo("SELECT * FROM users LIMIT 0 OFFSET " + Query.MAX_OFFSET);
+    }
+
     // --- combined ---
 
     @Test
