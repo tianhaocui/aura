@@ -12,6 +12,7 @@ import java.nio.file.*;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 public class McpPackager {
 
@@ -23,6 +24,9 @@ public class McpPackager {
     private static final int MAX_SCHEMA_BYTES = 1024 * 1024;
     private static final int CONNECT_TIMEOUT_MS = 5_000;
     private static final int READ_TIMEOUT_MS = 10_000;
+    private static final int MAX_PROCESS_OUTPUT_BYTES = 64 * 1024;
+    private static final long PROCESS_TIMEOUT_MS = 10_000L;
+    private static final long PUBLISH_TIMEOUT_MS = 5 * 60 * 1_000L;
 
     public static void generate(String appUrl, String npmName, String outputDir) throws Exception {
         generate(appUrl, npmName, outputDir, null, allowPrivateUrls());
@@ -282,7 +286,14 @@ public class McpPackager {
         ProcessBuilder pb = new ProcessBuilder("npm", "publish", "--access", "public")
                 .directory(dir.toFile())
                 .inheritIO();
-        int code = pb.start().waitFor();
+        Process process = pb.start();
+        if (!process.waitFor(PUBLISH_TIMEOUT_MS, TimeUnit.MILLISECONDS)) {
+            process.destroyForcibly();
+            System.err.println("npm publish timed out after " + PUBLISH_TIMEOUT_MS + "ms");
+            System.exit(1);
+            return;
+        }
+        int code = process.exitValue();
         if (code == 0) {
             System.out.println("Published successfully!");
         } else {
@@ -301,13 +312,38 @@ public class McpPackager {
     }
 
     private static String exec(String... cmd) {
+        Process process = null;
+        java.util.concurrent.FutureTask<String> output = null;
         try {
-            Process p = new ProcessBuilder(cmd).start();
-            String out = new String(p.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
-            p.waitFor();
-            return out;
+            process = new ProcessBuilder(cmd).redirectErrorStream(true).start();
+            Process current = process;
+            output = new java.util.concurrent.FutureTask<>(() -> readCapped(current.getInputStream()));
+            Thread reader = new Thread(output, "aura-mcp-process-reader");
+            reader.setDaemon(true);
+            reader.start();
+            if (!process.waitFor(PROCESS_TIMEOUT_MS, TimeUnit.MILLISECONDS)) {
+                process.destroyForcibly();
+                return null;
+            }
+            return output.get(PROCESS_TIMEOUT_MS, TimeUnit.MILLISECONDS);
         } catch (Exception e) {
+            if (process != null) process.destroyForcibly();
             return null;
         }
+    }
+
+    private static String readCapped(InputStream input) throws IOException {
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        byte[] buffer = new byte[4096];
+        int read;
+        int retained = 0;
+        while ((read = input.read(buffer)) != -1) {
+            if (retained < MAX_PROCESS_OUTPUT_BYTES) {
+                int copy = Math.min(read, MAX_PROCESS_OUTPUT_BYTES - retained);
+                output.write(buffer, 0, copy);
+                retained += copy;
+            }
+        }
+        return output.toString(StandardCharsets.UTF_8);
     }
 }
