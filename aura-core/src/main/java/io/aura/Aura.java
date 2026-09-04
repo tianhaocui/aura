@@ -38,8 +38,7 @@ public class Aura {
     private final List<Reloadable> reloadables = new ArrayList<>();
     private final List<AutoCloseable> closeables = new ArrayList<>();
     private final List<AuraPlugin> plugins = new ArrayList<>();
-    private final List<AuraModule> modules = new CopyOnWriteArrayList<>();
-    private final List<io.aura.contract.ModuleMetadata> installedModuleDescriptors = new CopyOnWriteArrayList<>();
+    private final ModuleManager moduleManager = new ModuleManager();
     private final List<Consumer<io.aura.web.BaseRouter>> moduleRouteConfigs = new CopyOnWriteArrayList<>();
     private String staticFilesPath;
     private boolean spaMode;
@@ -74,9 +73,6 @@ public class Aura {
     private final List<io.aura.contract.HealthCheck> healthChecks = new CopyOnWriteArrayList<>();
     private final io.aura.contract.PermissionRegistry permissionRegistry = new io.aura.contract.PermissionRegistry();
     private final List<AuraEventListener> eventListeners = new CopyOnWriteArrayList<>();
-    private volatile boolean modulesInstalled;
-    private volatile boolean modulesStarted;
-    private final List<AuraModule> startedModules = new CopyOnWriteArrayList<>();
 
     private AuraStarter starter;
     private McpStarter mcpStarter;
@@ -118,22 +114,12 @@ public class Aura {
 
     /** Explicitly install a capability or business module. Modules are ordered by declared dependencies. */
     public Aura use(AuraModule module) {
-        if (module == null) throw new IllegalArgumentException("module must not be null");
-        if (modulesInstalled) throw new IllegalStateException("Modules cannot be added after module preparation");
-        io.aura.contract.ModuleMetadata descriptor = module.descriptor();
-        if (descriptor == null) throw new ModuleException("AURA_MODULE_DESCRIPTOR_MISSING", "?", "Module descriptor must not be null");
-        if (modules.stream().anyMatch(existing -> existing.descriptor().id().equals(descriptor.id()))) {
-            throw new ModuleException("AURA_MODULE_DUPLICATE", descriptor.id(), "Duplicate module id: " + descriptor.id());
-        }
-        modules.add(module);
+        moduleManager.add(module);
         return this;
     }
 
-    public List<AuraModule> modules() { return List.copyOf(modules); }
-    public List<io.aura.contract.ModuleMetadata> moduleDescriptors() {
-        if (!installedModuleDescriptors.isEmpty()) return List.copyOf(installedModuleDescriptors);
-        return modules.stream().map(AuraModule::descriptor).toList();
-    }
+    public List<AuraModule> modules() { return moduleManager.modules(); }
+    public List<io.aura.contract.ModuleMetadata> moduleDescriptors() { return moduleManager.descriptors(); }
     public Aura observe(AuraEventListener listener) {
         if (listener == null) throw new IllegalArgumentException("event listener must not be null");
         eventListeners.add(listener);
@@ -749,17 +735,7 @@ public class Aura {
             starter.stop();
             starter = null;
         }
-        if (modulesStarted || !startedModules.isEmpty()) {
-            for (int i = startedModules.size() - 1; i >= 0; i--) {
-                AuraModule module = startedModules.get(i);
-                try {
-                    module.stop(new ModuleContextImpl(module, module.descriptor()));
-                } catch (Exception e) {
-                    log.error("Error stopping module {}", module.descriptor().id(), e);
-                }
-            }
-            startedModules.clear();
-        }
+        stopStartedModules();
         for (int i = closeables.size() - 1; i >= 0; i--) {
             try { closeables.get(i).close(); }
             catch (Exception e) { log.error("Error closing {}", closeables.get(i).getClass().getSimpleName(), e); }
@@ -809,73 +785,18 @@ public class Aura {
 
     /** Installs module contributions without starting external resources; used by TestClient. */
     public void prepareModules() {
-        if (modulesInstalled) return;
+        if (moduleManager.installed()) return;
         installModules(false);
     }
 
-    private synchronized void installModules(boolean startModules) {
-        if (modulesInstalled) {
-            if (startModules && !modulesStarted) startInstalledModules();
-            return;
-        }
-        List<AuraModule> ordered = orderModules();
-        for (AuraModule module : ordered) {
-            io.aura.contract.ModuleMetadata descriptor = module.descriptor();
-            ModuleContextImpl context = new ModuleContextImpl(module, descriptor);
-            try {
-                module.install(context);
-                installedModuleDescriptors.add(descriptor);
-            } catch (RuntimeException e) {
-                throw e;
-            } catch (Exception e) {
-                throw new ModuleException("AURA_MODULE_INSTALL_FAILED", descriptor.id(),
-                        "Failed to install module " + descriptor.id() + ": " + e.getMessage());
-            }
-        }
-        modules.clear();
-        modules.addAll(ordered);
-        modulesInstalled = true;
-        if (startModules) startInstalledModules();
-    }
+    private void installModules(boolean startModules) { moduleManager.install(this::moduleContext, startModules); }
 
-    private void startInstalledModules() {
-        if (modulesStarted) return;
-        for (AuraModule module : modules) {
-            try {
-                module.start(new ModuleContextImpl(module, module.descriptor()));
-                startedModules.add(module);
-            } catch (Exception e) {
-                for (int i = startedModules.size() - 1; i >= 0; i--) {
-                    AuraModule started = startedModules.get(i);
-                    try {
-                        started.stop(new ModuleContextImpl(started, started.descriptor()));
-                    } catch (Exception stopError) {
-                        log.error("Error rolling back module {} after startup failure", started.descriptor().id(), stopError);
-                    }
-                }
-                startedModules.clear();
-                throw new ModuleException("AURA_MODULE_START_FAILED", module.descriptor().id(),
-                        "Failed to start module " + module.descriptor().id() + ": " + e.getMessage());
-            }
-        }
-        modulesStarted = true;
-    }
+    private void startInstalledModules() { moduleManager.start(this::moduleContext); }
 
-    private void stopStartedModules() {
-        for (int i = startedModules.size() - 1; i >= 0; i--) {
-            AuraModule module = startedModules.get(i);
-            try {
-                module.stop(new ModuleContextImpl(module, module.descriptor()));
-            } catch (Exception stopError) {
-                log.error("Error stopping module {} during rollback", module.descriptor().id(), stopError);
-            }
-        }
-        startedModules.clear();
-        modulesStarted = false;
-    }
+    private void stopStartedModules() { moduleManager.stop(this::moduleContext); }
 
-    private List<AuraModule> orderModules() {
-        return ModuleGraph.order(modules);
+    private ModuleContext moduleContext(AuraModule module) {
+        return new ModuleContextImpl(module, module.descriptor());
     }
 
     private final class ModuleContextImpl implements ModuleContext {

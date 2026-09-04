@@ -1,0 +1,91 @@
+package io.aura;
+
+import io.aura.contract.ModuleMetadata;
+
+import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.function.Function;
+
+/** Owns module registration and lifecycle independently from the legacy Aura builder. */
+final class ModuleManager {
+    private final List<AuraModule> modules = new CopyOnWriteArrayList<>();
+    private final List<ModuleMetadata> installedDescriptors = new CopyOnWriteArrayList<>();
+    private final List<AuraModule> startedModules = new CopyOnWriteArrayList<>();
+    private volatile boolean installed;
+    private volatile boolean started;
+
+    void add(AuraModule module) {
+        if (module == null) throw new IllegalArgumentException("module must not be null");
+        if (installed) throw new IllegalStateException("Modules cannot be added after module preparation");
+        ModuleMetadata descriptor = module.descriptor();
+        if (descriptor == null) {
+            throw new ModuleException("AURA_MODULE_DESCRIPTOR_MISSING", "?",
+                    "Module descriptor must not be null");
+        }
+        if (modules.stream().anyMatch(existing -> existing.descriptor().id().equals(descriptor.id()))) {
+            throw new ModuleException("AURA_MODULE_DUPLICATE", descriptor.id(),
+                    "Duplicate module id: " + descriptor.id());
+        }
+        modules.add(module);
+    }
+
+    List<AuraModule> modules() { return List.copyOf(modules); }
+
+    List<ModuleMetadata> descriptors() {
+        if (!installedDescriptors.isEmpty()) return List.copyOf(installedDescriptors);
+        return modules.stream().map(AuraModule::descriptor).toList();
+    }
+
+    boolean installed() { return installed; }
+    boolean started() { return started; }
+
+    synchronized void install(Function<AuraModule, ModuleContext> contexts, boolean startModules) {
+        if (installed) {
+            if (startModules && !started) start(contexts);
+            return;
+        }
+        List<AuraModule> ordered = ModuleGraph.order(modules);
+        for (AuraModule module : ordered) {
+            ModuleMetadata descriptor = module.descriptor();
+            module.install(contexts.apply(module));
+            installedDescriptors.add(descriptor);
+        }
+        modules.clear();
+        modules.addAll(ordered);
+        installed = true;
+        if (startModules) start(contexts);
+    }
+
+    synchronized void start(Function<AuraModule, ModuleContext> contexts) {
+        if (started) return;
+        for (AuraModule module : modules) {
+            try {
+                module.start(contexts.apply(module));
+                startedModules.add(module);
+            } catch (Exception error) {
+                stopStarted(contexts);
+                throw new ModuleException("AURA_MODULE_START_FAILED", module.descriptor().id(),
+                        "Failed to start module " + module.descriptor().id() + ": " + error.getMessage());
+            }
+        }
+        started = true;
+    }
+
+    synchronized void stop(Function<AuraModule, ModuleContext> contexts) {
+        stopStarted(contexts);
+    }
+
+    private void stopStarted(Function<AuraModule, ModuleContext> contexts) {
+        for (int i = startedModules.size() - 1; i >= 0; i--) {
+            AuraModule module = startedModules.get(i);
+            try {
+                module.stop(contexts.apply(module));
+            } catch (Exception error) {
+                org.slf4j.LoggerFactory.getLogger(ModuleManager.class)
+                        .error("Error stopping module {}", module.descriptor().id(), error);
+            }
+        }
+        startedModules.clear();
+        started = false;
+    }
+}
