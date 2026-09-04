@@ -1,5 +1,6 @@
 package io.aura.mcp;
 
+import io.aura.contract.ApiParameter;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -41,6 +42,7 @@ class McpToolBuilderTest {
         assertThat(p.name()).isEqualTo("name");
         assertThat(p.type()).isEqualTo("string");
         assertThat(p.description()).isEqualTo("the name");
+        assertThat(p.contract()).isEqualTo(new ApiParameter("name", "string", "tool", true, "the name"));
         assertThat(p.isEnum()).isFalse();
     }
 
