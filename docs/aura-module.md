@@ -83,6 +83,12 @@ contract. It contributes `GET /health/live`, `GET /health/ready`, and
 the runtime to be `RUNNING` and all registered checks to be `UP`, and the
 aggregate endpoint reports dependency health without exposing check errors.
 
+HTTP failures use a stable JSON contract. `ApiException` responses contain
+`error`, `code`, and optional `field`, `reason`, and `hint`; validation responses
+use `code: "VALIDATION_ERROR"` and expose those same fields for each invalid
+property. Clients should branch on `code` and `field`, not parse the human
+message.
+
 Inside a route group, use `Aura.requirePermission("orders.read")` after `Aura.requireAuth()`.
 - `TestClient.of(app)` runs module installation but does not start external resources, so module routes can be tested in memory.
 - `healthCheck(...)` registrations are available through `AuraWebRuntime.healthChecks()` and the

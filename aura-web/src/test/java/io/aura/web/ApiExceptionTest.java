@@ -21,6 +21,7 @@ class ApiExceptionTest {
         assertThat(resp.body()).contains("\"code\":\"ORDER_DUPLICATE\"");
         assertThat(resp.body()).contains("\"field\":\"orderId\"");
         assertThat(resp.body()).contains("order already exists");
+        assertThat(resp.body()).contains("\"reason\":\"order already exists\"");
     }
 
     @Test

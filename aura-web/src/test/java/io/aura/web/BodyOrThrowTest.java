@@ -62,8 +62,11 @@ class BodyOrThrowTest {
         assertThat(resp.status()).isEqualTo(400);
         assertThat(resp.body()).contains("\"error\"");
         assertThat(resp.body()).contains("\"errors\"");
+        assertThat(resp.body()).contains("\"code\":\"VALIDATION_ERROR\"");
         assertThat(resp.body()).contains("\"field\"");
         assertThat(resp.body()).contains("\"message\"");
+        assertThat(resp.body()).contains("\"reason\"");
+        assertThat(resp.body()).contains("\"hint\"");
     }
 
     @Test

@@ -37,8 +37,12 @@ class ExceptionResolver {
         if (cause instanceof Validate.ValidationException ve && !ve.errors().isEmpty()) {
             return new ExceptionResponse(400, Map.of(
                     "error", "Validation failed",
+                    "code", "VALIDATION_ERROR",
+                    "hint", "Check the request fields against the API schema",
                     "errors", ve.errors().stream()
-                            .map(fe -> Map.of("field", fe.field(), "message", fe.message()))
+                            .map(fe -> Map.of("field", fe.field(), "message", fe.message(),
+                                    "reason", "The value does not satisfy the field constraint",
+                                    "hint", "Provide a value that satisfies the declared validation rule"))
                             .toList()));
         }
         if (cause instanceof CodedException ce) {
@@ -46,11 +50,13 @@ class ExceptionResolver {
             String message = productionServerError
                     ? "Internal Server Error"
                     : (cause.getMessage() != null ? cause.getMessage() : ce.code());
-            return new ExceptionResponse(ce.status(), ApiError.of(message, ce.code(), ce.field()));
+            return new ExceptionResponse(ce.status(), ApiError.of(message, ce.code(), ce.field(),
+                    message, ApiError.hintFor(ce.code())));
         }
         if (cause instanceof IllegalArgumentException || cause instanceof Validate.ValidationException) {
             String message = cause.getMessage() != null ? cause.getMessage() : "Bad Request";
-            return new ExceptionResponse(400, ApiError.of(message, "VALIDATION_ERROR"));
+            return new ExceptionResponse(400, ApiError.of(message, "VALIDATION_ERROR", null,
+                    message, "Check the request fields against the API schema"));
         }
 
         if ("dev".equals(app.env())) {
