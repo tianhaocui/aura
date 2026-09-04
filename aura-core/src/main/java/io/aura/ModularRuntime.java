@@ -269,7 +269,19 @@ final class ModularRuntime implements AuraWebRuntime {
         @Override public void healthCheck(io.aura.contract.HealthCheck check) { if (check != null) healthChecks.add(check); }
         @Override public PermissionRegistry permissions() { return permissions; }
         @Override public String property(String key) { String prefix = "aura." + descriptor.id() + "."; if (key == null || !key.startsWith(prefix)) throw new ModuleException("AURA_MODULE_PROPERTY_SCOPE", descriptor.id(), "Module properties must use prefix " + prefix); return prop(key); }
-        @Override public <T> T config(Class<T> recordType) { if (recordType == null || !recordType.isRecord()) throw new ModuleException("AURA_MODULE_CONFIG_TYPE", descriptor.id(), "Module config must be a record type"); return ConfigBinder.bind(properties(descriptor.id()), "aura." + descriptor.id() + ".", recordType); }
-        private Map<String, String> properties(String id) { Map<String, String> values = new java.util.LinkedHashMap<>(); String prefix = "aura." + id + "."; properties.forEach((key, value) -> { if (key.startsWith(prefix)) values.put(key, prop(key)); }); return values; }
+        @Override public <T> T config(Class<T> recordType) {
+            if (recordType == null || !recordType.isRecord()) {
+                throw new ModuleException("AURA_MODULE_CONFIG_TYPE", descriptor.id(),
+                        "Module config must be a record type");
+            }
+            String prefix = "aura." + descriptor.id() + ".";
+            Map<String, String> values = new java.util.LinkedHashMap<>();
+            for (java.lang.reflect.RecordComponent component : recordType.getRecordComponents()) {
+                String key = prefix + component.getName();
+                String value = prop(key);
+                if (value != null) values.put(key, value);
+            }
+            return ConfigBinder.bind(values, prefix, recordType);
+        }
     }
 }

@@ -48,6 +48,9 @@ routes.post("/orders", handler)
 - `install(...)` only registers services, routes and capabilities. `start(...)` opens external resources; `stop(...)` releases them.
 - Module properties must use `aura.<module-id>.*` and are read through `context.property(...)`.
 - Record configuration is bound with `context.config(OrderConfig.class)`, using only the current module's `aura.<module-id>.*` prefix.
+  Values resolve with the same precedence as `context.property(...)`: environment,
+  system property, then explicit application properties; missing fields use record
+  type defaults.
 - Permissions are declared through the shared `context.permissions()` registry; duplicate IDs fail during module installation.
 - The application supplies one authorization function and routes use stable permission middleware:
 

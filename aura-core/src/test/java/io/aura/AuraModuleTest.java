@@ -160,6 +160,28 @@ class AuraModuleTest {
     }
 
     @Test
+    void modularRecordConfigurationUsesSystemPropertyFallback() {
+        String key = "aura.system-config.limit";
+        String previous = System.getProperty(key);
+        System.setProperty(key, "37");
+        try {
+            AuraApp app = AuraApp.create().use(new AuraModule() {
+                @Override public io.aura.contract.ModuleMetadata descriptor() {
+                    return io.aura.contract.ModuleMetadata.of("system-config", "1.0.0");
+                }
+
+                @Override public void install(ModuleContext context) {
+                    assertThat(context.config(OrderConfig.class).limit()).isEqualTo(37);
+                }
+            });
+            app.prepare();
+        } finally {
+            if (previous == null) System.clearProperty(key);
+            else System.setProperty(key, previous);
+        }
+    }
+
+    @Test
     void moduleContributesPermissionsThroughSharedRegistry() {
         Aura app = Aura.create().use(new AuraModule() {
             @Override public io.aura.contract.ModuleMetadata descriptor() {
