@@ -14,6 +14,7 @@ class McpModuleTest {
         app.prepareModules();
 
         assertThat(app.getBean(McpRouter.class)).isSameAs(router);
+        assertThat(app.mcpRouter()).isSameAs(router);
         assertThat(router.buildSchema()).containsKey("tools");
     }
 }

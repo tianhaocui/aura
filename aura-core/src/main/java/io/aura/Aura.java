@@ -969,6 +969,7 @@ public class Aura {
         @Override public void routes(Consumer<io.aura.web.BaseRouter> routes) { moduleRouteConfigs.add(routes); }
         @Override public void before(io.aura.web.BaseHandler handler) { Aura.this.before(handler); }
         @Override public void after(io.aura.web.BaseHandler handler) { Aura.this.after(handler); }
+        @Override public void mcp(McpRouterSpec router) { Aura.this.mcp(router); }
         @Override public void healthCheck(HealthCheck healthCheck) { Aura.this.healthCheck(healthCheck); }
         @Override public String property(String key) {
             String prefix = "aura." + descriptor.id() + ".";
