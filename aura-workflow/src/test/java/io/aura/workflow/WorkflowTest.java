@@ -155,4 +155,22 @@ class WorkflowTest {
         assertThat(registry.schema().toString())
                 .contains("fulfillment", "place-order", "quality-check");
     }
+
+    @Test
+    void executesAsyncWithBoundedRuntimeAndStoresExecution() throws Exception {
+        WorkflowRegistry registry = new WorkflowRegistry();
+        registry.register(Workflow.<List<String>>builder("async-flow")
+                .step("one", events -> { events.add("one"); return null; })
+                .build());
+        WorkflowRuntime<List<String>> runtime = new WorkflowRuntime<>(registry);
+        try {
+            List<String> events = new ArrayList<>();
+            WorkflowResult result = runtime.executeAsync("async-flow", events).get(2, java.util.concurrent.TimeUnit.SECONDS);
+            assertThat(result.succeeded()).isTrue();
+            assertThat(runtime.execution(result.execution().executionId())).isPresent();
+            assertThat(events).containsExactly("one");
+        } finally {
+            runtime.close();
+        }
+    }
 }

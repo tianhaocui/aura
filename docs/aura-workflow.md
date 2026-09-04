@@ -42,3 +42,13 @@ The default graph is `place-order -> outbound -> deduct-inventory`. A selected v
 - `StepMode.IDEMPOTENT` and compensation metadata describe business guarantees. The framework does not infer idempotency or replay side effects on its own.
 
 Business modules define what “place”, “outbound”, “stocktake”, or “deduct inventory” mean. This module only composes and observes those operations; it does not own domain transactions, persistence, or external API semantics.
+
+For background work, use the bounded runtime executor and query the execution store:
+
+```java
+WorkflowRuntime<OrderContext> runtime = context.require(WorkflowRuntime.class);
+CompletableFuture<WorkflowResult> future = runtime.executeAsync(
+        "order.fulfillment", orderContext, WorkflowSelector.by(OrderContext::variant));
+```
+
+The default store is in-memory for tests and single-process use. Production modules can provide a `WorkflowExecutionStore` implementation to persist state; distributed workers and resume policies remain explicit extension responsibilities.

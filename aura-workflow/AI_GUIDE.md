@@ -14,3 +14,5 @@ WorkflowDefinition<C> workflow = Workflow.<C>builder("id")
 Use `WorkflowSelector.by(context -> variant)` for tenant/customer selection. Do not read a global tenant variable. A missing step, duplicate step, cycle, contradictory order, or unknown variant raises `WorkflowException`; inspect `code()` for a stable machine-readable code.
 
 Retries are per-step metadata and default to one attempt. The runtime retries only according to `RetryPolicy`; `StepMode.IDEMPOTENT` documents that repeating the operation is acceptable but does not make a non-idempotent operation safe. Compensation is explicit with `StepMode.COMPENSATABLE` and `variant.compensate(...)`, and runs in reverse completion order after a later step fails.
+
+For background execution, use `WorkflowRuntime.executeAsync(...)`. The runtime uses a bounded executor and stores completed execution state in `WorkflowExecutionStore`; provide a persistent store from a production module when restart recovery is required.

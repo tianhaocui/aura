@@ -7,17 +7,24 @@ import io.aura.contract.ModuleMetadata;
 /** Aura module that exposes one shared workflow registry and runtime. */
 public final class WorkflowModule implements AuraModule {
     private final WorkflowRegistry registry;
+    private final WorkflowExecutionStore store;
 
-    private WorkflowModule(WorkflowRegistry registry) {
+    private WorkflowModule(WorkflowRegistry registry, WorkflowExecutionStore store) {
         this.registry = registry;
+        this.store = store;
     }
 
     public static WorkflowModule create() {
-        return new WorkflowModule(new WorkflowRegistry());
+        return new WorkflowModule(new WorkflowRegistry(), new InMemoryWorkflowExecutionStore());
     }
 
     public static WorkflowModule create(WorkflowRegistry registry) {
-        return new WorkflowModule(java.util.Objects.requireNonNull(registry, "registry"));
+        return new WorkflowModule(java.util.Objects.requireNonNull(registry, "registry"), new InMemoryWorkflowExecutionStore());
+    }
+
+    public static WorkflowModule create(WorkflowRegistry registry, WorkflowExecutionStore store) {
+        return new WorkflowModule(java.util.Objects.requireNonNull(registry, "registry"),
+                java.util.Objects.requireNonNull(store, "store"));
     }
 
     @Override public ModuleMetadata descriptor() {
@@ -27,7 +34,8 @@ public final class WorkflowModule implements AuraModule {
 
     @Override public void install(ModuleContext context) {
         context.register(registry);
-        context.register(new WorkflowRuntime<>(registry));
+        context.register(store);
+        context.register(new WorkflowRuntime<>(registry, store));
         context.routes(routes -> routes.get("/__schema__/workflows", request -> request.json(registry.schema())));
     }
 
