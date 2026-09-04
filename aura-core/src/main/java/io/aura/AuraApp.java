@@ -5,12 +5,10 @@ import java.util.Optional;
 
 /** Canonical Aura 1.0 application facade for explicit module composition. */
 public final class AuraApp implements AutoCloseable {
-    private final Aura legacyRuntime;
     private final AuraRuntime runtime;
 
     private AuraApp(AuraConfig config) {
-        this.legacyRuntime = Aura.create(config == null ? new AuraConfig() : config);
-        this.runtime = new DefaultAuraRuntime(legacyRuntime);
+        this.runtime = new DefaultAuraRuntime(Aura.create(config == null ? new AuraConfig() : config));
     }
 
     public static AuraApp create() { return new AuraApp(new AuraConfig()); }
@@ -66,7 +64,7 @@ public final class AuraApp implements AutoCloseable {
 
     public Aura.Lifecycle lifecycle() { return Aura.Lifecycle.valueOf(runtime.state().name()); }
     public io.aura.contract.RuntimeState state() { return runtime.state(); }
-    /** Stable runtime view for adapters; unlike runtime(), this does not expose legacy Builder APIs. */
+    /** Stable runtime view for adapters; it does not expose legacy Builder APIs. */
     public AuraRuntime runtimeView() { return runtime; }
     public boolean isRunning() { return runtime.isRunning(); }
     public AuraConfig config() { return runtime.config(); }
@@ -76,10 +74,4 @@ public final class AuraApp implements AutoCloseable {
     public <T> T require(Class<T> type) {
         return runtime.require(type);
     }
-    /**
-     * @deprecated Use {@link #prepare()}, {@link #find(Class)}, or {@link #require(Class)}.
-     * This escape hatch will be removed after the 1.0 runtime split.
-     */
-    @Deprecated
-    public Aura runtime() { return legacyRuntime; }
 }
