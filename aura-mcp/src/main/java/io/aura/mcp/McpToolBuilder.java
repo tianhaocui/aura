@@ -28,6 +28,11 @@ public class McpToolBuilder {
         return this;
     }
 
+    public McpToolBuilder optional(String name, Class<?> type, String description) {
+        params.add(new McpParam(name, McpUtil.jsonType(type.getSimpleName()), description, null, false));
+        return this;
+    }
+
     public McpToolBuilder param(String name, Class<?> type, String description, Map<String, ?> mapping) {
         List<McpEnumValue> enumValues = new ArrayList<>();
         Map<String, Object> resolveMap = new LinkedHashMap<>();

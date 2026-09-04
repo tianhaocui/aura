@@ -139,8 +139,9 @@ public class McpRouter implements McpRouterSpec {
         Map<String, Object> properties = new LinkedHashMap<>();
         List<String> required = new ArrayList<>();
         for (McpParam p : params) {
+            io.aura.contract.ApiParameter contract = p.contract();
             var prop = new LinkedHashMap<String, Object>();
-            prop.put("type", p.type());
+            prop.put("type", contract.type());
             String desc = p.description();
             if (p.isEnum()) {
                 List<String> enumLabels = p.enumValues().stream().map(McpEnumValue::label).toList();
@@ -150,8 +151,8 @@ public class McpRouter implements McpRouterSpec {
                 }
             }
             if (desc != null) prop.put("description", desc);
-            properties.put(p.name(), prop);
-            required.add(p.name());
+            properties.put(contract.name(), prop);
+            if (contract.required()) required.add(contract.name());
         }
         schema.put("properties", properties);
         if (!required.isEmpty()) schema.put("required", required);

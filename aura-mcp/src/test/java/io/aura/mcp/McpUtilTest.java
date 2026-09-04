@@ -109,4 +109,15 @@ class McpUtilTest {
         List<String> required = (List<String>) schema.get("required");
         assertThat(required).containsExactly("id", "name");
     }
+
+    @Test
+    void buildContractInputSchema_preservesOptionalParameters() {
+        var schema = McpUtil.buildContractInputSchema(java.util.List.of(
+                new io.aura.contract.ApiParameter("query", "String", "query", true, null),
+                new io.aura.contract.ApiParameter("page", "int", "query", false, null)));
+
+        @SuppressWarnings("unchecked")
+        List<String> required = (List<String>) schema.get("required");
+        assertThat(required).containsExactly("query");
+    }
 }

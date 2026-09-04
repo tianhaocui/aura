@@ -251,4 +251,21 @@ class McpToolBuilderTest {
         assertThatThrownBy(() -> tool.params().add(null))
                 .isInstanceOf(UnsupportedOperationException.class);
     }
+
+    @Test
+    void optionalParametersAreOmittedFromRequiredSchema() {
+        McpRouter router = new McpRouter();
+        router.tool("search", "Search")
+                .param("query", String.class, "Query")
+                .optional("page", int.class, "Page")
+                .handler(ctx -> ctx.getString("query"));
+
+        @SuppressWarnings("unchecked")
+        java.util.Map<String, Object> schema = router.buildSchema();
+        @SuppressWarnings("unchecked")
+        java.util.Map<String, Object> tool = ((java.util.List<java.util.Map<String, Object>>) schema.get("tools")).get(0);
+        @SuppressWarnings("unchecked")
+        java.util.Map<String, Object> input = (java.util.Map<String, Object>) tool.get("inputSchema");
+        assertThat((java.util.List<String>) input.get("required")).containsExactly("query");
+    }
 }

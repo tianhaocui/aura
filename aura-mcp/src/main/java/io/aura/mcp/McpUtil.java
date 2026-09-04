@@ -23,16 +23,28 @@ public final class McpUtil {
     }
 
     public static Map<String, Object> buildInputSchema(List<ParamInfo> params) {
+        List<io.aura.contract.ApiParameter> contractParams = new ArrayList<>();
+        for (ParamInfo p : params) {
+            contractParams.add(new io.aura.contract.ApiParameter(p.name(), p.type(), "tool", true, p.description()));
+        }
+        return buildInputSchemaFromContract(contractParams);
+    }
+
+    static Map<String, Object> buildContractInputSchema(List<io.aura.contract.ApiParameter> params) {
+        return buildInputSchemaFromContract(params);
+    }
+
+    private static Map<String, Object> buildInputSchemaFromContract(List<io.aura.contract.ApiParameter> params) {
         Map<String, Object> schema = new LinkedHashMap<>();
         schema.put("type", "object");
         Map<String, Object> properties = new LinkedHashMap<>();
         List<String> required = new ArrayList<>();
-        for (ParamInfo p : params) {
+        for (io.aura.contract.ApiParameter p : params) {
             var prop = new LinkedHashMap<String, Object>();
             prop.put("type", jsonType(p.type()));
             if (p.description() != null) prop.put("description", p.description());
             properties.put(p.name(), prop);
-            required.add(p.name());
+            if (p.required()) required.add(p.name());
         }
         schema.put("properties", properties);
         if (!required.isEmpty()) schema.put("required", required);

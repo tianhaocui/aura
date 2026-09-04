@@ -176,14 +176,18 @@ public class McpBridge {
     }
 
     private static Map<String, Object> buildInputSchema(JSONArray params) {
-        List<McpUtil.ParamInfo> list = new ArrayList<>();
+        List<io.aura.contract.ApiParameter> list = new ArrayList<>();
         if (params != null) {
             for (int i = 0; i < params.size(); i++) {
                 JSONObject p = params.getJSONObject(i);
-                list.add(new McpUtil.ParamInfo(p.getString("name"), p.getString("type"), p.getString("description")));
+                String source = p.getString("source");
+                if (source == null || source.isBlank()) source = "tool";
+                Boolean required = p.getBoolean("required");
+                list.add(new io.aura.contract.ApiParameter(p.getString("name"), p.getString("type"), source,
+                        required == null || required, p.getString("description")));
             }
         }
-        return McpUtil.buildInputSchema(list);
+        return McpUtil.buildContractInputSchema(list);
     }
 
     public static void main(String[] args) throws Exception {
