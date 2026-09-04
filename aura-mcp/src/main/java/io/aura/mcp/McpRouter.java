@@ -4,6 +4,7 @@ import io.aura.contract.McpRouterSpec;
 
 import java.lang.reflect.Method;
 import java.util.*;
+import java.util.function.BiPredicate;
 
 public class McpRouter implements McpRouterSpec {
 
@@ -118,6 +119,7 @@ public class McpRouter implements McpRouterSpec {
             var entry = new LinkedHashMap<String, Object>();
             entry.put("name", tool.name());
             if (tool.description() != null) entry.put("description", tool.description());
+            if (tool.permission() != null) entry.put("x-aura-permission", tool.permission());
             entry.put("inputSchema", buildInputSchema(tool.params()));
             toolList.add(entry);
         }
@@ -125,10 +127,24 @@ public class McpRouter implements McpRouterSpec {
     }
 
     public Object invoke(String toolName, Map<String, Object> args) throws Exception {
+        return invoke(toolName, args, null, null);
+    }
+
+    /** Invokes a tool with an explicit authenticated identity and permission checker. */
+    public Object invoke(String toolName, Map<String, Object> args, String userId,
+                         BiPredicate<String, String> authorizer) throws Exception {
         McpTool tool = tools.stream()
                 .filter(t -> t.name().equals(toolName))
                 .findFirst()
                 .orElseThrow(() -> new IllegalArgumentException("Tool not found: " + toolName));
+        if (tool.permission() != null) {
+            if (authorizer == null) {
+                throw new SecurityException("MCP authorization is not configured for tool " + toolName);
+            }
+            if (userId == null || userId.isBlank() || !authorizer.test(userId, tool.permission())) {
+                throw new SecurityException("MCP permission denied for tool " + toolName);
+            }
+        }
         McpContext ctx = new McpContext(args, collectMappings(tool));
         return tool.handler().handle(ctx);
     }

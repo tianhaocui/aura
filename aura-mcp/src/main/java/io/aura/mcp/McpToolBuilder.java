@@ -12,6 +12,7 @@ public class McpToolBuilder {
     private final List<McpParam> params = new ArrayList<>();
     private final Map<String, Map<String, Object>> mappings = new LinkedHashMap<>();
     private McpHandler handler;
+    private String permission;
     private final McpRouter router;
 
     McpToolBuilder(McpRouter router, String name, String description) {
@@ -51,8 +52,17 @@ public class McpToolBuilder {
         return this;
     }
 
+    /** Requires the caller to hold this permission before the tool can run. */
+    public McpToolBuilder permission(String permission) {
+        if (permission == null || permission.isBlank()) {
+            throw new IllegalArgumentException("permission must not be blank");
+        }
+        this.permission = permission.trim();
+        return this;
+    }
+
     McpTool build() {
-        return new McpTool(name, description, List.copyOf(params), handler);
+        return new McpTool(name, description, List.copyOf(params), handler, permission);
     }
 
     Map<String, Map<String, Object>> mappings() {

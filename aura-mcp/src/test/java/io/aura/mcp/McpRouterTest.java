@@ -82,6 +82,27 @@ class McpRouterTest {
     }
 
     @Test
+    void permissionedToolFailsClosedAndAcceptsExplicitAuthorizedIdentity() throws Exception {
+        McpRouter mcp = new McpRouter();
+        mcp.tool("delete_order", "Delete order")
+                .param("id", long.class, "Order ID")
+                .permission("orders.delete")
+                .handler(ctx -> "deleted-" + ctx.getLong("id"));
+
+        assertThatThrownBy(() -> mcp.invoke("delete_order", Map.of("id", 7L)))
+                .isInstanceOf(SecurityException.class);
+        assertThatThrownBy(() -> mcp.invoke("delete_order", Map.of("id", 7L), "user-1",
+                (user, permission) -> false)).isInstanceOf(SecurityException.class);
+        assertThat(mcp.invoke("delete_order", Map.of("id", 7L), "user-1",
+                (user, permission) -> user.equals("user-1") && permission.equals("orders.delete")))
+                .isEqualTo("deleted-7");
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> tool = ((List<Map<String, Object>>) mcp.buildSchema().get("tools")).get(0);
+        assertThat(tool).containsEntry("x-aura-permission", "orders.delete");
+    }
+
+    @Test
     void tool_enumParam_schemaContainsEnumValues() {
         McpRouter mcp = new McpRouter();
         mcp.tool("query", "查询")

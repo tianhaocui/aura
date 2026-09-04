@@ -50,6 +50,23 @@ Aura.create()
     .start(args);
 ```
 
+Declare a permission for tools that mutate protected state. Permissioned tools
+fail closed when invoked without an authenticated identity:
+
+```java
+mcp.tool("delete_order", "Delete an order")
+   .param("id", long.class, "Order ID")
+   .permission("orders.delete")
+   .handler(ctx -> orderService.delete(ctx.getLong("id")));
+
+mcp.invoke("delete_order", args, userId,
+        (user, permission) -> acl.allows(user, permission));
+```
+
+The generated tool schema includes `x-aura-permission`. The four-argument
+`invoke` overload is the authenticated transport boundary; the two-argument
+overload does not bypass a declared permission.
+
 When McpRouter is provided, MCP runs in-process (no HTTP roundtrip). Only registered tools are exposed.
 
 ### Enum Auto-Mapping

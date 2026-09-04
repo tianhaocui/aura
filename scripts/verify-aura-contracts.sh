@@ -67,5 +67,9 @@ if rg -n 'BodyHandlers\.ofString\(' \
 fi
 rg -q 'JSON\.toJSONString\(validatedAppUrl\.toString\(\)\)' \
   "$repo_root/aura-mcp/src/main/java/io/aura/mcp/McpPackager.java"
+rg -q 'x-aura-permission' \
+  "$repo_root/aura-mcp/src/main/java/io/aura/mcp/McpRouter.java"
+rg -q 'permission\(String permission\)' \
+  "$repo_root/aura-mcp/src/main/java/io/aura/mcp/McpToolBuilder.java"
 
 echo "Aura module and documentation contracts passed (version $root_version)"
