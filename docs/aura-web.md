@@ -115,6 +115,8 @@ Request/response wrapper passed to handlers.
 | `file(String field)` | UploadedFile | Multipart file upload field |
 | `method()` | String | HTTP method (GET, POST, ...) |
 | `url()` | String | Request URI |
+| `cancellationToken()` | CancellationToken | Cooperative cancellation for timeout, disconnect, and shutdown |
+| `isCancelled()` | boolean | Whether the request cancellation signal has fired |
 | `abort()` | void | Skip handler execution (before-middleware only) |
 | `isAborted()` | boolean | Whether abort() was called |
 | `set(String key, Object value)` | void | Store named attribute |
@@ -137,6 +139,18 @@ Request/response wrapper passed to handlers.
 **Note**: `ctx.json(row)` works directly — Row extends LinkedHashMap and serializes as a JSON object. No manual Map conversion needed. Use `.select("col1, col2")` in the query to control which fields appear in the output.
 
 **Security**: `redirect(url)` throws `IllegalArgumentException` if the URL contains `\r` or `\n` (CRLF injection prevention).
+
+### External HTTP calls
+
+`SnapshotHttpClient` only accepts relative paths within its configured HTTP(S)
+base URI. Redirects are disabled, response bodies have a bounded default size,
+and requests have an absolute timeout. For a downstream call started by a
+handler, pass the request token so client disconnects and timeouts cancel the
+request and response-body read:
+
+```java
+var user = http.get("/users/" + id, User.class, ctx.cancellationToken());
+```
 
 ---
 

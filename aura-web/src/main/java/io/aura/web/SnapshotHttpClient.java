@@ -1,6 +1,7 @@
 package io.aura.web;
 
 import com.alibaba.fastjson2.JSON;
+import io.aura.contract.CancellationToken;
 import io.aura.snapshot.ExceptionSnapshot;
 import io.aura.snapshot.Snapshot;
 import io.aura.snapshot.SnapshotScope;
@@ -18,6 +19,8 @@ import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.CancellationException;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
@@ -82,14 +85,30 @@ public class SnapshotHttpClient {
     }
 
     public <T> T get(String path, Class<T> type) {
-        return send("GET", path, null, Map.of(), type);
+        return get(path, type, new CancellationToken());
+    }
+
+    public <T> T get(String path, Class<T> type, CancellationToken cancellationToken) {
+        return send("GET", path, null, Map.of(), type, cancellationToken);
     }
 
     public <T> T post(String path, Object body, Class<T> type) {
-        return send("POST", path, body, Map.of("Content-Type", "application/json"), type);
+        return post(path, body, type, new CancellationToken());
+    }
+
+    public <T> T post(String path, Object body, Class<T> type, CancellationToken cancellationToken) {
+        return send("POST", path, body, Map.of("Content-Type", "application/json"), type, cancellationToken);
     }
 
     public <T> T send(String method, String path, Object body, Map<String, String> headers, Class<T> type) {
+        return send(method, path, body, headers, type, new CancellationToken());
+    }
+
+    /** Sends an external request that is cancelled when the supplied token is cancelled. */
+    public <T> T send(String method, String path, Object body, Map<String, String> headers,
+                      Class<T> type, CancellationToken cancellationToken) {
+        if (cancellationToken == null) throw new IllegalArgumentException("cancellationToken is required");
+        cancellationToken.throwIfCancelled();
         URI uri = resolvePath(path);
         SnapshotScope scope = Snapshot.currentOrNull();
         if (scope != null && scope.replaying()) {
@@ -123,10 +142,12 @@ public class SnapshotHttpClient {
         long t0 = System.currentTimeMillis();
         long deadlineNanos = System.nanoTime() + requestTimeout.toNanos();
         try {
-            HttpResponse<InputStream> response = client.send(builder.build(), HttpResponse.BodyHandlers.ofInputStream());
+            CompletableFuture<HttpResponse<InputStream>> request = client.sendAsync(
+                    builder.build(), HttpResponse.BodyHandlers.ofInputStream());
+            HttpResponse<InputStream> response = await(request, deadlineNanos, cancellationToken);
             String responseBody;
             try (InputStream input = response.body()) {
-                responseBody = readBoundedBeforeDeadline(input, maxResponseBodySize, deadlineNanos);
+                responseBody = readBoundedBeforeDeadline(input, maxResponseBodySize, deadlineNanos, cancellationToken);
             }
             long elapsed = System.currentTimeMillis() - t0;
             if (scope != null) {
@@ -150,6 +171,8 @@ public class SnapshotHttpClient {
             }
             return convert(responseBody, type);
         } catch (ApiException e) {
+            throw e;
+        } catch (CancellationException e) {
             throw e;
         } catch (TimeoutException e) {
             recordFailedCall(scope, method, uri, body, 504, name.toUpperCase() + "_TIMEOUT",
@@ -246,12 +269,13 @@ public class SnapshotHttpClient {
         return "https".equalsIgnoreCase(uri.getScheme()) ? 443 : 80;
     }
 
-    private static String readBounded(InputStream input, int maxBytes) throws IOException {
+    private static String readBounded(InputStream input, int maxBytes, CancellationToken cancellationToken) throws IOException {
         ByteArrayOutputStream output = new ByteArrayOutputStream(Math.min(maxBytes, 8192));
         byte[] buffer = new byte[8192];
         long total = 0;
         int read;
         while ((read = input.read(buffer)) != -1) {
+            cancellationToken.throwIfCancelled();
             if (read > (long) maxBytes - total) throw new ResponseTooLargeException();
             total += read;
             output.write(buffer, 0, read);
@@ -259,26 +283,17 @@ public class SnapshotHttpClient {
         return output.toString(StandardCharsets.UTF_8);
     }
 
-    private static String readBoundedBeforeDeadline(InputStream input, int maxBytes, long deadlineNanos)
-            throws IOException, TimeoutException {
+    private static String readBoundedBeforeDeadline(InputStream input, int maxBytes, long deadlineNanos,
+                                                    CancellationToken cancellationToken)
+            throws IOException, InterruptedException, TimeoutException {
         Future<String> readTask;
         try {
-            readTask = RESPONSE_BODY_READERS.submit(() -> readBounded(input, maxBytes));
+            readTask = RESPONSE_BODY_READERS.submit(() -> readBounded(input, maxBytes, cancellationToken));
         } catch (RejectedExecutionException e) {
             throw new IOException("External response reader capacity is exhausted", e);
         }
         try {
-            long remainingNanos = deadlineNanos - System.nanoTime();
-            if (remainingNanos <= 0) throw new TimeoutException();
-            return readTask.get(remainingNanos, TimeUnit.NANOSECONDS);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new IOException("Interrupted while reading external response", e);
-        } catch (ExecutionException e) {
-            Throwable cause = e.getCause();
-            if (cause instanceof IOException io) throw io;
-            if (cause instanceof RuntimeException runtime) throw runtime;
-            throw new IOException("Could not read external response", cause);
+            return await(readTask, deadlineNanos, cancellationToken);
         } catch (TimeoutException e) {
             readTask.cancel(true);
             try {
@@ -287,6 +302,38 @@ public class SnapshotHttpClient {
                 // Closing the stream is best effort after the deadline expires.
             }
             throw e;
+        } catch (CancellationException e) {
+            readTask.cancel(true);
+            try { input.close(); } catch (IOException ignored) { }
+            throw e;
+        }
+    }
+
+    private static <T> T await(Future<T> future, long deadlineNanos, CancellationToken cancellationToken)
+            throws IOException, InterruptedException, TimeoutException {
+        while (true) {
+            if (cancellationToken.isCancelled()) {
+                future.cancel(true);
+                throw new CancellationException("External request cancelled");
+            }
+            long remainingNanos = deadlineNanos - System.nanoTime();
+            if (remainingNanos <= 0) {
+                future.cancel(true);
+                throw new TimeoutException();
+            }
+            try {
+                return future.get(Math.min(remainingNanos, TimeUnit.MILLISECONDS.toNanos(100)), TimeUnit.NANOSECONDS);
+            } catch (TimeoutException ignored) {
+                // Re-check cancellation and absolute deadline.
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+                throw interrupted;
+            } catch (ExecutionException e) {
+                Throwable cause = e.getCause();
+                if (cause instanceof IOException io) throw io;
+                if (cause instanceof RuntimeException runtime) throw runtime;
+                throw new IOException("External request failed", cause);
+            }
         }
     }
 

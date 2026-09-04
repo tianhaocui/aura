@@ -9,6 +9,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import com.sun.net.httpserver.HttpServer;
+import io.aura.contract.CancellationToken;
 
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
@@ -256,6 +257,40 @@ class SnapshotReplayTest {
                 Snapshot.clear();
             }
         } finally {
+            server.stop(0);
+        }
+    }
+
+    @Test
+    void externalCallHonorsCancellationTokenWhileReadingResponse() throws Exception {
+        java.util.concurrent.CountDownLatch responseStarted = new java.util.concurrent.CountDownLatch(1);
+        HttpServer server = HttpServer.create(new InetSocketAddress(0), 0);
+        server.createContext("/cancel", exchange -> {
+            exchange.sendResponseHeaders(200, 1);
+            responseStarted.countDown();
+            try (OutputStream output = exchange.getResponseBody()) {
+                output.flush();
+                Thread.sleep(10_000);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        });
+        server.start();
+        java.util.concurrent.ExecutorService caller = java.util.concurrent.Executors.newSingleThreadExecutor();
+        try {
+            URI base = URI.create("http://localhost:" + server.getAddress().getPort());
+            SnapshotHttpClient client = new SnapshotHttpClient("local", base,
+                    HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(1)).build(),
+                    Duration.ofSeconds(5), 1024);
+            CancellationToken token = new CancellationToken();
+            java.util.concurrent.Future<?> request = caller.submit(() ->
+                    client.get("/cancel", String.class, token));
+            assertThat(responseStarted.await(2, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+            token.cancel();
+            assertThatThrownBy(() -> request.get(2, java.util.concurrent.TimeUnit.SECONDS))
+                    .hasCauseInstanceOf(java.util.concurrent.CancellationException.class);
+        } finally {
+            caller.shutdownNow();
             server.stop(0);
         }
     }
