@@ -47,9 +47,9 @@ class RuntimeFoundationTest {
 
     @Test void lifecycleStopIsIdempotentAndTerminal() {
         Aura app = Aura.create();
-        assertThat(app.lifecycle()).isEqualTo(Aura.Lifecycle.NEW);
+        assertThat(app.state()).isEqualTo(io.aura.contract.RuntimeState.NEW);
         app.stop(); app.stop();
-        assertThat(app.lifecycle()).isEqualTo(Aura.Lifecycle.STOPPED);
+        assertThat(app.state()).isEqualTo(io.aura.contract.RuntimeState.STOPPED);
         assertThatThrownBy(app::start).isInstanceOf(IllegalStateException.class);
     }
 

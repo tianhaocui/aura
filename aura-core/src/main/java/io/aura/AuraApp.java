@@ -62,7 +62,6 @@ public final class AuraApp implements AutoCloseable {
     public void stop() { runtime.stop(); }
     @Override public void close() { stop(); }
 
-    public Aura.Lifecycle lifecycle() { return Aura.Lifecycle.valueOf(runtime.state().name()); }
     public io.aura.contract.RuntimeState state() { return runtime.state(); }
     /** Stable runtime view for adapters; it does not expose legacy Builder APIs. */
     public AuraRuntime runtimeView() { return runtime; }
