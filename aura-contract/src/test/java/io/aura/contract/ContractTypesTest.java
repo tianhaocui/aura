@@ -96,6 +96,11 @@ class ContractTypesTest {
                 .hasMessageContaining("already registered");
     }
 
+    @Test
+    void optionalMcpIntegrationUsesTheCoreFreeContract() {
+        assertThat(McpRouterSpec.class.getPackageName()).isEqualTo("io.aura.contract");
+    }
+
     private static final class SetSupport {
         private static java.util.Set<ModuleRequirement> copy(List<ModuleRequirement> values) {
             return new java.util.LinkedHashSet<>(values);

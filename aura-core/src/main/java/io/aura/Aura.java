@@ -55,7 +55,7 @@ public class Aura {
     private JsonConfig jsonConfig = new JsonConfig();
     private int mcpPort = -1;
     private java.io.PrintStream mcpStdout;
-    private McpRouterSpec mcpRouter;
+    private io.aura.contract.McpRouterSpec mcpRouter;
     private java.util.function.Function<io.aura.web.BaseContext, String> authFunction;
     private java.util.function.BiPredicate<String, String> permissionChecker;
     private JwtSupport jwtSupport;
@@ -456,7 +456,7 @@ public class Aura {
         return this;
     }
 
-    public Aura mcp(McpRouterSpec mcpRouter) {
+    public Aura mcp(io.aura.contract.McpRouterSpec mcpRouter) {
         this.mcpRouter = mcpRouter;
         return this;
     }
@@ -805,7 +805,7 @@ public class Aura {
     public JsonConfig jsonConfig() { return jsonConfig; }
     public int mcpPort() { return mcpPort; }
     public java.io.PrintStream mcpStdout() { return mcpStdout; }
-    public McpRouterSpec mcpRouter() { return mcpRouter; }
+    public io.aura.contract.McpRouterSpec mcpRouter() { return mcpRouter; }
 
     /** Installs module contributions without starting external resources; used by TestClient. */
     public void prepareModules() {
@@ -995,7 +995,7 @@ public class Aura {
         @Override public void routes(Consumer<io.aura.web.BaseRouter> routes) { moduleRouteConfigs.add(routes); }
         @Override public void before(io.aura.web.BaseHandler handler) { Aura.this.before(handler); }
         @Override public void after(io.aura.web.BaseHandler handler) { Aura.this.after(handler); }
-        @Override public void mcp(McpRouterSpec router) { Aura.this.mcp(router); }
+        @Override public void mcp(io.aura.contract.McpRouterSpec router) { Aura.this.mcp(router); }
         @Override public void healthCheck(io.aura.contract.HealthCheck healthCheck) { Aura.this.healthCheck(healthCheck); }
         @Override public io.aura.contract.PermissionRegistry permissions() { return permissionRegistry; }
         @Override public String property(String key) {

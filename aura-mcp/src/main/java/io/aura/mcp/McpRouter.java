@@ -1,6 +1,6 @@
 package io.aura.mcp;
 
-import io.aura.McpRouterSpec;
+import io.aura.contract.McpRouterSpec;
 
 import java.lang.reflect.Method;
 import java.util.*;
