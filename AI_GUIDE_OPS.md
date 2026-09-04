@@ -32,7 +32,7 @@ f.contentType() // MIME type
 f.size()        // bytes
 
 // Increase limit for large files (default 10MB):
-Aura.create().maxBodySize(500 * 1024 * 1024L)
+AuraApp.create(new AuraConfig().maxBodySize(500 * 1024 * 1024L))
 ```
 
 ## File Download

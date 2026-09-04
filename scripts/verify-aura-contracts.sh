@@ -56,6 +56,11 @@ if rg -n '0\.6\.1|Aura\.create\(|\.plugin\(' "$repo_root/AI_GUIDE.md"; then
   exit 1
 fi
 rg -q 'AuraApp\.create\(\)' "$repo_root/AI_GUIDE.md"
+if rg -n '0\.6\.1|Aura\.create\(|\.plugin\(' \
+    "$repo_root/AI_GUIDE_DB.md" "$repo_root/AI_GUIDE_MCP.md" "$repo_root/AI_GUIDE_OPS.md"; then
+  echo "legacy API found in canonical AI extension guides" >&2
+  exit 1
+fi
 
 if rg -n 'context\.routes\(' \
     "$repo_root/aura-"*/src/main "$repo_root/examples"; then

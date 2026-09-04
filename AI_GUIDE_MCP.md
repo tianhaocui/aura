@@ -3,8 +3,8 @@
 ## MCP (AI Agent Tools)
 
 ```java
-// All routes exposed as MCP tools (simple mode)
-Aura.create().mcp(true).start(args);
+// Install MCP explicitly in Aura 1.0
+AuraApp.create().use(McpModule.create(router)).start("--mcp-stdio");
 
 // Selective exposure via McpRouter (recommended)
 McpRouter mcp = new McpRouter();
@@ -35,7 +35,7 @@ mcp.tool("order_detail", "Full order info")
        return Map.of("order", order, "user", userService.get(order.userId()));
    });
 
-Aura.create().mcp(mcp).start(args);
+AuraApp.create().use(McpModule.create(mcp)).start("--mcp-stdio");
 // Run: java -jar app.jar --mcp-stdio
 ```
 
