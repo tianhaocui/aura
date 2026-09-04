@@ -1,7 +1,7 @@
 package io.aura;
 
 public interface McpStarter {
-    void start(Aura app);
-    void startStdio(Aura app);
+    void start(AuraMcpRuntime app);
+    void startStdio(AuraMcpRuntime app);
     void stop();
 }

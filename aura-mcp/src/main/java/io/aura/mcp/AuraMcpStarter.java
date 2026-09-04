@@ -2,7 +2,7 @@ package io.aura.mcp;
 
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONObject;
-import io.aura.Aura;
+import io.aura.AuraMcpRuntime;
 import io.aura.McpStarter;
 
 import java.io.*;
@@ -17,11 +17,11 @@ public class AuraMcpStarter implements McpStarter {
     private static final Logger log = LoggerFactory.getLogger(AuraMcpStarter.class);
 
     @Override
-    public void start(Aura app) {
+    public void start(AuraMcpRuntime app) {
     }
 
     @Override
-    public void startStdio(Aura app) {
+    public void startStdio(AuraMcpRuntime app) {
         try {
             PrintStream out = app.mcpStdout() != null ? app.mcpStdout() : System.out;
             if (app.mcpRouter() instanceof McpRouter mcpRouter) {

@@ -19,7 +19,7 @@ import java.util.function.Function;
  * behind the runtime boundary. A Web adapter must not depend on the concrete
  * {@link Aura} builder implementation.</p>
  */
-public interface AuraWebRuntime extends AuraRuntime {
+public interface AuraWebRuntime extends AuraMcpRuntime {
     int port();
     String env();
     int workers();
@@ -41,9 +41,6 @@ public interface AuraWebRuntime extends AuraRuntime {
     boolean gzip();
     int gzipMinSize();
     JsonConfig jsonConfig();
-    int mcpPort();
-    PrintStream mcpStdout();
-    McpRouterSpec mcpRouter();
     Set<String> allowedHosts();
     boolean securityHeaders();
     boolean openApiEnabled();
