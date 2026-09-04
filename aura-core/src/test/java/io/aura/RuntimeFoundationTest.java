@@ -66,6 +66,16 @@ class RuntimeFoundationTest {
         assertThat(app.healthStatus()).isEqualTo(HealthStatus.DOWN);
     }
 
+    @Test void modularRuntimeExposesHealthChecksThroughStableWebContract() {
+        AuraApp app = AuraApp.create()
+                .healthCheck(() -> HealthStatus.UP)
+                .healthCheck(() -> { throw new IllegalStateException("secret"); });
+        AuraWebRuntime runtime = (AuraWebRuntime) app.runtimeView();
+
+        assertThat(runtime.healthChecks()).hasSize(2);
+        assertThat(runtime.healthStatus()).isEqualTo(HealthStatus.DOWN);
+    }
+
     @Test void optionalRuntimeControlsDefaultOffAndTlsFailsFast() {
         Aura app = Aura.create();
         assertThat(app.rateLimitPerSecond()).isZero();
@@ -91,5 +101,34 @@ class RuntimeFoundationTest {
         assertThat(runtime.accessLogFormat()).isEqualTo("json");
         assertThat(runtime.gzip()).isTrue();
         assertThat(runtime.gzipMinSize()).isEqualTo(2048);
+    }
+
+    @Test void modularRuntimeFreezesBuilderAndNestedConfiguration() {
+        AuraConfig source = new AuraConfig()
+                .port(8081)
+                .cors(cors -> cors.origins("https://client.example").credentials(true))
+                .jsonConfig(json -> json.dateFormat("yyyy-MM-dd"))
+                .snapshot(snapshot -> snapshot.maxBodySize(4096));
+        AuraApp app = AuraApp.create(source);
+
+        source.port(9090);
+        source.corsConfig().origins("https://attacker.example");
+        source.jsonConfig().dateFormat("MM-dd");
+        source.snapshotOptions().maxBodySize(1);
+
+        assertThat(app.config().port()).isEqualTo(8081);
+        assertThat(app.config().corsConfig().resolveOrigin("https://client.example"))
+                .isEqualTo("https://client.example");
+        assertThat(app.config().jsonConfig().dateFormat()).isEqualTo("yyyy-MM-dd");
+        assertThat(app.config().snapshotOptions().maxBodySize()).isEqualTo(4096);
+
+        app.config().corsConfig().origins("https://another.example");
+        app.config().jsonConfig().dateFormat("MM-dd");
+        app.config().snapshotOptions().maxBodySize(2);
+
+        assertThat(app.config().corsConfig().resolveOrigin("https://client.example"))
+                .isEqualTo("https://client.example");
+        assertThat(app.config().jsonConfig().dateFormat()).isEqualTo("yyyy-MM-dd");
+        assertThat(app.config().snapshotOptions().maxBodySize()).isEqualTo(4096);
     }
 }

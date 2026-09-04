@@ -48,6 +48,8 @@ public interface AuraWebRuntime extends AuraMcpRuntime {
     int rateLimitPerSecond();
     String publicOrigin();
     boolean isShuttingDown();
+    List<io.aura.contract.HealthCheck> healthChecks();
+    io.aura.contract.HealthStatus healthStatus();
     void emit(AuraEvent event);
     String prop(String key);
     <T> T getBean(Class<T> type);

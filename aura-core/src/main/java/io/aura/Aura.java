@@ -107,7 +107,8 @@ public class Aura implements AuraWebRuntime {
     }
 
     public static Aura create(AuraConfig config) { return new Aura(config == null ? new AuraConfig() : config, false); }
-    public AuraConfig config() { return config; }
+    /** Returns a detached immutable view; mutate the legacy builder through its fluent methods. */
+    @Override public AuraConfigSnapshot config() { return config.snapshotView(); }
     public Lifecycle lifecycle() { return lifecycle.get(); }
     @Override public io.aura.contract.RuntimeState state() {
         return io.aura.contract.RuntimeState.valueOf(lifecycle.get().name());
@@ -276,10 +277,16 @@ public class Aura implements AuraWebRuntime {
     }
 
     public Aura healthCheck(io.aura.contract.HealthCheck check) { if (check != null) healthChecks.add(check); return this; }
-    public List<io.aura.contract.HealthCheck> healthChecks() { return List.copyOf(healthChecks); }
-    public io.aura.contract.HealthStatus healthStatus() {
+    @Override public List<io.aura.contract.HealthCheck> healthChecks() { return List.copyOf(healthChecks); }
+    @Override public io.aura.contract.HealthStatus healthStatus() {
         if (shuttingDown) return io.aura.contract.HealthStatus.DOWN;
-        for (io.aura.contract.HealthCheck check : healthChecks) try { if (check.check() != io.aura.contract.HealthStatus.UP) return io.aura.contract.HealthStatus.DOWN; } catch (Exception e) { return io.aura.contract.HealthStatus.DOWN; }
+        for (io.aura.contract.HealthCheck check : healthChecks) {
+            try {
+                if (check.check() != io.aura.contract.HealthStatus.UP) return io.aura.contract.HealthStatus.DOWN;
+            } catch (Exception ignored) {
+                return io.aura.contract.HealthStatus.DOWN;
+            }
+        }
         return io.aura.contract.HealthStatus.UP;
     }
     public io.aura.contract.PermissionRegistry permissions() { return permissionRegistry; }

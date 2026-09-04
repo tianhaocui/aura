@@ -10,7 +10,8 @@ import java.util.Optional;
 /** Replaceable 1.0 runtime surface used by AuraApp and adapters. */
 public interface AuraRuntime extends AutoCloseable {
     RuntimeState state();
-    AuraConfig config();
+    /** Immutable configuration captured for this runtime. */
+    AuraConfigSnapshot config();
     AuraRuntime use(AuraModule module);
     AuraRuntime observe(AuraEventListener listener);
     AuraRuntime healthCheck(io.aura.contract.HealthCheck check);

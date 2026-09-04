@@ -17,4 +17,8 @@ public class JsonConfig {
 
     public String dateFormat() { return dateFormat; }
     public boolean writeNulls() { return writeNulls; }
+
+    JsonConfig copy() {
+        return new JsonConfig().dateFormat(dateFormat).writeNulls(writeNulls);
+    }
 }

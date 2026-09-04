@@ -155,4 +155,28 @@ public class SnapshotOptions {
         }
         return this;
     }
+
+    /** Returns a detached copy so runtime snapshots cannot be mutated through this builder. */
+    public SnapshotOptions copy() {
+        SnapshotOptions copy = new SnapshotOptions()
+                .enabled(enabled)
+                .dir(dir)
+                .async(async)
+                .queueSize(queueSize)
+                .bodyMode(bodyMode)
+                .maxBodySize(maxBodySize)
+                .maxExternalBodySize(maxExternalBodySize)
+                .maxStackTraceSize(maxStackTraceSize)
+                .maxSnapshotFileSize(maxSnapshotFileSize)
+                .maxStorageSize(maxStorageSize)
+                .maxSnapshots(maxSnapshots)
+                .retentionTtl(retentionTtl)
+                .sampleRate(sampleRate)
+                .onDrop(dropCallback)
+                .onWriteFailure(writeFailureCallback)
+                .envAllowlist(envAllowlist.toArray(String[]::new));
+        redactHeaders.forEach(copy::redactHeader);
+        redactFields.forEach(copy::redactField);
+        return copy;
+    }
 }

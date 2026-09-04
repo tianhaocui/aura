@@ -47,4 +47,11 @@ public class CorsConfig {
 
     /** Wildcard origins must never be emitted with credentialed CORS responses. */
     public boolean hasWildcardOrigin() { return origins.contains("*"); }
+
+    CorsConfig copy() {
+        CorsConfig copy = new CorsConfig().origins(origins.toArray(String[]::new));
+        copy.headers = headers;
+        copy.credentials = credentials;
+        return copy;
+    }
 }

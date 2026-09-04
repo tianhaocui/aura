@@ -69,8 +69,15 @@ AuraConfig config = new AuraConfig()
 AuraApp.create(config).use(new OrderModule()).start();
 ```
 
+`AuraConfig` is the build-time fluent object. Once an application is created,
+`app.config()` and `runtime.config()` expose an immutable `AuraConfigSnapshot`;
+changing the original builder or a returned nested CORS/JSON/Snapshot object
+does not change the runtime.
+
 Inside a route group, use `Aura.requirePermission("orders.read")` after `Aura.requireAuth()`.
 - `TestClient.of(app)` runs module installation but does not start external resources, so module routes can be tested in memory.
+- `healthCheck(...)` registrations are available through `AuraWebRuntime.healthChecks()` and the
+  fail-closed `healthStatus()` aggregate for readiness adapters.
 - For application-level capability lookup, call `app.prepare()` followed by `app.find(Type.class)` or `app.require(Type.class)`; use `app.runtimeView()` when an adapter needs the stable runtime contract.
 - `aura-db` provides `DatabaseModule.create(db)`. A business module can declare `requires("db")` and obtain the same `Db` instance with `context.require(Db.class)`.
 - New applications should use `AuraApp`; the older `Aura` builder is an implementation detail and is not the recommended module authoring API.

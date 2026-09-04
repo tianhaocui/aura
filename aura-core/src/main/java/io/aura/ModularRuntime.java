@@ -28,7 +28,7 @@ import java.util.function.Function;
  * and lifecycle state; the legacy Aura builder is not part of this runtime.
  */
 final class ModularRuntime implements AuraWebRuntime {
-    private final AuraConfig config;
+    private final AuraConfigSnapshot config;
     private final Map<String, String> properties = new ConcurrentHashMap<>();
     private final Map<Class<?>, Object> registry = new ConcurrentHashMap<>();
     private final Map<String, Object> namedRegistry = new ConcurrentHashMap<>();
@@ -41,8 +41,6 @@ final class ModularRuntime implements AuraWebRuntime {
     private final List<BaseHandler> afterHandlers = new CopyOnWriteArrayList<>();
     private final Map<Class<? extends Exception>, BaseExceptionHandler<?>> exceptionHandlers = new ConcurrentHashMap<>();
     private final PermissionRegistry permissions = new PermissionRegistry();
-    private final SnapshotOptions snapshotOptions;
-    private final JsonConfig jsonConfig;
     private final ModuleManager moduleManager = new ModuleManager();
     private final AtomicReference<RuntimeState> state = new AtomicReference<>(RuntimeState.NEW);
     private final AtomicBoolean shuttingDown = new AtomicBoolean();
@@ -57,15 +55,12 @@ final class ModularRuntime implements AuraWebRuntime {
     private volatile Thread keepAliveThread;
 
     ModularRuntime(AuraConfig source) {
-        this.config = source == null ? new AuraConfig() : source;
-        this.config.validate();
-        this.snapshotOptions = config.snapshotOptions();
-        this.jsonConfig = config.jsonConfig();
+        this.config = AuraConfigSnapshot.from(source);
         registry.put(ModularRuntime.class, this);
     }
 
     @Override public RuntimeState state() { return state.get(); }
-    @Override public AuraConfig config() { return config; }
+    @Override public AuraConfigSnapshot config() { return config; }
     @Override public AuraRuntime use(AuraModule module) { moduleManager.add(module); return this; }
     @Override public AuraRuntime observe(AuraEventListener listener) {
         if (listener == null) throw new IllegalArgumentException("event listener must not be null");
@@ -124,7 +119,6 @@ final class ModularRuntime implements AuraWebRuntime {
         }
         if (!state.compareAndSet(RuntimeState.NEW, RuntimeState.STARTING)) return;
         try {
-            config.validate();
             moduleManager.install(this::moduleContext, true);
             StartupCheck.checkParameterNames(services);
             starter = java.util.ServiceLoader.load(AuraStarter.class).findFirst()
@@ -188,7 +182,7 @@ final class ModularRuntime implements AuraWebRuntime {
     @Override public int requestTimeout() { return config.requestTimeout(); }
     @Override public boolean gzip() { return config.gzip(); }
     @Override public int gzipMinSize() { return config.gzipMinSize(); }
-    @Override public JsonConfig jsonConfig() { return jsonConfig; }
+    @Override public JsonConfig jsonConfig() { return config.jsonConfig(); }
     @Override public int mcpPort() { return mcpPort; }
     @Override public PrintStream mcpStdout() { return mcpStdout; }
     @Override public McpRouterSpec mcpRouter() { return mcpRouter != null ? mcpRouter : getBean(McpRouterSpec.class); }
@@ -199,6 +193,18 @@ final class ModularRuntime implements AuraWebRuntime {
     @Override public int rateLimitPerSecond() { return config.rateLimitPerSecond(); }
     @Override public String publicOrigin() { return config.publicOrigin(); }
     @Override public boolean isShuttingDown() { return shuttingDown.get(); }
+    @Override public List<io.aura.contract.HealthCheck> healthChecks() { return List.copyOf(healthChecks); }
+    @Override public io.aura.contract.HealthStatus healthStatus() {
+        if (isShuttingDown()) return io.aura.contract.HealthStatus.DOWN;
+        for (io.aura.contract.HealthCheck check : healthChecks) {
+            try {
+                if (check.check() != io.aura.contract.HealthStatus.UP) return io.aura.contract.HealthStatus.DOWN;
+            } catch (Exception ignored) {
+                return io.aura.contract.HealthStatus.DOWN;
+            }
+        }
+        return io.aura.contract.HealthStatus.UP;
+    }
     @Override public void emit(AuraEvent event) { for (AuraEventListener listener : eventListeners) try { listener.onEvent(event); } catch (RuntimeException ignored) { } }
     @Override public String prop(String key) {
         String envKey = key.replace('.', '_').replace('-', '_').toUpperCase();
@@ -217,7 +223,7 @@ final class ModularRuntime implements AuraWebRuntime {
     @Override public List<BaseHandler> beforeHandlers() { return List.copyOf(beforeHandlers); }
     @Override public List<BaseHandler> afterHandlers() { return List.copyOf(afterHandlers); }
     @Override public Function<Object, Object> resultWrapper() { return resultWrapper; }
-    @Override public SnapshotOptions snapshotOptions() { return snapshotOptions; }
+    @Override public SnapshotOptions snapshotOptions() { return config.snapshotOptions(); }
 
     private void failStart(Throwable failure) {
         if (keepAliveThread != null) keepAliveThread.interrupt();

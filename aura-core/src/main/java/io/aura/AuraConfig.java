@@ -120,6 +120,9 @@ public final class AuraConfig {
     public JsonConfig jsonConfig() { return jsonConfig; }
     public SnapshotOptions snapshotOptions() { return snapshotOptions; }
 
+    /** Captures a validated, immutable view for a runtime or adapter. */
+    public AuraConfigSnapshot snapshotView() { return AuraConfigSnapshot.from(this); }
+
     /** Validate before binding a listener; zero means disabled only for optional admission controls. */
     public AuraConfig validate() {
         if (port < 0 || port > 65535) throw new IllegalArgumentException("port must be between 0 and 65535");
