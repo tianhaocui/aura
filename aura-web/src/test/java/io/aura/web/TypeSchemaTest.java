@@ -12,6 +12,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class TypeSchemaTest {
     record Address(String city, int zip) { }
     record CreateUser(String name, Address address, boolean active) { }
+    record BatchRequest(List<Address> addresses) { }
 
     @Test
     void recordBodyProducesNestedSchemaWithPrimitiveRequiredFields() {
@@ -42,5 +43,20 @@ class TypeSchemaTest {
         Map<?, ?> bodySchema = (Map<?, ?>) ((Map<?, ?>) content.get("application/json")).get("schema");
         @SuppressWarnings("unchecked") Map<String, Object> properties = (Map<String, Object>) bodySchema.get("properties");
         assertThat(properties.keySet()).contains("name", "address", "active");
+    }
+
+    @Test
+    void genericCollectionBodyIncludesElementSchema() {
+        Map<String, Object> schema = TypeSchema.describe(BatchRequest.class);
+        @SuppressWarnings("unchecked") Map<String, Object> properties =
+                (Map<String, Object>) schema.get("properties");
+        @SuppressWarnings("unchecked") Map<String, Object> addresses =
+                (Map<String, Object>) properties.get("addresses");
+        assertThat(addresses.get("type")).isEqualTo("array");
+        @SuppressWarnings("unchecked") Map<String, Object> item =
+                (Map<String, Object>) addresses.get("items");
+        @SuppressWarnings("unchecked") Map<String, Object> itemProperties =
+                (Map<String, Object>) item.get("properties");
+        assertThat(itemProperties.keySet()).contains("city", "zip");
     }
 }
