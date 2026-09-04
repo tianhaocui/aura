@@ -20,7 +20,6 @@ AiRequest request = AiRequest.builder()
         .model("my-model")
         .timeout(Duration.ofSeconds(20))
         .budget(new AiBudget(8_000, 4_000, 0))
-        .redactor(AiRedactor.none())
         .build();
 
 AiResponse response = client.chat(request);
@@ -46,3 +45,22 @@ client.stream(request, new AiStreamHandler() {
 ```
 
 Provider 可通过 `ServiceLoader` 注册，应用也可以直接传入 provider 实例，便于 TestClient 风格的内存测试。
+
+## OpenAI-compatible provider
+
+`aura-ai` includes an optional provider-neutral HTTP adapter for services that implement the
+OpenAI chat-completions wire format. It uses JDK `HttpClient`; no vendor SDK is required:
+
+```java
+AiProvider provider = OpenAiCompatibleProvider.create(
+        "https://api.example.com/v1/chat/completions",
+        System.getenv("AI_API_KEY"),
+        "my-model");
+AuraApp.create()
+        .use(AiModule.create(provider))
+        .start();
+```
+
+The adapter sends redacted prompts, applies request timeouts, caps response bytes, supports SSE
+`data:` chunks, and reports provider failures with `AiProviderException.code()`. Keep the endpoint
+and key in deployment configuration; they are never included in provider error messages.

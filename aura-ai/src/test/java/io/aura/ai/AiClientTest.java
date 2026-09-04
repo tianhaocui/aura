@@ -75,6 +75,15 @@ class AiClientTest {
     }
 
     @Test
+    void requestsUseDeterministicSensitiveFieldRedactionByDefault() {
+        AiRequest request = new AiRequest("password=hidden token=secret");
+        assertThat(request.redactedPrompt()).isEqualTo("password=<redacted> token=<redacted>");
+
+        AiRequest jsonRequest = new AiRequest("{\"password\":\"hidden\",\"token\":\"secret\"}");
+        assertThat(jsonRequest.redactedPrompt()).isEqualTo("{\"password\":\"<redacted>\",\"token\":\"<redacted>\"}");
+    }
+
+    @Test
     void providerCanEmitMultipleStreamingTokens() throws Exception {
         AiProvider provider = new AiProvider() {
             @Override public AiResponse chat(AiRequest request) { return AiResponse.text("ab"); }

@@ -75,7 +75,7 @@ public final class AiRequest {
         private Duration timeout = Duration.ZERO;
         private CancellationToken cancellationToken = new CancellationToken();
         private AiBudget budget = AiBudget.unlimited();
-        private AiRedactor redactor = AiRedactor.none();
+        private AiRedactor redactor = AiRedactor.defaultRedactor();
 
         public Builder prompt(String value) { this.prompt = value; return this; }
         public Builder systemPrompt(String value) { this.systemPrompt = value; return this; }
