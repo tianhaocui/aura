@@ -2,7 +2,14 @@ package io.aura;
 
 import io.aura.snapshot.SnapshotOptions;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.LinkedHashSet;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.Properties;
 import java.util.Set;
 import java.util.function.Consumer;
 
@@ -10,6 +17,91 @@ import java.util.function.Consumer;
 public final class AuraConfig {
     public static final long DEFAULT_MAX_BODY_SIZE = 10L * 1024 * 1024;
     public static final long DEFAULT_MAX_UPLOAD_SIZE = 1024L * 1024;
+
+    /** Loads framework settings from a properties file before application creation. */
+    public static AuraConfig fromProperties(Path path) throws IOException {
+        if (path == null) throw new IllegalArgumentException("config path must not be null");
+        try (InputStream input = Files.newInputStream(path)) {
+            Properties properties = new Properties();
+            properties.load(input);
+            return fromProperties(properties);
+        }
+    }
+
+    /**
+     * Creates validated framework configuration from properties. Environment and
+     * JVM properties intentionally win over file values so deployments can use
+     * one image with environment-specific settings.
+     */
+    public static AuraConfig fromProperties(Properties properties) {
+        AuraConfig config = new AuraConfig();
+        if (properties == null) return config;
+        properties.forEach((key, value) -> {
+            if (key != null && key.toString().startsWith("aura.") && value != null) {
+                config.property(key.toString(), value.toString());
+            }
+        });
+        config.port(parseInt(value(properties, "aura.port", "AURA_PORT"), config.port, "aura.port"));
+        String env = value(properties, "aura.env", "AURA_ENV");
+        if (env != null) config.env(env);
+        config.workers(parseInt(value(properties, "aura.workers", "AURA_WORKERS"), config.workers, "aura.workers"));
+        config.maxBodySize(parseLong(value(properties, "aura.max-body-size", "AURA_MAX_BODY_SIZE"), config.maxBodySize, "aura.max-body-size"));
+        config.maxUploadSize(parseLong(value(properties, "aura.max-upload-size", "AURA_MAX_UPLOAD_SIZE"), config.maxUploadSize, "aura.max-upload-size"));
+        config.shutdownTimeout(parseInt(value(properties, "aura.shutdown-timeout", "AURA_SHUTDOWN_TIMEOUT"), config.shutdownTimeout, "aura.shutdown-timeout"));
+        config.requestTimeout(parseInt(value(properties, "aura.request-timeout", "AURA_REQUEST_TIMEOUT"), config.requestTimeout, "aura.request-timeout"));
+        config.pageSizeMax(parseInt(value(properties, "aura.page-size-max", "AURA_PAGE_SIZE_MAX"), config.pageSizeMax, "aura.page-size-max"));
+        config.concurrencyLimit(parseInt(value(properties, "aura.concurrency-limit", "AURA_CONCURRENCY_LIMIT"), config.concurrencyLimit, "aura.concurrency-limit"));
+        config.rateLimitPerSecond(parseInt(value(properties, "aura.rate-limit-per-second", "AURA_RATE_LIMIT_PER_SECOND"), config.rateLimitPerSecond, "aura.rate-limit-per-second"));
+
+        String publicOrigin = value(properties, "aura.public-origin", "AURA_PUBLIC_ORIGIN");
+        if (publicOrigin != null) config.publicOrigin(publicOrigin);
+        String allowedHosts = value(properties, "aura.allowed-hosts", "AURA_ALLOWED_HOSTS");
+        if (allowedHosts != null) config.allowedHosts(allowedHosts.split(","));
+        String securityHeaders = value(properties, "aura.security-headers", "AURA_SECURITY_HEADERS");
+        if (securityHeaders != null) config.securityHeaders(parseBoolean(securityHeaders, "aura.security-headers"));
+        String openApi = value(properties, "aura.openapi", "AURA_OPENAPI");
+        if (openApi != null) config.openApi(parseBoolean(openApi, "aura.openapi"));
+        String cors = value(properties, "aura.cors", "AURA_CORS");
+        if (cors != null) config.cors("true".equalsIgnoreCase(cors) ? "*" : cors);
+        String staticFiles = value(properties, "aura.static-files", "AURA_STATIC_FILES");
+        if (staticFiles != null) config.staticFiles(staticFiles);
+        String spa = value(properties, "aura.spa", "AURA_SPA");
+        if (spa != null) config.spa(parseBoolean(spa, "aura.spa"));
+        String accessLog = value(properties, "aura.access-log", "AURA_ACCESS_LOG");
+        if (accessLog != null) config.accessLog("true".equalsIgnoreCase(accessLog) ? "text" :
+                "false".equalsIgnoreCase(accessLog) ? null : accessLog);
+        String gzip = value(properties, "aura.gzip", "AURA_GZIP");
+        if (gzip != null) config.gzip(parseBoolean(gzip, "aura.gzip"));
+        config.gzipMinSize(parseInt(value(properties, "aura.gzip-min-size", "AURA_GZIP_MIN_SIZE"), config.gzipMinSize, "aura.gzip-min-size"));
+        return config.validate();
+    }
+
+    private static String value(Properties properties, String key, String envKey) {
+        String value = System.getenv(envKey);
+        if (value != null && !value.isBlank()) return value.trim();
+        value = System.getProperty(key);
+        if (value != null && !value.isBlank()) return value.trim();
+        value = properties.getProperty(key);
+        return value == null || value.isBlank() ? null : value.trim();
+    }
+
+    private static int parseInt(String value, int fallback, String key) {
+        if (value == null) return fallback;
+        try { return Integer.parseInt(value); }
+        catch (NumberFormatException error) { throw new IllegalArgumentException(key + " must be an integer", error); }
+    }
+
+    private static long parseLong(String value, long fallback, String key) {
+        if (value == null) return fallback;
+        try { return Long.parseLong(value); }
+        catch (NumberFormatException error) { throw new IllegalArgumentException(key + " must be a long integer", error); }
+    }
+
+    private static boolean parseBoolean(String value, String key) {
+        if ("true".equalsIgnoreCase(value)) return true;
+        if ("false".equalsIgnoreCase(value)) return false;
+        throw new IllegalArgumentException(key + " must be true or false");
+    }
 
     private int port = 8080;
     private String env = "dev";
@@ -35,6 +127,7 @@ public final class AuraConfig {
     private String accessLogFormat;
     private boolean gzip;
     private int gzipMinSize = 1024;
+    private final Map<String, String> properties = new LinkedHashMap<>();
     private final JsonConfig jsonConfig = new JsonConfig();
     private final SnapshotOptions snapshotOptions = new SnapshotOptions();
 
@@ -91,6 +184,17 @@ public final class AuraConfig {
         consumer.accept(snapshotOptions);
         return this;
     }
+
+    /** Stores a module-scoped property for resolution by an explicitly installed module. */
+    public AuraConfig property(String key, String value) {
+        if (key == null || !key.startsWith("aura.")) {
+            throw new IllegalArgumentException("AuraConfig properties must use the aura.<module>.* namespace");
+        }
+        if (value == null) properties.remove(key); else properties.put(key, value);
+        return this;
+    }
+
+    Map<String, String> properties() { return Map.copyOf(properties); }
 
     public int port() { return port; }
     public String env() { return env; }

@@ -78,6 +78,11 @@ AuraApp app = AuraApp.create(config)
         .use(new OrderModule());
 ```
 
+For deployment files, use `AuraConfig.fromProperties(java.nio.file.Path.of("aura.properties"))`.
+Framework keys use the `aura.*` namespace; environment variables and JVM system
+properties override file values. Invalid values fail while creating the config,
+before modules or listeners are started.
+
 Call `start()` after all modules and properties are configured. `app.config()`
 returns an immutable `AuraConfigSnapshot`; changing the builder or nested
 configuration afterwards has no effect. Property changes after `prepare()` are

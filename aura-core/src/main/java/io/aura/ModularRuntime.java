@@ -56,6 +56,7 @@ final class ModularRuntime implements AuraWebRuntime {
 
     ModularRuntime(AuraConfig source) {
         this.config = AuraConfigSnapshot.from(source);
+        this.properties.putAll(source.properties());
         registry.put(ModularRuntime.class, this);
     }
 
