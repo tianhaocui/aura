@@ -131,4 +131,18 @@ class RuntimeFoundationTest {
         assertThat(app.config().jsonConfig().dateFormat()).isEqualTo("yyyy-MM-dd");
         assertThat(app.config().snapshotOptions().maxBodySize()).isEqualTo(4096);
     }
+
+    @Test void healthModuleDeclaresTheStandardHealthRoutes() {
+        AuraApp app = AuraApp.create().use(HealthModule.create());
+        app.prepare();
+
+        assertThat(app.modules()).extracting("id").containsExactly("health");
+        assertThat(app.find(ModularRuntime.class)).isPresent();
+        assertThat(((AuraWebRuntime) app.runtimeView()).directRoutes())
+                .extracting(RouteEntry::method, RouteEntry::path)
+                .containsExactlyInAnyOrder(
+                        org.assertj.core.api.Assertions.tuple("GET", "/health/live"),
+                        org.assertj.core.api.Assertions.tuple("GET", "/health/ready"),
+                        org.assertj.core.api.Assertions.tuple("GET", "/health"));
+    }
 }

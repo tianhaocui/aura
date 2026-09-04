@@ -74,6 +74,12 @@ AuraApp.create(config).use(new OrderModule()).start();
 changing the original builder or a returned nested CORS/JSON/Snapshot object
 does not change the runtime.
 
+Use `HealthModule.create()` when an application needs the standard health
+contract. It contributes `GET /health/live`, `GET /health/ready`, and
+`GET /health`; liveness reports whether shutdown has begun, readiness requires
+the runtime to be `RUNNING` and all registered checks to be `UP`, and the
+aggregate endpoint reports dependency health without exposing check errors.
+
 Inside a route group, use `Aura.requirePermission("orders.read")` after `Aura.requireAuth()`.
 - `TestClient.of(app)` runs module installation but does not start external resources, so module routes can be tested in memory.
 - `healthCheck(...)` registrations are available through `AuraWebRuntime.healthChecks()` and the
