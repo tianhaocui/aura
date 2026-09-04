@@ -13,6 +13,7 @@ public class WorkflowException extends RuntimeException {
     public static final String UNKNOWN_WORKFLOW = "UNKNOWN_WORKFLOW";
     public static final String EXECUTOR_SATURATED = "EXECUTOR_SATURATED";
     public static final String CANCELLED = "CANCELLED";
+    public static final String IDEMPOTENCY_CONFLICT = "IDEMPOTENCY_CONFLICT";
 
     private final String code;
 

@@ -82,6 +82,17 @@ runtime.cancel(executionId);
 `cancel(...)` returns `false` when the execution is already terminal or unknown. Cancellation is
 cooperative, so business steps should honor interruption or inspect their own shared token.
 
+For message consumers and retried clients, pass an idempotency key to deduplicate concurrent and
+retained executions:
+
+```java
+CompletableFuture<WorkflowResult> future = runtime.executeAsync(
+        "order.fulfillment", orderContext, "order-event-42");
+```
+
+The key is scoped to the workflow ID. A retained execution is returned without running its steps
+again; the default bounded store releases the key when its execution record is evicted.
+
 The default in-memory store is bounded to 10,000 execution records and evicts the oldest records
 when full. Production modules can provide a
 `WorkflowExecutionStore` implementation to persist state; distributed workers and resume policies

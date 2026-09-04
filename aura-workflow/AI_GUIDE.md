@@ -17,3 +17,4 @@ Retries are per-step metadata and default to one attempt. The runtime retries on
 
 Use `WorkflowRuntime.execute(...)` for inline work and `executeAsync(...)` for background work. Both runtime entry points use the bounded execution policy and store execution state transitions in `WorkflowExecutionStore`; the default in-memory store is bounded to 10,000 records. Pass a `CancellationToken` when the caller needs cooperative cancellation. Calling `WorkflowDefinition.execute(...)` directly skips runtime storage. Provide a persistent store from a production module when restart recovery is required.
 For an async job discovered in the store, call `runtime.cancel(executionId)` to request cooperative cancellation; it returns `false` for unknown or terminal executions.
+For retried messages, pass a stable key with `executeAsync(workflowId, context, idempotencyKey)`; concurrent and retained duplicate keys reuse the original execution.

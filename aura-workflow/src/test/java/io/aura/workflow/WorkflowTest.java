@@ -302,4 +302,39 @@ class WorkflowTest {
                 .containsExactly(second.executionId(), third.executionId());
         assertThat(store.find(first.executionId())).isEmpty();
     }
+
+    @Test
+    void idempotencyKeyDeduplicatesConcurrentAndRetainedExecutions() throws Exception {
+        WorkflowRegistry registry = new WorkflowRegistry();
+        java.util.concurrent.CountDownLatch started = new java.util.concurrent.CountDownLatch(1);
+        java.util.concurrent.CountDownLatch release = new java.util.concurrent.CountDownLatch(1);
+        AtomicInteger runs = new AtomicInteger();
+        registry.register(Workflow.<Object>builder("idempotent")
+                .step("once", context -> {
+                    runs.incrementAndGet();
+                    started.countDown();
+                    release.await(2, java.util.concurrent.TimeUnit.SECONDS);
+                    return "done";
+                })
+                .build());
+        WorkflowRuntime<Object> runtime = new WorkflowRuntime<>(registry);
+        try {
+            java.util.concurrent.CompletableFuture<WorkflowResult> first =
+                    runtime.executeAsync("idempotent", new Object(), "message-42");
+            assertThat(started.await(2, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+            java.util.concurrent.CompletableFuture<WorkflowResult> duplicate =
+                    runtime.executeAsync("idempotent", new Object(), "message-42");
+            assertThat(duplicate).isSameAs(first);
+            release.countDown();
+
+            WorkflowResult result = first.get(2, java.util.concurrent.TimeUnit.SECONDS);
+            WorkflowResult retained = runtime.executeAsync("idempotent", new Object(), "message-42")
+                    .get(2, java.util.concurrent.TimeUnit.SECONDS);
+            assertThat(runs).hasValue(1);
+            assertThat(retained.execution().executionId()).isEqualTo(result.execution().executionId());
+            assertThat(result.execution().idempotencyKey()).isEqualTo("message-42");
+        } finally {
+            runtime.close();
+        }
+    }
 }

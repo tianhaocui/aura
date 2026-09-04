@@ -12,6 +12,7 @@ public final class WorkflowExecution {
     private final String executionId = UUID.randomUUID().toString();
     private final String workflowId;
     private final String variant;
+    private final String idempotencyKey;
     private final Map<String, StepExecution> steps = new LinkedHashMap<>();
     private Status status = Status.PENDING;
     private Throwable error;
@@ -19,8 +20,13 @@ public final class WorkflowExecution {
     private Instant finishedAt;
 
     WorkflowExecution(String workflowId, String variant) {
+        this(workflowId, variant, null);
+    }
+
+    WorkflowExecution(String workflowId, String variant, String idempotencyKey) {
         this.workflowId = workflowId;
         this.variant = variant;
+        this.idempotencyKey = idempotencyKey;
     }
     void start() { status = Status.RUNNING; }
     void success() { status = Status.SUCCEEDED; finishedAt = Instant.now(); }
@@ -30,6 +36,7 @@ public final class WorkflowExecution {
     public String executionId() { return executionId; }
     public String workflowId() { return workflowId; }
     public String variant() { return variant; }
+    public String idempotencyKey() { return idempotencyKey; }
     public Status status() { return status; }
     public Throwable error() { return error; }
     public Instant startedAt() { return startedAt; }

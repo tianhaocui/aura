@@ -59,13 +59,20 @@ public final class WorkflowDefinition<C> implements AuraWorkflow<C> {
     WorkflowResult execute(C context, WorkflowSelector<C> selector,
                             CancellationToken cancellationToken,
                             Consumer<WorkflowExecution> observer) {
+        return execute(context, selector, cancellationToken, observer, null);
+    }
+
+    WorkflowResult execute(C context, WorkflowSelector<C> selector,
+                            CancellationToken cancellationToken,
+                            Consumer<WorkflowExecution> observer,
+                            String idempotencyKey) {
         Objects.requireNonNull(selector, "selector");
         Objects.requireNonNull(cancellationToken, "cancellationToken");
         Objects.requireNonNull(observer, "observer");
         String variant = selector.select(context);
         Resolved<C> resolved = resolve(variant);
         List<String> order = topologicalOrder(resolved.steps, resolved.edges);
-        WorkflowExecution execution = new WorkflowExecution(id, variant);
+        WorkflowExecution execution = new WorkflowExecution(id, variant, idempotencyKey);
         for (String stepId : order) {
             WorkflowStepSpec<C> spec = resolved.steps.get(stepId);
             execution.add(new StepExecution(stepId, spec.mode(), spec.retryPolicy()));
