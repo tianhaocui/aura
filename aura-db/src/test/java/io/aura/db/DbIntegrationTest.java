@@ -1,5 +1,6 @@
 package io.aura.db;
 
+import io.aura.contract.CancellationToken;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -51,6 +52,19 @@ class DbIntegrationTest {
 
         Row refetched = db.findById("users", id);
         assertThat(refetched.getStr("name")).isEqualTo("Bob");
+    }
+
+    @Test
+    void queryAndQueryBuilderRejectPreCancelledTokenBeforeOpeningJdbcStatement() {
+        CancellationToken token = new CancellationToken();
+        token.cancel();
+
+        assertThatThrownBy(() -> db.find("SELECT * FROM users", token))
+                .isInstanceOf(java.util.concurrent.CancellationException.class);
+        assertThatThrownBy(() -> db.table("users").find(token))
+                .isInstanceOf(java.util.concurrent.CancellationException.class);
+        assertThatThrownBy(() -> db.execute("DELETE FROM users", token))
+                .isInstanceOf(java.util.concurrent.CancellationException.class);
     }
 
     @Test

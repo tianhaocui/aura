@@ -1,6 +1,7 @@
 package io.aura.contract;
 
 import java.util.Objects;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -8,6 +9,13 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public final class CancellationToken {
     private final AtomicBoolean cancelled = new AtomicBoolean();
     private final CancellationToken[] parents;
+    private final CopyOnWriteArrayList<Runnable> listeners = new CopyOnWriteArrayList<>();
+    private final CopyOnWriteArrayList<Registration> parentRegistrations = new CopyOnWriteArrayList<>();
+
+    @FunctionalInterface
+    public interface Registration extends AutoCloseable {
+        @Override void close();
+    }
 
     public CancellationToken() {
         this.parents = new CancellationToken[0];
@@ -15,6 +23,15 @@ public final class CancellationToken {
 
     private CancellationToken(CancellationToken[] parents) {
         this.parents = parents;
+        for (CancellationToken parent : parents) {
+            if (isCancelled()) break;
+            Registration registration = parent.onCancel(this::cancel);
+            parentRegistrations.add(registration);
+            if (isCancelled()) {
+                registration.close();
+                break;
+            }
+        }
     }
 
     /**
@@ -46,7 +63,36 @@ public final class CancellationToken {
     }
 
     public boolean cancel() {
-        return cancelled.compareAndSet(false, true);
+        if (!cancelled.compareAndSet(false, true)) return false;
+        for (Runnable listener : listeners) listener.run();
+        listeners.clear();
+        for (Registration registration : parentRegistrations) registration.close();
+        parentRegistrations.clear();
+        return true;
+    }
+
+    /** Registers a best-effort callback invoked once when this token is cancelled. */
+    public Registration onCancel(Runnable listener) {
+        Objects.requireNonNull(listener, "listener");
+        AtomicBoolean active = new AtomicBoolean(true);
+        Runnable guarded = () -> {
+            if (active.compareAndSet(true, false)) {
+                try {
+                    listener.run();
+                } catch (RuntimeException ignored) {
+                    // Cancellation must notify other listeners even if one callback fails.
+                }
+            }
+        };
+        if (isCancelled()) {
+            guarded.run();
+            return () -> { };
+        }
+        listeners.add(guarded);
+        if (isCancelled() && listeners.remove(guarded)) guarded.run();
+        return () -> {
+            if (active.compareAndSet(true, false)) listeners.remove(guarded);
+        };
     }
 
     public void throwIfCancelled() {

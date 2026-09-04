@@ -203,6 +203,13 @@ List<User> users = db.query(
 );
 ```
 
+### Cancellation
+
+Pass a shared `CancellationToken` to `find`, `query`, `execute`, or query
+builder operations such as `db.table("user").find(token)`. The JDBC statement
+is cancelled when the token fires and result iteration checks the token between
+rows, so request and workflow shutdown can stop database work cooperatively.
+
 ### Close
 
 ```java

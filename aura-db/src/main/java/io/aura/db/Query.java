@@ -1,5 +1,6 @@
 package io.aura.db;
 
+import io.aura.contract.CancellationToken;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
@@ -104,9 +105,19 @@ public class Query {
         return db.query(buildSql(), params.toArray(), rs -> Db.rsToRow(rs, table));
     }
 
+    public List<Row> find(CancellationToken cancellationToken) {
+        return db.query(buildSql(), params.toArray(), rs -> Db.rsToRow(rs, table), cancellationToken);
+    }
+
     public Row findOne() {
         this.limit = 1;
         List<Row> list = find();
+        return list.isEmpty() ? null : list.get(0);
+    }
+
+    public Row findOne(CancellationToken cancellationToken) {
+        this.limit = 1;
+        List<Row> list = find(cancellationToken);
         return list.isEmpty() ? null : list.get(0);
     }
 
@@ -120,8 +131,18 @@ public class Query {
         return row == null ? 0 : ((Number) row.values().iterator().next()).intValue();
     }
 
+    public int count(CancellationToken cancellationToken) {
+        String sql = "SELECT COUNT(*) FROM " + table + buildWhere();
+        Row row = db.findOne(sql, cancellationToken, params.toArray());
+        return row == null ? 0 : ((Number) row.values().iterator().next()).intValue();
+    }
+
     public boolean exists() {
         return count() > 0;
+    }
+
+    public boolean exists(CancellationToken cancellationToken) {
+        return count(cancellationToken) > 0;
     }
 
     public int update(Row row) {
@@ -137,9 +158,27 @@ public class Query {
         return db.execute(sql, allParams.toArray());
     }
 
+    public int update(Row row, CancellationToken cancellationToken) {
+        var setCols = new ArrayList<String>();
+        var allParams = new ArrayList<>();
+        for (var entry : row.entrySet()) {
+            SqlSafe.identifier(entry.getKey());
+            setCols.add(entry.getKey() + " = ?");
+            allParams.add(entry.getValue());
+        }
+        allParams.addAll(params);
+        String sql = "UPDATE " + table + " SET " + String.join(", ", setCols) + buildWhere();
+        return db.execute(sql, cancellationToken, allParams.toArray());
+    }
+
     public int delete() {
         String sql = "DELETE FROM " + table + buildWhere();
         return db.execute(sql, params.toArray());
+    }
+
+    public int delete(CancellationToken cancellationToken) {
+        String sql = "DELETE FROM " + table + buildWhere();
+        return db.execute(sql, cancellationToken, params.toArray());
     }
 
     private String buildSql() {

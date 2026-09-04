@@ -8,6 +8,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CancellationException;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -90,6 +91,24 @@ class ContractTypesTest {
         child.cancel();
         assertThat(child.isCancelled()).isTrue();
         assertThat(runtime.isCancelled()).isFalse();
+    }
+
+    @Test
+    void cancellationListenersRunOnceAndCanBeDetached() {
+        CancellationToken token = new CancellationToken();
+        AtomicInteger calls = new AtomicInteger();
+        CancellationToken.Registration registration = token.onCancel(calls::incrementAndGet);
+
+        assertThat(token.cancel()).isTrue();
+        assertThat(token.cancel()).isFalse();
+        assertThat(calls).hasValue(1);
+        registration.close();
+
+        CancellationToken alreadyCancelled = new CancellationToken();
+        alreadyCancelled.cancel();
+        AtomicInteger immediate = new AtomicInteger();
+        alreadyCancelled.onCancel(immediate::incrementAndGet);
+        assertThat(immediate).hasValue(1);
     }
 
     @Test

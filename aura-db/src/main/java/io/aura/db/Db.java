@@ -2,6 +2,7 @@ package io.aura.db;
 
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
+import io.aura.contract.CancellationToken;
 
 import java.sql.*;
 import java.util.ArrayList;
@@ -92,17 +93,37 @@ public class Db implements AutoCloseable {
     // --- typed query ---
 
     public <T> List<T> query(String sql, Object[] params, RowMapper<T> mapper) {
+        return query(sql, params, mapper, new CancellationToken());
+    }
+
+    /** Executes a query that can cancel its JDBC statement through the token. */
+    public <T> List<T> query(String sql, Object[] params, RowMapper<T> mapper,
+                             CancellationToken cancellationToken) {
+        Objects.requireNonNull(cancellationToken, "cancellationToken");
+        cancellationToken.throwIfCancelled();
         boolean inTx = transactionConnection() != null;
         Connection conn = null;
         try {
             conn = getConnection();
-            try (PreparedStatement ps = prepare(conn, sql, params);
-                 ResultSet rs = ps.executeQuery()) {
-                List<T> result = new ArrayList<>();
-                while (rs.next()) result.add(mapper.map(rs));
-                return result;
+            try (PreparedStatement ps = prepare(conn, sql, params)) {
+                CancellationToken.Registration registration = cancellationToken.onCancel(() -> cancel(ps));
+                try (ResultSet rs = ps.executeQuery()) {
+                    List<T> result = new ArrayList<>();
+                    while (rs.next()) {
+                        cancellationToken.throwIfCancelled();
+                        result.add(mapper.map(rs));
+                    }
+                    return result;
+                } finally {
+                    registration.close();
+                }
             }
+        } catch (java.util.concurrent.CancellationException e) {
+            throw e;
         } catch (SQLException e) {
+            if (cancellationToken.isCancelled()) {
+                throw new java.util.concurrent.CancellationException("Database query cancelled");
+            }
             throw new DbException(e);
         } finally {
             if (!inTx && conn != null) {
@@ -112,18 +133,31 @@ public class Db implements AutoCloseable {
     }
 
     public <T> T queryOne(String sql, Object[] params, RowMapper<T> mapper) {
-        List<T> list = query(sql, params, mapper);
+        return queryOne(sql, params, mapper, new CancellationToken());
+    }
+
+    public <T> T queryOne(String sql, Object[] params, RowMapper<T> mapper,
+                          CancellationToken cancellationToken) {
+        List<T> list = query(sql, params, mapper, cancellationToken);
         return list.isEmpty() ? null : list.get(0);
     }
 
     // --- Row query ---
 
     public List<Row> find(String sql, Object... params) {
-        return query(sql, params, Db::rsToRow);
+        return find(sql, new CancellationToken(), params);
+    }
+
+    public List<Row> find(String sql, CancellationToken cancellationToken, Object... params) {
+        return query(sql, params, Db::rsToRow, cancellationToken);
     }
 
     public Row findOne(String sql, Object... params) {
-        List<Row> list = find(sql, params);
+        return findOne(sql, new CancellationToken(), params);
+    }
+
+    public Row findOne(String sql, CancellationToken cancellationToken, Object... params) {
+        List<Row> list = find(sql, cancellationToken, params);
         return list.isEmpty() ? null : list.get(0);
     }
 
@@ -207,14 +241,31 @@ public class Db implements AutoCloseable {
     // --- execute ---
 
     public int execute(String sql, Object... params) {
+        return execute(sql, new CancellationToken(), params);
+    }
+
+    /** Executes an update that can cancel its JDBC statement through the token. */
+    public int execute(String sql, CancellationToken cancellationToken, Object... params) {
+        Objects.requireNonNull(cancellationToken, "cancellationToken");
+        cancellationToken.throwIfCancelled();
         boolean inTx = transactionConnection() != null;
         Connection conn = null;
         try {
             conn = getConnection();
             try (PreparedStatement ps = prepare(conn, sql, params)) {
-                return ps.executeUpdate();
+                CancellationToken.Registration registration = cancellationToken.onCancel(() -> cancel(ps));
+                try {
+                    return ps.executeUpdate();
+                } finally {
+                    registration.close();
+                }
             }
+        } catch (java.util.concurrent.CancellationException e) {
+            throw e;
         } catch (SQLException e) {
+            if (cancellationToken.isCancelled()) {
+                throw new java.util.concurrent.CancellationException("Database update cancelled");
+            }
             throw new DbException(e);
         } finally {
             if (!inTx && conn != null) {
@@ -565,6 +616,10 @@ public class Db implements AutoCloseable {
             for (int i = 0; i < params.length; i++) ps.setObject(i + 1, params[i]);
         }
         return ps;
+    }
+
+    private static void cancel(java.sql.Statement statement) {
+        try { statement.cancel(); } catch (SQLException ignored) { }
     }
 
     static Row rsToRow(ResultSet rs) throws SQLException {
