@@ -36,6 +36,16 @@ AuraApp.create()
 - Module properties must use `aura.<module-id>.*` and are read through `context.property(...)`.
 - Record configuration is bound with `context.config(OrderConfig.class)`, using only the current module's `aura.<module-id>.*` prefix.
 - Permissions are declared through the shared `context.permissions()` registry; duplicate IDs fail during module installation.
+- The application supplies one authorization function and routes use stable permission middleware:
+
+```java
+AuraApp.create()
+        .authorize((userId, permission) -> acl.allows(userId, permission))
+        .use(new OrderModule())
+        .start();
+```
+
+Inside a route group, use `Aura.requirePermission("orders.read")` after `Aura.requireAuth()`.
 - `TestClient.of(app)` runs module installation but does not start external resources, so module routes can be tested in memory.
 - `aura-db` provides `DatabaseModule.create(db)`. A business module can declare `requires("db")` and obtain the same `Db` instance with `context.require(Db.class)`.
 - New applications should use `AuraApp`; the older `Aura` builder is an implementation detail and is not the recommended module authoring API.

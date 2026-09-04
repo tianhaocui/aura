@@ -57,6 +57,7 @@ public class Aura {
     private java.io.PrintStream mcpStdout;
     private McpRouterSpec mcpRouter;
     private java.util.function.Function<io.aura.web.BaseContext, String> authFunction;
+    private java.util.function.BiPredicate<String, String> permissionChecker;
     private JwtSupport jwtSupport;
     private String jwtSecret;
     private long jwtExpireSeconds;
@@ -323,6 +324,11 @@ public class Aura {
         return this;
     }
 
+    public Aura authorize(java.util.function.BiPredicate<String, String> permissionChecker) {
+        this.permissionChecker = permissionChecker;
+        return this;
+    }
+
     public Aura jwt(String secret) {
         return jwt(secret, 604800);
     }
@@ -394,6 +400,23 @@ public class Aura {
                 ctx.abort();
             } else {
                 ctx.set("_userId", userId);
+            }
+        };
+    }
+
+    public static io.aura.web.BaseHandler requirePermission(String permission) {
+        if (permission == null || permission.isBlank()) {
+            throw new IllegalArgumentException("permission must not be blank");
+        }
+        return ctx -> {
+            Aura app = (Aura) ctx.get("_app", Object.class);
+            String userId = ctx.get("_userId", String.class);
+            if (app == null || app.permissionChecker == null) {
+                throw new IllegalStateException("Authorization not configured. Call app.authorize() first.");
+            }
+            if (userId == null || !app.permissionChecker.test(userId, permission)) {
+                ctx.status(403).json(java.util.Map.of("error", "Forbidden", "permission", permission));
+                ctx.abort();
             }
         };
     }

@@ -28,6 +28,11 @@ public final class AuraApp implements AutoCloseable {
         return this;
     }
 
+    public AuraApp authorize(java.util.function.BiPredicate<String, String> checker) {
+        runtime.authorize(checker);
+        return this;
+    }
+
     public AuraApp property(String key, String value) {
         String prefix = "aura.";
         if (key == null || !key.startsWith(prefix)) {
