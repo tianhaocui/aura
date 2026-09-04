@@ -51,6 +51,11 @@ CompletableFuture<WorkflowResult> future = runtime.executeAsync(
         "order.fulfillment", orderContext, WorkflowSelector.by(OrderContext::variant));
 ```
 
+The default runtime uses a bounded worker pool and queue. Production modules can choose explicit
+limits with `new WorkflowRuntime<>(registry, store, workers, queueCapacity)` and observe
+`activeExecutions()`, `queuedExecutions()`, `completedExecutions()`, and
+`rejectedExecutions()` for admission and operational checks.
+
 For cooperative cancellation, pass a shared token. The runtime persists the execution as
 `PENDING`, `RUNNING`, and finally `SUCCEEDED`, `FAILED`, or `CANCELLED`:
 

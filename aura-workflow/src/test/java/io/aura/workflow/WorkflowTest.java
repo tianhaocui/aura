@@ -176,6 +176,28 @@ class WorkflowTest {
     }
 
     @Test
+    void exposesAndValidatesBoundedExecutorMetrics() {
+        WorkflowRegistry registry = new WorkflowRegistry();
+        WorkflowRuntime<Object> runtime = new WorkflowRuntime<>(registry,
+                new InMemoryWorkflowExecutionStore(), 2, 7);
+        try {
+            assertThat(runtime.workerLimit()).isEqualTo(2);
+            assertThat(runtime.queueCapacity()).isEqualTo(7);
+            assertThat(runtime.queuedExecutions()).isZero();
+            assertThat(runtime.activeExecutions()).isZero();
+            assertThat(runtime.rejectedExecutions()).isZero();
+        } finally {
+            runtime.close();
+        }
+        assertThatThrownBy(() -> new WorkflowRuntime<>(registry,
+                new InMemoryWorkflowExecutionStore(), 0, 1))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> new WorkflowRuntime<>(registry,
+                new InMemoryWorkflowExecutionStore(), 1, 0))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
     void propagatesCancellationAndPersistsCancelledExecution() throws Exception {
         WorkflowRegistry registry = new WorkflowRegistry();
         java.util.concurrent.CountDownLatch started = new java.util.concurrent.CountDownLatch(1);

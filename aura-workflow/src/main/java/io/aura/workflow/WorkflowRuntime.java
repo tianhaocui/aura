@@ -9,6 +9,7 @@ import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.ConcurrentHashMap;
 
 public final class WorkflowRuntime<C> implements AutoCloseable {
@@ -17,16 +18,23 @@ public final class WorkflowRuntime<C> implements AutoCloseable {
     private final ThreadPoolExecutor executor;
     private final ConcurrentHashMap<String, CancellationToken> activeCancellations = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, CompletableFuture<WorkflowResult>> inFlightByKey = new ConcurrentHashMap<>();
+    private final AtomicLong rejectedExecutions = new AtomicLong();
 
     public WorkflowRuntime() { this(new WorkflowRegistry(), new InMemoryWorkflowExecutionStore()); }
     public WorkflowRuntime(WorkflowRegistry registry) { this(registry, new InMemoryWorkflowExecutionStore()); }
     public WorkflowRuntime(WorkflowRegistry registry, WorkflowExecutionStore store) {
+        this(registry, store, defaultWorkers(), 256);
+    }
+    /** Creates a runtime with explicit bounded executor settings. */
+    public WorkflowRuntime(WorkflowRegistry registry, WorkflowExecutionStore store,
+                           int workers, int queueCapacity) {
         this.registry = Objects.requireNonNull(registry, "registry");
         this.store = Objects.requireNonNull(store, "store");
-        int workers = Math.max(2, Math.min(8, Runtime.getRuntime().availableProcessors()));
+        if (workers < 1) throw new IllegalArgumentException("workers must be positive");
+        if (queueCapacity < 1) throw new IllegalArgumentException("queueCapacity must be positive");
         AtomicInteger sequence = new AtomicInteger();
         this.executor = new ThreadPoolExecutor(workers, workers, 0L, TimeUnit.MILLISECONDS,
-                new ArrayBlockingQueue<>(256), task -> {
+                new ArrayBlockingQueue<>(queueCapacity), task -> {
                     Thread thread = new Thread(task, "aura-workflow-" + sequence.incrementAndGet());
                     thread.setDaemon(true);
                     return thread;
@@ -34,6 +42,12 @@ public final class WorkflowRuntime<C> implements AutoCloseable {
     }
     public WorkflowRegistry registry() { return registry; }
     public WorkflowExecutionStore store() { return store; }
+    public int activeExecutions() { return executor.getActiveCount(); }
+    public int queuedExecutions() { return executor.getQueue().size(); }
+    public long completedExecutions() { return executor.getCompletedTaskCount(); }
+    public long rejectedExecutions() { return rejectedExecutions.get(); }
+    public int workerLimit() { return executor.getMaximumPoolSize(); }
+    public int queueCapacity() { return executor.getQueue().remainingCapacity() + executor.getQueue().size(); }
 
     public WorkflowResult execute(String workflowId, C context, WorkflowSelector<C> selector) {
         return execute(workflowId, context, selector, new CancellationToken());
@@ -118,6 +132,7 @@ public final class WorkflowRuntime<C> implements AutoCloseable {
                 }
             });
         } catch (RejectedExecutionException error) {
+            rejectedExecutions.incrementAndGet();
             if (inFlightKey != null) inFlightByKey.remove(inFlightKey, future);
             future.completeExceptionally(new WorkflowException(WorkflowException.EXECUTOR_SATURATED,
                     "Workflow executor is saturated or shut down", error));
@@ -185,5 +200,9 @@ public final class WorkflowRuntime<C> implements AutoCloseable {
         inFlightByKey.values().forEach(future -> future.cancel(true));
         inFlightByKey.clear();
         executor.shutdownNow();
+    }
+
+    private static int defaultWorkers() {
+        return Math.max(2, Math.min(8, Runtime.getRuntime().availableProcessors()));
     }
 }
