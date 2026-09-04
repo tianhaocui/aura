@@ -4,7 +4,7 @@ import org.junit.jupiter.api.Test;
 import io.aura.Aura;
 import io.aura.AuraModule;
 import io.aura.ModuleContext;
-import io.aura.ModuleDescriptor;
+import io.aura.contract.ModuleMetadata;
 
 import java.time.Duration;
 import java.util.ArrayList;
@@ -118,8 +118,8 @@ class WorkflowTest {
         Aura app = Aura.create()
                 .use(WorkflowModule.create())
                 .use(new AuraModule() {
-                    @Override public ModuleDescriptor descriptor() {
-                        return ModuleDescriptor.of("orders", "1.0.0").requires("workflow").build();
+                    @Override public ModuleMetadata descriptor() {
+                        return ModuleMetadata.of("orders", "1.0.0").requires("workflow");
                     }
 
                     @Override public void install(ModuleContext context) {

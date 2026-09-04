@@ -41,6 +41,17 @@ public record ModuleMetadata(String id, String version, Set<ModuleRequirement> r
         return new ModuleMetadata(id, version, values, capabilities);
     }
 
+    public ModuleMetadata requires(String... ids) {
+        if (ids == null) return this;
+        ModuleRequirement[] requirements = new ModuleRequirement[ids.length];
+        for (int i = 0; i < ids.length; i++) requirements[i] = ModuleRequirement.of(ids[i]);
+        return requires(requirements);
+    }
+
+    public ModuleMetadata requires(String id, String versionRange) {
+        return requires(new ModuleRequirement(id, versionRange));
+    }
+
     public ModuleMetadata capabilities(String... names) {
         var values = new LinkedHashSet<>(capabilities);
         if (names != null) {
@@ -52,6 +63,10 @@ public record ModuleMetadata(String id, String version, Set<ModuleRequirement> r
             }
         }
         return new ModuleMetadata(id, version, requires, values);
+    }
+
+    public ModuleMetadata provides(String... names) {
+        return capabilities(names);
     }
 
     private static Set<ModuleRequirement> immutableSet(Set<ModuleRequirement> values, String label) {

@@ -2,7 +2,7 @@ package io.aura.ai;
 
 import io.aura.AuraModule;
 import io.aura.ModuleContext;
-import io.aura.ModuleDescriptor;
+import io.aura.contract.ModuleMetadata;
 
 import java.util.Objects;
 import java.util.concurrent.ExecutorService;
@@ -23,10 +23,9 @@ public final class AiModule implements AuraModule {
         return new AiModule(new AiClient(provider, executor));
     }
 
-    @Override public ModuleDescriptor descriptor() {
-        return ModuleDescriptor.of("ai", "1.0.0")
-                .provides("ai.client")
-                .build();
+    @Override public ModuleMetadata descriptor() {
+        return ModuleMetadata.of("ai", "1.0.0")
+                .provides("ai.client");
     }
 
     @Override public void install(ModuleContext context) {

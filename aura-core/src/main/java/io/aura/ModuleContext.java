@@ -8,7 +8,7 @@ import java.util.function.Consumer;
 
 /** Restricted contribution context exposed to one module during installation. */
 public interface ModuleContext extends io.aura.contract.CapabilityLookup {
-    ModuleDescriptor currentModule();
+    io.aura.contract.ModuleMetadata currentModule();
 
     <T> T require(Class<T> type);
 

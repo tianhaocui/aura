@@ -2,7 +2,7 @@ package io.aura.db;
 
 import io.aura.AuraModule;
 import io.aura.ModuleContext;
-import io.aura.ModuleDescriptor;
+import io.aura.contract.ModuleMetadata;
 
 import java.util.Objects;
 
@@ -27,10 +27,9 @@ public final class DatabaseModule implements AuraModule {
         return new DatabaseModule(db, classpathLocation);
     }
 
-    @Override public ModuleDescriptor descriptor() {
-        return ModuleDescriptor.of("db", "1.0.0")
-                .provides("db", "db.migrations")
-                .build();
+    @Override public ModuleMetadata descriptor() {
+        return ModuleMetadata.of("db", "1.0.0")
+                .provides("db", "db.migrations");
     }
 
     @Override public void install(ModuleContext context) {

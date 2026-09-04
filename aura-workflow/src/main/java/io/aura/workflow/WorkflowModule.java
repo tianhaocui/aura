@@ -2,7 +2,7 @@ package io.aura.workflow;
 
 import io.aura.AuraModule;
 import io.aura.ModuleContext;
-import io.aura.ModuleDescriptor;
+import io.aura.contract.ModuleMetadata;
 
 /** Aura module that exposes one shared workflow registry and runtime. */
 public final class WorkflowModule implements AuraModule {
@@ -20,10 +20,9 @@ public final class WorkflowModule implements AuraModule {
         return new WorkflowModule(java.util.Objects.requireNonNull(registry, "registry"));
     }
 
-    @Override public ModuleDescriptor descriptor() {
-        return ModuleDescriptor.of("workflow", "1.0.0")
-                .provides("workflow.registry", "workflow.runtime")
-                .build();
+    @Override public ModuleMetadata descriptor() {
+        return ModuleMetadata.of("workflow", "1.0.0")
+                .provides("workflow.registry", "workflow.runtime");
     }
 
     @Override public void install(ModuleContext context) {

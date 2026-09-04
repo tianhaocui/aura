@@ -2,7 +2,7 @@ package io.aura.mcp;
 
 import io.aura.AuraModule;
 import io.aura.ModuleContext;
-import io.aura.ModuleDescriptor;
+import io.aura.contract.ModuleMetadata;
 
 import java.util.Objects;
 
@@ -17,10 +17,9 @@ public final class McpModule implements AuraModule {
     public static McpModule create() { return new McpModule(new McpRouter()); }
     public static McpModule create(McpRouter router) { return new McpModule(router); }
 
-    @Override public ModuleDescriptor descriptor() {
-        return ModuleDescriptor.of("mcp", "1.0.0")
-                .provides("mcp.tools", "mcp.resources", "mcp.prompts")
-                .build();
+    @Override public ModuleMetadata descriptor() {
+        return ModuleMetadata.of("mcp", "1.0.0")
+                .provides("mcp.tools", "mcp.resources", "mcp.prompts");
     }
 
     @Override public void install(ModuleContext context) {

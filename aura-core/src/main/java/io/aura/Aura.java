@@ -39,7 +39,7 @@ public class Aura {
     private final List<AutoCloseable> closeables = new ArrayList<>();
     private final List<AuraPlugin> plugins = new ArrayList<>();
     private final List<AuraModule> modules = new CopyOnWriteArrayList<>();
-    private final List<ModuleDescriptor> installedModuleDescriptors = new CopyOnWriteArrayList<>();
+    private final List<io.aura.contract.ModuleMetadata> installedModuleDescriptors = new CopyOnWriteArrayList<>();
     private final List<Consumer<io.aura.web.BaseRouter>> moduleRouteConfigs = new CopyOnWriteArrayList<>();
     private String staticFilesPath;
     private boolean spaMode;
@@ -118,7 +118,7 @@ public class Aura {
     public Aura use(AuraModule module) {
         if (module == null) throw new IllegalArgumentException("module must not be null");
         if (modulesInstalled) throw new IllegalStateException("Modules cannot be added after module preparation");
-        ModuleDescriptor descriptor = module.descriptor();
+        io.aura.contract.ModuleMetadata descriptor = module.descriptor();
         if (descriptor == null) throw new ModuleException("AURA_MODULE_DESCRIPTOR_MISSING", "?", "Module descriptor must not be null");
         if (modules.stream().anyMatch(existing -> existing.descriptor().id().equals(descriptor.id()))) {
             throw new ModuleException("AURA_MODULE_DUPLICATE", descriptor.id(), "Duplicate module id: " + descriptor.id());
@@ -128,7 +128,7 @@ public class Aura {
     }
 
     public List<AuraModule> modules() { return List.copyOf(modules); }
-    public List<ModuleDescriptor> moduleDescriptors() {
+    public List<io.aura.contract.ModuleMetadata> moduleDescriptors() {
         if (!installedModuleDescriptors.isEmpty()) return List.copyOf(installedModuleDescriptors);
         return modules.stream().map(AuraModule::descriptor).toList();
     }
@@ -794,7 +794,7 @@ public class Aura {
         }
         List<AuraModule> ordered = orderModules();
         for (AuraModule module : ordered) {
-            ModuleDescriptor descriptor = module.descriptor();
+            io.aura.contract.ModuleMetadata descriptor = module.descriptor();
             ModuleContextImpl context = new ModuleContextImpl(module, descriptor);
             try {
                 module.install(context);
@@ -851,7 +851,7 @@ public class Aura {
     private List<AuraModule> orderModules() {
         Map<String, AuraModule> byId = new java.util.LinkedHashMap<>();
         for (AuraModule module : modules) {
-            ModuleDescriptor descriptor = module.descriptor();
+            io.aura.contract.ModuleMetadata descriptor = module.descriptor();
             if (byId.putIfAbsent(descriptor.id(), module) != null) {
                 throw new ModuleException("AURA_MODULE_DUPLICATE", descriptor.id(), "Duplicate module id: " + descriptor.id());
             }
@@ -872,7 +872,7 @@ public class Aura {
             throw new ModuleException("AURA_MODULE_DEPENDENCY_CYCLE", id,
                     "Circular module dependency involving " + String.join(" -> ", visiting) + " -> " + id);
         }
-        for (ModuleRequirement requirement : module.descriptor().requires()) {
+        for (io.aura.contract.ModuleRequirement requirement : module.descriptor().requires()) {
             AuraModule dependency = byId.get(requirement.id());
             if (dependency == null) {
                 throw new ModuleException("AURA_MODULE_DEPENDENCY_MISSING", id,
@@ -948,14 +948,14 @@ public class Aura {
 
     private final class ModuleContextImpl implements ModuleContext {
         private final AuraModule module;
-        private final ModuleDescriptor descriptor;
+        private final io.aura.contract.ModuleMetadata descriptor;
 
-        private ModuleContextImpl(AuraModule module, ModuleDescriptor descriptor) {
+        private ModuleContextImpl(AuraModule module, io.aura.contract.ModuleMetadata descriptor) {
             this.module = module;
             this.descriptor = descriptor;
         }
 
-        @Override public ModuleDescriptor currentModule() { return descriptor; }
+        @Override public io.aura.contract.ModuleMetadata currentModule() { return descriptor; }
         @Override public <T> T require(Class<T> type) {
             T value = Aura.this.getBean(type);
             if (value == null) throw new ModuleException("AURA_CAPABILITY_MISSING", descriptor.id(),

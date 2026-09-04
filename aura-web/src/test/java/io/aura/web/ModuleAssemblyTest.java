@@ -3,7 +3,7 @@ package io.aura.web;
 import io.aura.Aura;
 import io.aura.AuraModule;
 import io.aura.ModuleContext;
-import io.aura.ModuleDescriptor;
+import io.aura.contract.ModuleMetadata;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -12,8 +12,8 @@ class ModuleAssemblyTest {
     @Test
     void moduleRoutesAreAvailableToInMemoryTestClient() {
         Aura app = Aura.create().use(new AuraModule() {
-            @Override public ModuleDescriptor descriptor() {
-                return ModuleDescriptor.of("greeting", "1.0.0").build();
+            @Override public ModuleMetadata descriptor() {
+                return ModuleMetadata.of("greeting", "1.0.0");
             }
 
             @Override public void install(ModuleContext context) {

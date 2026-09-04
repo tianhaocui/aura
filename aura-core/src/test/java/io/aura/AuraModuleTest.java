@@ -20,7 +20,7 @@ class AuraModuleTest {
         app.prepareModules();
 
         assertThat(installed).containsExactly("dependency", "feature");
-        assertThat(app.moduleDescriptors()).extracting(ModuleDescriptor::id)
+        assertThat(app.moduleDescriptors()).extracting(io.aura.contract.ModuleMetadata::id)
                 .containsExactly("dependency", "feature");
         assertThat(app.getBean(String.class)).isEqualTo("feature");
     }
@@ -43,13 +43,13 @@ class AuraModuleTest {
     void rollsBackStartedModulesWhenLaterModuleFails() {
         List<String> events = new ArrayList<>();
         AuraModule first = new AuraModule() {
-            @Override public ModuleDescriptor descriptor() { return ModuleDescriptor.of("first", "1.0.0").build(); }
+            @Override public io.aura.contract.ModuleMetadata descriptor() { return io.aura.contract.ModuleMetadata.of("first", "1.0.0"); }
             @Override public void install(ModuleContext context) { }
             @Override public void start(ModuleContext context) { events.add("start:first"); }
             @Override public void stop(ModuleContext context) { events.add("stop:first"); }
         };
         AuraModule second = new AuraModule() {
-            @Override public ModuleDescriptor descriptor() { return ModuleDescriptor.of("second", "1.0.0").build(); }
+            @Override public io.aura.contract.ModuleMetadata descriptor() { return io.aura.contract.ModuleMetadata.of("second", "1.0.0"); }
             @Override public void install(ModuleContext context) { }
             @Override public void start(ModuleContext context) { throw new IllegalStateException("boom"); }
         };
@@ -65,7 +65,7 @@ class AuraModuleTest {
         AuraApp app = AuraApp.create()
                 .use(module("sample", List.of(), new ArrayList<>()));
 
-        assertThat(app.modules()).extracting(ModuleDescriptor::id).containsExactly("sample");
+        assertThat(app.modules()).extracting(io.aura.contract.ModuleMetadata::id).containsExactly("sample");
         assertThat(app.lifecycle()).isEqualTo(Aura.Lifecycle.NEW);
         app.runtime().prepareModules();
         assertThat(app.lifecycle()).isEqualTo(Aura.Lifecycle.NEW);
@@ -74,25 +74,25 @@ class AuraModuleTest {
     @Test
     void exposesCapabilitiesAndChecksVersionRanges() {
         AuraModule dependency = new AuraModule() {
-            @Override public ModuleDescriptor descriptor() {
-                return ModuleDescriptor.of("db", "1.4.2").provides("db").build();
+            @Override public io.aura.contract.ModuleMetadata descriptor() {
+                return io.aura.contract.ModuleMetadata.of("db", "1.4.2").provides("db");
             }
             @Override public void install(ModuleContext context) { }
         };
         AuraModule consumer = new AuraModule() {
-            @Override public ModuleDescriptor descriptor() {
-                return ModuleDescriptor.of("orders", "1.0.0").requires("db", "[1.0,2.0)").build();
+            @Override public io.aura.contract.ModuleMetadata descriptor() {
+                return io.aura.contract.ModuleMetadata.of("orders", "1.0.0").requires("db", "[1.0,2.0)");
             }
             @Override public void install(ModuleContext context) { }
         };
 
         Aura app = Aura.create().use(consumer).use(dependency);
         app.prepareModules();
-        assertThat(app.moduleDescriptors().get(0).provides()).containsExactly("db");
+        assertThat(app.moduleDescriptors().get(0).capabilities().contains("db")).isTrue();
 
         AuraModule incompatible = new AuraModule() {
-            @Override public ModuleDescriptor descriptor() {
-                return ModuleDescriptor.of("bad", "1.0.0").requires("db", "[2.0,3.0)").build();
+            @Override public io.aura.contract.ModuleMetadata descriptor() {
+                return io.aura.contract.ModuleMetadata.of("bad", "1.0.0").requires("db", "[2.0,3.0)");
             }
             @Override public void install(ModuleContext context) { }
         };
@@ -103,10 +103,10 @@ class AuraModuleTest {
 
     private static AuraModule module(String id, List<String> dependencies, List<String> installed) {
         return new AuraModule() {
-            @Override public ModuleDescriptor descriptor() {
-                ModuleDescriptor.Builder builder = ModuleDescriptor.of(id, "1.0.0");
-                dependencies.forEach(dep -> builder.requires(dep));
-                return builder.build();
+            @Override public io.aura.contract.ModuleMetadata descriptor() {
+                io.aura.contract.ModuleMetadata metadata = io.aura.contract.ModuleMetadata.of(id, "1.0.0");
+                for (String dep : dependencies) metadata = metadata.requires(dep);
+                return metadata;
             }
 
             @Override public void install(ModuleContext context) {

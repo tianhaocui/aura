@@ -52,6 +52,6 @@ public final class AuraApp implements AutoCloseable {
 
     public Aura.Lifecycle lifecycle() { return runtime.lifecycle(); }
     public AuraConfig config() { return runtime.config(); }
-    public List<ModuleDescriptor> modules() { return runtime.moduleDescriptors(); }
+    public List<io.aura.contract.ModuleMetadata> modules() { return runtime.moduleDescriptors(); }
     public Aura runtime() { return runtime; }
 }

@@ -4,8 +4,8 @@ Aura 1.0 modules are explicit Maven-installed building blocks. A module has one 
 
 ```java
 public final class OrderModule implements AuraModule {
-    @Override public ModuleDescriptor descriptor() {
-        return ModuleDescriptor.of("order", "1.0.0")
+    @Override public ModuleMetadata descriptor() {
+        return ModuleMetadata.of("order", "1.0.0")
                 .requires("workflow")
                 .provides("order.api", "order.workflow")
                 .build();
