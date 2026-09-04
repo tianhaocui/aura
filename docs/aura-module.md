@@ -31,6 +31,15 @@ AuraApp.create()
 - `descriptor().id()` is stable and unique within one application.
 - `descriptor().provides(...)` documents the capabilities contributed by the module for diagnostics and tooling.
 - The shared `ApiRoute` / `ApiParameter` contract is the source for schema adapters, including the dependency-free `OpenApiGenerator` in `aura-web`.
+- Lambda routes can declare parameters explicitly when reflection cannot infer them:
+
+```java
+routes.post("/orders", handler)
+        .param("customerId", "string", "query", true, "Customer identifier")
+        .param("order", "Order", "body", true, "Order payload");
+```
+
+  These declarations feed `/__schema__`, OpenAPI, and other adapters from the same contract.
 - Dependencies are declared with `requires(...)`; Aura checks missing modules and cycles before starting the server.
 - `install(...)` only registers services, routes and capabilities. `start(...)` opens external resources; `stop(...)` releases them.
 - Module properties must use `aura.<module-id>.*` and are read through `context.property(...)`.

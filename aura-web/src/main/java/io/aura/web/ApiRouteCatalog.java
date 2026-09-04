@@ -16,7 +16,9 @@ public final class ApiRouteCatalog {
     public static ApiRoute describe(CompiledRoute route, String example) {
         List<ApiParameter> parameters = new ArrayList<>();
         Map<String, String> metadata = route.meta() == null ? Map.of() : route.meta().params();
-        if (route.handler() instanceof MethodRefHandler methodHandler) {
+        if (route.meta() != null && !route.meta().parameters().isEmpty()) {
+            parameters.addAll(route.meta().parameters());
+        } else if (route.handler() instanceof MethodRefHandler methodHandler) {
             Method method = methodHandler.resolvedMethod();
             for (Parameter parameter : method.getParameters()) {
                 if (parameter.getType() == Context.class || parameter.getType() == BaseContext.class) continue;

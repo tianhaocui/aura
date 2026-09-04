@@ -1,5 +1,7 @@
 package io.aura.web;
 
+import io.aura.contract.ApiParameter;
+
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -42,5 +44,15 @@ public record CompiledRoute(String method, String rawPath, Pattern pattern, List
                 paramNames, beforeHandlers, handler, afterHandlers, meta);
     }
 
-    public record RouteMeta(String description, String returnType, Map<String, String> params) {}
+    public record RouteMeta(String description, String returnType, Map<String, String> params,
+                            List<ApiParameter> parameters) {
+        public RouteMeta(String description, String returnType, Map<String, String> params) {
+            this(description, returnType, params, List.of());
+        }
+        public RouteMeta {
+            params = params == null ? Map.of()
+                    : java.util.Collections.unmodifiableMap(new java.util.LinkedHashMap<>(params));
+            parameters = parameters == null ? List.of() : List.copyOf(parameters);
+        }
+    }
 }
