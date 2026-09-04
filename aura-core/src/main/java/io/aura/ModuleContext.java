@@ -31,4 +31,6 @@ public interface ModuleContext extends io.aura.contract.CapabilityLookup {
     void healthCheck(io.aura.contract.HealthCheck healthCheck);
 
     String property(String key);
+
+    <T> T config(Class<T> recordType);
 }

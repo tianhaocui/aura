@@ -980,6 +980,13 @@ public class Aura {
             }
             return Aura.this.prop(key);
         }
+        @Override public <T> T config(Class<T> recordType) {
+            if (recordType == null || !recordType.isRecord()) {
+                throw new ModuleException("AURA_MODULE_CONFIG_TYPE", descriptor.id(),
+                        "Module config must be a record type");
+            }
+            return Aura.this.props("aura." + descriptor.id() + ".", recordType);
+        }
 
         private void trackLifecycle(Object value) {
             if (value instanceof Reloadable reloadable && !reloadables.contains(reloadable)) reloadables.add(reloadable);

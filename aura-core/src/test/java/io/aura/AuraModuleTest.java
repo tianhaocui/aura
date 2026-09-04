@@ -9,6 +9,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class AuraModuleTest {
+    record OrderConfig(int limit, boolean enabled) {}
 
     @Test
     void preparesModulesInDependencyOrderAndExposesContributions() {
@@ -99,6 +100,26 @@ class AuraModuleTest {
         assertThatThrownBy(() -> Aura.create().use(incompatible).use(dependency).prepareModules())
                 .isInstanceOf(ModuleException.class)
                 .extracting("code").isEqualTo("AURA_MODULE_VERSION_MISMATCH");
+    }
+
+    @Test
+    void bindsModuleScopedRecordConfiguration() {
+        AuraModule module = new AuraModule() {
+            @Override public io.aura.contract.ModuleMetadata descriptor() {
+                return io.aura.contract.ModuleMetadata.of("orders", "1.0.0");
+            }
+            @Override public void install(ModuleContext context) {
+                OrderConfig config = context.config(OrderConfig.class);
+                assertThat(config.limit()).isEqualTo(25);
+                assertThat(config.enabled()).isTrue();
+            }
+        };
+
+        Aura.create()
+                .set("aura.orders.limit", "25")
+                .set("aura.orders.enabled", "true")
+                .use(module)
+                .prepareModules();
     }
 
     private static AuraModule module(String id, List<String> dependencies, List<String> installed) {
