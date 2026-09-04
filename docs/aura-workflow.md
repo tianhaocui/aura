@@ -67,6 +67,10 @@ The same token overload is available for synchronous `execute(...)` calls.
 When cancellation is observed, the workflow and the currently running step are both marked
 `CANCELLED`; steps that have not started remain `PENDING`.
 
+Both `WorkflowRuntime.execute(...)` and `executeAsync(...)` persist the same execution state
+transitions. Calling `WorkflowDefinition.execute(...)` directly remains a lightweight operation
+without a runtime store.
+
 The default store is in-memory for tests and single-process use. Production modules can provide a
 `WorkflowExecutionStore` implementation to persist state; distributed workers and resume policies
 remain explicit extension responsibilities. Cancellation is cooperative: a running step must

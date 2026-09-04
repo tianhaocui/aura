@@ -232,4 +232,22 @@ class WorkflowTest {
             runtime.close();
         }
     }
+
+    @Test
+    void synchronousRuntimeExecutionIsInspectableThroughTheSameStore() {
+        WorkflowRegistry registry = new WorkflowRegistry();
+        registry.register(Workflow.<Object>builder("sync-flow")
+                .step("one", context -> "done")
+                .build());
+        WorkflowRuntime<Object> runtime = new WorkflowRuntime<>(registry);
+        try {
+            WorkflowResult result = runtime.execute("sync-flow", new Object());
+
+            assertThat(runtime.execution(result.execution().executionId())).contains(result.execution());
+            assertThat(runtime.executions("sync-flow")).extracting(WorkflowExecution::executionId)
+                    .containsExactly(result.execution().executionId());
+        } finally {
+            runtime.close();
+        }
+    }
 }

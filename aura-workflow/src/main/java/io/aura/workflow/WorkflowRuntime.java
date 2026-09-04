@@ -39,7 +39,7 @@ public final class WorkflowRuntime<C> implements AutoCloseable {
     public WorkflowResult execute(String workflowId, C context, WorkflowSelector<C> selector,
                                   CancellationToken cancellationToken) {
         @SuppressWarnings("unchecked") WorkflowDefinition<C> definition = (WorkflowDefinition<C>) registry.get(workflowId);
-        return definition.execute(context, selector, cancellationToken, ignored -> { });
+        return definition.execute(context, selector, cancellationToken, store::save);
     }
     public WorkflowResult execute(String workflowId, C context) {
         return execute(workflowId, context, WorkflowSelector.defaultVariant());
@@ -96,7 +96,7 @@ public final class WorkflowRuntime<C> implements AutoCloseable {
 
     public WorkflowResult execute(WorkflowDefinition<C> definition, C context,
                                   WorkflowSelector<C> selector, CancellationToken cancellationToken) {
-        return definition.execute(context, selector, cancellationToken, ignored -> { });
+        return definition.execute(context, selector, cancellationToken, store::save);
     }
 
     @Override public void close() { executor.shutdownNow(); }
