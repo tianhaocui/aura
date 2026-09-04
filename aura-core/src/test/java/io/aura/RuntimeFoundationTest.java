@@ -29,6 +29,14 @@ class RuntimeFoundationTest {
         assertThat(runtime.state()).isEqualTo(io.aura.contract.RuntimeState.STOPPED);
     }
 
+    @Test void runtimeViewReportsRunningStateWithoutLegacyLifecycleType() {
+        AuraApp app = AuraApp.create();
+        assertThat(app.runtimeView()).isInstanceOf(AuraRuntime.class);
+        assertThat(app.isRunning()).isFalse();
+        app.close();
+        assertThat(app.runtimeView().isRunning()).isFalse();
+    }
+
     @Test void cancellationIsAtomicAndObservable() {
         CancellationToken token = new CancellationToken();
         assertThat(token.isCancelled()).isFalse();

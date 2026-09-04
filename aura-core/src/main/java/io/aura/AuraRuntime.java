@@ -24,6 +24,8 @@ public interface AuraRuntime extends AutoCloseable {
     PermissionRegistry permissions();
     <T> Optional<T> find(Class<T> type);
 
+    default boolean isRunning() { return state() == RuntimeState.RUNNING; }
+
     default <T> T require(Class<T> type) {
         return find(type).orElseThrow(() ->
                 new IllegalStateException("Aura capability is not installed: " + type.getName()));

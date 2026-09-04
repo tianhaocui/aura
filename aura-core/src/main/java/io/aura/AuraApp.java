@@ -66,6 +66,9 @@ public final class AuraApp implements AutoCloseable {
 
     public Aura.Lifecycle lifecycle() { return Aura.Lifecycle.valueOf(runtime.state().name()); }
     public io.aura.contract.RuntimeState state() { return runtime.state(); }
+    /** Stable runtime view for adapters; unlike runtime(), this does not expose legacy Builder APIs. */
+    public AuraRuntime runtimeView() { return runtime; }
+    public boolean isRunning() { return runtime.isRunning(); }
     public AuraConfig config() { return runtime.config(); }
     public io.aura.contract.PermissionRegistry permissions() { return runtime.permissions(); }
     public List<io.aura.contract.ModuleMetadata> modules() { return runtime.moduleDescriptors(); }

@@ -21,6 +21,9 @@ Do not add new code that reaches through `AuraApp.runtime()`.
 Adapters should depend on the replaceable `AuraRuntime` surface and its stable `RuntimeState`
 values rather than on the legacy Builder implementation.
 
+From an application, obtain that surface with `app.runtimeView()` and use `isRunning()` or
+`state()` for lifecycle checks. `app.runtime()` is retained only for the migration period.
+
 ## API mapping
 
 | Before | Aura 1.0 |
