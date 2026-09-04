@@ -504,8 +504,7 @@ public class UndertowStarter implements AuraStarter {
     private void serveSchema(HttpServerExchange exchange) {
         List<io.aura.contract.ApiRoute> routes = new ArrayList<>();
         for (CompiledRoute cr : compiledRoutes) {
-            List<Map<String, String>> params = buildParamSchema(cr);
-            routes.add(ApiRouteCatalog.describe(cr, buildCurlExample(cr, params)));
+            routes.add(describeRoute(cr));
         }
 
         Map<String, Object> schema = new LinkedHashMap<>();
@@ -520,8 +519,7 @@ public class UndertowStarter implements AuraStarter {
     private void serveOpenApi(HttpServerExchange exchange) {
         List<io.aura.contract.ApiRoute> routes = new ArrayList<>();
         for (CompiledRoute route : compiledRoutes) {
-            List<Map<String, String>> params = buildParamSchema(route);
-            routes.add(ApiRouteCatalog.describe(route, buildCurlExample(route, params)));
+            routes.add(describeRoute(route));
         }
         Map<String, Object> document = OpenApiGenerator.generate(
                 app.prop("app.name") == null ? "Aura API" : app.prop("app.name"), "1.0.0", routes);
@@ -530,24 +528,30 @@ public class UndertowStarter implements AuraStarter {
         exchange.getResponseSender().send(JSON.toJSONString(document));
     }
 
-    private String buildCurlExample(CompiledRoute cr, List<Map<String, String>> params) {
+    private io.aura.contract.ApiRoute describeRoute(CompiledRoute route) {
+        io.aura.contract.ApiRoute description = ApiRouteCatalog.describe(route, null);
+        return new io.aura.contract.ApiRoute(description.method(), description.path(), description.description(),
+                description.returnType(), description.params(), buildCurlExample(route, description.params()));
+    }
+
+    private String buildCurlExample(CompiledRoute cr, List<io.aura.contract.ApiParameter> params) {
         String base = "http://localhost:" + app.port();
         String path = cr.rawPath();
 
         // replace path params with example values
-        for (Map<String, String> p : params) {
-            if ("path".equals(p.get("source"))) {
-                String example = exampleValue(p.get("type"), p.get("name"));
-                path = path.replace("{" + p.get("name") + "}", example);
+        for (io.aura.contract.ApiParameter p : params) {
+            if ("path".equals(p.source())) {
+                String example = exampleValue(p.type(), p.name());
+                path = path.replace("{" + p.name() + "}", example);
             }
         }
 
         // build query string for query params (GET only)
         if ("GET".equals(cr.method())) {
             List<String> queryParts = new ArrayList<>();
-            for (Map<String, String> p : params) {
-                if ("query".equals(p.get("source"))) {
-                    queryParts.add(p.get("name") + "=" + exampleValue(p.get("type"), p.get("name")));
+            for (io.aura.contract.ApiParameter p : params) {
+                if ("query".equals(p.source())) {
+                    queryParts.add(p.name() + "=" + exampleValue(p.type(), p.name()));
                 }
             }
             if (!queryParts.isEmpty()) path += "?" + String.join("&", queryParts);
@@ -561,8 +565,8 @@ public class UndertowStarter implements AuraStarter {
 
         // add body for POST/PUT
         if ("POST".equals(cr.method()) || "PUT".equals(cr.method())) {
-            for (Map<String, String> p : params) {
-                if ("body".equals(p.get("source"))) {
+            for (io.aura.contract.ApiParameter p : params) {
+                if ("body".equals(p.source())) {
                     curl.append(" -H 'Content-Type: application/json' -d '{}'");
                     break;
                 }
@@ -579,46 +583,6 @@ public class UndertowStarter implements AuraStarter {
             case "double", "Double" -> "1.0";
             default -> "example";
         };
-    }
-
-    private List<Map<String, String>> buildParamSchema(CompiledRoute cr) {
-        List<Map<String, String>> params = new ArrayList<>();
-        Map<String, String> metaParams = cr.meta() != null ? cr.meta().params() : Map.of();
-
-        if (cr.handler() instanceof MethodRefHandler mh) {
-            Method m = mh.resolvedMethod();
-            for (Parameter p : m.getParameters()) {
-                if (p.getType() == Context.class) continue;
-                Map<String, String> param = new LinkedHashMap<>();
-                param.put("name", p.getName());
-                param.put("type", p.getType().getSimpleName());
-
-                // determine source
-                if (p.getType().isRecord() || TypeUtil.isPojo(p.getType())) {
-                    param.put("source", "body");
-                } else if (cr.paramNames().contains(p.getName())) {
-                    param.put("source", "path");
-                } else {
-                    param.put("source", "query");
-                }
-
-                String desc = metaParams.get(p.getName());
-                if (desc != null) param.put("description", desc);
-
-                params.add(param);
-            }
-        } else {
-            // for lambda handlers, use path param names
-            for (String name : cr.paramNames()) {
-                Map<String, String> param = new LinkedHashMap<>();
-                param.put("name", name);
-                param.put("source", "path");
-                String desc = metaParams.get(name);
-                if (desc != null) param.put("description", desc);
-                params.add(param);
-            }
-        }
-        return params;
     }
 
     @SuppressWarnings({"unchecked", "rawtypes"})
