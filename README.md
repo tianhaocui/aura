@@ -39,7 +39,7 @@ AI agent gets 7 tools (create/list/get/update/delete/search/stats todos). [Sourc
 <dependency>
     <groupId>io.github.tianhaocui</groupId>
     <artifactId>aura-web</artifactId>
-    <version>0.6.1</version>
+    <version>1.0.0</version>
 </dependency>
 <!-- Add an SLF4J provider, e.g. logback-classic -->
 ```

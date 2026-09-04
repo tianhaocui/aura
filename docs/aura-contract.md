@@ -9,7 +9,7 @@ own transport and lifecycle.
 <dependency>
     <groupId>io.github.tianhaocui</groupId>
     <artifactId>aura-contract</artifactId>
-    <version>0.6.1</version>
+    <version>1.0.0</version>
 </dependency>
 ```
 
