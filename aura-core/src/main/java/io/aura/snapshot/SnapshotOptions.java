@@ -1,8 +1,10 @@
 package io.aura.snapshot;
 
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.LinkedHashSet;
 import java.util.Set;
+import java.util.function.Consumer;
 
 public class SnapshotOptions {
 
@@ -21,7 +23,11 @@ public class SnapshotOptions {
     private int maxStackTraceSize = 32 * 1024;
     private int maxSnapshotFileSize = 1024 * 1024;
     private long maxStorageSize = 64L * 1024 * 1024;
+    private int maxSnapshots = 1000;
+    private Duration retentionTtl = Duration.ZERO;
     private double sampleRate = 1.0;
+    private Consumer<String> dropCallback = ignored -> { };
+    private Consumer<Exception> writeFailureCallback = ignored -> { };
     private final Set<String> redactHeaders = new LinkedHashSet<>(Set.of(
             "authorization", "cookie", "set-cookie", "x-api-key"));
     private final Set<String> redactFields = new LinkedHashSet<>(Set.of(
@@ -38,10 +44,14 @@ public class SnapshotOptions {
     public int maxStackTraceSize() { return maxStackTraceSize; }
     public int maxSnapshotFileSize() { return maxSnapshotFileSize; }
     public long maxStorageSize() { return maxStorageSize; }
+    public int maxSnapshots() { return maxSnapshots; }
+    public Duration retentionTtl() { return retentionTtl; }
     public double sampleRate() { return sampleRate; }
     public Set<String> redactHeaders() { return Set.copyOf(redactHeaders); }
     public Set<String> redactFields() { return Set.copyOf(redactFields); }
     public Set<String> envAllowlist() { return Set.copyOf(envAllowlist); }
+    public Consumer<String> dropCallback() { return dropCallback; }
+    public Consumer<Exception> writeFailureCallback() { return writeFailureCallback; }
 
     public SnapshotOptions enabled(boolean enabled) {
         this.enabled = enabled;
@@ -95,6 +105,29 @@ public class SnapshotOptions {
 
     public SnapshotOptions maxStorageSize(long maxStorageSize) {
         this.maxStorageSize = Math.max(0L, maxStorageSize);
+        return this;
+    }
+
+    public SnapshotOptions maxSnapshots(int maxSnapshots) {
+        this.maxSnapshots = Math.max(0, maxSnapshots);
+        return this;
+    }
+
+    public SnapshotOptions retentionTtl(Duration retentionTtl) {
+        if (retentionTtl != null && retentionTtl.isNegative()) {
+            throw new IllegalArgumentException("retentionTtl cannot be negative");
+        }
+        this.retentionTtl = retentionTtl == null ? Duration.ZERO : retentionTtl;
+        return this;
+    }
+
+    public SnapshotOptions onDrop(Consumer<String> callback) {
+        this.dropCallback = callback == null ? ignored -> { } : callback;
+        return this;
+    }
+
+    public SnapshotOptions onWriteFailure(Consumer<Exception> callback) {
+        this.writeFailureCallback = callback == null ? ignored -> { } : callback;
         return this;
     }
 

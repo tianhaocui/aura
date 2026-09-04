@@ -62,6 +62,9 @@ Inside a route group, use `Aura.requirePermission("orders.read")` after `Aura.re
 - `AiModule` contributes an `AiClient`; `McpModule` contributes an `McpRouter`. They do not silently open network listeners. Use the application's explicit MCP transport flag or configuration when starting.
 - Do not use global registries, static tenant state, reflection-based module discovery, or numeric step positions.
 
+Snapshot storage is bounded by default. Configure `maxSnapshots(...)`, `maxStorageSize(...)`, and
+`retentionTtl(...)` when needed; dropped snapshots are counted and can be observed with `onDrop(...)`.
+
 ## Business workflow extensions
 
 Business modules may register a standard flow and add customer variants with `aura-workflow`:

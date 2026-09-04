@@ -19,8 +19,13 @@ import java.util.UUID;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 class SnapshotRecorder {
+
+    private static final Logger log = LoggerFactory.getLogger(SnapshotRecorder.class);
 
     private static final String TRUNCATION_MARKER = "...<truncated>";
     private static final String SAFE_PATH_PARAMETER = "redacted";
@@ -32,6 +37,7 @@ class SnapshotRecorder {
     private final ExceptionSnapshot.EnvSnapshot env;
     private final ArrayBlockingQueue<ExceptionSnapshot> queue;
     private final Thread writer;
+    private final AtomicLong dropped = new AtomicLong();
     private volatile boolean closed;
 
     private SnapshotRecorder(Aura app) {
@@ -55,6 +61,11 @@ class SnapshotRecorder {
         SnapshotOptions options = app.snapshotOptions();
         if (!options.enabled()) return false;
         return options.sampleRate() >= 1.0 || Math.random() <= options.sampleRate();
+    }
+
+    static long dropped(Aura app) {
+        SnapshotRecorder recorder = RECORDERS.get(app);
+        return recorder == null ? 0L : recorder.dropped.get();
     }
 
     void record(Exception e, CompiledRoute route, Context ctx, HttpServerExchange exchange, SnapshotScope scope) {
@@ -157,10 +168,16 @@ class SnapshotRecorder {
     private void write(ExceptionSnapshot snapshot) {
         if (closed) return;
         if (options.async()) {
-            queue.offer(snapshot);
+            if (!queue.offer(snapshot)) drop("queue-full");
         } else {
             writeNow(snapshot);
         }
+    }
+
+    private void drop(String reason) {
+        dropped.incrementAndGet();
+        try { options.dropCallback().accept(reason); }
+        catch (RuntimeException callbackError) { log.warn("Snapshot drop callback failed", callbackError); }
     }
 
     private Thread startWriter() {
@@ -203,19 +220,83 @@ class SnapshotRecorder {
             String json = JSON.toJSONString(snapshot, JSONWriter.Feature.PrettyFormat);
             byte[] bytes = json.getBytes(StandardCharsets.UTF_8);
             if (options.maxSnapshotFileSize() <= 0 || bytes.length > options.maxSnapshotFileSize()) {
+                drop("file-too-large");
                 return;
             }
             Path dir = options.dir().toAbsolutePath().normalize();
             Object storageLock = STORAGE_LOCKS.computeIfAbsent(dir, ignored -> new Object());
             synchronized (storageLock) {
                 Files.createDirectories(dir);
-                if (options.maxStorageSize() <= 0 || storageSize(dir) + bytes.length > options.maxStorageSize()) {
+                evictExpired(dir);
+                evictForCount(dir);
+                evictForCapacity(dir, bytes.length);
+                if (options.maxStorageSize() <= 0 || options.maxSnapshots() <= 0
+                        || storageSize(dir) + bytes.length > options.maxStorageSize()
+                        || snapshotCount(dir) >= options.maxSnapshots()) {
+                    drop("retention-limit");
                     return;
                 }
                 Path path = dir.resolve(snapshot.snapshotId() + ".json");
                 Files.write(path, bytes);
             }
-        } catch (Exception ignored) {}
+        } catch (Exception error) {
+            dropped.incrementAndGet();
+            log.warn("Failed to write Aura snapshot", error);
+            try { options.writeFailureCallback().accept(error); }
+            catch (RuntimeException callbackError) { log.warn("Snapshot write failure callback failed", callbackError); }
+        }
+    }
+
+    private void evictExpired(Path dir) {
+        if (options.retentionTtl().isZero()) return;
+        long cutoff = System.currentTimeMillis() - options.retentionTtl().toMillis();
+        for (Path file : snapshotFiles(dir)) {
+            try {
+                if (Files.getLastModifiedTime(file).toMillis() < cutoff) Files.deleteIfExists(file);
+            } catch (Exception error) { log.debug("Failed to evict expired snapshot {}", file, error); }
+        }
+    }
+
+    private void evictForCount(Path dir) {
+        if (options.maxSnapshots() <= 0) return;
+        List<Path> files = snapshotFiles(dir);
+        int excess = files.size() - Math.max(0, options.maxSnapshots() - 1);
+        for (int i = 0; i < excess; i++) deleteQuietly(files.get(i));
+    }
+
+    private void evictForCapacity(Path dir, long incomingBytes) {
+        if (options.maxStorageSize() <= 0) return;
+        List<Path> files = snapshotFiles(dir);
+        long size = storageSize(dir);
+        int index = 0;
+        while (size + incomingBytes > options.maxStorageSize() && index < files.size()) {
+            Path file = files.get(index++);
+            try {
+                long fileSize = Files.size(file);
+                if (Files.deleteIfExists(file)) size -= fileSize;
+            } catch (Exception error) { log.debug("Failed to evict snapshot {}", file, error); }
+        }
+    }
+
+    private static List<Path> snapshotFiles(Path dir) {
+        try (var files = Files.list(dir)) {
+            return files.filter(Files::isRegularFile)
+                    .filter(file -> file.getFileName().toString().endsWith(".json"))
+                    .sorted(java.util.Comparator.comparingLong(SnapshotRecorder::modifiedTime))
+                    .toList();
+        } catch (Exception ignored) { return List.of(); }
+    }
+
+    private static long modifiedTime(Path file) {
+        try { return Files.getLastModifiedTime(file).toMillis(); }
+        catch (Exception ignored) { return Long.MIN_VALUE; }
+    }
+
+    private static int snapshotCount(Path dir) { return snapshotFiles(dir).size(); }
+
+    private static void deleteQuietly(Path file) {
+        try { Files.deleteIfExists(file); }
+        catch (Exception ignored) { }
     }
 
     private static long storageSize(Path dir) {

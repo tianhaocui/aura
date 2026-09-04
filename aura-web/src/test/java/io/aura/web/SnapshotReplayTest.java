@@ -122,6 +122,37 @@ class SnapshotReplayTest {
     }
 
     @Test
+    void snapshotRetentionEvictsOldFilesAndReportsDrops() throws Exception {
+        java.util.concurrent.atomic.AtomicReference<String> drop = new java.util.concurrent.atomic.AtomicReference<>();
+        Aura app = Aura.create().snapshot(s -> s.enabled(true).async(false).dir(tempDir)
+                .maxSnapshots(1).maxStorageSize(1024 * 1024).onDrop(drop::set));
+        Router router = new Router();
+        router.get("/fail", ctx -> { throw new RuntimeException("failure"); });
+
+        new TestClient(app, router).get("/fail").execute();
+        Path first = Files.list(tempDir).findFirst().orElseThrow();
+        new TestClient(app, router).get("/fail").execute();
+
+        assertThat(Files.list(tempDir).toList()).hasSize(1);
+        assertThat(Files.list(tempDir).findFirst().orElseThrow()).isNotEqualTo(first);
+        assertThat(drop.get()).isNull();
+    }
+
+    @Test
+    void snapshotRetentionReportsDropWhenStorageCannotFitOneFile() throws Exception {
+        java.util.concurrent.atomic.AtomicReference<String> drop = new java.util.concurrent.atomic.AtomicReference<>();
+        Aura app = Aura.create().snapshot(s -> s.enabled(true).async(false).dir(tempDir)
+                .maxSnapshots(1).maxSnapshotFileSize(1).onDrop(drop::set));
+        Router router = new Router();
+        router.get("/fail", ctx -> { throw new RuntimeException("failure"); });
+
+        new TestClient(app, router).get("/fail").execute();
+
+        assertThat(drop.get()).isEqualTo("file-too-large");
+        assertThat(SnapshotRecorder.dropped(app)).isEqualTo(1L);
+    }
+
+    @Test
     void replayerStubsExternalCallsFromSnapshot() throws Exception {
         Path snapshotFile = tempDir.resolve("replay.json");
         ExceptionSnapshot snapshot = snapshot();
