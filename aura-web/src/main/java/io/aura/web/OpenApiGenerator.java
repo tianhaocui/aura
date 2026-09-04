@@ -39,8 +39,10 @@ public final class OpenApiGenerator {
             if (!parameters.isEmpty()) operation.put("parameters", parameters);
             if (!body.isEmpty()) {
                 ApiParameter parameter = body.get(0);
+                Map<String, Object> bodySchema = parameter.schema().isEmpty()
+                        ? Map.of("type", "object") : parameter.schema();
                 operation.put("requestBody", Map.of("required", parameter.required(),
-                        "content", Map.of("application/json", Map.of("schema", Map.of("type", "object")))));
+                        "content", Map.of("application/json", Map.of("schema", bodySchema))));
             }
             operation.put("responses", Map.of("200", Map.of("description", "Success")));
             paths.computeIfAbsent(route.path(), ignored -> new LinkedHashMap<>())

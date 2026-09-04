@@ -42,7 +42,11 @@ public final class McpUtil {
         List<String> required = new ArrayList<>();
         for (io.aura.contract.ApiParameter p : params) {
             var prop = new LinkedHashMap<String, Object>();
-            prop.put("type", jsonType(p.type()));
+            if (p.schema() == null || p.schema().isEmpty()) {
+                prop.put("type", jsonType(p.type()));
+            } else {
+                prop.putAll(p.schema());
+            }
             if (p.description() != null) prop.put("description", p.description());
             properties.put(p.name(), prop);
             if (p.required()) required.add(p.name());

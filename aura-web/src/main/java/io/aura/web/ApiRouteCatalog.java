@@ -26,7 +26,8 @@ public final class ApiRouteCatalog {
                         ? "body" : route.paramNames().contains(parameter.getName()) ? "path" : "query";
                 boolean required = parameter.getType().isPrimitive() || "path".equals(source);
                 parameters.add(new ApiParameter(parameter.getName(), parameter.getType().getSimpleName(), source,
-                        required, metadata.get(parameter.getName())));
+                        required, metadata.get(parameter.getName()),
+                        "body".equals(source) ? TypeSchema.describe(parameter.getType()) : Map.of()));
             }
         } else {
             for (String name : route.paramNames()) {
