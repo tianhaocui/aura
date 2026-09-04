@@ -21,6 +21,7 @@ public final class AuraConfig {
     private String publicOrigin;
     private final Set<String> allowedHosts = new LinkedHashSet<>();
     private boolean securityHeaders = true;
+    private boolean openApiEnabled;
     private String keyStorePath;
     private String keyStorePassword;
 
@@ -41,6 +42,7 @@ public final class AuraConfig {
         return this;
     }
     public AuraConfig securityHeaders(boolean value) { securityHeaders = value; return this; }
+    public AuraConfig openApi(boolean value) { openApiEnabled = value; return this; }
     public AuraConfig tls(String keyStore, String password) {
         keyStorePath = requireText(keyStore, "TLS keystore path");
         keyStorePassword = password;
@@ -60,6 +62,7 @@ public final class AuraConfig {
     public String publicOrigin() { return publicOrigin; }
     public Set<String> allowedHosts() { return Set.copyOf(allowedHosts); }
     public boolean securityHeaders() { return securityHeaders; }
+    public boolean openApiEnabled() { return openApiEnabled; }
     public boolean tlsEnabled() { return keyStorePath != null; }
     public String keyStorePath() { return keyStorePath; }
     public String keyStorePassword() { return keyStorePassword; }

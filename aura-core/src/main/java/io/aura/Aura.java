@@ -199,12 +199,14 @@ public class Aura {
     public Aura publicOrigin(String origin) { config.publicOrigin(origin); return this; }
     public Aura allowedHosts(String... hosts) { config.allowedHosts(hosts); return this; }
     public Aura securityHeaders(boolean enabled) { config.securityHeaders(enabled); return this; }
+    public Aura openApi(boolean enabled) { config.openApi(enabled); return this; }
     public Aura tls(String keyStorePath, String password) { config.tls(keyStorePath, password).validate(); return this; }
     public int rateLimitPerSecond() { return config.rateLimitPerSecond(); }
     public int concurrencyLimit() { return config.concurrencyLimit(); }
     public String publicOrigin() { return config.publicOrigin(); }
     public java.util.Set<String> allowedHosts() { return config.allowedHosts(); }
     public boolean securityHeaders() { return config.securityHeaders(); }
+    public boolean openApiEnabled() { return config.openApiEnabled(); }
 
     public Aura set(String key, String value) {
         props.put(key, value);
