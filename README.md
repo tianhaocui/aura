@@ -61,6 +61,8 @@ AuraApp.create()
 
 Each module declares dependencies and contributes routes, services, health checks, migrations, MCP tools, or workflow variants through `ModuleContext`. See [module development](docs/aura-module.md).
 
+New 1.0 applications should follow the [migration and API guide](docs/migration-to-1.0.md).
+
 ## Just Service
 
 Service methods are plain Java. No Controller, no DAO, no annotations required.

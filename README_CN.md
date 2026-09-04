@@ -64,6 +64,8 @@ AI 能力（可选模块）：
 
 `aura-ai` 提供 provider-neutral 的 `AiClient`、同步/流式调用、超时与取消、结构化 JSON 输出、预算和会话/RAG 扩展接口；具体模型厂商通过 `AiProvider` SPI 接入。
 
+新项目请先阅读 [Aura 1.0 迁移与 API 指南](docs/migration-to-1.0.md)。
+
 ## Just Service
 
 Service 方法就是普通 Java 方法。没有 Controller，没有 DAO，不需要注解。

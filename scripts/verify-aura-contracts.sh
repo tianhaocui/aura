@@ -17,6 +17,7 @@ test -f "$repo_root/aura-ai/src/main/java/io/aura/ai/AiClient.java"
 test -f "$repo_root/aura-workflow/src/main/java/io/aura/workflow/WorkflowModule.java"
 test -f "$repo_root/docs/aura-module.md"
 test -f "$repo_root/docs/aura-workflow.md"
+test -f "$repo_root/docs/migration-to-1.0.md"
 test -f "$repo_root/examples/aura-composed/src/main/java/example/ComposedApp.java"
 test -f "$repo_root/examples/aura-composed/src/test/java/example/ComposedAppTest.java"
 
