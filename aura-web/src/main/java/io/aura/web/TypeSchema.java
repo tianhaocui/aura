@@ -23,6 +23,10 @@ final class TypeSchema {
         return describe((Type) type, new HashSet<>(), 0);
     }
 
+    static Map<String, Object> describe(Type type) {
+        return describe(type, new HashSet<>(), 0);
+    }
+
     private static Map<String, Object> describe(Type genericType, Set<Class<?>> visiting, int depth) {
         if (genericType == null) return object();
         if (genericType instanceof GenericArrayType array) {

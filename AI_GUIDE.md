@@ -167,6 +167,10 @@ mvn -q -DskipTests package
 bash scripts/verify-aura-contracts.sh
 ```
 
+Route metadata includes both request body fields and the JSON response shape
+when a service method returns a record/POJO. AI clients should use these fields
+instead of inferring response properties from example strings.
+
 ## Database
 
 Use Query Builder for simple CRUD and keep values bound as parameters:

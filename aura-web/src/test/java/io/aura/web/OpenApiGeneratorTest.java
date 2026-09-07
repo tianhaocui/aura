@@ -23,4 +23,16 @@ class OpenApiGeneratorTest {
         List<?> parameters = (List<?>) operation.get("parameters");
         assertThat(parameters).hasSize(1);
     }
+
+    @Test
+    void generatesResponseSchemaFromSharedRouteContract() {
+        ApiRoute route = new ApiRoute("GET", "/orders/1", "Get order", "Order", List.of(), "curl",
+                Map.of("type", "object", "properties", Map.of("id", Map.of("type", "integer"))));
+
+        Map<String, Object> document = OpenApiGenerator.generate("Orders", "1.0.0", List.of(route));
+        Map<?, ?> paths = (Map<?, ?>) document.get("paths");
+        Map<?, ?> operation = (Map<?, ?>) ((Map<?, ?>) paths.get("/orders/1")).get("get");
+        Map<?, ?> response = (Map<?, ?>) ((Map<?, ?>) operation.get("responses")).get("200");
+        assertThat(response.containsKey("content")).isTrue();
+    }
 }

@@ -44,7 +44,13 @@ public final class OpenApiGenerator {
                 operation.put("requestBody", Map.of("required", parameter.required(),
                         "content", Map.of("application/json", Map.of("schema", bodySchema))));
             }
-            operation.put("responses", Map.of("200", Map.of("description", "Success")));
+            Map<String, Object> success = new LinkedHashMap<>();
+            success.put("description", "Success");
+            if (!route.responseSchema().isEmpty()) {
+                success.put("content", Map.of("application/json",
+                        Map.of("schema", route.responseSchema())));
+            }
+            operation.put("responses", Map.of("200", success));
             paths.computeIfAbsent(route.path(), ignored -> new LinkedHashMap<>())
                     .put(route.method().toLowerCase(java.util.Locale.ROOT), operation);
         }

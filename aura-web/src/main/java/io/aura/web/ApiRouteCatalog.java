@@ -34,8 +34,19 @@ public final class ApiRouteCatalog {
                 parameters.add(new ApiParameter(name, "String", "path", true, metadata.get(name)));
             }
         }
+        Map<String, Object> responseSchema = responseSchema(route);
         return new ApiRoute(route.method(), route.rawPath(),
                 route.meta() == null ? null : route.meta().description(),
-                route.meta() == null ? null : route.meta().returnType(), parameters, example);
+                route.meta() == null ? null : route.meta().returnType(), parameters, example, responseSchema);
+    }
+
+    private static Map<String, Object> responseSchema(CompiledRoute route) {
+        if (!(route.handler() instanceof MethodRefHandler methodHandler)) return Map.of();
+        Method method = methodHandler.resolvedMethod();
+        if (method.getReturnType() == void.class || method.getReturnType() == Void.class
+                || method.getReturnType() == Context.class || method.getReturnType() == BaseContext.class) {
+            return Map.of();
+        }
+        return TypeSchema.describe(method.getGenericReturnType());
     }
 }
