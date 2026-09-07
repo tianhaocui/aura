@@ -83,6 +83,10 @@ Framework keys use the `aura.*` namespace; environment variables and JVM system
 properties override file values. Invalid values fail while creating the config,
 before modules or listeners are started.
 
+The equivalent application entry point is `AuraApp.create(Path.of("aura.properties"))`
+or `AuraApp.create(properties)`. Configuration is frozen when the app is created;
+do not load or mutate configuration after module preparation.
+
 Call `start()` after all modules and properties are configured. `app.config()`
 returns an immutable `AuraConfigSnapshot`; changing the builder or nested
 configuration afterwards has no effect. Property changes after `prepare()` are

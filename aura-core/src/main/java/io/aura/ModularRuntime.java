@@ -99,7 +99,10 @@ final class ModularRuntime implements AuraWebRuntime {
         boolean stdio = false;
         if (args != null) for (String arg : args) {
             if (arg == null) continue;
-            if (arg.startsWith("--config=")) throw new IllegalArgumentException("External config is not supported by AuraApp yet");
+            if (arg.startsWith("--config=")) {
+                throw new IllegalArgumentException(
+                        "AuraApp configuration is frozen at creation; use AuraApp.create(Path.of(\"...\")) or AuraApp.create(Properties)");
+            }
             if ("--mcp-stdio".equals(arg)) stdio = true;
             if ("--dev".equals(arg)) ReloadState.devMode = true;
             if (arg.startsWith("--") && arg.contains("=")) {

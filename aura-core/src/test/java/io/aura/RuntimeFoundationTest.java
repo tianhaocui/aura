@@ -5,6 +5,8 @@ import io.aura.contract.HealthStatus;
 
 import org.junit.jupiter.api.Test;
 
+import java.util.Properties;
+
 import static org.assertj.core.api.Assertions.*;
 
 class RuntimeFoundationTest {
@@ -36,6 +38,16 @@ class RuntimeFoundationTest {
         assertThat(app.isRunning()).isFalse();
         app.close();
         assertThat(app.runtimeView().isRunning()).isFalse();
+    }
+
+    @Test void modularAppCanBeCreatedFromDeploymentPropertiesBeforeFreezing() {
+        Properties properties = new Properties();
+        properties.setProperty("aura.port", "9192");
+        AuraApp app = AuraApp.create(properties);
+        assertThat(app.config().port()).isEqualTo(9192);
+        assertThatThrownBy(() -> app.start("--config=ignored.properties"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("AuraApp.create");
     }
 
     @Test void cancellationIsAtomicAndObservable() {

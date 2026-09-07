@@ -2,6 +2,9 @@ package io.aura;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Properties;
+import java.nio.file.Path;
+import java.io.IOException;
 
 /** Canonical Aura 1.0 application facade for explicit module composition. */
 public final class AuraApp implements AutoCloseable {
@@ -13,6 +16,16 @@ public final class AuraApp implements AutoCloseable {
 
     public static AuraApp create() { return new AuraApp(new AuraConfig()); }
     public static AuraApp create(AuraConfig config) { return new AuraApp(config); }
+
+    /** Creates an application from a deployment properties file before runtime freezing. */
+    public static AuraApp create(Path propertiesFile) throws IOException {
+        return new AuraApp(AuraConfig.fromProperties(propertiesFile));
+    }
+
+    /** Creates an application from already loaded deployment properties. */
+    public static AuraApp create(Properties properties) {
+        return new AuraApp(AuraConfig.fromProperties(properties));
+    }
 
     public AuraApp use(AuraModule module) {
         runtime.use(module);
