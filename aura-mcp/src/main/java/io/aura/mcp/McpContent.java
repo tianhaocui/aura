@@ -23,6 +23,17 @@ final class McpContent {
         return result;
     }
 
+    /** Stable, non-sensitive tool failure returned to remote callers. */
+    static Map<String, Object> error(String code) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("isError", true);
+        result.put("code", code);
+        result.put("content", List.of(Map.of(
+                "type", "text",
+                "text", "Tool invocation failed (" + code + ")")));
+        return result;
+    }
+
     private static JSONObject parseObject(String value) {
         try {
             return JSON.parseObject(value);

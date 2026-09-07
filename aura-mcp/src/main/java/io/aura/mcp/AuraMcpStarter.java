@@ -60,8 +60,8 @@ public class AuraMcpStarter implements McpStarter {
             Object result = router.invoke(toolName, argsMap);
             return McpContent.result(result);
         } catch (Exception e) {
-            return Map.of("isError", true,
-                    "content", List.of(Map.of("type", "text", "text", "Error: " + e.getMessage())));
+            log.warn("MCP tool invocation failed for {}", toolName, e);
+            return McpContent.error("MCP_TOOL_ERROR");
         }
     }
 }

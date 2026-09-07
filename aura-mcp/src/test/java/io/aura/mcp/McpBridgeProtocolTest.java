@@ -69,8 +69,9 @@ class McpBridgeProtocolTest {
         String response = sendRequest("tools/call", 4, params);
         JSONObject result = parseResult(response);
         assertThat(result.getBoolean("isError")).isTrue();
+        assertThat(result.getString("code")).isEqualTo("MCP_TOOL_ERROR");
         assertThat(result.getJSONArray("content").getJSONObject(0).getString("text"))
-                .contains("nonexistent");
+                .doesNotContain("nonexistent");
     }
 
     @Test
@@ -148,8 +149,7 @@ class McpBridgeProtocolTest {
                         String text = result instanceof String s ? s : JSON.toJSONString(result);
                         yield Map.of("content", List.of(Map.of("type", "text", "text", text)));
                     } catch (Exception e) {
-                        yield Map.of("isError", true,
-                            "content", List.of(Map.of("type", "text", "text", "Error: " + e.getMessage())));
+                        yield McpContent.error("MCP_TOOL_ERROR");
                     }
                 }
                 default -> null;

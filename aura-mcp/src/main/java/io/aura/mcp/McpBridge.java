@@ -84,12 +84,12 @@ public class McpBridge {
                 String result = callHttp(route, args);
                 return McpContent.result(result);
             } catch (Exception e) {
-                return Map.of("isError", true,
-                        "content", List.of(Map.of("type", "text", "text", "Error: " + e.getMessage())));
+                java.util.logging.Logger.getLogger(McpBridge.class.getName())
+                        .warning("MCP bridge tool invocation failed for " + toolName + ": " + e.getClass().getSimpleName());
+                return McpContent.error("MCP_UPSTREAM_ERROR");
             }
         }
-        return Map.of("isError", true,
-                "content", List.of(Map.of("type", "text", "text", "Tool not found: " + toolName)));
+        return McpContent.error("MCP_TOOL_NOT_FOUND");
     }
 
     private String callHttp(JSONObject route, JSONObject args) throws Exception {
