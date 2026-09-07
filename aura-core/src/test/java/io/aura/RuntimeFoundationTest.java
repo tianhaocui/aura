@@ -65,6 +65,18 @@ class RuntimeFoundationTest {
         assertThat(runtime.authFunction().apply(null)).isEqualTo("user-1");
     }
 
+    @Test void modularFacadeExposesTransportNeutralMcpSecurityConfiguration() {
+        AuraApp app = AuraApp.create()
+                .mcpAuthenticate(metadata -> metadata.get("authorization"))
+                .mcpAuthorize((user, permission) -> "service-42".equals(user)
+                        && "orders.read".equals(permission));
+        AuraMcpRuntime runtime = (AuraMcpRuntime) app.runtimeView();
+
+        assertThat(runtime.mcpAuthenticator().authenticate(java.util.Map.of("authorization", "service-42")))
+                .isEqualTo("service-42");
+        assertThat(runtime.mcpAuthorizer().authorize("service-42", "orders.read")).isTrue();
+    }
+
     @Test void lifecycleStopIsIdempotentAndTerminal() {
         Aura app = Aura.create();
         assertThat(app.state()).isEqualTo(io.aura.contract.RuntimeState.NEW);

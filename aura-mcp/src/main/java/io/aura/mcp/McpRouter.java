@@ -145,7 +145,7 @@ public class McpRouter implements McpRouterSpec {
                 throw new SecurityException("MCP permission denied for tool " + toolName);
             }
         }
-        McpContext ctx = new McpContext(args, collectMappings(tool));
+        McpContext ctx = new McpContext(args, collectMappings(tool), userId);
         return tool.handler().handle(ctx);
     }
 

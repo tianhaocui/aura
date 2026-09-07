@@ -47,6 +47,16 @@ public final class AuraApp implements AutoCloseable {
         return this;
     }
 
+    public AuraApp mcpAuthenticate(io.aura.contract.McpAuthenticator authenticator) {
+        runtime.mcpAuthenticate(authenticator);
+        return this;
+    }
+
+    public AuraApp mcpAuthorize(io.aura.contract.McpAuthorizer authorizer) {
+        runtime.mcpAuthorize(authorizer);
+        return this;
+    }
+
     public AuraApp authenticate(java.util.function.Function<io.aura.web.BaseContext, String> authenticator) {
         runtime.authenticate(authenticator);
         return this;

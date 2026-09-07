@@ -17,6 +17,8 @@ public interface AuraRuntime extends AutoCloseable {
     AuraRuntime healthCheck(io.aura.contract.HealthCheck check);
     AuraRuntime authorize(java.util.function.BiPredicate<String, String> checker);
     AuraRuntime authenticate(java.util.function.Function<io.aura.web.BaseContext, String> authenticator);
+    default AuraRuntime mcpAuthenticate(io.aura.contract.McpAuthenticator authenticator) { return this; }
+    default AuraRuntime mcpAuthorize(io.aura.contract.McpAuthorizer authorizer) { return this; }
     AuraRuntime property(String key, String value);
     void prepareModules();
     void start();

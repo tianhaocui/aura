@@ -46,6 +46,8 @@ final class ModularRuntime implements AuraWebRuntime {
     private final AtomicBoolean shuttingDown = new AtomicBoolean();
     private BiPredicate<String, String> permissionChecker;
     private Function<BaseContext, String> authFunction;
+    private io.aura.contract.McpAuthenticator mcpAuthenticator;
+    private io.aura.contract.McpAuthorizer mcpAuthorizer;
     private Function<Object, Object> resultWrapper;
     private int mcpPort = -1;
     private PrintStream mcpStdout;
@@ -78,6 +80,14 @@ final class ModularRuntime implements AuraWebRuntime {
     }
     @Override public AuraRuntime authenticate(Function<BaseContext, String> authenticator) {
         authFunction = authenticator;
+        return this;
+    }
+    @Override public AuraRuntime mcpAuthenticate(io.aura.contract.McpAuthenticator authenticator) {
+        mcpAuthenticator = authenticator;
+        return this;
+    }
+    @Override public AuraRuntime mcpAuthorize(io.aura.contract.McpAuthorizer authorizer) {
+        mcpAuthorizer = authorizer;
         return this;
     }
     @Override public AuraRuntime property(String key, String value) {
@@ -226,6 +236,8 @@ final class ModularRuntime implements AuraWebRuntime {
     }
     @Override public Function<BaseContext, String> authFunction() { return authFunction; }
     @Override public BiPredicate<String, String> permissionChecker() { return permissionChecker; }
+    @Override public io.aura.contract.McpAuthenticator mcpAuthenticator() { return mcpAuthenticator; }
+    @Override public io.aura.contract.McpAuthorizer mcpAuthorizer() { return mcpAuthorizer; }
     @Override public Map<Class<? extends Exception>, BaseExceptionHandler<?>> exceptionHandlers() { return exceptionHandlers; }
     @Override public List<BaseHandler> beforeHandlers() { return List.copyOf(beforeHandlers); }
     @Override public List<BaseHandler> afterHandlers() { return List.copyOf(afterHandlers); }

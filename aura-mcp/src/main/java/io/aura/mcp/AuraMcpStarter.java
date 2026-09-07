@@ -6,6 +6,7 @@ import io.aura.AuraMcpRuntime;
 import io.aura.McpStarter;
 
 import java.io.*;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -27,7 +28,7 @@ public class AuraMcpStarter implements McpStarter {
             if (app.mcpRouter() instanceof McpRouter mcpRouter) {
                 McpProtocol protocol = new McpProtocol(out, "aura-mcp", (method, params) -> switch (method) {
                         case "tools/list" -> mcpRouter.buildSchema();
-                        case "tools/call" -> handleRouterCall(mcpRouter, params);
+                        case "tools/call" -> handleRouterCall(app, mcpRouter, params);
                         case "ping" -> Map.of();
                         case "resources/list" -> mcpRouter.listResources();
                         case "resources/read" -> mcpRouter.readResource(params.getString("uri"));
@@ -51,13 +52,25 @@ public class AuraMcpStarter implements McpStarter {
     @Override
     public void stop() {}
 
-    private static Map<String, Object> handleRouterCall(McpRouter router, JSONObject params) {
+    private static Map<String, Object> handleRouterCall(AuraMcpRuntime app, McpRouter router, JSONObject params) {
         String toolName = params.getString("name");
         JSONObject args = params.getJSONObject("arguments");
+        JSONObject metadata = params.getJSONObject("_meta");
+        Map<String, String> transportMetadata = new LinkedHashMap<>();
+        if (metadata != null) {
+            for (String key : metadata.keySet()) {
+                Object value = metadata.get(key);
+                if (value != null) transportMetadata.put(key, value.toString());
+            }
+        }
         @SuppressWarnings("unchecked")
         Map<String, Object> argsMap = args != null ? (Map<String, Object>) args.toJavaObject(Map.class) : Map.of();
         try {
-            Object result = router.invoke(toolName, argsMap);
+            String userId = app.mcpAuthenticator() == null
+                    ? null : app.mcpAuthenticator().authenticate(Map.copyOf(transportMetadata));
+            io.aura.contract.McpAuthorizer authorizer = app.mcpAuthorizer();
+            Object result = router.invoke(toolName, argsMap, userId,
+                    authorizer == null ? null : authorizer::authorize);
             return McpContent.result(result);
         } catch (Exception e) {
             log.warn("MCP tool invocation failed for {}", toolName, e);

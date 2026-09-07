@@ -7,11 +7,20 @@ public class McpContext {
 
     private final Map<String, Object> args;
     private final Map<String, Map<String, Object>> mappings;
+    private final String userId;
 
     McpContext(Map<String, Object> args, Map<String, Map<String, Object>> mappings) {
+        this(args, mappings, null);
+    }
+
+    McpContext(Map<String, Object> args, Map<String, Map<String, Object>> mappings, String userId) {
         this.args = args;
         this.mappings = mappings;
+        this.userId = userId;
     }
+
+    /** Returns the identity resolved by the transport, or null for anonymous calls. */
+    public String userId() { return userId; }
 
     public Object get(String name) {
         Object val = args.get(name);

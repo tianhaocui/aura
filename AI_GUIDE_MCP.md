@@ -39,9 +39,24 @@ AuraApp.create().use(McpModule.create(mcp)).start("--mcp-stdio");
 // Run: java -jar app.jar --mcp-stdio
 ```
 
+For an authenticated transport, keep identity resolution and permission
+decisions explicit:
+
+```java
+AuraApp.create()
+    .mcpAuthenticate(metadata -> tokenService.userId(metadata.get("authorization")))
+    .mcpAuthorize((user, permission) -> acl.allows(user, permission))
+    .use(McpModule.create(mcp))
+    .start("--mcp-stdio");
+```
+
+Transport adapters pass untrusted metadata to the authenticator. A tool handler
+can read the resolved identity with `ctx.userId()`. Permissioned tools fail
+closed when no authorizer or authenticated identity is available.
+
 ## McpContext Methods
 
-`getString()`, `getInt()`, `getLong()`, `getEnum(name, Type.class)`, `get()`
+`getString()`, `getInt()`, `getLong()`, `getEnum(name, Type.class)`, `get()`, `userId()`
 
 ## URL Configuration (npm bridge)
 
