@@ -183,8 +183,11 @@ public class McpBridge {
                 String source = p.getString("source");
                 if (source == null || source.isBlank()) source = "tool";
                 Boolean required = p.getBoolean("required");
+                @SuppressWarnings("unchecked")
+                Map<String, Object> bodySchema = p.getJSONObject("schema") == null
+                        ? Map.of() : p.getJSONObject("schema").toJavaObject(Map.class);
                 list.add(new io.aura.contract.ApiParameter(p.getString("name"), p.getString("type"), source,
-                        required == null || required, p.getString("description")));
+                        required == null || required, p.getString("description"), bodySchema));
             }
         }
         return McpUtil.buildContractInputSchema(list);

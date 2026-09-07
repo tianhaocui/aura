@@ -120,4 +120,19 @@ class McpUtilTest {
         List<String> required = (List<String>) schema.get("required");
         assertThat(required).containsExactly("query");
     }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void buildContractInputSchema_preservesStructuredBodySchema() {
+        Map<String, Object> body = new java.util.LinkedHashMap<>();
+        body.put("type", "object");
+        body.put("properties", Map.of("name", Map.of("type", "string")));
+        var schema = McpUtil.buildContractInputSchema(java.util.List.of(
+                new io.aura.contract.ApiParameter("request", "CreateRequest", "body", true, null, body)));
+
+        Map<String, Object> properties = (Map<String, Object>) schema.get("properties");
+        Map<String, Object> request = (Map<String, Object>) properties.get("request");
+        assertThat(request).containsEntry("type", "object");
+        assertThat((Map<String, Object>) request.get("properties")).containsKey("name");
+    }
 }
