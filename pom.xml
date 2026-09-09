@@ -44,6 +44,7 @@
         <module>aura-ai</module>
         <module>aura-workflow</module>
         <module>examples/aura-composed</module>
+        <module>examples/aura-generated</module>
         <module>aura-dev</module>
     </modules>
 

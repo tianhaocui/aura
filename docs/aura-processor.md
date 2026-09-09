@@ -11,7 +11,7 @@ The generated contributor contains direct Java calls, explicit route metadata,
 and fixed path/query/body binding. Install it explicitly:
 
 ```java
-context.routes(new OrderServiceAuraRoutes(orderService));
+new OrderServiceAuraRoutes(orderService).routes().forEach(context::route);
 ```
 
 Do not also register the same service through the reflection-based service

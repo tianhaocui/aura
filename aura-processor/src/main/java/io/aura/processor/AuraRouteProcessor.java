@@ -127,10 +127,7 @@ public final class AuraRouteProcessor extends AbstractProcessor {
                 }
             } else {
                 String name = parameter.getSimpleName().toString();
-                boolean required = type.getKind().isPrimitive() || path.contains("{" + name + "}");
-                String accessor = required
-                        ? "ctx.queryRequired(\"" + escape(name) + "\")"
-                        : "ctx.query(\"" + escape(name) + "\")";
+                String accessor = "ctx.query(\"" + escape(name) + "\")";
                 String expression = path.contains("{" + name + "}")
                         ? scalar("ctx.path(\"" + escape(name) + "\")", type)
                         : scalar(accessor, type);

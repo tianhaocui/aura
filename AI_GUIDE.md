@@ -108,7 +108,7 @@ public final class OrderService {
 public final class OrderModule implements AuraModule {
     @Override public void install(ModuleContext context) {
         OrderService service = context.require(OrderService.class);
-        context.routes(new OrderServiceAuraRoutes(service));
+        new OrderServiceAuraRoutes(service).routes().forEach(context::route);
     }
 }
 ```
