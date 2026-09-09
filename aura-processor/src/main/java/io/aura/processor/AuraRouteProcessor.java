@@ -1,0 +1,241 @@
+package io.aura.processor;
+
+import io.aura.annotation.Delete;
+import io.aura.annotation.Get;
+import io.aura.annotation.Head;
+import io.aura.annotation.Options;
+import io.aura.annotation.Patch;
+import io.aura.annotation.Post;
+import io.aura.annotation.Put;
+
+import javax.annotation.processing.AbstractProcessor;
+import javax.annotation.processing.Filer;
+import javax.annotation.processing.RoundEnvironment;
+import javax.annotation.processing.SupportedAnnotationTypes;
+import javax.annotation.processing.SupportedSourceVersion;
+import javax.lang.model.SourceVersion;
+import javax.lang.model.element.AnnotationMirror;
+import javax.lang.model.element.Element;
+import javax.lang.model.element.ElementKind;
+import javax.lang.model.element.ExecutableElement;
+import javax.lang.model.element.Modifier;
+import javax.lang.model.element.TypeElement;
+import javax.lang.model.element.VariableElement;
+import javax.lang.model.type.TypeKind;
+import javax.lang.model.type.TypeMirror;
+import javax.tools.JavaFileObject;
+import java.io.IOException;
+import java.io.Writer;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Set;
+
+/**
+ * Optional compile-time generator for explicit Aura route contributions.
+ * Generated code is ordinary Java and can be inspected, compiled, and tested
+ * without reflection at runtime.
+ */
+@SupportedSourceVersion(SourceVersion.RELEASE_17)
+@SupportedAnnotationTypes({
+        "io.aura.annotation.Path", "io.aura.annotation.Get", "io.aura.annotation.Post",
+        "io.aura.annotation.Put", "io.aura.annotation.Delete", "io.aura.annotation.Patch",
+        "io.aura.annotation.Head", "io.aura.annotation.Options"})
+public final class AuraRouteProcessor extends AbstractProcessor {
+    private final Set<String> generated = new LinkedHashSet<>();
+
+    @Override public boolean process(Set<? extends TypeElement> annotations, RoundEnvironment roundEnv) {
+        if (roundEnv.processingOver()) return false;
+        Set<Element> services = new LinkedHashSet<>();
+        for (Element element : roundEnv.getElementsAnnotatedWith(io.aura.annotation.Path.class)) {
+            if (element.getKind() == ElementKind.CLASS) services.add(element);
+        }
+        for (TypeElement annotation : annotations) {
+            for (Element element : roundEnv.getElementsAnnotatedWith(annotation)) {
+                if (element.getKind() == ElementKind.METHOD && element.getEnclosingElement().getKind() == ElementKind.CLASS) {
+                    services.add(element.getEnclosingElement());
+                }
+            }
+        }
+        services.stream().filter(element -> element instanceof TypeElement)
+                .map(element -> (TypeElement) element)
+                .sorted(Comparator.comparing(element -> element.getQualifiedName().toString()))
+                .forEach(this::generate);
+        return false;
+    }
+
+    private void generate(TypeElement service) {
+        String packageName = processingEnv.getElementUtils().getPackageOf(service).getQualifiedName().toString();
+        String simpleName = service.getSimpleName() + "AuraRoutes";
+        String qualifiedName = packageName.isEmpty() ? simpleName : packageName + "." + simpleName;
+        if (!generated.add(qualifiedName)) return;
+
+        String prefix = annotationValue(service, "io.aura.annotation.Path", "value");
+        if (prefix == null) prefix = "";
+        List<ExecutableElement> methods = service.getEnclosedElements().stream()
+                .filter(element -> element.getKind() == ElementKind.METHOD)
+                .map(element -> (ExecutableElement) element)
+                .filter(method -> method.getModifiers().contains(Modifier.PUBLIC))
+                .filter(this::hasRouteAnnotation)
+                .sorted(Comparator.comparing(method -> method.getSimpleName().toString()))
+                .toList();
+        if (methods.isEmpty()) return;
+
+        StringBuilder source = new StringBuilder();
+        if (!packageName.isEmpty()) source.append("package ").append(packageName).append(";\n\n");
+        source.append("public final class ").append(simpleName)
+                .append(" implements io.aura.contract.RouteContributor {\n")
+                .append("  private final ").append(service.getQualifiedName()).append(" service;\n")
+                .append("  public ").append(simpleName).append("(").append(service.getQualifiedName()).append(" service) { this.service = service; }\n")
+                .append("  @Override public java.util.List<io.aura.contract.RouteContribution> routes() {\n")
+                .append("    return java.util.List.of(\n");
+        for (int i = 0; i < methods.size(); i++) {
+            if (i > 0) source.append(",\n");
+            appendRoute(source, prefix, methods.get(i));
+        }
+        source.append(");\n  }\n}\n");
+
+        try {
+            JavaFileObject file = processingEnv.getFiler().createSourceFile(qualifiedName, service);
+            try (Writer writer = file.openWriter()) { writer.write(source.toString()); }
+        } catch (IOException error) {
+            processingEnv.getMessager().printMessage(javax.tools.Diagnostic.Kind.ERROR,
+                    "Aura route generation failed for " + service.getQualifiedName() + ": " + error.getMessage(), service);
+        }
+    }
+
+    private void appendRoute(StringBuilder source, String prefix, ExecutableElement method) {
+        Route route = route(method);
+        String path = prefix + route.path;
+        source.append("      new io.aura.contract.RouteContribution(\"").append(route.method).append("\", \"")
+                .append(escape(path)).append("\", (io.aura.web.BaseHandler) ctx -> {");
+
+        List<? extends VariableElement> parameters = method.getParameters();
+        List<String> args = new ArrayList<>();
+        for (VariableElement parameter : parameters) {
+            TypeMirror type = parameter.asType();
+            if (isContext(type)) {
+                args.add("ctx");
+            } else if (isBody(type)) {
+                if (type.getKind() == javax.lang.model.type.TypeKind.ARRAY || type.getKind() == javax.lang.model.type.TypeKind.DECLARED && ((javax.lang.model.type.DeclaredType) type).getTypeArguments().isEmpty()) {
+                    args.add("ctx.bodyOrThrow(" + rawClassName(type) + ".class)");
+                } else {
+                    processingEnv.getMessager().printMessage(javax.tools.Diagnostic.Kind.ERROR,
+                            "Generic body parameters are not supported by AuraRouteProcessor; use a concrete record/POJO", parameter);
+                    args.add("null");
+                }
+            } else {
+                String name = parameter.getSimpleName().toString();
+                boolean required = type.getKind().isPrimitive() || path.contains("{" + name + "}");
+                String accessor = required
+                        ? "ctx.queryRequired(\"" + escape(name) + "\")"
+                        : "ctx.query(\"" + escape(name) + "\")";
+                String expression = path.contains("{" + name + "}")
+                        ? scalar("ctx.path(\"" + escape(name) + "\")", type)
+                        : scalar(accessor, type);
+                args.add(expression);
+            }
+        }
+        String invocation = "service." + method.getSimpleName() + "(" + String.join(", ", args) + ")";
+        if (method.getReturnType().getKind() == TypeKind.VOID) source.append(invocation).append(";");
+        else source.append("ctx.json(").append(invocation).append(");");
+        source.append("}, java.util.Map.of(\"parameters\", java.util.List.of(");
+        List<String> contracts = new ArrayList<>();
+        for (VariableElement parameter : parameters) {
+            if (isContext(parameter.asType())) continue;
+            String name = parameter.getSimpleName().toString();
+            String sourceName = isBody(parameter.asType()) ? "body" :
+                    path.contains("{" + name + "}") ? "path" : "query";
+            boolean required = isBody(parameter.asType()) || parameter.asType().getKind().isPrimitive()
+                    || "path".equals(sourceName);
+            String description = annotationValue(parameter, "io.aura.annotation.Desc", "value");
+            contracts.add("new io.aura.contract.ApiParameter(\"" + escape(name) + "\", \""
+                    + escape(parameter.asType().toString()) + "\", \"" + sourceName + "\", " + required + ", "
+                    + (description == null ? "null" : "\"" + escape(description) + "\"") + ")");
+        }
+        source.append(String.join(", ", contracts)).append("), \"returnType\", \"")
+                .append(escape(method.getReturnType().toString())).append("\"");
+        String description = routeDescription(method);
+        if (description != null) {
+            source.append(", \"description\", \"").append(escape(description)).append("\"");
+        }
+        source.append("))");
+    }
+
+    private boolean hasRouteAnnotation(ExecutableElement method) {
+        return route(method).method != null;
+    }
+
+    private Route route(ExecutableElement method) {
+        String[][] values = {
+                {"io.aura.annotation.Get", "GET"}, {"io.aura.annotation.Post", "POST"},
+                {"io.aura.annotation.Put", "PUT"}, {"io.aura.annotation.Delete", "DELETE"},
+                {"io.aura.annotation.Patch", "PATCH"}, {"io.aura.annotation.Head", "HEAD"},
+                {"io.aura.annotation.Options", "OPTIONS"}};
+        for (String[] value : values) {
+            String path = annotationValue(method, value[0], "value");
+            if (path != null) return new Route(value[1], path);
+        }
+        return new Route(null, null);
+    }
+
+    private String annotationValue(Element element, String annotationName, String valueName) {
+        for (AnnotationMirror mirror : element.getAnnotationMirrors()) {
+            if (mirror.getAnnotationType().toString().equals(annotationName)) {
+                for (var entry : mirror.getElementValues().entrySet()) {
+                    if (entry.getKey().getSimpleName().contentEquals(valueName)) {
+                        return entry.getValue().getValue().toString();
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
+    private boolean isContext(TypeMirror type) {
+        String name = type.toString();
+        return "io.aura.web.Context".equals(name) || "io.aura.web.BaseContext".equals(name);
+    }
+
+    private boolean isBody(TypeMirror type) {
+        if (isContext(type)) return false;
+        return !Set.of("java.lang.String", "int", "long", "boolean", "double", "float",
+                "short", "byte", "char", "java.lang.Integer", "java.lang.Long",
+                "java.lang.Boolean", "java.lang.Double", "java.lang.Float").contains(type.toString());
+    }
+
+    private String scalar(String value, TypeMirror type) {
+        String converted = switch (type.toString()) {
+            case "int", "java.lang.Integer" -> "Integer.parseInt(" + value + ")";
+            case "long", "java.lang.Long" -> "Long.parseLong(" + value + ")";
+            case "boolean", "java.lang.Boolean" -> "Boolean.parseBoolean(" + value + ")";
+            case "double", "java.lang.Double" -> "Double.parseDouble(" + value + ")";
+            case "float", "java.lang.Float" -> "Float.parseFloat(" + value + ")";
+            case "short", "java.lang.Short" -> "Short.parseShort(" + value + ")";
+            case "byte", "java.lang.Byte" -> "Byte.parseByte(" + value + ")";
+            case "char", "java.lang.Character" -> "(" + value + ").charAt(0)";
+            default -> null;
+        };
+        if (converted == null) return value;
+        return type.getKind().isPrimitive() ? converted : "(" + value + " == null ? null : " + converted + ")";
+    }
+
+    private String routeDescription(ExecutableElement method) {
+        return annotationValue(method, "io.aura.annotation.Desc", "value");
+    }
+
+    private static String rawClassName(TypeMirror type) {
+        if (type.getKind() == TypeKind.ARRAY) return type.toString();
+        if (type instanceof javax.lang.model.type.DeclaredType declared) {
+            return declared.asElement().toString();
+        }
+        return type.toString();
+    }
+
+    private static String escape(String value) {
+        return value.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n");
+    }
+
+    private record Route(String method, String path) { }
+}

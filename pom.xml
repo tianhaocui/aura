@@ -37,6 +37,7 @@
     <modules>
         <module>aura-contract</module>
         <module>aura-core</module>
+        <module>aura-processor</module>
         <module>aura-web</module>
         <module>aura-db</module>
         <module>aura-mcp</module>
@@ -68,6 +69,11 @@
             <dependency>
                 <groupId>io.github.tianhaocui</groupId>
                 <artifactId>aura-core</artifactId>
+                <version>${aura.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.github.tianhaocui</groupId>
+                <artifactId>aura-processor</artifactId>
                 <version>${aura.version}</version>
             </dependency>
             <dependency>

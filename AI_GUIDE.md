@@ -62,6 +62,61 @@ Use `context.require(Type.class)` for required capabilities and
 `context.find(Type.class)` for optional capabilities. Do not use global
 registries, reflection-based module discovery, or numeric workflow positions.
 
+## Generated Routes
+
+For production services with route annotations, add the optional
+`aura-processor` annotation processor. It emits an inspectable
+`<ServiceName>AuraRoutes` contributor with direct method calls and fixed
+parameter binding. Reflection registration remains useful for prototypes; do
+not combine both registrations for the same service.
+
+```xml
+<dependency>
+    <groupId>io.github.tianhaocui</groupId>
+    <artifactId>aura-processor</artifactId>
+    <version>1.0.0</version>
+    <scope>provided</scope>
+</dependency>
+```
+
+```xml
+<plugin>
+    <groupId>org.apache.maven.plugins</groupId>
+    <artifactId>maven-compiler-plugin</artifactId>
+    <configuration>
+        <annotationProcessorPaths>
+            <path>
+                <groupId>io.github.tianhaocui</groupId>
+                <artifactId>aura-processor</artifactId>
+                <version>1.0.0</version>
+            </path>
+        </annotationProcessorPaths>
+    </configuration>
+</plugin>
+```
+
+```java
+@Path("/orders")
+public final class OrderService {
+    @Get("/{id}")
+    public Order get(long id) { return orders.get(id); }
+
+    @Post("")
+    public Order create(CreateOrder request) { return orders.create(request); }
+}
+
+public final class OrderModule implements AuraModule {
+    @Override public void install(ModuleContext context) {
+        OrderService service = context.require(OrderService.class);
+        context.routes(new OrderServiceAuraRoutes(service));
+    }
+}
+```
+
+Generated sources are regular Java under Maven's generated-sources directory.
+Compile them, inspect them, and verify their routes through `TestClient` like
+any handwritten module code.
+
 ## Configuration
 
 ```java
