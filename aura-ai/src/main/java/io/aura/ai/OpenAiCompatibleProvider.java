@@ -78,6 +78,7 @@ public final class OpenAiCompatibleProvider implements AiProvider {
         }
         handler.onStart();
         StringBuilder content = new StringBuilder();
+        Map<String, Object> usage = new LinkedHashMap<>();
         long[] bytes = {0L};
         try (InputStream body = response.body();
              BufferedReader reader = new BufferedReader(new InputStreamReader(body, StandardCharsets.UTF_8))) {
@@ -92,7 +93,11 @@ public final class OpenAiCompatibleProvider implements AiProvider {
                 if (!line.startsWith("data:")) continue;
                 String data = line.substring(5).trim();
                 if ("[DONE]".equals(data)) break;
-                String token = decodeDelta(data);
+                Map<String, Object> event = decodeEvent(data);
+                if (event.get("usage") instanceof Map<?, ?> reportedUsage) {
+                    reportedUsage.forEach((key, value) -> usage.put(String.valueOf(key), value));
+                }
+                String token = decodeDelta(event);
                 if (token != null && !token.isEmpty()) {
                     content.append(token);
                     handler.onToken(token);
@@ -100,7 +105,7 @@ public final class OpenAiCompatibleProvider implements AiProvider {
             }
         }
         request.cancellationToken().throwIfCancelled();
-        handler.onComplete(new AiResponse(content.toString(), model(request), Map.of(), null));
+        handler.onComplete(new AiResponse(content.toString(), model(request), usage, null));
     }
 
     private HttpRequest request(AiRequest request, boolean stream) {
@@ -118,6 +123,9 @@ public final class OpenAiCompatibleProvider implements AiProvider {
             }
         });
         if (stream) payload.put("stream", true);
+        if (stream && request.budget().requiresUsage()) {
+            payload.put("stream_options", Map.of("include_usage", true));
+        }
         if (!request.tools().isEmpty()) {
             payload.put("tools", request.tools().stream().map(tool -> Map.of(
                     "type", "function",
@@ -181,11 +189,29 @@ public final class OpenAiCompatibleProvider implements AiProvider {
     private static String decodeDelta(String payload) throws AiProviderException {
         try {
             Map<String, Object> root = JSON.parseObject(payload, Map.class);
+            return decodeDelta(root);
+        } catch (RuntimeException error) {
+            throw new AiProviderException("AI_STREAM_INVALID", 200, "AI provider returned invalid stream data");
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private static String decodeDelta(Map<String, Object> root) throws AiProviderException {
+        try {
             List<Map<String, Object>> choices = (List<Map<String, Object>>) root.get("choices");
             if (choices == null || choices.isEmpty()) return null;
             Map<String, Object> delta = (Map<String, Object>) choices.get(0).get("delta");
             Object content = delta == null ? null : delta.get("content");
             return content == null ? null : content.toString();
+        } catch (RuntimeException error) {
+            throw new AiProviderException("AI_STREAM_INVALID", 200, "AI provider returned invalid stream data");
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Map<String, Object> decodeEvent(String payload) throws AiProviderException {
+        try {
+            return JSON.parseObject(payload, Map.class);
         } catch (RuntimeException error) {
             throw new AiProviderException("AI_STREAM_INVALID", 200, "AI provider returned invalid stream data");
         }

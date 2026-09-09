@@ -19,7 +19,12 @@ AiRequest request = AiRequest.builder()
         .prompt("Summarize this order")
         .model("my-model")
         .timeout(Duration.ofSeconds(20))
-        .budget(new AiBudget(8_000, 4_000, 0))
+        .budget(AiBudget.builder()
+                .maxInputCharacters(8_000)
+                .maxOutputCharacters(4_000)
+                .maxOutputTokens(2_000)
+                .maxCostMicros(50_000)
+                .build())
         .build();
 
 AiResponse response = client.chat(request);

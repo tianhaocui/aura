@@ -16,6 +16,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 /** Synchronous and streaming facade around an {@link AiProvider}. */
 public final class AiClient implements AutoCloseable {
@@ -57,10 +58,7 @@ public final class AiClient implements AutoCloseable {
             });
             try {
                 AiResponse response = await(future, remaining, request.cancellationToken());
-                if (request.budget().maxOutputCharacters() > 0
-                        && response.content().length() > request.budget().maxOutputCharacters()) {
-                    throw new IllegalStateException("AI response exceeds configured output budget");
-                }
+                enforceBudget(request, response);
                 return response;
             } catch (TimeoutException | CancellationException | InterruptedException error) {
                 request.cancellationToken().cancel();
@@ -70,6 +68,9 @@ public final class AiClient implements AutoCloseable {
             } catch (ExecutionException error) {
                 future.cancel(true);
                 Throwable cause = unwrap(error);
+                if (cause instanceof AiBudgetExceededException budgetFailure) {
+                    throw budgetFailure;
+                }
                 if (attempt >= request.retryPolicy().maxAttempts()
                         || !request.retryPolicy().shouldRetry(cause)) {
                     if (cause instanceof Exception exception) throw exception;
@@ -86,16 +87,35 @@ public final class AiClient implements AutoCloseable {
         Objects.requireNonNull(handler, "handler");
         request.cancellationToken().throwIfCancelled();
         AtomicBoolean errorDelivered = new AtomicBoolean();
+        AtomicReference<AiBudgetExceededException> budgetFailure = new AtomicReference<>();
+        StringBuilder streamedContent = new StringBuilder();
         Future<Void> future = submit(() -> {
             handler.onStart();
             request.cancellationToken().throwIfCancelled();
             provider.stream(request, new AiStreamHandler() {
                 @Override public void onToken(String token) {
                     request.cancellationToken().throwIfCancelled();
+                    if (token != null) {
+                        streamedContent.append(token);
+                        try {
+                            enforceOutputCharacters(request, streamedContent.length());
+                        } catch (AiBudgetExceededException exceeded) {
+                            budgetFailure.compareAndSet(null, exceeded);
+                            request.cancellationToken().cancel();
+                            throw exceeded;
+                        }
+                    }
                     handler.onToken(token);
                 }
                 @Override public void onComplete(AiResponse response) {
                     request.cancellationToken().throwIfCancelled();
+                    try {
+                        enforceBudget(request, response);
+                    } catch (AiBudgetExceededException exceeded) {
+                        budgetFailure.compareAndSet(null, exceeded);
+                        request.cancellationToken().cancel();
+                        throw exceeded;
+                    }
                     handler.onComplete(response);
                 }
                 @Override public void onError(Throwable error) {
@@ -106,17 +126,66 @@ public final class AiClient implements AutoCloseable {
         });
         try {
             await(future, request.timeout(), request.cancellationToken());
+            if (budgetFailure.get() != null) {
+                AiBudgetExceededException exceeded = budgetFailure.get();
+                if (errorDelivered.compareAndSet(false, true)) handler.onError(exceeded);
+                throw exceeded;
+            }
         } catch (TimeoutException | CancellationException | InterruptedException error) {
             request.cancellationToken().cancel();
             future.cancel(true);
             if (error instanceof InterruptedException) Thread.currentThread().interrupt();
-            if (errorDelivered.compareAndSet(false, true)) handler.onError(error);
+            Throwable terminal = budgetFailure.get() != null ? budgetFailure.get() : error;
+            if (errorDelivered.compareAndSet(false, true)) handler.onError(terminal);
+            if (terminal instanceof Exception exception) throw exception;
             throw error;
         } catch (ExecutionException error) {
+            request.cancellationToken().cancel();
             future.cancel(true);
             Throwable cause = unwrap(error);
-            if (errorDelivered.compareAndSet(false, true)) handler.onError(cause);
-            throwCause(error);
+            Throwable terminal = budgetFailure.get() != null ? budgetFailure.get() : cause;
+            if (errorDelivered.compareAndSet(false, true)) handler.onError(terminal);
+            if (terminal instanceof Exception exception) throw exception;
+            if (terminal instanceof Error fatal) throw fatal;
+            throw new RuntimeException(terminal);
+        }
+    }
+
+    private static void enforceBudget(AiRequest request, AiResponse response) {
+        enforceOutputCharacters(request, response.content().length());
+        AiBudget budget = request.budget();
+        if (!budget.requiresUsage()) return;
+        AiUsage usage = AiUsage.from(response.usage());
+        if (budget.maxInputTokens() > 0 && usage.inputTokens() < 0) {
+            throw AiBudgetExceededException.missing("inputTokens", budget.maxInputTokens());
+        }
+        if (budget.maxOutputTokens() > 0 && usage.outputTokens() < 0) {
+            throw AiBudgetExceededException.missing("outputTokens", budget.maxOutputTokens());
+        }
+        if (budget.maxTotalTokens() > 0 && usage.totalTokens() < 0) {
+            throw AiBudgetExceededException.missing("totalTokens", budget.maxTotalTokens());
+        }
+        if (budget.maxCostMicros() > 0 && usage.costMicros() < 0) {
+            throw AiBudgetExceededException.missing("costMicros", budget.maxCostMicros());
+        }
+        if (budget.maxInputTokens() > 0 && usage.inputTokens() > budget.maxInputTokens()) {
+            throw AiBudgetExceededException.exceeded("inputTokens", budget.maxInputTokens(), usage.inputTokens());
+        }
+        if (budget.maxOutputTokens() > 0 && usage.outputTokens() > budget.maxOutputTokens()) {
+            throw AiBudgetExceededException.exceeded("outputTokens", budget.maxOutputTokens(), usage.outputTokens());
+        }
+        if (budget.maxTotalTokens() > 0 && usage.totalTokens() > budget.maxTotalTokens()) {
+            throw AiBudgetExceededException.exceeded("totalTokens", budget.maxTotalTokens(), usage.totalTokens());
+        }
+        if (budget.maxCostMicros() > 0 && usage.costMicros() > budget.maxCostMicros()) {
+            throw AiBudgetExceededException.exceeded("costMicros", budget.maxCostMicros(), usage.costMicros());
+        }
+    }
+
+    private static void enforceOutputCharacters(AiRequest request, long actual) {
+        long limit = request.budget().maxOutputCharacters();
+        if (limit > 0 && actual > limit) {
+            throw AiBudgetExceededException.exceeded("outputCharacters", limit, actual);
         }
     }
 

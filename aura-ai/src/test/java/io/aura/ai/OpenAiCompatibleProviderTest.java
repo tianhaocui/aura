@@ -74,6 +74,35 @@ class OpenAiCompatibleProviderTest {
     }
 
     @Test
+    void streamingBudgetRequestsAndParsesUsage() throws Exception {
+        AtomicReference<String> requestBody = new AtomicReference<>();
+        HttpServer server = HttpServer.create(new InetSocketAddress(0), 0);
+        server.createContext("/usage-stream", exchange -> {
+            requestBody.set(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
+            byte[] response = ("data: {\"choices\":[{\"delta\":{\"content\":\"ok\"}}]}\n\n"
+                    + "data: {\"choices\":[],\"usage\":{\"prompt_tokens\":2,\"completion_tokens\":1,\"total_tokens\":3}}\n\n"
+                    + "data: [DONE]\n\n").getBytes(StandardCharsets.UTF_8);
+            exchange.sendResponseHeaders(200, response.length);
+            try (OutputStream output = exchange.getResponseBody()) { output.write(response); }
+        });
+        server.start();
+        try {
+            OpenAiCompatibleProvider provider = OpenAiCompatibleProvider.create(
+                    "http://localhost:" + server.getAddress().getPort() + "/usage-stream", "", "default");
+            AiRequest request = AiRequest.builder().prompt("prompt")
+                    .budget(AiBudget.builder().maxTotalTokens(3).build()).build();
+            try (AiClient client = new AiClient(provider)) {
+                StringBuilder output = new StringBuilder();
+                client.stream(request, output::append);
+                assertThat(output).hasToString("ok");
+            }
+            assertThat(requestBody.get()).contains("stream_options", "include_usage");
+        } finally {
+            server.stop(0);
+        }
+    }
+
+    @Test
     void sendsTypedToolsAndParsesToolCallsWithoutExposingRawErrors() throws Exception {
         AtomicReference<String> requestBody = new AtomicReference<>();
         HttpServer server = HttpServer.create(new InetSocketAddress(0), 0);

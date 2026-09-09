@@ -212,6 +212,25 @@ structured output, and tool calling. Pass `ctx.cancellationToken()` to AI and
 external HTTP calls. `SnapshotHttpClient` accepts only relative paths, disables
 redirects, bounds response bodies, and enforces an absolute timeout.
 
+Use explicit budgets when an AI request has a hard execution allowance:
+
+```java
+AiRequest request = AiRequest.builder()
+        .prompt("Summarize this order")
+        .budget(AiBudget.builder()
+                .maxInputCharacters(8_000)
+                .maxOutputCharacters(2_000)
+                .maxTotalTokens(4_000)
+                .maxCostMicros(50_000)
+                .build())
+        .build();
+```
+
+When token or cost limits are configured, a provider must report usage. Missing
+usage fails closed with `AI_BUDGET_USAGE_MISSING`; an exceeded limit produces
+`AI_BUDGET_EXCEEDED` with a stable dimension, limit, and actual value. Streaming
+providers receive cooperative cancellation as soon as the character limit is exceeded.
+
 MCP tools are explicitly selected and can declare permissions:
 
 ```java
