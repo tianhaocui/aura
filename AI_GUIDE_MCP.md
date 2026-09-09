@@ -54,6 +54,26 @@ Transport adapters pass untrusted metadata to the authenticator. A tool handler
 can read the resolved identity with `ctx.userId()`. Permissioned tools fail
 closed when no authorizer or authenticated identity is available.
 
+Enable the HTTP transport explicitly; installing `McpModule` alone does not
+open an HTTP endpoint:
+
+```java
+McpModule mcpModule = McpModule.create(mcp)
+    .http("/mcp", 1024, Duration.ofMinutes(30));
+
+AuraApp.create()
+    .mcpAuthenticate(metadata -> tokenService.userId(metadata.get("authorization")))
+    .mcpAuthorize((user, permission) -> acl.allows(user, permission))
+    .use(mcpModule)
+    .start();
+```
+
+Clients initialize with protocol version `2025-03-26`, retain the returned
+`Mcp-Session-Id` response header, and send that header on later POST or DELETE
+requests. Sessions are bound to the authenticated identity, have a bounded
+capacity and idle TTL, and re-authenticate every request. The endpoint rejects
+anonymous callers even when every registered tool is public.
+
 ## McpContext Methods
 
 `getString()`, `getInt()`, `getLong()`, `getEnum(name, Type.class)`, `get()`, `userId()`
@@ -65,6 +85,7 @@ Env `AURA_API_URL` > `aura.properties` (`api.url=...`) > baked default.
 ## Deployment
 
 - **stdio** — `java -jar app.jar --mcp-stdio`, for Claude Desktop / Cursor
+- **HTTP JSON-RPC** — explicit `McpModule.create(router).http()`, default `/mcp`
 - **npm publish** — `McpPackager` generates distributable npm package, `--publish` to registry
 
 ```json

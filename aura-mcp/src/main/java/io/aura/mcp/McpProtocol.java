@@ -100,9 +100,9 @@ public final class McpProtocol {
         Object result;
         if ("initialize".equals(method)) {
             result = Map.of(
-                "protocolVersion", "2025-03-26",
+                "protocolVersion", McpProtocolConstants.VERSION,
                 "capabilities", Map.of("tools", Map.of(), "resources", Map.of(), "prompts", Map.of()),
-                "serverInfo", Map.of("name", serverName, "version", "0.1.0")
+                "serverInfo", Map.of("name", serverName, "version", McpProtocolConstants.SERVER_VERSION)
             );
         } else if ("ping".equals(method)) {
             result = Map.of();

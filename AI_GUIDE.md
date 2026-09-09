@@ -224,6 +224,9 @@ mcp.tool("delete_order", "Delete an order")
 Permissioned tools fail closed unless an authenticated transport calls the
 four-argument `invoke` boundary with an identity and authorizer. MCP transport
 errors use stable JSON-RPC codes `-32700`, `-32600`, `-32601`, and `-32602`.
+Enable authenticated HTTP JSON-RPC explicitly with
+`McpModule.create(router).http()`; its sessions are identity-bound, capacity
+bounded, idle-expiring, and re-authenticated on every request.
 
 Customer-specific processes use named workflow variants:
 
