@@ -124,8 +124,8 @@ final class McpHttpTransport {
             return;
         }
         String requestedVersion = params.getString("protocolVersion");
-        if (requestedVersion == null || params.getJSONObject("clientInfo") == null
-                || params.getJSONObject("capabilities") == null) {
+        if (requestedVersion == null || !objectValue(params, "clientInfo")
+                || !objectValue(params, "capabilities")) {
             respondError(context, id, 400, -32602, "Invalid initialize params");
             return;
         }
@@ -229,6 +229,11 @@ final class McpHttpTransport {
     private static boolean objectOrAbsent(JSONObject params, String key) {
         Object value = params.get(key);
         return value == null || value instanceof JSONObject || value instanceof Map<?, ?>;
+    }
+
+    private static boolean objectValue(JSONObject params, String key) {
+        Object value = params.get(key);
+        return value instanceof JSONObject || value instanceof Map<?, ?>;
     }
 
     private static void add(Map<String, String> metadata, String key, String value) {

@@ -118,6 +118,11 @@ class McpHttpTransportTest {
                 Map.of()).expect(400))).isEqualTo(-32602);
         assertThat(errorCode(request("Bearer alice", session, 6, "prompts/get",
                 Map.of()).expect(400))).isEqualTo(-32602);
+
+        Map<String, Object> invalidInitialize = initialize(7);
+        ((Map<String, Object>) invalidInitialize.get("params")).put("clientInfo", "invalid");
+        assertThat(errorCode(client.post("/mcp").header("Authorization", "Bearer alice")
+                .body(invalidInitialize).expect(400))).isEqualTo(-32602);
     }
 
     @Test
