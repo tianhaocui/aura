@@ -28,4 +28,16 @@ class DatabaseModuleTest {
         assertThat(app.getBean(Db.class)).isSameAs(db);
         db.close();
     }
+
+    @Test
+    void databaseModuleAcceptsMigrationSourceSpi() {
+        Db db = Db.create("jdbc:h2:mem:module-migration;DB_CLOSE_DELAY=-1", "sa", "");
+        MigrationSource source = () -> java.util.List.of(
+                new Migration("1", "create_items", "CREATE TABLE items (id INT PRIMARY KEY)"));
+        DatabaseModule module = DatabaseModule.create(db).migrations(source);
+        assertThat(module).isNotNull();
+        db.migrate(source);
+        assertThat(db.find("SELECT * FROM items")).isEmpty();
+        db.close();
+    }
 }
