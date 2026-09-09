@@ -10,6 +10,7 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 public final class InMemoryWorkflowExecutionStore implements WorkflowExecutionStore {
     private final ConcurrentHashMap<String, WorkflowExecution> executions = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, String> idempotencyKeys = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, WorkflowExecutionSnapshot> snapshots = new ConcurrentHashMap<>();
     private final ConcurrentLinkedQueue<String> insertionOrder = new ConcurrentLinkedQueue<>();
     private final int maxExecutions;
 
@@ -37,14 +38,25 @@ public final class InMemoryWorkflowExecutionStore implements WorkflowExecutionSt
         } else {
             executions.put(execution.executionId(), execution);
         }
+        saveSnapshot(execution.snapshot());
         while (executions.size() > maxExecutions) {
             String oldest = insertionOrder.poll();
             if (oldest == null) break;
             WorkflowExecution removed = executions.remove(oldest);
+            snapshots.remove(oldest);
             if (removed != null && removed.idempotencyKey() != null) {
                 idempotencyKeys.remove(key(removed.workflowId(), removed.idempotencyKey()), removed.executionId());
             }
         }
+    }
+
+    @Override public void saveSnapshot(WorkflowExecutionSnapshot snapshot) {
+        if (snapshot == null) throw new IllegalArgumentException("snapshot must not be null");
+        snapshots.put(snapshot.executionId(), snapshot);
+    }
+
+    public Optional<WorkflowExecutionSnapshot> findSnapshot(String executionId) {
+        return Optional.ofNullable(snapshots.get(executionId));
     }
 
     @Override public Optional<WorkflowExecution> find(String executionId) {

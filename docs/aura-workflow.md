@@ -108,3 +108,9 @@ when full. Production modules can provide a
 `WorkflowExecutionStore` implementation to persist state; distributed workers and resume policies
 remain explicit extension responsibilities. Cancellation is cooperative: a running step must
 honor interruption or inspect its token through the surrounding context to stop promptly.
+
+Use `WorkflowExecution.snapshot()` when a store needs an immutable, JSON-friendly
+projection. It contains lifecycle and step metadata plus stable error codes, but
+intentionally excludes arbitrary step results and raw exception messages. Aura
+does not automatically replay a persisted execution; recovery must be an explicit,
+idempotent business operation.

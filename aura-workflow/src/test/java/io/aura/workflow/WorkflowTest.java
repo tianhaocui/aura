@@ -361,6 +361,46 @@ class WorkflowTest {
     }
 
     @Test
+    void executionSnapshotIsImmutableAndExcludesBusinessResultsAndMessages() {
+        WorkflowDefinition<Object> workflow = Workflow.<Object>builder("snapshot-flow")
+                .step("secret-step", context -> "password=hidden")
+                .build();
+        WorkflowResult result = workflow.execute(new Object());
+
+        WorkflowExecutionSnapshot snapshot = result.execution().snapshot();
+        assertThat(snapshot.status()).isEqualTo(WorkflowExecution.Status.SUCCEEDED);
+        assertThat(snapshot.steps()).singleElement().satisfies(step -> {
+            assertThat(step.stepId()).isEqualTo("secret-step");
+            assertThat(step.status()).isEqualTo(StepExecution.Status.SUCCEEDED);
+        });
+        assertThat(snapshot.toMap().toString()).doesNotContain("password", "hidden");
+        assertThatThrownBy(() -> snapshot.toMap().put("status", "FAILED"))
+                .isInstanceOf(UnsupportedOperationException.class);
+    }
+
+    @Test
+    void executionSnapshotKeepsStableWorkflowErrorCodeWithoutRawMessage() {
+        WorkflowDefinition<Object> workflow = Workflow.<Object>builder("snapshot-failure")
+                .step("fail", context -> { throw new WorkflowException(WorkflowException.MISSING_STEP, "secret details"); })
+                .build();
+        WorkflowExecutionSnapshot snapshot = workflow.execute(new Object()).execution().snapshot();
+
+        assertThat(snapshot.errorCode()).isEqualTo(WorkflowException.MISSING_STEP);
+        assertThat(snapshot.toMap().toString()).doesNotContain("secret details");
+    }
+
+    @Test
+    void inMemoryStoreKeepsSnapshotProjectionAlongsideExecution() {
+        InMemoryWorkflowExecutionStore store = new InMemoryWorkflowExecutionStore(1);
+        WorkflowExecution execution = new WorkflowExecution("flow", null);
+        store.save(execution);
+
+        assertThat(store.findSnapshot(execution.executionId())).isPresent();
+        assertThat(store.findSnapshot(execution.executionId()).orElseThrow().executionId())
+                .isEqualTo(execution.executionId());
+    }
+
+    @Test
     void idempotencyKeyDeduplicatesConcurrentAndRetainedExecutions() throws Exception {
         WorkflowRegistry registry = new WorkflowRegistry();
         java.util.concurrent.CountDownLatch started = new java.util.concurrent.CountDownLatch(1);

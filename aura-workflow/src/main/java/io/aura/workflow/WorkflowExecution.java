@@ -44,4 +44,6 @@ public final class WorkflowExecution {
     public Map<String, StepExecution> steps() { return Collections.unmodifiableMap(steps); }
     public java.util.List<StepExecution> stepExecutions() { return java.util.List.copyOf(steps.values()); }
     public StepExecution step(String id) { return steps.get(id); }
+    /** Returns an immutable, redacted view suitable for persistence or tooling. */
+    public WorkflowExecutionSnapshot snapshot() { return WorkflowExecutionSnapshot.from(this); }
 }
