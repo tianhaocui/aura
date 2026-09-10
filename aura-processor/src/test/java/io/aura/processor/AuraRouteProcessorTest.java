@@ -82,4 +82,62 @@ class AuraRouteProcessorTest {
             assertThat(task.call()).isTrue();
         }
     }
+
+    @Test
+    void generatedBodySchemaSupportsMoreThanTenRecordFields() throws Exception {
+        JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
+        Path root = Files.createTempDirectory("aura-processor-schema-test");
+        Path source = root.resolve("LargeService.java");
+        Files.writeString(source, """
+                package large;
+                import io.aura.annotation.Post;
+                public class LargeService {
+                    @Post("/large") public String create(LargeRequest request) { return "ok"; }
+                }
+                record LargeRequest(String a, String b, String c, String d, String e, String f,
+                        String g, String h, String i, String j, String k, String l) {}
+                """);
+        Path classes = root.resolve("classes");
+        Path generated = root.resolve("generated");
+        Files.createDirectories(classes);
+        Files.createDirectories(generated);
+        try (StandardJavaFileManager files = compiler.getStandardFileManager(null, null, null)) {
+            var task = compiler.getTask(null, files, diagnostic -> { },
+                    List.of("-classpath", System.getProperty("java.class.path"), "-d", classes.toString(),
+                            "-s", generated.toString(), "-parameters"), null,
+                    files.getJavaFileObjects(source.toFile()));
+            task.setProcessors(List.of(new AuraRouteProcessor()));
+            assertThat(task.call()).isTrue();
+        }
+    }
+
+    @Test
+    void generatedBodySchemaCarriesValidationConstraints() throws Exception {
+        JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
+        Path root = Files.createTempDirectory("aura-processor-validation-test");
+        Path source = root.resolve("ValidatedService.java");
+        Files.writeString(source, """
+                package validated;
+                import io.aura.annotation.*;
+                public class ValidatedService {
+                    @Post("/validated") public String create(ValidatedRequest request) { return "ok"; }
+                }
+                record ValidatedRequest(@NotBlank String name, @Min(1) @Max(10) int count,
+                        @Size(max=5) String code, @Pattern("[a-z]+") String slug) {}
+                """);
+        Path classes = root.resolve("classes");
+        Path generated = root.resolve("generated");
+        Files.createDirectories(classes);
+        Files.createDirectories(generated);
+        try (StandardJavaFileManager files = compiler.getStandardFileManager(null, null, null)) {
+            var task = compiler.getTask(null, files, diagnostic -> { },
+                    List.of("-classpath", System.getProperty("java.class.path"), "-d", classes.toString(),
+                            "-s", generated.toString(), "-parameters"), null,
+                    files.getJavaFileObjects(source.toFile()));
+            task.setProcessors(List.of(new AuraRouteProcessor()));
+            assertThat(task.call()).isTrue();
+        }
+        String generatedText = Files.readString(generated.resolve("validated/ValidatedServiceAuraRoutes.java"));
+        assertThat(generatedText).contains("minimum", "maximum", "maxLength", "pattern", "required");
+    }
 }

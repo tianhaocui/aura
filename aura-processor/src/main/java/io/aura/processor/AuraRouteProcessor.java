@@ -147,9 +147,10 @@ public final class AuraRouteProcessor extends AbstractProcessor {
             boolean required = isBody(parameter.asType()) || parameter.asType().getKind().isPrimitive()
                     || "path".equals(sourceName);
             String description = annotationValue(parameter, "io.aura.annotation.Desc", "value");
+            String schema = isBody(parameter.asType()) ? bodySchema(parameter.asType()) : "java.util.Map.of()";
             contracts.add("new io.aura.contract.ApiParameter(\"" + escape(name) + "\", \""
                     + escape(parameter.asType().toString()) + "\", \"" + sourceName + "\", " + required + ", "
-                    + (description == null ? "null" : "\"" + escape(description) + "\"") + ")");
+                    + (description == null ? "null" : "\"" + escape(description) + "\"") + ", " + schema + ")");
         }
         source.append(String.join(", ", contracts)).append("), \"returnType\", \"")
                 .append(escape(method.getReturnType().toString())).append("\"");
@@ -220,6 +221,69 @@ public final class AuraRouteProcessor extends AbstractProcessor {
 
     private String routeDescription(ExecutableElement method) {
         return annotationValue(method, "io.aura.annotation.Desc", "value");
+    }
+
+    private String bodySchema(TypeMirror type) {
+        if (!(type instanceof javax.lang.model.type.DeclaredType declared)
+                || !declared.getTypeArguments().isEmpty()) {
+            return "java.util.Map.of(\"type\", \"object\")";
+        }
+        Element element = declared.asElement();
+        if (element.getKind() != ElementKind.RECORD) return "java.util.Map.of(\"type\", \"object\")";
+        List<? extends Element> components = element.getEnclosedElements().stream()
+                .filter(candidate -> candidate.getKind() == ElementKind.RECORD_COMPONENT)
+                .toList();
+        List<String> properties = new ArrayList<>();
+        List<String> required = new ArrayList<>();
+        for (Element component : components) {
+            String name = component.getSimpleName().toString();
+            properties.add("java.util.Map.entry(\"" + escape(name) + "\", "
+                    + scalarSchema(component.asType(), component) + ")");
+            if (component.asType().getKind().isPrimitive()
+                    || hasAnnotation(component, "io.aura.annotation.NotNull")
+                    || hasAnnotation(component, "io.aura.annotation.NotBlank")) {
+                required.add("\"" + escape(name) + "\"");
+            }
+        }
+        String props = properties.isEmpty() ? "java.util.Map.of()"
+                : "java.util.Map.ofEntries(" + String.join(", ", properties) + ")";
+        StringBuilder expression = new StringBuilder("java.util.Map.ofEntries(")
+                .append("java.util.Map.entry(\"type\", \"object\"), ")
+                .append("java.util.Map.entry(\"properties\", ").append(props).append(")");
+        if (!required.isEmpty()) {
+            expression.append(", java.util.Map.entry(\"required\", java.util.List.of(")
+                    .append(String.join(", ", required)).append("))");
+        }
+        expression.append(")");
+        return expression.toString();
+    }
+
+    private String scalarSchema(TypeMirror type, Element element) {
+        String jsonType = switch (type.getKind()) {
+            case BOOLEAN -> "boolean";
+            case BYTE, SHORT, INT, LONG -> "integer";
+            case FLOAT, DOUBLE -> "number";
+            default -> "string";
+        };
+        List<String> entries = new ArrayList<>();
+        entries.add("\"type\"");
+        entries.add("\"" + jsonType + "\"");
+        String min = annotationValue(element, "io.aura.annotation.Min", "value");
+        String max = annotationValue(element, "io.aura.annotation.Max", "value");
+        String sizeMin = annotationValue(element, "io.aura.annotation.Size", "min");
+        String sizeMax = annotationValue(element, "io.aura.annotation.Size", "max");
+        String pattern = annotationValue(element, "io.aura.annotation.Pattern", "value");
+        if (min != null) { entries.add("\"minimum\""); entries.add(min); }
+        if (max != null) { entries.add("\"maximum\""); entries.add(max); }
+        if (sizeMin != null && !"0".equals(sizeMin)) { entries.add("\"minLength\""); entries.add(sizeMin); }
+        if (sizeMax != null && !"2147483647".equals(sizeMax)) { entries.add("\"maxLength\""); entries.add(sizeMax); }
+        if (pattern != null) { entries.add("\"pattern\""); entries.add("\"" + escape(pattern) + "\""); }
+        return "java.util.Map.of(" + String.join(", ", entries) + ")";
+    }
+
+    private boolean hasAnnotation(Element element, String name) {
+        return element.getAnnotationMirrors().stream()
+                .anyMatch(mirror -> mirror.getAnnotationType().toString().equals(name));
     }
 
     private static String rawClassName(TypeMirror type) {

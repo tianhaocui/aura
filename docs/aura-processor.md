@@ -24,5 +24,11 @@ The first generator scope intentionally supports public annotated methods with:
 - record/POJO body parameters via `bodyOrThrow`;
 - `void` or JSON-serializable return values.
 
+For record body components, the generated schema includes the supported
+validation annotations `@NotBlank`, `@NotNull`, `@Min`, `@Max`, `@Size`, and
+`@Pattern`. Runtime `BeanValidator` remains authoritative; generated metadata
+is descriptive and lets AI clients construct valid payloads before sending a
+request.
+
 Unsupported or complex binding shapes should remain on the reflection prototype
 path until a generated binding rule is added with a contract test.
