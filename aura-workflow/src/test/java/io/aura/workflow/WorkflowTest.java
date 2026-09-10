@@ -309,6 +309,32 @@ class WorkflowTest {
     }
 
     @Test
+    void runtimePublishesSnapshotProjectionOnEveryAsyncStateChange() throws Exception {
+        WorkflowRegistry registry = new WorkflowRegistry();
+        registry.register(Workflow.<Object>builder("snapshot-runtime")
+                .step("one", context -> "secret-result")
+                .build());
+        java.util.List<WorkflowExecutionSnapshot> snapshots = new java.util.concurrent.CopyOnWriteArrayList<>();
+        WorkflowExecutionStore store = new WorkflowExecutionStore() {
+            @Override public void save(WorkflowExecution execution) { }
+            @Override public void saveSnapshot(WorkflowExecutionSnapshot snapshot) { snapshots.add(snapshot); }
+            @Override public java.util.Optional<WorkflowExecution> find(String id) { return java.util.Optional.empty(); }
+            @Override public java.util.List<WorkflowExecution> list(String workflowId) { return java.util.List.of(); }
+        };
+        WorkflowRuntime<Object> runtime = new WorkflowRuntime<>(registry, store);
+        try {
+            WorkflowResult result = runtime.executeAsync("snapshot-runtime", new Object()).get(2,
+                    java.util.concurrent.TimeUnit.SECONDS);
+            assertThat(result.succeeded()).isTrue();
+            assertThat(snapshots).isNotEmpty();
+            assertThat(snapshots).anyMatch(snapshot -> snapshot.status() == WorkflowExecution.Status.SUCCEEDED);
+            assertThat(snapshots.toString()).doesNotContain("secret-result");
+        } finally {
+            runtime.close();
+        }
+    }
+
+    @Test
     void runtimeCanCancelQueuedOrRunningExecutionById() throws Exception {
         WorkflowRegistry registry = new WorkflowRegistry();
         java.util.concurrent.CountDownLatch started = new java.util.concurrent.CountDownLatch(1);

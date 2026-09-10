@@ -120,6 +120,7 @@ public final class WorkflowRuntime<C> implements AutoCloseable {
                             (WorkflowDefinition<C>) registry.get(workflowId);
                     WorkflowResult result = definition.execute(context, selector, executionToken, execution -> {
                         store.save(execution);
+                        store.saveSnapshot(execution.snapshot());
                         if (execution.status() == WorkflowExecution.Status.PENDING
                                 || execution.status() == WorkflowExecution.Status.RUNNING) {
                             activeCancellations.put(execution.executionId(), executionToken);
