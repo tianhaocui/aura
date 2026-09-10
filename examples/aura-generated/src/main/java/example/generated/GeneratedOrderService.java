@@ -4,6 +4,7 @@ import io.aura.annotation.Desc;
 import io.aura.annotation.Get;
 import io.aura.annotation.Path;
 import io.aura.annotation.Post;
+import io.aura.annotation.NotBlank;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -31,6 +32,6 @@ public final class GeneratedOrderService {
         return order;
     }
 
-    public record CreateOrder(long id, String status) { }
+    public record CreateOrder(long id, @NotBlank String status) { }
     public record Order(long id, String status) { }
 }

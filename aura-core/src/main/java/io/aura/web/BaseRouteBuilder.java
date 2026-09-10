@@ -36,6 +36,12 @@ public class BaseRouteBuilder {
         return this;
     }
 
+    /** Preserves a generated structured schema when assembling a route. */
+    public BaseRouteBuilder param(ApiParameter parameter) {
+        parameters.add(java.util.Objects.requireNonNull(parameter, "parameter"));
+        return this;
+    }
+
     public List<ApiParameter> parameters() {
         return List.copyOf(parameters);
     }

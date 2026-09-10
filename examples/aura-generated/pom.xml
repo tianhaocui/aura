@@ -17,6 +17,12 @@
             <artifactId>aura-web</artifactId>
         </dependency>
         <dependency>
+            <groupId>io.github.tianhaocui</groupId>
+            <artifactId>aura-processor</artifactId>
+            <version>${aura.version}</version>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter</artifactId>
             <scope>test</scope>

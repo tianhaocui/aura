@@ -49,8 +49,7 @@ final class RouteAssembler {
             if (parameters instanceof Collection<?> values) {
                 for (Object value : values) {
                     if (value instanceof ApiParameter parameter) {
-                        builder.param(parameter.name(), parameter.type(), parameter.source(),
-                                parameter.required(), parameter.description());
+                        builder.param(parameter);
                     }
                 }
             }

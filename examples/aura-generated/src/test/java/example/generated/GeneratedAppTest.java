@@ -19,5 +19,18 @@ class GeneratedAppTest {
                 .contains("created");
         assertThat(client.schema().toString())
                 .contains("Get one generated order", "Order identifier", "/generated/orders/{id}");
+        @SuppressWarnings("unchecked")
+        var routes = (java.util.List<io.aura.contract.ApiRoute>) client.schema().get("routes");
+        var create = routes.stream().filter(route -> route.path().equals("/generated/orders")
+                && route.method().equals("POST")).findFirst().orElseThrow();
+        assertThat(create.params()).singleElement()
+                .satisfies(parameter -> {
+                    assertThat(parameter.schema()).containsEntry("type", "object");
+                    @SuppressWarnings("unchecked")
+                    var properties = (java.util.Map<String, Object>) parameter.schema().get("properties");
+                    @SuppressWarnings("unchecked")
+                    var status = (java.util.Map<String, Object>) properties.get("status");
+                    assertThat(status).containsEntry("minLength", 1);
+                });
     }
 }

@@ -119,11 +119,14 @@ class AuraRouteProcessorTest {
         Files.writeString(source, """
                 package validated;
                 import io.aura.annotation.*;
+                import java.util.List;
                 public class ValidatedService {
                     @Post("/validated") public String create(ValidatedRequest request) { return "ok"; }
                 }
                 record ValidatedRequest(@NotBlank String name, @Min(1) @Max(10) int count,
-                        @Size(max=5) String code, @Pattern("[a-z]+") String slug) {}
+                        @Size(max=5) String code, @Pattern("[a-z]+") String slug,
+                        Integer boxed, List<String> tags, Child child) {}
+                record Child(String value) {}
                 """);
         Path classes = root.resolve("classes");
         Path generated = root.resolve("generated");
@@ -138,6 +141,7 @@ class AuraRouteProcessorTest {
             assertThat(task.call()).isTrue();
         }
         String generatedText = Files.readString(generated.resolve("validated/ValidatedServiceAuraRoutes.java"));
-        assertThat(generatedText).contains("minimum", "maximum", "maxLength", "pattern", "required");
+        assertThat(generatedText).contains("minimum", "maximum", "maxLength", "pattern", "required")
+                .contains("java.util.List", "\"boxed\"", "\"tags\"", "\"child\"");
     }
 }
