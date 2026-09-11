@@ -22,8 +22,12 @@ test -f "$repo_root/docs/legacy-ai-guide-0.6.md"
 test -f "$repo_root/docs/aura-module.md"
 test -f "$repo_root/docs/aura-workflow.md"
 test -f "$repo_root/docs/migration-to-1.0.md"
+test -f "$repo_root/aura-processor/src/main/java/io/aura/processor/AuraRouteProcessor.java"
+test -f "$repo_root/aura-processor/src/main/resources/META-INF/services/javax.annotation.processing.Processor"
 test -f "$repo_root/examples/aura-composed/src/main/java/example/ComposedApp.java"
 test -f "$repo_root/examples/aura-composed/src/test/java/example/ComposedAppTest.java"
+test -f "$repo_root/examples/aura-generated/pom.xml"
+test -f "$repo_root/examples/aura-generated/src/test/java/example/generated/GeneratedAppTest.java"
 test -f "$repo_root/aura-web/src/main/java/io/aura/web/RouteContract.java"
 rg -q 'RouteContract\.schema\(app, compiledRoutes\)' \
   "$repo_root/aura-web/src/main/java/io/aura/web/UndertowStarter.java"
@@ -84,5 +88,7 @@ rg -q 'x-aura-permission' \
   "$repo_root/aura-mcp/src/main/java/io/aura/mcp/McpRouter.java"
 rg -q 'permission\(String permission\)' \
   "$repo_root/aura-mcp/src/main/java/io/aura/mcp/McpToolBuilder.java"
+rg -q 'annotationProcessorPaths' "$repo_root/examples/aura-generated/pom.xml"
+rg -q 'responseSchema' "$repo_root/aura-contract/src/main/java/io/aura/contract/ApiRoute.java"
 
 echo "Aura module and documentation contracts passed (version $root_version)"
