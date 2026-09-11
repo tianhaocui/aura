@@ -54,6 +54,17 @@ Transport adapters pass untrusted metadata to the authenticator. A tool handler
 can read the resolved identity with `ctx.userId()`. Permissioned tools fail
 closed when no authorizer or authenticated identity is available.
 
+Handlers may return explicit MCP content when a response is not plain text:
+
+```java
+ctx -> new McpStructured(Map.of("order", order, "total", total))
+ctx -> new McpImage(base64Png, "image/png")
+ctx -> new McpResourceLink("orders://" + id, "application/json", json)
+```
+
+Use `McpText` for explicit text. Existing String and POJO return values remain
+supported and are encoded as text/structured JSON automatically.
+
 Enable the HTTP transport explicitly; installing `McpModule` alone does not
 open an HTTP endpoint:
 

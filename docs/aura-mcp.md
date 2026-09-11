@@ -5,11 +5,9 @@ MCP (Model Context Protocol) integration. Exposes Aura routes as AI agent tools.
 ## Quick Start
 
 ```java
-Aura.create()
-    .port(8080)
-    .mcp(true)
-    .service(new UserService())
-    .start(args);
+AuraApp.create(new AuraConfig().port(8080))
+    .use(McpModule.create(mcpRouter))
+    .start("--mcp-stdio");
 // HTTP on :8080, MCP available via --mcp-stdio
 ```
 
@@ -21,7 +19,8 @@ AuraApp.create()
     .start("--mcp-stdio");
 ```
 
-`McpModule` 只注册 router，不隐式打开网络监听；传输方式由启动参数显式决定。
+`McpModule` 只注册 router，不隐式打开网络监听；stdio 由启动参数启用，HTTP
+由 `McpModule.create(router).http()` 显式启用。
 
 ## McpRouter (Selective Tool Exposure)
 
@@ -45,8 +44,8 @@ mcp.tool("create_order", "Create a new order")
    .param("quantity", int.class, "Quantity")
    .handler(ctx -> orderService.create(ctx.getString("product"), ctx.getInt("quantity")));
 
-Aura.create()
-    .mcp(mcp)  // pass McpRouter instead of boolean
+AuraApp.create()
+    .use(McpModule.create(mcp))
     .start(args);
 ```
 
@@ -68,6 +67,10 @@ The generated tool schema includes `x-aura-permission`. The four-argument
 overload does not bypass a declared permission.
 
 When McpRouter is provided, MCP runs in-process (no HTTP roundtrip). Only registered tools are exposed.
+
+Handlers can return explicit content blocks with `McpText`, `McpStructured`,
+`McpImage`, or `McpResourceLink` when plain text is not sufficient. Existing
+String and POJO return values remain supported.
 
 ### Enum Auto-Mapping
 
@@ -332,8 +335,8 @@ Map<String, Object> schema = McpUtil.buildInputSchema(params);
 ServiceLoader implementation that starts MCP server.
 
 ```java
-// Called automatically by Aura when .mcp(true) is set
-// SSE mode (network):
+// Called automatically by the optional MCP starter when a transport is enabled
+// HTTP mode: McpModule.create(router).http()
 starter.start(app);
 
 // stdio mode (--mcp-stdio flag):
