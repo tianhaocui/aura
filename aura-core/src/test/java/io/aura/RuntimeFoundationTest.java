@@ -22,6 +22,14 @@ class RuntimeFoundationTest {
         assertThat(Aura.create().port()).isEqualTo(8080);
     }
 
+    @Test
+    void legacyAuraBuilderIsExplicitlyDeprecatedForRemoval() {
+        Deprecated deprecated = Aura.class.getAnnotation(Deprecated.class);
+        assertThat(deprecated).isNotNull();
+        assertThat(deprecated.forRemoval()).isTrue();
+        assertThat(deprecated.since()).isEqualTo("1.0.0");
+    }
+
     @Test void runtimeContractExposesStableStateAndCapabilityLookup() {
         AuraRuntime runtime = Aura.create();
         assertThat(runtime.state()).isEqualTo(io.aura.contract.RuntimeState.NEW);

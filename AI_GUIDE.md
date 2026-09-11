@@ -9,6 +9,8 @@ AI writes a module -> Maven compiles it -> TestClient verifies it -> Schema/MCP 
 Stability is the first priority. The API choices below are the only recommended
 authoring path for new applications. The pre-1.0 guide is retained at
 `docs/legacy-ai-guide-0.6.md` only for migration reference.
+The legacy `Aura` builder is deprecated for removal; do not generate new code
+with it.
 
 ## Maven Setup
 

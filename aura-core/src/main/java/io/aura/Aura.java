@@ -16,6 +16,11 @@ import io.aura.snapshot.SnapshotOptions;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+/**
+ * Legacy pre-1.0 builder. New applications must use {@link AuraApp}; this
+ * compatibility surface is retained temporarily and will be removed in 1.0.x.
+ */
+@Deprecated(forRemoval = true, since = "1.0.0")
 public class Aura implements AuraWebRuntime {
 
     public enum Lifecycle { NEW, STARTING, RUNNING, STOPPING, STOPPED }

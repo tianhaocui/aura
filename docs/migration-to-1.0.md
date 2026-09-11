@@ -14,8 +14,10 @@ AuraApp app = AuraApp.create()
         .start();
 ```
 
-The old `Aura` builder remains an internal implementation detail. New modules must implement
+The old `Aura` builder is deprecated for removal in 1.0. New modules must implement
 `AuraModule`, declare a stable descriptor, and obtain dependencies from `ModuleContext`.
+Do not add new production code that calls `Aura.create()`; migrate directly to
+`AuraApp.create().use(...)` and remove the old builder once all modules are migrated.
 
 Adapters should depend on the replaceable `AuraRuntime` surface and its stable `RuntimeState`
 values rather than on the legacy Builder implementation.
