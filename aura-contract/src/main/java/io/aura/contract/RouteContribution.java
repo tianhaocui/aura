@@ -39,6 +39,14 @@ public record RouteContribution(String method, String path, Object handler,
         return value == null ? null : value.toString();
     }
 
+    /** Optional structured JSON schema for the route response. */
+    @SuppressWarnings("unchecked")
+    public Map<String, Object> responseSchema() {
+        Object value = metadata.get("responseSchema");
+        if (!(value instanceof Map<?, ?> map)) return Map.of();
+        return (Map<String, Object>) map;
+    }
+
     /** Optional explicit parameters for handlers whose signature is not reflectively discoverable. */
     public java.util.List<ApiParameter> parameters() {
         Object value = metadata.get("parameters");

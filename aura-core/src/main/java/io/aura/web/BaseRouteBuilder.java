@@ -12,6 +12,7 @@ public class BaseRouteBuilder {
     public final BaseRouter.Route route;
     public String description;
     public String returnType;
+    public Map<String, Object> responseSchema = Map.of();
     public final Map<String, String> paramDescriptions = new LinkedHashMap<>();
     private final List<ApiParameter> parameters = new ArrayList<>();
 

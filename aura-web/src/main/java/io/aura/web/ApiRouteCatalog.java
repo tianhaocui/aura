@@ -41,6 +41,9 @@ public final class ApiRouteCatalog {
     }
 
     private static Map<String, Object> responseSchema(CompiledRoute route) {
+        if (route.meta() != null && !route.meta().responseSchema().isEmpty()) {
+            return route.meta().responseSchema();
+        }
         if (!(route.handler() instanceof MethodRefHandler methodHandler)) return Map.of();
         Method method = methodHandler.resolvedMethod();
         if (method.getReturnType() == void.class || method.getReturnType() == Void.class

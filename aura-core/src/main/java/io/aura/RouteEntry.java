@@ -14,4 +14,12 @@ public record RouteEntry(String method, String path, Object handler, String desc
     public RouteEntry(String method, String path, Object handler, String description) {
         this(method, path, handler, description, Map.of());
     }
+
+    /** Optional structured JSON schema carried from a route contribution. */
+    @SuppressWarnings("unchecked")
+    public Map<String, Object> responseSchema() {
+        Object value = metadata.get("responseSchema");
+        if (!(value instanceof Map<?, ?> map)) return Map.of();
+        return (Map<String, Object>) map;
+    }
 }

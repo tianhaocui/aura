@@ -45,14 +45,20 @@ public record CompiledRoute(String method, String rawPath, Pattern pattern, List
     }
 
     public record RouteMeta(String description, String returnType, Map<String, String> params,
-                            List<ApiParameter> parameters) {
+                            List<ApiParameter> parameters, Map<String, Object> responseSchema) {
+        public RouteMeta(String description, String returnType, Map<String, String> params,
+                         List<ApiParameter> parameters) {
+            this(description, returnType, params, parameters, Map.of());
+        }
         public RouteMeta(String description, String returnType, Map<String, String> params) {
-            this(description, returnType, params, List.of());
+            this(description, returnType, params, List.of(), Map.of());
         }
         public RouteMeta {
             params = params == null ? Map.of()
                     : java.util.Collections.unmodifiableMap(new java.util.LinkedHashMap<>(params));
             parameters = parameters == null ? List.of() : List.copyOf(parameters);
+            responseSchema = responseSchema == null ? Map.of()
+                    : java.util.Collections.unmodifiableMap(new java.util.LinkedHashMap<>(responseSchema));
         }
     }
 }

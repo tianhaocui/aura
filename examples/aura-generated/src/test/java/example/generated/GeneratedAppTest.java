@@ -32,5 +32,11 @@ class GeneratedAppTest {
                     var status = (java.util.Map<String, Object>) properties.get("status");
                     assertThat(status).containsEntry("minLength", 1);
                 });
+        var get = routes.stream().filter(route -> route.path().equals("/generated/orders/{id}")
+                && route.method().equals("GET")).findFirst().orElseThrow();
+        assertThat(get.responseSchema()).containsEntry("type", "object");
+        @SuppressWarnings("unchecked")
+        var responseProperties = (java.util.Map<String, Object>) get.responseSchema().get("properties");
+        assertThat(responseProperties.keySet()).contains("id", "status");
     }
 }

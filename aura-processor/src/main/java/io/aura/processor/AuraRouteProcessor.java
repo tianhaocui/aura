@@ -154,6 +154,9 @@ public final class AuraRouteProcessor extends AbstractProcessor {
         }
         source.append(String.join(", ", contracts)).append("), \"returnType\", \"")
                 .append(escape(method.getReturnType().toString())).append("\"");
+        if (method.getReturnType().getKind() != TypeKind.VOID) {
+            source.append(", \"responseSchema\", ").append(bodySchema(method.getReturnType()));
+        }
         String description = routeDescription(method);
         if (description != null) {
             source.append(", \"description\", \"").append(escape(description)).append("\"");
