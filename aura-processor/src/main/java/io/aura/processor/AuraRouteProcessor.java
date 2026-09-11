@@ -226,7 +226,23 @@ public final class AuraRouteProcessor extends AbstractProcessor {
             default -> null;
         };
         if (converted == null) return value;
-        return type.getKind().isPrimitive() ? converted : "(" + value + " == null ? null : " + converted + ")";
+        if (type.getKind().isPrimitive()) {
+            String missing = switch (type.toString()) {
+                case "boolean" -> "false";
+                case "char" -> "'\\0'";
+                case "float" -> "0.0f";
+                case "double" -> "0.0d";
+                case "long" -> "0L";
+                default -> "0";
+            };
+            String absent = "(" + value + " == null";
+            if ("char".equals(type.toString())) absent += " || " + value + ".isEmpty()";
+            absent += " ? " + missing + " : " + converted + ")";
+            return absent;
+        }
+        String absent = "(" + value + " == null";
+        if ("java.lang.Character".equals(type.toString())) absent += " || " + value + ".isEmpty()";
+        return absent + " ? null : " + converted + ")";
     }
 
     private String routeDescription(ExecutableElement method) {
