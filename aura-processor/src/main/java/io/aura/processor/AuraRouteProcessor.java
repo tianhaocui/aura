@@ -202,9 +202,15 @@ public final class AuraRouteProcessor extends AbstractProcessor {
 
     private boolean isBody(TypeMirror type) {
         if (isContext(type)) return false;
+        // Keep this scalar set in lock-step with ParamResolver.  A scalar
+        // parameter is bound from path/query; anything outside this set is a
+        // request body.  Missing wrapper types here would make the generated
+        // route try to deserialize a short/byte/char as JSON instead of
+        // applying the same binding semantics as the reflection path.
         return !Set.of("java.lang.String", "int", "long", "boolean", "double", "float",
                 "short", "byte", "char", "java.lang.Integer", "java.lang.Long",
-                "java.lang.Boolean", "java.lang.Double", "java.lang.Float").contains(type.toString());
+                "java.lang.Boolean", "java.lang.Double", "java.lang.Float",
+                "java.lang.Short", "java.lang.Byte", "java.lang.Character").contains(type.toString());
     }
 
     private String scalar(String value, TypeMirror type) {
@@ -273,11 +279,12 @@ public final class AuraRouteProcessor extends AbstractProcessor {
                     String componentName = component.getSimpleName().toString();
                     properties.add("java.util.Map.entry(\"" + escape(componentName) + "\", "
                             + schemaForType(component.asType(), component, depth + 1) + ")");
-                    if (component.asType().getKind().isPrimitive()
-                            || hasAnnotation(component, "io.aura.annotation.NotNull")
-                            || hasAnnotation(component, "io.aura.annotation.NotBlank")) {
-                        required.add("\"" + escape(componentName) + "\"");
-                    }
+                    // Records have no field defaults in Aura's request
+                    // contract.  Keep generated schemas aligned with the
+                    // reflection TypeSchema path by marking every component
+                    // required; BeanValidator annotations refine the value
+                    // constraints but do not change presence semantics.
+                    required.add("\"" + escape(componentName) + "\"");
                 }
                 String props = properties.isEmpty() ? "java.util.Map.of()"
                         : "java.util.Map.ofEntries(" + String.join(", ", properties) + ")";

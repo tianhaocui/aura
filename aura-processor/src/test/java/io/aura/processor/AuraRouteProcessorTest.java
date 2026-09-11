@@ -58,7 +58,7 @@ class AuraRouteProcessorTest {
     }
 
     @Test
-    void generatesPrimitiveShortAndByteBindings() throws Exception {
+    void generatesScalarBindingsForPrimitiveAndBoxedTypes() throws Exception {
         JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
         Path root = Files.createTempDirectory("aura-processor-scalar-test");
         Path source = root.resolve("ScalarService.java");
@@ -66,7 +66,8 @@ class AuraRouteProcessorTest {
                 package scalar;
                 import io.aura.annotation.Get;
                 public class ScalarService {
-                    @Get("/values") public String values(short s, byte b, char c) { return "ok"; }
+                    @Get("/values") public String values(short s, byte b, char c,
+                            Short boxedShort, Byte boxedByte, Character boxedChar) { return "ok"; }
                 }
                 """);
         Path classes = root.resolve("classes");
@@ -81,6 +82,14 @@ class AuraRouteProcessorTest {
             task.setProcessors(List.of(new AuraRouteProcessor()));
             assertThat(task.call()).isTrue();
         }
+        String generatedText = Files.readString(generated.resolve("scalar/ScalarServiceAuraRoutes.java"));
+        assertThat(generatedText)
+                .contains("Short.parseShort(ctx.query(\"boxedShort\"))")
+                .contains("Byte.parseByte(ctx.query(\"boxedByte\"))")
+                .contains("ctx.query(\"boxedChar\")")
+                .doesNotContain("ctx.bodyOrThrow(java.lang.Short.class)")
+                .doesNotContain("ctx.bodyOrThrow(java.lang.Byte.class)")
+                .doesNotContain("ctx.bodyOrThrow(java.lang.Character.class)");
     }
 
     @Test
@@ -142,6 +151,7 @@ class AuraRouteProcessorTest {
         }
         String generatedText = Files.readString(generated.resolve("validated/ValidatedServiceAuraRoutes.java"));
         assertThat(generatedText).contains("minimum", "maximum", "maxLength", "pattern", "required")
-                .contains("java.util.List", "\"boxed\"", "\"tags\"", "\"child\"");
+                .contains("java.util.List", "\"boxed\"", "\"tags\"", "\"child\"")
+                .contains("\"name\", \"count\", \"code\", \"slug\", \"boxed\", \"tags\", \"child\"");
     }
 }
