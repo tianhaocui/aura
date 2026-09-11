@@ -52,7 +52,7 @@ public class Context implements BaseContext {
     }
 
     public AuraWebRuntime app() { return app; }
-    boolean isResponseStarted() { return exchange != null && exchange.isResponseStarted(); }
+    @Override public boolean isResponseStarted() { return exchange != null && exchange.isResponseStarted(); }
     String cachedBody() { return cachedBody; }
     @Override public String requestId() { return requestId; }
     @Override public CancellationToken cancellationToken() { return cancellationToken; }

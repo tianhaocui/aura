@@ -78,4 +78,20 @@ class ResultWrapperTest {
         assertThat(resp.body()).contains("\"key\"");
         assertThat(resp.body()).doesNotContain("\"code\"");
     }
+
+    @Test
+    void sharedRouteResponsePreservesGeneratedHandlerSemantics() {
+        MockContext wrapped = new MockContext(Map.of(), Map.of(), Map.of(), null,
+                Aura.create().resultWrapper(Result::ok));
+        RouteResponse.write(wrapped, null);
+        assertThat(wrapped.responseBody).contains("\"code\"", "\"message\":\"ok\"");
+
+        MockContext plain = new MockContext(Map.of(), Map.of(), Map.of(), null, Aura.create());
+        RouteResponse.write(plain, null);
+        assertThat(plain.responseBody).isNull();
+
+        plain.text("manual");
+        RouteResponse.write(plain, Map.of("overwritten", true));
+        assertThat(plain.responseBody).isEqualTo("manual");
+    }
 }

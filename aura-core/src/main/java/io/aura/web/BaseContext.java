@@ -13,6 +13,12 @@ public interface BaseContext {
     String url();
     int statusCode();
 
+    /** Whether a handler or middleware has already committed the response. */
+    default boolean isResponseStarted() { return false; }
+
+    /** Runtime view associated with this request, when one is available. */
+    default io.aura.AuraWebRuntime app() { return null; }
+
     // --- response ---
     BaseContext status(int code);
     void json(Object obj);

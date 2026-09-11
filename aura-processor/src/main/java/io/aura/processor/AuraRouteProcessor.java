@@ -136,7 +136,7 @@ public final class AuraRouteProcessor extends AbstractProcessor {
         }
         String invocation = "service." + method.getSimpleName() + "(" + String.join(", ", args) + ")";
         if (method.getReturnType().getKind() == TypeKind.VOID) source.append(invocation).append(";");
-        else source.append("ctx.json(").append(invocation).append(");");
+        else source.append("io.aura.web.RouteResponse.write(ctx, ").append(invocation).append(");");
         source.append("}, java.util.Map.of(\"parameters\", java.util.List.of(");
         List<String> contracts = new ArrayList<>();
         for (VariableElement parameter : parameters) {

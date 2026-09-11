@@ -69,7 +69,7 @@ public class MockContext extends Context {
     @Override public Context header(String name, String value) { respHeaders.put(name, value); return this; }
     @Override public Context cookie(String name, String value, int maxAge) { return this; }
 
-    @Override boolean isResponseStarted() { return responded; }
+    @Override public boolean isResponseStarted() { return responded; }
     Map<String, String> responseHeaders() { return respHeaders; }
 
     byte[] fileBytes;
