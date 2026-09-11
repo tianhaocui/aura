@@ -12,6 +12,14 @@ public interface WorkflowExecutionStore {
      * snapshot rather than retaining a mutable execution reference.
      */
     default void saveSnapshot(WorkflowExecutionSnapshot snapshot) { }
+    /** Optional read path for durable, redacted execution projections. */
+    default Optional<WorkflowExecutionSnapshot> findSnapshot(String executionId) {
+        return Optional.empty();
+    }
+    /** Optional listing path for durable execution projections. */
+    default List<WorkflowExecutionSnapshot> listSnapshots(String workflowId) {
+        return List.of();
+    }
     Optional<WorkflowExecution> find(String executionId);
     List<WorkflowExecution> list(String workflowId);
 

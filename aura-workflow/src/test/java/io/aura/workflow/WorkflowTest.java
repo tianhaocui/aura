@@ -335,6 +335,22 @@ class WorkflowTest {
     }
 
     @Test
+    void runtimeExposesDurableSnapshotReadPaths() {
+        WorkflowRegistry registry = new WorkflowRegistry();
+        registry.register(Workflow.<Object>builder("snapshot-read")
+                .step("one", context -> null).build());
+        InMemoryWorkflowExecutionStore store = new InMemoryWorkflowExecutionStore();
+        WorkflowRuntime<Object> runtime = new WorkflowRuntime<>(registry, store);
+        try {
+            WorkflowResult result = runtime.execute("snapshot-read", new Object());
+            assertThat(runtime.executionSnapshot(result.execution().executionId())).isPresent();
+            assertThat(runtime.executionSnapshots("snapshot-read")).hasSize(1);
+        } finally {
+            runtime.close();
+        }
+    }
+
+    @Test
     void runtimeCanCancelQueuedOrRunningExecutionById() throws Exception {
         WorkflowRegistry registry = new WorkflowRegistry();
         java.util.concurrent.CountDownLatch started = new java.util.concurrent.CountDownLatch(1);

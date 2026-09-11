@@ -119,8 +119,7 @@ public final class WorkflowRuntime<C> implements AutoCloseable {
                     @SuppressWarnings("unchecked") WorkflowDefinition<C> definition =
                             (WorkflowDefinition<C>) registry.get(workflowId);
                     WorkflowResult result = definition.execute(context, selector, executionToken, execution -> {
-                        store.save(execution);
-                        store.saveSnapshot(execution.snapshot());
+                        persistExecution(execution);
                         if (execution.status() == WorkflowExecution.Status.PENDING
                                 || execution.status() == WorkflowExecution.Status.RUNNING) {
                             activeCancellations.put(execution.executionId(), executionToken);
@@ -162,8 +161,17 @@ public final class WorkflowRuntime<C> implements AutoCloseable {
         return store.find(executionId);
     }
 
+    /** Reads the redacted immutable projection exposed by a durable store. */
+    public java.util.Optional<WorkflowExecutionSnapshot> executionSnapshot(String executionId) {
+        return store.findSnapshot(executionId);
+    }
+
     public java.util.List<WorkflowExecution> executions(String workflowId) {
         return store.list(workflowId);
+    }
+
+    public java.util.List<WorkflowExecutionSnapshot> executionSnapshots(String workflowId) {
+        return store.listSnapshots(workflowId);
     }
 
     /** Requests cooperative cancellation of a queued or running execution. */
@@ -173,12 +181,12 @@ public final class WorkflowRuntime<C> implements AutoCloseable {
         return token != null && token.cancel();
     }
     public WorkflowResult execute(WorkflowDefinition<C> definition, C context, WorkflowSelector<C> selector) {
-        return definition.execute(context, selector, linkedToken(new CancellationToken()), store::save);
+        return definition.execute(context, selector, linkedToken(new CancellationToken()), this::persistExecution);
     }
 
     public WorkflowResult execute(WorkflowDefinition<C> definition, C context,
                                   WorkflowSelector<C> selector, CancellationToken cancellationToken) {
-        return definition.execute(context, selector, linkedToken(cancellationToken), store::save);
+        return definition.execute(context, selector, linkedToken(cancellationToken), this::persistExecution);
     }
 
     public WorkflowResult execute(WorkflowDefinition<C> definition, C context,
@@ -189,7 +197,7 @@ public final class WorkflowRuntime<C> implements AutoCloseable {
             java.util.Optional<WorkflowExecution> existing = store.findByIdempotencyKey(definition.id(), key);
             if (existing.isPresent()) return new WorkflowResult(existing.get(), null);
         }
-        return definition.execute(context, selector, linkedToken(cancellationToken), store::save, key);
+        return definition.execute(context, selector, linkedToken(cancellationToken), this::persistExecution, key);
     }
 
     private static String normalizeKey(String idempotencyKey) {
@@ -210,6 +218,11 @@ public final class WorkflowRuntime<C> implements AutoCloseable {
     private CancellationToken linkedToken(CancellationToken callerToken) {
         return CancellationToken.linked(runtimeCancellation,
                 Objects.requireNonNull(callerToken, "cancellationToken"));
+    }
+
+    private void persistExecution(WorkflowExecution execution) {
+        store.save(execution);
+        store.saveSnapshot(execution.snapshot());
     }
 
     private static int defaultWorkers() {

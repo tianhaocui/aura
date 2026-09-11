@@ -55,8 +55,16 @@ public final class InMemoryWorkflowExecutionStore implements WorkflowExecutionSt
         snapshots.put(snapshot.executionId(), snapshot);
     }
 
-    public Optional<WorkflowExecutionSnapshot> findSnapshot(String executionId) {
+    @Override public Optional<WorkflowExecutionSnapshot> findSnapshot(String executionId) {
         return Optional.ofNullable(snapshots.get(executionId));
+    }
+
+    @Override public List<WorkflowExecutionSnapshot> listSnapshots(String workflowId) {
+        return snapshots.values().stream()
+                .filter(snapshot -> workflowId == null || workflowId.equals(snapshot.workflowId()))
+                .sorted(java.util.Comparator.comparing(WorkflowExecutionSnapshot::startedAt,
+                        java.util.Comparator.nullsFirst(java.util.Comparator.naturalOrder())))
+                .toList();
     }
 
     @Override public Optional<WorkflowExecution> find(String executionId) {

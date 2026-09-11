@@ -114,3 +114,8 @@ projection. It contains lifecycle and step metadata plus stable error codes, but
 intentionally excludes arbitrary step results and raw exception messages. Aura
 does not automatically replay a persisted execution; recovery must be an explicit,
 idempotent business operation.
+
+Durable adapters can implement `saveSnapshot`, `findSnapshot`, and
+`listSnapshots` to persist and query this projection. `WorkflowRuntime` publishes
+the projection for synchronous and asynchronous executions; the legacy
+`save(WorkflowExecution)` callback remains available for in-process inspection.
