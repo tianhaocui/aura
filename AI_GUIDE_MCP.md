@@ -70,7 +70,7 @@ open an HTTP endpoint:
 
 ```java
 McpModule mcpModule = McpModule.create(mcp)
-    .http("/mcp", 1024, Duration.ofMinutes(30));
+    .http("/mcp", 1024, Duration.ofMinutes(30), 1024 * 1024);
 
 AuraApp.create()
     .mcpAuthenticate(metadata -> tokenService.userId(metadata.get("authorization")))
@@ -82,7 +82,9 @@ AuraApp.create()
 Clients initialize with protocol version `2025-03-26`, retain the returned
 `Mcp-Session-Id` response header, and send that header on later POST or DELETE
 requests. Sessions are bound to the authenticated identity, have a bounded
-capacity and idle TTL, and re-authenticate every request. The endpoint rejects
+capacity and idle TTL, and re-authenticate every request. The JSON-RPC response
+body has an explicit byte limit; oversized tool/resource results fail with
+`MCP_RESPONSE_TOO_LARGE`. The endpoint rejects
 anonymous callers even when every registered tool is public.
 
 ## McpContext Methods

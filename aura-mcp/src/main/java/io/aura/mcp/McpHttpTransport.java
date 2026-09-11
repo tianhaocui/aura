@@ -14,13 +14,17 @@ import java.util.Map;
 final class McpHttpTransport {
     static final String SESSION_HEADER = "Mcp-Session-Id";
     static final String PROTOCOL_VERSION = McpProtocolConstants.VERSION;
+    static final int DEFAULT_MAX_RESPONSE_BYTES = 1024 * 1024;
 
     private final McpRouter router;
     private final McpSessionManager sessions;
+    private final int maxResponseBytes;
 
-    McpHttpTransport(McpRouter router, McpSessionManager sessions) {
+    McpHttpTransport(McpRouter router, McpSessionManager sessions, int maxResponseBytes) {
         this.router = java.util.Objects.requireNonNull(router, "router");
         this.sessions = java.util.Objects.requireNonNull(sessions, "sessions");
+        if (maxResponseBytes < 1) throw new IllegalArgumentException("maxResponseBytes must be positive");
+        this.maxResponseBytes = maxResponseBytes;
     }
 
     void post(BaseContext context) {
@@ -248,7 +252,7 @@ final class McpHttpTransport {
         return response;
     }
 
-    private static void respondError(BaseContext context, Object id, int status, int code, String message) {
+    private void respondError(BaseContext context, Object id, int status, int code, String message) {
         Map<String, Object> error = new LinkedHashMap<>();
         error.put("jsonrpc", "2.0");
         error.put("id", id);
@@ -257,8 +261,13 @@ final class McpHttpTransport {
         writeRpc(context, error);
     }
 
-    private static void writeRpc(BaseContext context, Map<String, Object> response) {
-        context.jsonRaw(JSON.toJSONString(response, JSONWriter.Feature.WriteNulls));
+    private void writeRpc(BaseContext context, Map<String, Object> response) {
+        String json = JSON.toJSONString(response, JSONWriter.Feature.WriteNulls);
+        if (json.getBytes(java.nio.charset.StandardCharsets.UTF_8).length > maxResponseBytes) {
+            context.status(502).json(McpContent.error("MCP_RESPONSE_TOO_LARGE"));
+            return;
+        }
+        context.jsonRaw(json);
     }
 
     private static final Object INVALID = new Object();

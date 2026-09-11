@@ -15,27 +15,34 @@ public final class McpModule implements AuraModule {
     private final McpRouter router;
     private final String httpPath;
     private final McpSessionManager sessions;
+    private final int maxResponseBytes;
 
-    private McpModule(McpRouter router, String httpPath, McpSessionManager sessions) {
+    private McpModule(McpRouter router, String httpPath, McpSessionManager sessions, int maxResponseBytes) {
         this.router = Objects.requireNonNull(router, "router");
         this.httpPath = httpPath;
         this.sessions = sessions;
+        this.maxResponseBytes = maxResponseBytes;
     }
 
-    public static McpModule create() { return new McpModule(new McpRouter(), null, null); }
-    public static McpModule create(McpRouter router) { return new McpModule(router, null, null); }
+    public static McpModule create() { return new McpModule(new McpRouter(), null, null, 0); }
+    public static McpModule create(McpRouter router) { return new McpModule(router, null, null, 0); }
 
     /** Enables authenticated JSON-RPC over HTTP at {@code /mcp}. */
     public McpModule http() {
         return http("/mcp", McpSessionManager.DEFAULT_MAX_SESSIONS,
-                McpSessionManager.DEFAULT_IDLE_TTL);
+                McpSessionManager.DEFAULT_IDLE_TTL, McpHttpTransport.DEFAULT_MAX_RESPONSE_BYTES);
     }
 
     public McpModule http(String path, int maxSessions, Duration idleTtl) {
+        return http(path, maxSessions, idleTtl, McpHttpTransport.DEFAULT_MAX_RESPONSE_BYTES);
+    }
+
+    public McpModule http(String path, int maxSessions, Duration idleTtl, int maxResponseBytes) {
         if (path == null || path.isBlank() || !path.startsWith("/")) {
             throw new IllegalArgumentException("MCP HTTP path must start with '/'");
         }
-        return new McpModule(router, path.trim(), new McpSessionManager(maxSessions, idleTtl));
+        if (maxResponseBytes < 1) throw new IllegalArgumentException("maxResponseBytes must be positive");
+        return new McpModule(router, path.trim(), new McpSessionManager(maxSessions, idleTtl), maxResponseBytes);
     }
 
     @Override public ModuleMetadata descriptor() {
@@ -53,7 +60,7 @@ public final class McpModule implements AuraModule {
         context.register("mcp", router);
         if (sessions != null) {
             context.register(sessions);
-            McpHttpTransport transport = new McpHttpTransport(router, sessions);
+            McpHttpTransport transport = new McpHttpTransport(router, sessions, maxResponseBytes);
             context.route(new RouteContribution("POST", httpPath,
                     (BaseHandler) transport::post,
                     Map.of("description", "MCP JSON-RPC transport", "returnType", "JsonRpcResponse")));

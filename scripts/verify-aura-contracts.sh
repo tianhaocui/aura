@@ -88,6 +88,10 @@ rg -q 'x-aura-permission' \
   "$repo_root/aura-mcp/src/main/java/io/aura/mcp/McpRouter.java"
 rg -q 'permission\(String permission\)' \
   "$repo_root/aura-mcp/src/main/java/io/aura/mcp/McpToolBuilder.java"
+rg -q 'DEFAULT_MAX_RESPONSE_BYTES' \
+  "$repo_root/aura-mcp/src/main/java/io/aura/mcp/McpHttpTransport.java"
+rg -q 'MCP_RESPONSE_TOO_LARGE' \
+  "$repo_root/aura-mcp/src/main/java/io/aura/mcp/McpHttpTransport.java"
 rg -q 'annotationProcessorPaths' "$repo_root/examples/aura-generated/pom.xml"
 rg -q 'responseSchema' "$repo_root/aura-contract/src/main/java/io/aura/contract/ApiRoute.java"
 

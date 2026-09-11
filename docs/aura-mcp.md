@@ -20,7 +20,8 @@ AuraApp.create()
 ```
 
 `McpModule` 只注册 router，不隐式打开网络监听；stdio 由启动参数启用，HTTP
-由 `McpModule.create(router).http()` 显式启用。
+由 `McpModule.create(router).http()` 显式启用。HTTP transport 默认限制响应为
+1MB，可通过四参数 `.http(path, maxSessions, idleTtl, maxResponseBytes)` 调整。
 
 ## McpRouter (Selective Tool Exposure)
 

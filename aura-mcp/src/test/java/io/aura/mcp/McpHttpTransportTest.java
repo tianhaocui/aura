@@ -176,6 +176,28 @@ class McpHttpTransportTest {
         assertThat(response.header(McpHttpTransport.SESSION_HEADER)).isNotBlank();
     }
 
+    @Test
+    void oversizedToolResponsesAreRejectedBeforeBeingReturned() {
+        McpRouter router = new McpRouter();
+        router.tool("large", "Large response")
+                .handler(ctx -> "x".repeat(1024));
+        McpModule bounded = McpModule.create(router).http("/mcp", 2,
+                Duration.ofMinutes(5), 512);
+        AuraApp app = AuraApp.create()
+                .mcpAuthenticate(metadata -> "alice")
+                .use(bounded);
+        TestClient boundedClient = TestClient.of(app);
+        String session = boundedClient.post("/mcp").header("Authorization", "Bearer anything")
+                .body(initialize(1)).expect(200).header(McpHttpTransport.SESSION_HEADER);
+        TestClient.Response response = boundedClient.post("/mcp")
+                .header("Authorization", "Bearer anything")
+                .header(McpHttpTransport.SESSION_HEADER, session)
+                .body(Map.of("jsonrpc", "2.0", "id", 2, "method", "tools/call",
+                        "params", Map.of("name", "large", "arguments", Map.of())))
+                .expect(502);
+        assertThat(response.body()).contains("MCP_RESPONSE_TOO_LARGE");
+    }
+
     private TestClient.Response initialize(String authorization, int id) {
         return client.post("/mcp").header("Authorization", authorization)
                 .body(initialize(id)).expect(200);
