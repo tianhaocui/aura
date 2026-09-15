@@ -264,10 +264,22 @@ final class McpHttpTransport {
     private void writeRpc(BaseContext context, Map<String, Object> response) {
         String json = JSON.toJSONString(response, JSONWriter.Feature.WriteNulls);
         if (json.getBytes(java.nio.charset.StandardCharsets.UTF_8).length > maxResponseBytes) {
-            context.status(502).json(McpContent.error("MCP_RESPONSE_TOO_LARGE"));
+            writeOversizeError(context);
             return;
         }
         context.jsonRaw(json);
+    }
+
+    private void writeOversizeError(BaseContext context) {
+        String fallback = JSON.toJSONString(McpContent.error("MCP_RESPONSE_TOO_LARGE"));
+        if (fallback.getBytes(java.nio.charset.StandardCharsets.UTF_8).length <= maxResponseBytes) {
+            context.status(502).jsonRaw(fallback);
+        } else {
+            // A valid JSON error would itself violate the configured byte
+            // budget. Return a bounded empty body rather than bypassing the
+            // limit through BaseContext.json(...).
+            context.status(502).raw("");
+        }
     }
 
     private static final Object INVALID = new Object();

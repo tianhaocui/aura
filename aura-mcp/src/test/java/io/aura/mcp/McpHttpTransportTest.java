@@ -198,6 +198,25 @@ class McpHttpTransportTest {
         assertThat(response.body()).contains("MCP_RESPONSE_TOO_LARGE");
     }
 
+    @Test
+    void oversizedFallbackErrorNeverExceedsConfiguredResponseBudget() {
+        McpRouter router = new McpRouter();
+        router.tool("large", "Large response")
+                .handler(ctx -> "x".repeat(1024));
+        McpModule bounded = McpModule.create(router).http("/mcp", 2,
+                Duration.ofMinutes(5), 1);
+        AuraApp app = AuraApp.create()
+                .mcpAuthenticate(metadata -> "alice")
+                .use(bounded);
+        TestClient client = TestClient.of(app);
+        TestClient.Response response = client.post("/mcp")
+                .header("Authorization", "Bearer anything")
+                .body(initialize(1))
+                .expect(502);
+        assertThat(response.body() == null ? 0 : response.body().getBytes(java.nio.charset.StandardCharsets.UTF_8).length)
+                .isLessThanOrEqualTo(1);
+    }
+
     private TestClient.Response initialize(String authorization, int id) {
         return client.post("/mcp").header("Authorization", authorization)
                 .body(initialize(id)).expect(200);
