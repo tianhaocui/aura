@@ -42,7 +42,9 @@ public final class ParamResolver {
         if (type == Character.class) return ctx -> parseCharBoxed(resolveString(ctx, name));
 
         if (isBody(param)) return ctx -> {
-            return ctx.bodyOrThrow(parameterType(param));
+            Object obj = ctx.body(parameterType(param));
+            if (obj != null) BeanValidator.validate(obj);
+            return obj;
         };
 
         return ctx -> resolveString(ctx, name);

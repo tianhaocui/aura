@@ -120,10 +120,10 @@ public final class AuraRouteProcessor extends AbstractProcessor {
                 args.add("ctx");
             } else if (isBody(type)) {
                 if (isSimpleBodyType(type)) {
-                    args.add("ctx.bodyOrThrow(" + rawClassName(type) + ".class)");
+                    args.add("ctx.body(" + rawClassName(type) + ".class)");
                 } else if (type instanceof javax.lang.model.type.DeclaredType declared
                         && supportedTypeArguments(declared)) {
-                    args.add("ctx.bodyOrThrow(" + genericTypeExpression(declared) + ")");
+                    args.add("ctx.body(" + genericTypeExpression(declared) + ")");
                 } else {
                     processingEnv.getMessager().printMessage(javax.tools.Diagnostic.Kind.ERROR,
                             "Unsupported generic body parameter; use concrete type arguments", parameter);

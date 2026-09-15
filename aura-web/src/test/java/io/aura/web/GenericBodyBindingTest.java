@@ -24,16 +24,16 @@ class GenericBodyBindingTest {
     }
 
     @Test
-    void missingCollectionBodyUsesTheStableRequiredBodyError() {
+    void missingCollectionBodyPreservesNullableBodyBinding() {
         TestClient client = TestClient.of(Aura.create().service(new CollectionService()));
-        assertThat(client.post("/batch").expect(400).body())
-                .contains("Request body is required");
+        assertThat(client.post("/batch").expect(200).body()).contains("null");
     }
 
     @Path("")
     static final class CollectionService {
         @Post("/batch")
         public String batch(List<Item> items) {
+            if (items == null) return "null";
             return items.stream().map(Item::name).reduce((left, right) -> left + "," + right).orElse("");
         }
 

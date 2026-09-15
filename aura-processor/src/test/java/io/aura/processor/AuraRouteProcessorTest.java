@@ -52,7 +52,7 @@ class AuraRouteProcessorTest {
         assertThat(text).contains("implements io.aura.contract.RouteContributor")
                 .contains("GET", "/orders/{id}")
                 .contains("ctx.path(\"id\")")
-                .contains("ctx.bodyOrThrow(sample.CreateRequest.class)")
+                .contains("ctx.body(sample.CreateRequest.class)")
                 .contains("io.aura.web.RouteResponse.write(ctx, service.get(")
                 .contains("new io.aura.contract.ApiParameter");
         assertThat(classes.resolve("sample/ExampleServiceAuraRoutes.class")).exists();
