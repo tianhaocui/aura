@@ -282,6 +282,35 @@ class AiClientTest {
         }
     }
 
+    @Test
+    void cancellationTokenStopsLongRetryBackoff() throws Exception {
+        CancellationToken token = new CancellationToken();
+        AtomicReference<Throwable> failure = new AtomicReference<>();
+        java.util.concurrent.atomic.AtomicInteger calls = new java.util.concurrent.atomic.AtomicInteger();
+        AiProvider provider = request -> {
+            calls.incrementAndGet();
+            throw new AiProviderException("TRANSIENT", 503, "retry");
+        };
+        AiRequest request = AiRequest.builder()
+                .prompt("retry-cancel")
+                .cancellationToken(token)
+                .retry(AiRetryPolicy.fixed(2, Duration.ofSeconds(5)))
+                .timeout(Duration.ofSeconds(10))
+                .build();
+        try (AiClient client = new AiClient(provider)) {
+            Thread caller = new Thread(() -> {
+                try { client.chat(request); }
+                catch (Throwable error) { failure.set(error); }
+            });
+            caller.start();
+            for (int i = 0; i < 100 && calls.get() == 0; i++) Thread.sleep(5);
+            assertThat(calls).hasValue(1);
+            token.cancel();
+            caller.join(1_000);
+            assertThat(failure.get()).isInstanceOf(CancellationException.class);
+        }
+    }
+
     private static void assertBudgetError(AiBudgetExceededException error,
                                           String dimension, long limit, long actual) {
         assertThat(error.code()).isEqualTo(AiBudgetExceededException.EXCEEDED);

@@ -209,13 +209,19 @@ public final class AiClient implements AutoCloseable {
         if (remaining != null && !remaining.isZero() && backoff.compareTo(remaining) >= 0) {
             throw new TimeoutException("AI request timed out during retry backoff");
         }
-        long millis = backoff.toMillis();
-        int nanos = backoff.minusMillis(millis).getNano();
-        try {
-            Thread.sleep(millis, nanos);
-        } catch (InterruptedException interrupted) {
-            Thread.currentThread().interrupt();
-            throw interrupted;
+        long remainingNanos = backoff.toNanos();
+        while (remainingNanos > 0) {
+            request.cancellationToken().throwIfCancelled();
+            long slice = Math.min(remainingNanos, TimeUnit.MILLISECONDS.toNanos(50));
+            long millis = TimeUnit.NANOSECONDS.toMillis(slice);
+            int nanos = (int) (slice - TimeUnit.MILLISECONDS.toNanos(millis));
+            try {
+                Thread.sleep(millis, nanos);
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+                throw interrupted;
+            }
+            remainingNanos -= slice;
         }
         request.cancellationToken().throwIfCancelled();
         if (deadline != Long.MAX_VALUE && deadline <= System.nanoTime()) {
