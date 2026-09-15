@@ -98,6 +98,29 @@ class WorkflowTest {
     }
 
     @Test
+    void cancellationInterruptsLongRetryDelayPromptly() throws Exception {
+        java.util.concurrent.CountDownLatch failed = new java.util.concurrent.CountDownLatch(1);
+        AtomicInteger attempts = new AtomicInteger();
+        WorkflowDefinition<Object> workflow = Workflow.<Object>builder("cancel-retry")
+                .step("unstable", context -> {
+                    attempts.incrementAndGet();
+                    failed.countDown();
+                    throw new IllegalStateException("retry");
+                }, StepMode.IDEMPOTENT, RetryPolicy.fixed(2, Duration.ofSeconds(5)))
+                .build();
+        CancellationToken token = new CancellationToken();
+        java.util.concurrent.CompletableFuture<WorkflowResult> future =
+                java.util.concurrent.CompletableFuture.supplyAsync(
+                        () -> workflow.execute(new Object(), WorkflowSelector.defaultVariant(), token,
+                                ignored -> { }));
+        assertThat(failed.await(1, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+        token.cancel();
+        WorkflowResult result = future.get(1, java.util.concurrent.TimeUnit.SECONDS);
+        assertThat(result.cancelled()).isTrue();
+        assertThat(attempts).hasValue(1);
+    }
+
+    @Test
     void invokesCompensationInReverseOrder() {
         List<String> events = new ArrayList<>();
         WorkflowDefinition<List<String>> workflow = Workflow.<List<String>>builder("compensate")

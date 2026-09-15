@@ -112,8 +112,9 @@ public final class WorkflowDefinition<C> implements AuraWorkflow<C> {
                         failure = error;
                         if (attempt >= spec.retryPolicy().maxAttempts() || !spec.retryPolicy().shouldRetry(error)) break;
                         if (!spec.retryPolicy().delay().isZero()) {
-                            try { Thread.sleep(spec.retryPolicy().delay().toMillis()); }
-                            catch (InterruptedException interrupted) {
+                            try {
+                                awaitRetryDelay(spec.retryPolicy().delay(), cancellationToken);
+                            } catch (InterruptedException interrupted) {
                                 Thread.currentThread().interrupt();
                                 if (cancellationToken.isCancelled()) {
                                     throw new java.util.concurrent.CancellationException("Workflow cancelled");
@@ -148,6 +149,26 @@ public final class WorkflowDefinition<C> implements AuraWorkflow<C> {
             observer.accept(execution);
             return new WorkflowResult(execution, null);
         }
+    }
+
+    private static void awaitRetryDelay(java.time.Duration delay, CancellationToken cancellationToken)
+            throws InterruptedException {
+        long remainingNanos;
+        try {
+            remainingNanos = Math.multiplyExact(delay.getSeconds(), 1_000_000_000L)
+                    + delay.getNano();
+        } catch (ArithmeticException overflow) {
+            remainingNanos = Long.MAX_VALUE;
+        }
+        while (remainingNanos > 0) {
+            cancellationToken.throwIfCancelled();
+            long sliceNanos = Math.min(remainingNanos, java.util.concurrent.TimeUnit.MILLISECONDS.toNanos(50));
+            long millis = java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(sliceNanos);
+            int nanos = (int) (sliceNanos - java.util.concurrent.TimeUnit.MILLISECONDS.toNanos(millis));
+            Thread.sleep(millis, nanos);
+            remainingNanos -= sliceNanos;
+        }
+        cancellationToken.throwIfCancelled();
     }
 
     private void compensate(C context, List<WorkflowStepSpec<C>> completed, WorkflowExecution execution) {
