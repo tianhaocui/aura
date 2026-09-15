@@ -156,4 +156,43 @@ class AuraRouteProcessorTest {
                 .contains("java.util.List", "\"boxed\"", "\"tags\"", "\"child\"")
                 .contains("\"name\", \"count\", \"code\", \"slug\", \"boxed\", \"tags\", \"child\"");
     }
+
+    @Test
+    void generatesCrudConventionRoutes() throws Exception {
+        JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
+        Path root = Files.createTempDirectory("aura-processor-crud-test");
+        Path source = root.resolve("CrudService.java");
+        Files.writeString(source, """
+                package crud;
+                import io.aura.annotation.Path;
+                @Path("/orders")
+                public class CrudService {
+                    public String get(long id) { return "get"; }
+                    public java.util.List<String> list() { return java.util.List.of(); }
+                    public String create(CreateRequest request) { return "created"; }
+                    public String update(long id, CreateRequest request) { return "updated"; }
+                    public void delete(long id) { }
+                }
+                record CreateRequest(String value) {}
+                """);
+        Path classes = root.resolve("classes");
+        Path generated = root.resolve("generated");
+        Files.createDirectories(classes);
+        Files.createDirectories(generated);
+        try (StandardJavaFileManager files = compiler.getStandardFileManager(null, null, null)) {
+            var task = compiler.getTask(null, files, diagnostic -> { },
+                    List.of("-classpath", System.getProperty("java.class.path"), "-d", classes.toString(),
+                            "-s", generated.toString(), "-parameters"), null,
+                    files.getJavaFileObjects(source.toFile()));
+            task.setProcessors(List.of(new AuraRouteProcessor()));
+            assertThat(task.call()).isTrue();
+        }
+        String generatedText = Files.readString(generated.resolve("crud/CrudServiceAuraRoutes.java"));
+        assertThat(generatedText)
+                .contains("\"GET\", \"/orders/{id}\"")
+                .contains("\"GET\", \"/orders\"")
+                .contains("\"POST\", \"/orders\"")
+                .contains("\"PUT\", \"/orders/{id}\"")
+                .contains("\"DELETE\", \"/orders/{id}\"");
+    }
 }

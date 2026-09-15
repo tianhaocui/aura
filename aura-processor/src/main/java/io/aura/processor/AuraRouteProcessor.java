@@ -77,7 +77,7 @@ public final class AuraRouteProcessor extends AbstractProcessor {
                 .filter(element -> element.getKind() == ElementKind.METHOD)
                 .map(element -> (ExecutableElement) element)
                 .filter(method -> method.getModifiers().contains(Modifier.PUBLIC))
-                .filter(this::hasRouteAnnotation)
+                .filter(this::hasRoute)
                 .sorted(Comparator.comparing(method -> method.getSimpleName().toString()))
                 .toList();
         if (methods.isEmpty()) return;
@@ -108,6 +108,7 @@ public final class AuraRouteProcessor extends AbstractProcessor {
     private void appendRoute(StringBuilder source, String prefix, ExecutableElement method) {
         Route route = route(method);
         String path = prefix + route.path;
+        if (path.isEmpty()) path = "/";
         source.append("      new io.aura.contract.RouteContribution(\"").append(route.method).append("\", \"")
                 .append(escape(path)).append("\", (io.aura.web.BaseHandler) ctx -> {");
 
@@ -164,7 +165,7 @@ public final class AuraRouteProcessor extends AbstractProcessor {
         source.append("))");
     }
 
-    private boolean hasRouteAnnotation(ExecutableElement method) {
+    private boolean hasRoute(ExecutableElement method) {
         return route(method).method != null;
     }
 
@@ -178,7 +179,25 @@ public final class AuraRouteProcessor extends AbstractProcessor {
             String path = annotationValue(method, value[0], "value");
             if (path != null) return new Route(value[1], path);
         }
-        return new Route(null, null);
+        return switch (method.getSimpleName().toString()) {
+            case "get" -> new Route("GET", "/" + pathParamSegment(method));
+            case "list" -> new Route("GET", "");
+            case "create" -> new Route("POST", "");
+            case "update" -> new Route("PUT", "/" + pathParamSegment(method));
+            case "delete" -> new Route("DELETE", "/" + pathParamSegment(method));
+            default -> new Route(null, null);
+        };
+    }
+
+    private String pathParamSegment(ExecutableElement method) {
+        for (VariableElement parameter : method.getParameters()) {
+            String type = parameter.asType().toString();
+            if (Set.of("int", "long", "java.lang.String", "java.lang.Integer", "java.lang.Long")
+                    .contains(type)) {
+                return "{" + parameter.getSimpleName() + "}";
+            }
+        }
+        return "{id}";
     }
 
     private String annotationValue(Element element, String annotationName, String valueName) {
