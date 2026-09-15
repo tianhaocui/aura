@@ -9,6 +9,12 @@ public interface BaseContext {
     String header(String name);
     String cookie(String name);
     <T> T body(Class<T> type) throws Exception;
+    /** Decodes a body using a generic Java reflection type such as List<Order>. */
+    @SuppressWarnings("unchecked")
+    default <T> T body(java.lang.reflect.Type type) throws Exception {
+        if (type instanceof Class<?> clazz) return (T) body(clazz);
+        throw new UnsupportedOperationException("Generic body decoding is not supported in this context");
+    }
     String method();
     String url();
     int statusCode();
@@ -38,6 +44,13 @@ public interface BaseContext {
 
     // --- body with validation ---
     default <T> T bodyOrThrow(Class<T> type) throws Exception {
+        T obj = body(type);
+        if (obj == null) throw new IllegalArgumentException("Request body is required");
+        io.aura.BeanValidator.validate(obj);
+        return obj;
+    }
+
+    default <T> T bodyOrThrow(java.lang.reflect.Type type) throws Exception {
         T obj = body(type);
         if (obj == null) throw new IllegalArgumentException("Request body is required");
         io.aura.BeanValidator.validate(obj);

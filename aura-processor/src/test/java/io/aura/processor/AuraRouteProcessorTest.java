@@ -133,6 +133,7 @@ class AuraRouteProcessorTest {
                 import java.util.List;
                 public class ValidatedService {
                     @Post("/validated") public String create(ValidatedRequest request) { return "ok"; }
+                    @Post("/tags") public String tags(List<String> tags) { return "ok"; }
                 }
                 record ValidatedRequest(@NotBlank String name, @Min(1) @Max(10) int count,
                         @Size(max=5) String code, @Pattern("[a-z]+") String slug,
@@ -154,7 +155,8 @@ class AuraRouteProcessorTest {
         String generatedText = Files.readString(generated.resolve("validated/ValidatedServiceAuraRoutes.java"));
         assertThat(generatedText).contains("minimum", "maximum", "maxLength", "pattern", "required")
                 .contains("java.util.List", "\"boxed\"", "\"tags\"", "\"child\"")
-                .contains("\"name\", \"count\", \"code\", \"slug\", \"boxed\", \"tags\", \"child\"");
+                .contains("\"name\", \"count\", \"code\", \"slug\", \"boxed\", \"tags\", \"child\"")
+                .contains("io.aura.web.RequestType.parameterized(java.util.List.class, java.lang.String.class)");
     }
 
     @Test

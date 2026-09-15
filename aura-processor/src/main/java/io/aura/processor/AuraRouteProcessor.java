@@ -119,11 +119,14 @@ public final class AuraRouteProcessor extends AbstractProcessor {
             if (isContext(type)) {
                 args.add("ctx");
             } else if (isBody(type)) {
-                if (type.getKind() == javax.lang.model.type.TypeKind.ARRAY || type.getKind() == javax.lang.model.type.TypeKind.DECLARED && ((javax.lang.model.type.DeclaredType) type).getTypeArguments().isEmpty()) {
+                if (isSimpleBodyType(type)) {
                     args.add("ctx.bodyOrThrow(" + rawClassName(type) + ".class)");
+                } else if (type instanceof javax.lang.model.type.DeclaredType declared
+                        && supportedTypeArguments(declared)) {
+                    args.add("ctx.bodyOrThrow(" + genericTypeExpression(declared) + ")");
                 } else {
                     processingEnv.getMessager().printMessage(javax.tools.Diagnostic.Kind.ERROR,
-                            "Generic body parameters are not supported by AuraRouteProcessor; use a concrete record/POJO", parameter);
+                            "Unsupported generic body parameter; use concrete type arguments", parameter);
                     args.add("null");
                 }
             } else {
@@ -230,6 +233,41 @@ public final class AuraRouteProcessor extends AbstractProcessor {
                 "short", "byte", "char", "java.lang.Integer", "java.lang.Long",
                 "java.lang.Boolean", "java.lang.Double", "java.lang.Float",
                 "java.lang.Short", "java.lang.Byte", "java.lang.Character").contains(type.toString());
+    }
+
+    private boolean isSimpleBodyType(TypeMirror type) {
+        return type.getKind() == TypeKind.ARRAY
+                || type.getKind() == TypeKind.DECLARED
+                && ((javax.lang.model.type.DeclaredType) type).getTypeArguments().isEmpty();
+    }
+
+    private boolean supportedTypeArguments(javax.lang.model.type.DeclaredType type) {
+        for (TypeMirror argument : type.getTypeArguments()) {
+            if (argument.getKind() == TypeKind.TYPEVAR || argument.getKind() == TypeKind.WILDCARD
+                    || argument.getKind() == TypeKind.INTERSECTION) return false;
+            if (argument instanceof javax.lang.model.type.DeclaredType nested
+                    && !supportedTypeArguments(nested)) return false;
+        }
+        return true;
+    }
+
+    private String genericTypeExpression(javax.lang.model.type.DeclaredType type) {
+        TypeElement raw = (TypeElement) type.asElement();
+        List<String> arguments = type.getTypeArguments().stream()
+                .map(this::typeExpression).toList();
+        return "io.aura.web.RequestType.parameterized(" + raw.getQualifiedName() + ".class, "
+                + String.join(", ", arguments) + ")";
+    }
+
+    private String typeExpression(TypeMirror type) {
+        if (type.getKind() == TypeKind.ARRAY) return rawClassName(type) + ".class";
+        if (type instanceof javax.lang.model.type.DeclaredType declared) {
+            if (declared.getTypeArguments().isEmpty()) {
+                return ((TypeElement) declared.asElement()).getQualifiedName() + ".class";
+            }
+            return genericTypeExpression(declared);
+        }
+        return type.toString() + ".class";
     }
 
     private String scalar(String value, TypeMirror type) {

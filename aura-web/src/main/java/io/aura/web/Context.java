@@ -145,13 +145,18 @@ public class Context implements BaseContext {
     }
 
     @Override public <T> T body(Class<T> type) throws IOException {
+        return body((java.lang.reflect.Type) type);
+    }
+
+    @Override @SuppressWarnings("unchecked")
+    public <T> T body(java.lang.reflect.Type type) throws IOException {
         if (cachedBody == null) {
             exchange.startBlocking();
             long maxSize = app != null ? app.maxBodySize() : 10 * 1024 * 1024L;
             cachedBody = readBody(exchange.getInputStream(), maxSize);
         }
         if (cachedBody.isBlank()) return null;
-        return JSON.parseObject(cachedBody, type);
+        return (T) JSON.parseObject(cachedBody, type);
     }
 
     private static String readBody(java.io.InputStream input, long maxSize) throws IOException {

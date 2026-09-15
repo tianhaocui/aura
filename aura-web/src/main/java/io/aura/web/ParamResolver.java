@@ -41,13 +41,22 @@ public final class ParamResolver {
         if (type == char.class) return ctx -> parseChar(resolveString(ctx, name));
         if (type == Character.class) return ctx -> parseCharBoxed(resolveString(ctx, name));
 
-        if (type.isRecord() || TypeUtil.isPojo(type)) return ctx -> {
-            Object obj = ctx.body(type);
-            BeanValidator.validate(obj);
-            return obj;
+        if (isBody(param)) return ctx -> {
+            return ctx.bodyOrThrow(parameterType(param));
         };
 
         return ctx -> resolveString(ctx, name);
+    }
+
+    private static boolean isBody(Parameter param) {
+        Class<?> type = param.getType();
+        return type.isRecord() || TypeUtil.isPojo(type) || type.isArray()
+                || java.util.Map.class.isAssignableFrom(type)
+                || java.lang.Iterable.class.isAssignableFrom(type);
+    }
+
+    private static java.lang.reflect.Type parameterType(Parameter param) {
+        return param.getParameterizedType();
     }
 
     public static String resolveString(BaseContext ctx, String name) {
