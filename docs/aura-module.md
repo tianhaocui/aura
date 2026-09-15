@@ -89,6 +89,10 @@ contract. It contributes `GET /health/live`, `GET /health/ready`, and
 the runtime to be `RUNNING` and all registered checks to be `UP`, and the
 aggregate endpoint reports dependency health without exposing check errors.
 
+Health probes are bounded by `AuraConfig.healthCheckTimeout()` (default one
+second, configurable from `aura.health-check-timeout`) and fail closed when a
+probe times out.
+
 HTTP failures use a stable JSON contract. `ApiException` responses contain
 `error`, `code`, and optional `field`, `reason`, and `hint`; validation responses
 use `code: "VALIDATION_ERROR"` and expose those same fields for each invalid
@@ -105,6 +109,12 @@ Inside a route group, use `Aura.requirePermission("orders.read")` after `Aura.re
 - For application-level capability lookup, call `app.prepare()` followed by `app.find(Type.class)` or `app.require(Type.class)`; use `app.runtimeView()` when an adapter needs the stable runtime contract.
 - `aura-db` provides `DatabaseModule.create(db)`. A business module can declare `requires("db")` and obtain the same `Db` instance with `context.require(Db.class)`.
 - New applications should use `AuraApp`; the older `Aura` builder is an implementation detail and is not the recommended module authoring API.
+- The optional `aura-processor` mirrors the reflection CRUD convention for
+  `@Path` services and emits direct route code. Do not install generated and
+  reflection routes for the same service.
+- Request bodies may be concrete records/POJOs or parameterized collections.
+  Use `RequestType.parameterized(List.class, Item.class)` for a generic body;
+  empty bodies remain nullable unless the handler rejects them.
 - `AiModule` contributes an `AiClient`; `McpModule` contributes an `McpRouter`. They do not silently open network listeners. Use the application's explicit MCP transport flag or configuration when starting.
 - Do not use global registries, static tenant state, reflection-based module discovery, or numeric step positions.
 
@@ -130,3 +140,6 @@ registry.register(Workflow.<OrderContext>builder("order.fulfillment")
 ```
 
 The framework owns ordering, validation, retry metadata, execution state and explicit compensation. The business module owns the meaning and side effects of each step.
+Asynchronous workflow executions receive an ID before queue admission, so a
+queued execution can be cancelled and persisted as `CANCELLED` without
+running its steps.

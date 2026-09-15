@@ -119,6 +119,12 @@ Generated sources are regular Java under Maven's generated-sources directory.
 Compile them, inspect them, and verify their routes through `TestClient` like
 any handwritten module code.
 
+For annotated services, the processor also preserves the convention routes
+get/list/create/update/delete: GET /orders/{id}, GET /orders, POST /orders,
+PUT /orders/{id}, and DELETE /orders/{id}. Mark the service with `@Path` so
+generation is explicit; do not register the same service through both
+reflection and generated routes.
+
 ## Configuration
 
 ```java
@@ -127,6 +133,7 @@ AuraConfig config = new AuraConfig()
         .workers(100)
         .maxBodySize(10 * 1024 * 1024L)
         .maxUploadSize(1024 * 1024L)
+        .healthCheckTimeout(1)
         .securityHeaders(true)
         .openApi(true);
 
@@ -176,9 +183,13 @@ router.get("/orders/{id}", handler)
 ```
 
 Binding is fixed: `int`/`long`/`String` use path then query parameters;
-records/POJOs use JSON bodies; non-void results become JSON responses. Use
+records/POJOs use JSON bodies; concrete `List<T>` and `Map<K,V>` parameters
+also use JSON bodies; non-void results become JSON responses. Empty bodies
+remain nullable unless the business handler rejects them explicitly. Use
 `ctx.bodyOrThrow(Type.class)` for a required validated body, and
-`ctx.pageNum()`/`ctx.pageSize()` for bounded pagination.
+`ctx.body(RequestType.parameterized(List.class, Order.class))` when a generic
+body type is needed. The generated processor emits the same `RequestType`
+expression automatically for concrete type arguments.
 
 Clients must branch on stable error fields, not exception text:
 
@@ -320,8 +331,13 @@ Workflow.<OrderContext>builder("order.fulfillment")
 ```
 
 The framework owns ordering, validation, retries, compensation, execution
-state, bounded workers, cancellation, and idempotency. Business modules own
-domain meaning and side effects.
+state, bounded workers, cancellation, and idempotency. Queued executions get
+an execution ID before entering the worker queue and can be cancelled without
+running business steps. Business modules own domain meaning and side effects.
+
+Health checks run with a bounded timeout and fail closed. Configure
+`aura.health-check-timeout` (1–300 seconds) when dependency probes need a
+different deadline; check errors are never returned in health response bodies.
 
 ## Generated-Code Rules
 
