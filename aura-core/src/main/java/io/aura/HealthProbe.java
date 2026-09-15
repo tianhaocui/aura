@@ -11,7 +11,6 @@ import java.util.concurrent.TimeUnit;
 
 /** Bounded, fail-closed health probe shared by legacy and modular runtimes. */
 final class HealthProbe {
-    private static final long TIMEOUT_MILLIS = 1_000L;
     private static final ThreadPoolExecutor EXECUTOR = new ThreadPoolExecutor(
             0, 16, 30L, TimeUnit.SECONDS, new ArrayBlockingQueue<>(64),
             task -> {
@@ -22,12 +21,13 @@ final class HealthProbe {
 
     private HealthProbe() { }
 
-    static HealthStatus check(List<HealthCheck> checks) {
+    static HealthStatus check(List<HealthCheck> checks, int timeoutSeconds) {
+        long timeoutMillis = TimeUnit.SECONDS.toMillis(timeoutSeconds);
         for (HealthCheck check : checks) {
             Future<HealthStatus> future = null;
             try {
                 future = EXECUTOR.submit(check::check);
-                HealthStatus status = future.get(TIMEOUT_MILLIS, TimeUnit.MILLISECONDS);
+                HealthStatus status = future.get(timeoutMillis, TimeUnit.MILLISECONDS);
                 if (status != HealthStatus.UP) return HealthStatus.DOWN;
             } catch (Exception failure) {
                 if (failure instanceof InterruptedException) Thread.currentThread().interrupt();

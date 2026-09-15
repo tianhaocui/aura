@@ -20,6 +20,7 @@ public final class AuraConfigSnapshot {
     private final long maxUploadSize;
     private final int shutdownTimeout;
     private final int requestTimeout;
+    private final int healthCheckTimeout;
     private final int pageSizeMax;
     private final int concurrencyLimit;
     private final int rateLimitPerSecond;
@@ -49,6 +50,7 @@ public final class AuraConfigSnapshot {
         this.maxUploadSize = source.maxUploadSize();
         this.shutdownTimeout = source.shutdownTimeout();
         this.requestTimeout = source.requestTimeout();
+        this.healthCheckTimeout = source.healthCheckTimeout();
         this.pageSizeMax = source.pageSizeMax();
         this.concurrencyLimit = source.concurrencyLimit();
         this.rateLimitPerSecond = source.rateLimitPerSecond();
@@ -81,6 +83,7 @@ public final class AuraConfigSnapshot {
     public long maxUploadSize() { return maxUploadSize; }
     public int shutdownTimeout() { return shutdownTimeout; }
     public int requestTimeout() { return requestTimeout; }
+    public int healthCheckTimeout() { return healthCheckTimeout; }
     public int pageSizeMax() { return pageSizeMax; }
     public int concurrencyLimit() { return concurrencyLimit; }
     public int rateLimitPerSecond() { return rateLimitPerSecond; }

@@ -49,6 +49,7 @@ public final class AuraConfig {
         config.maxUploadSize(parseLong(value(properties, "aura.max-upload-size", "AURA_MAX_UPLOAD_SIZE"), config.maxUploadSize, "aura.max-upload-size"));
         config.shutdownTimeout(parseInt(value(properties, "aura.shutdown-timeout", "AURA_SHUTDOWN_TIMEOUT"), config.shutdownTimeout, "aura.shutdown-timeout"));
         config.requestTimeout(parseInt(value(properties, "aura.request-timeout", "AURA_REQUEST_TIMEOUT"), config.requestTimeout, "aura.request-timeout"));
+        config.healthCheckTimeout(parseInt(value(properties, "aura.health-check-timeout", "AURA_HEALTH_CHECK_TIMEOUT"), config.healthCheckTimeout, "aura.health-check-timeout"));
         config.pageSizeMax(parseInt(value(properties, "aura.page-size-max", "AURA_PAGE_SIZE_MAX"), config.pageSizeMax, "aura.page-size-max"));
         config.concurrencyLimit(parseInt(value(properties, "aura.concurrency-limit", "AURA_CONCURRENCY_LIMIT"), config.concurrencyLimit, "aura.concurrency-limit"));
         config.rateLimitPerSecond(parseInt(value(properties, "aura.rate-limit-per-second", "AURA_RATE_LIMIT_PER_SECOND"), config.rateLimitPerSecond, "aura.rate-limit-per-second"));
@@ -110,6 +111,7 @@ public final class AuraConfig {
     private long maxUploadSize = DEFAULT_MAX_UPLOAD_SIZE;
     private int shutdownTimeout = 30;
     private int requestTimeout;
+    private int healthCheckTimeout = 1;
     private int pageSizeMax = 500;
     private int concurrencyLimit;
     private int rateLimitPerSecond;
@@ -138,6 +140,7 @@ public final class AuraConfig {
     public AuraConfig maxUploadSize(long value) { maxUploadSize = value; return this; }
     public AuraConfig shutdownTimeout(int value) { shutdownTimeout = value; return this; }
     public AuraConfig requestTimeout(int value) { requestTimeout = value; return this; }
+    public AuraConfig healthCheckTimeout(int value) { healthCheckTimeout = value; return this; }
     public AuraConfig pageSizeMax(int value) { pageSizeMax = value; return this; }
     public AuraConfig concurrencyLimit(int value) { concurrencyLimit = value; return this; }
     public AuraConfig rateLimitPerSecond(int value) { rateLimitPerSecond = value; return this; }
@@ -203,6 +206,7 @@ public final class AuraConfig {
     public long maxUploadSize() { return maxUploadSize; }
     public int shutdownTimeout() { return shutdownTimeout; }
     public int requestTimeout() { return requestTimeout; }
+    public int healthCheckTimeout() { return healthCheckTimeout; }
     public int pageSizeMax() { return pageSizeMax; }
     public int concurrencyLimit() { return concurrencyLimit; }
     public int rateLimitPerSecond() { return rateLimitPerSecond; }
@@ -236,6 +240,9 @@ public final class AuraConfig {
         if (maxUploadSize > maxBodySize) throw new IllegalArgumentException("maxUploadSize cannot exceed maxBodySize");
         if (shutdownTimeout < 0) throw new IllegalArgumentException("shutdownTimeout cannot be negative");
         if (requestTimeout < 0) throw new IllegalArgumentException("requestTimeout cannot be negative");
+        if (healthCheckTimeout < 1 || healthCheckTimeout > 300) {
+            throw new IllegalArgumentException("healthCheckTimeout must be between 1 and 300 seconds");
+        }
         if (pageSizeMax < 1 || pageSizeMax > 100_000) throw new IllegalArgumentException("pageSizeMax is out of range");
         if (concurrencyLimit < 0 || rateLimitPerSecond < 0) throw new IllegalArgumentException("admission limits cannot be negative");
         if (tlsEnabled() && (keyStorePassword == null || keyStorePassword.isEmpty())) throw new IllegalArgumentException("TLS keystore password is required");

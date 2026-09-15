@@ -109,7 +109,7 @@ class RuntimeFoundationTest {
     }
 
     @Test void healthChecksTimeoutAndFailClosed() {
-        Aura app = Aura.create().healthCheck(() -> {
+        Aura app = Aura.create(new AuraConfig().healthCheckTimeout(1)).healthCheck(() -> {
             Thread.sleep(10_000);
             return HealthStatus.UP;
         });
