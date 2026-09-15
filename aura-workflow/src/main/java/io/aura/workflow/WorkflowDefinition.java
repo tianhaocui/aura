@@ -69,6 +69,12 @@ public final class WorkflowDefinition<C> implements AuraWorkflow<C> {
         Objects.requireNonNull(selector, "selector");
         Objects.requireNonNull(cancellationToken, "cancellationToken");
         Objects.requireNonNull(observer, "observer");
+        return executePrepared(context, selector, cancellationToken, observer,
+                idempotencyKey, prepare(context, selector, idempotencyKey));
+    }
+
+    WorkflowExecution prepare(C context, WorkflowSelector<C> selector, String idempotencyKey) {
+        Objects.requireNonNull(selector, "selector");
         String variant = selector.select(context);
         Resolved<C> resolved = resolve(variant);
         List<String> order = topologicalOrder(resolved.steps, resolved.edges);
@@ -77,6 +83,16 @@ public final class WorkflowDefinition<C> implements AuraWorkflow<C> {
             WorkflowStepSpec<C> spec = resolved.steps.get(stepId);
             execution.add(new StepExecution(stepId, spec.mode(), spec.retryPolicy()));
         }
+        return execution;
+    }
+
+    WorkflowResult executePrepared(C context, WorkflowSelector<C> selector,
+                                           CancellationToken cancellationToken,
+                                           Consumer<WorkflowExecution> observer,
+                                           String idempotencyKey,
+                                           WorkflowExecution execution) {
+        Resolved<C> resolved = resolve(execution.variant());
+        List<String> order = topologicalOrder(resolved.steps, resolved.edges);
         observer.accept(execution);
         Object value = null;
         List<WorkflowStepSpec<C>> completed = new ArrayList<>();

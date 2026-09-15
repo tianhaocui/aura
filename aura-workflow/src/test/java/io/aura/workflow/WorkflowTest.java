@@ -11,6 +11,7 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.CompletableFuture;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -309,6 +310,112 @@ class WorkflowTest {
                     .anyMatch(execution -> execution.status() == WorkflowExecution.Status.CANCELLED);
             assertThat(caller.isCancelled()).isFalse();
         } finally {
+            runtime.close();
+        }
+    }
+
+    @Test
+    void queuedExecutionCanBeCancelledBeforeItsWorkerStarts() throws Exception {
+        WorkflowRegistry registry = new WorkflowRegistry();
+        java.util.concurrent.CountDownLatch firstStarted = new java.util.concurrent.CountDownLatch(1);
+        java.util.concurrent.CountDownLatch releaseFirst = new java.util.concurrent.CountDownLatch(1);
+        AtomicInteger secondAttempts = new AtomicInteger();
+        registry.register(Workflow.<String>builder("queued-cancel")
+                .step("wait", context -> {
+                    firstStarted.countDown();
+                    releaseFirst.await();
+                    return context;
+                })
+                .build());
+        WorkflowRuntime<String> runtime = new WorkflowRuntime<>(
+                registry, new InMemoryWorkflowExecutionStore(), 1, 2);
+        try {
+            CompletableFuture<WorkflowResult> first = runtime.executeAsync("queued-cancel", "first");
+            assertThat(firstStarted.await(1, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+
+            WorkflowDefinition<String> secondDefinition = Workflow.<String>builder("queued-cancel-second")
+                    .step("never-run", context -> {
+                        secondAttempts.incrementAndGet();
+                        return context;
+                    }).build();
+            // Register a separate id so the queued execution is unambiguous.
+            registry.register(secondDefinition);
+            CompletableFuture<WorkflowResult> second =
+                    runtime.executeAsync("queued-cancel-second", "second");
+            String executionId = runtime.executions("queued-cancel-second").stream()
+                    .findFirst().map(WorkflowExecution::executionId).orElse(null);
+            assertThat(executionId).isNotNull();
+
+            assertThat(runtime.cancel(executionId)).isTrue();
+            WorkflowResult cancelled = second.get(1, java.util.concurrent.TimeUnit.SECONDS);
+            assertThat(cancelled.cancelled()).isTrue();
+            assertThat(cancelled.execution().status()).isEqualTo(WorkflowExecution.Status.CANCELLED);
+            assertThat(secondAttempts).hasValue(0);
+            assertThat(runtime.executionSnapshot(executionId))
+                    .get().extracting(WorkflowExecutionSnapshot::status)
+                    .isEqualTo(WorkflowExecution.Status.CANCELLED);
+            releaseFirst.countDown();
+            first.get(1, java.util.concurrent.TimeUnit.SECONDS);
+        } finally {
+            releaseFirst.countDown();
+            runtime.close();
+        }
+    }
+
+    @Test
+    void unknownWorkflowDoesNotPoisonIdempotentAsyncFuture() throws Exception {
+        WorkflowRuntime<Object> runtime = new WorkflowRuntime<>();
+        try {
+            CompletableFuture<WorkflowResult> first = runtime.executeAsync(
+                    "missing-workflow", new Object(), WorkflowSelector.defaultVariant(), "same-key");
+            assertThatThrownBy(() -> first.get(1, java.util.concurrent.TimeUnit.SECONDS))
+                    .hasRootCauseInstanceOf(WorkflowException.class)
+                    .hasMessageContaining("Unknown workflow");
+            CompletableFuture<WorkflowResult> second = runtime.executeAsync(
+                    "missing-workflow", new Object(), WorkflowSelector.defaultVariant(), "same-key");
+            assertThatThrownBy(() -> second.get(1, java.util.concurrent.TimeUnit.SECONDS))
+                    .hasRootCauseInstanceOf(WorkflowException.class)
+                    .hasMessageContaining("Unknown workflow");
+        } finally {
+            runtime.close();
+        }
+    }
+
+    @Test
+    void cancellingQueuedFuturePersistsCancelledExecution() throws Exception {
+        WorkflowRegistry registry = new WorkflowRegistry();
+        java.util.concurrent.CountDownLatch started = new java.util.concurrent.CountDownLatch(1);
+        java.util.concurrent.CountDownLatch release = new java.util.concurrent.CountDownLatch(1);
+        registry.register(Workflow.<String>builder("future-cancel")
+                .step("wait", context -> {
+                    started.countDown();
+                    release.await();
+                    return context;
+                }).build());
+        WorkflowRuntime<String> runtime = new WorkflowRuntime<>(
+                registry, new InMemoryWorkflowExecutionStore(), 1, 2);
+        try {
+            CompletableFuture<WorkflowResult> first = runtime.executeAsync("future-cancel", "first");
+            assertThat(started.await(1, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+            CompletableFuture<WorkflowResult> queued = runtime.executeAsync("future-cancel", "queued");
+            String executionId = runtime.executions("future-cancel").stream()
+                    .filter(execution -> execution.status() == WorkflowExecution.Status.PENDING)
+                    .findFirst().map(WorkflowExecution::executionId).orElse(null);
+            assertThat(executionId).isNotNull();
+            assertThat(queued.cancel(false)).isTrue();
+            release.countDown();
+            first.get(1, java.util.concurrent.TimeUnit.SECONDS);
+            for (int i = 0; i < 100; i++) {
+                if (runtime.execution(executionId)
+                        .map(execution -> execution.status() == WorkflowExecution.Status.CANCELLED)
+                        .orElse(false)) break;
+                Thread.sleep(5);
+            }
+            assertThat(runtime.execution(executionId))
+                    .get().extracting(WorkflowExecution::status)
+                    .isEqualTo(WorkflowExecution.Status.CANCELLED);
+        } finally {
+            release.countDown();
             runtime.close();
         }
     }
