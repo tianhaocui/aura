@@ -42,7 +42,8 @@ public class AuraMcpStarter implements McpStarter {
                 });
                 protocol.runStdio();
             } else {
-                new McpBridge("http://localhost:" + app.port(), out).run();
+                new McpBridge("http://localhost:" + app.port(), out,
+                        null, true).run();
             }
         } catch (Exception e) {
             throw new RuntimeException("MCP stdio failed", e);

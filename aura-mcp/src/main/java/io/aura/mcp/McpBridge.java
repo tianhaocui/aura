@@ -6,6 +6,7 @@ import com.alibaba.fastjson2.JSONObject;
 
 import java.io.*;
 import java.net.HttpURLConnection;
+import java.net.InetAddress;
 import java.net.URI;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
@@ -29,15 +30,46 @@ public class McpBridge {
     }
 
     public McpBridge(String baseUrl, PrintStream out, String schemaToken) {
+        this(baseUrl, out, schemaToken, allowPrivateUrls());
+    }
+
+    /** Creates a bridge with an explicit private/local target policy. */
+    public McpBridge(String baseUrl, PrintStream out, String schemaToken, boolean allowPrivateUrl) {
         URI parsed = URI.create(Objects.requireNonNull(baseUrl, "baseUrl"));
         if (!("http".equalsIgnoreCase(parsed.getScheme()) || "https".equalsIgnoreCase(parsed.getScheme()))
-                || parsed.getHost() == null || parsed.getUserInfo() != null) {
-            throw new IllegalArgumentException("baseUrl must be an absolute HTTP(S) URL without userinfo");
+                || parsed.getHost() == null || parsed.getUserInfo() != null
+                || parsed.getRawFragment() != null || parsed.getRawQuery() != null) {
+            throw new IllegalArgumentException(
+                    "baseUrl must be an absolute HTTP(S) URL without userinfo, query, or fragment");
+        }
+        if (!allowPrivateUrl) {
+            try {
+                for (InetAddress address : InetAddress.getAllByName(parsed.getHost())) {
+                    if (isNonPublicAddress(address)) {
+                        throw new IllegalArgumentException("baseUrl resolves to a private or local address");
+                    }
+                }
+            } catch (java.net.UnknownHostException error) {
+                throw new IllegalArgumentException("baseUrl host cannot be resolved", error);
+            }
         }
         String normalized = parsed.toString();
         this.baseUrl = normalized.endsWith("/") ? normalized.substring(0, normalized.length() - 1) : normalized;
         this.out = out;
         this.schemaToken = schemaToken == null || schemaToken.isBlank() ? null : schemaToken;
+    }
+
+    private static boolean allowPrivateUrls() {
+        return Boolean.parseBoolean(System.getProperty(
+                McpPackager.ALLOW_PRIVATE_URL_PROPERTY,
+                System.getenv().getOrDefault(McpPackager.ALLOW_PRIVATE_URL_ENV, "false")));
+    }
+
+    private static boolean isNonPublicAddress(InetAddress address) {
+        return address.isAnyLocalAddress() || address.isLoopbackAddress()
+                || address.isLinkLocalAddress() || address.isSiteLocalAddress()
+                || address.isMulticastAddress()
+                || (address.getAddress().length == 16 && (address.getAddress()[0] & 0xfe) == 0xfc);
     }
 
     public void run() throws Exception {

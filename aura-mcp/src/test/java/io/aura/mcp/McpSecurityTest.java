@@ -54,7 +54,7 @@ class McpSecurityTest {
                     .getBytes(StandardCharsets.UTF_8)));
             new McpBridge("http://localhost:" + server.getAddress().getPort(),
                     new PrintStream(new ByteArrayOutputStream(), true, StandardCharsets.UTF_8),
-                    "schema-secret").run();
+                    "schema-secret", true).run();
             assertThat(tokenSeen.get()).isTrue();
         } finally {
             System.setIn(originalIn);
@@ -68,6 +68,18 @@ class McpSecurityTest {
                 .isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> McpPackager.validateAppUrl("http://user:pass@example.com"))
                 .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void bridgeRejectsPrivateTargetsUnlessExplicitlyAllowed() {
+        assertThatThrownBy(() -> new McpBridge("http://127.0.0.1:8080",
+                new PrintStream(new ByteArrayOutputStream()), null))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("private or local");
+        assertThatThrownBy(() -> new McpBridge("https://example.test/api?x=1",
+                new PrintStream(new ByteArrayOutputStream()), null))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("query");
     }
 
     @Test
