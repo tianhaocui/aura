@@ -71,6 +71,14 @@ class OpenAiCompatibleProviderTest {
 
         assertThatThrownBy(() -> OpenAiCompatibleProvider.create("file:///tmp/ai", "", "model"))
                 .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> OpenAiCompatibleProvider.create("https://example.test/api#fragment", "", "model"))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> new OpenAiCompatibleProvider(
+                URI.create("https://example.test/api"), "", "model",
+                java.net.http.HttpClient.newBuilder()
+                        .followRedirects(java.net.http.HttpClient.Redirect.NORMAL).build(),
+                Duration.ofSeconds(2), 512))
+                .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test

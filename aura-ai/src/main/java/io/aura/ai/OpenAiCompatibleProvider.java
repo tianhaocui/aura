@@ -32,7 +32,8 @@ public final class OpenAiCompatibleProvider implements AiProvider {
     private final int maxResponseBytes;
 
     public OpenAiCompatibleProvider(URI endpoint, String apiKey, String defaultModel) {
-        this(endpoint, apiKey, defaultModel, HttpClient.newHttpClient(), Duration.ofSeconds(60),
+        this(endpoint, apiKey, defaultModel,
+                HttpClient.newBuilder().followRedirects(HttpClient.Redirect.NEVER).build(), Duration.ofSeconds(60),
                 DEFAULT_MAX_RESPONSE_BYTES);
     }
 
@@ -42,6 +43,9 @@ public final class OpenAiCompatibleProvider implements AiProvider {
         this.apiKey = apiKey == null ? "" : apiKey.trim();
         this.defaultModel = requireText(defaultModel, "defaultModel");
         this.client = Objects.requireNonNull(client, "client");
+        if (client.followRedirects() != HttpClient.Redirect.NEVER) {
+            throw new IllegalArgumentException("client must not follow redirects");
+        }
         this.defaultTimeout = validateTimeout(defaultTimeout);
         if (maxResponseBytes < 1) throw new IllegalArgumentException("maxResponseBytes must be positive");
         this.maxResponseBytes = maxResponseBytes;
@@ -251,8 +255,10 @@ public final class OpenAiCompatibleProvider implements AiProvider {
     private static URI validateEndpoint(URI endpoint) {
         Objects.requireNonNull(endpoint, "endpoint");
         if (!("http".equalsIgnoreCase(endpoint.getScheme()) || "https".equalsIgnoreCase(endpoint.getScheme()))
-                || endpoint.getHost() == null) {
-            throw new IllegalArgumentException("AI provider endpoint must be an absolute HTTP(S) URI");
+                || endpoint.getHost() == null || endpoint.getUserInfo() != null
+                || endpoint.getRawFragment() != null) {
+            throw new IllegalArgumentException(
+                    "AI provider endpoint must be an absolute HTTP(S) URI without userinfo or fragment");
         }
         return endpoint;
     }
