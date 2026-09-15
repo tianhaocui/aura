@@ -108,6 +108,17 @@ class RuntimeFoundationTest {
         assertThat(runtime.healthStatus()).isEqualTo(HealthStatus.DOWN);
     }
 
+    @Test void healthChecksTimeoutAndFailClosed() {
+        Aura app = Aura.create().healthCheck(() -> {
+            Thread.sleep(10_000);
+            return HealthStatus.UP;
+        });
+        long started = System.nanoTime();
+        assertThat(app.healthStatus()).isEqualTo(HealthStatus.DOWN);
+        assertThat(System.nanoTime() - started)
+                .isLessThan(java.util.concurrent.TimeUnit.SECONDS.toNanos(3));
+    }
+
     @Test void optionalRuntimeControlsDefaultOffAndTlsFailsFast() {
         Aura app = Aura.create();
         assertThat(app.rateLimitPerSecond()).isZero();

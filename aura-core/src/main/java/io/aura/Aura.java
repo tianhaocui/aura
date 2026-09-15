@@ -285,14 +285,7 @@ public class Aura implements AuraWebRuntime {
     @Override public List<io.aura.contract.HealthCheck> healthChecks() { return List.copyOf(healthChecks); }
     @Override public io.aura.contract.HealthStatus healthStatus() {
         if (shuttingDown) return io.aura.contract.HealthStatus.DOWN;
-        for (io.aura.contract.HealthCheck check : healthChecks) {
-            try {
-                if (check.check() != io.aura.contract.HealthStatus.UP) return io.aura.contract.HealthStatus.DOWN;
-            } catch (Exception ignored) {
-                return io.aura.contract.HealthStatus.DOWN;
-            }
-        }
-        return io.aura.contract.HealthStatus.UP;
+        return HealthProbe.check(healthChecks);
     }
     public io.aura.contract.PermissionRegistry permissions() { return permissionRegistry; }
 

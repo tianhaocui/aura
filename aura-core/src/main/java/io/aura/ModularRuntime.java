@@ -213,14 +213,7 @@ final class ModularRuntime implements AuraWebRuntime {
     @Override public List<io.aura.contract.HealthCheck> healthChecks() { return List.copyOf(healthChecks); }
     @Override public io.aura.contract.HealthStatus healthStatus() {
         if (isShuttingDown()) return io.aura.contract.HealthStatus.DOWN;
-        for (io.aura.contract.HealthCheck check : healthChecks) {
-            try {
-                if (check.check() != io.aura.contract.HealthStatus.UP) return io.aura.contract.HealthStatus.DOWN;
-            } catch (Exception ignored) {
-                return io.aura.contract.HealthStatus.DOWN;
-            }
-        }
-        return io.aura.contract.HealthStatus.UP;
+        return HealthProbe.check(healthChecks);
     }
     @Override public void emit(AuraEvent event) { for (AuraEventListener listener : eventListeners) try { listener.onEvent(event); } catch (RuntimeException ignored) { } }
     @Override public String prop(String key) {
