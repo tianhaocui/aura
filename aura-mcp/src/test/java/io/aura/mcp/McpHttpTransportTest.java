@@ -8,6 +8,11 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
+import java.net.ServerSocket;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -49,6 +54,51 @@ class McpHttpTransportTest {
                 .header("Authorization", "Bearer alice").body(unsupported).expect(400);
         assertThat(errorCode(rejected)).isEqualTo(-32602);
         assertThat(module.sessions().size()).isZero();
+    }
+
+    @Test
+    void realUndertowSocketCarriesAuthenticatedMcpSession() throws Exception {
+        int port;
+        try (ServerSocket socket = new ServerSocket(0)) {
+            port = socket.getLocalPort();
+        }
+        McpRouter router = new McpRouter();
+        router.tool("ping_tool", "Ping").handler(ctx -> "pong");
+        AuraApp app = AuraApp.create(new io.aura.AuraConfig().port(port))
+                .mcpAuthenticate(metadata -> "alice")
+                .use(McpModule.create(router).http());
+        HttpClient http = HttpClient.newHttpClient();
+        URI endpoint = URI.create("http://127.0.0.1:" + port + "/mcp");
+        try {
+            app.start();
+            HttpResponse<String> initialized = http.send(
+                    HttpRequest.newBuilder(endpoint)
+                            .header("Authorization", "Bearer alice")
+                            .header("Content-Type", "application/json")
+                            .POST(HttpRequest.BodyPublishers.ofString(JSON.toJSONString(initialize(1))))
+                            .build(),
+                    HttpResponse.BodyHandlers.ofString());
+            assertThat(initialized.statusCode()).isEqualTo(200);
+            String session = initialized.headers()
+                    .firstValue(McpHttpTransport.SESSION_HEADER).orElseThrow();
+
+            HttpResponse<String> listed = http.send(
+                    HttpRequest.newBuilder(endpoint)
+                            .header("Authorization", "Bearer alice")
+                            .header(McpHttpTransport.SESSION_HEADER, session)
+                            .header("Content-Type", "application/json")
+                            .POST(HttpRequest.BodyPublishers.ofString(JSON.toJSONString(
+                                    Map.of("jsonrpc", "2.0", "id", 2, "method", "tools/list",
+                                            "params", Map.of()))))
+                            .build(),
+                    HttpResponse.BodyHandlers.ofString());
+            assertThat(listed.statusCode()).isEqualTo(200);
+            assertThat(JSON.parseObject(listed.body()).getJSONObject("result")
+                    .getJSONArray("tools").getJSONObject(0).getString("name"))
+                    .isEqualTo("ping_tool");
+        } finally {
+            app.stop();
+        }
     }
 
     @Test
