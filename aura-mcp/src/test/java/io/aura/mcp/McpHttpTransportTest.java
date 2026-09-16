@@ -212,6 +212,14 @@ class McpHttpTransportTest {
         assertThat(responses.getJSONObject(0).getInteger("id")).isEqualTo(2);
         assertThat(responses.getJSONObject(1).getInteger("id")).isEqualTo(3);
 
+        TestClient.Response invalid = client.post("/mcp")
+                .header("Authorization", "Bearer alice")
+                .header(McpHttpTransport.SESSION_HEADER, session)
+                .body(java.util.List.of(Map.of("jsonrpc", "2.0", "params", Map.of())))
+                .expect(200);
+        assertThat(JSON.parseArray(invalid.body()).getJSONObject(0).getJSONObject("error")
+                .getInteger("code")).isEqualTo(-32600);
+
         java.util.List<Map<String, Object>> oversized = new java.util.ArrayList<>();
         for (int i = 0; i < 33; i++) {
             oversized.add(Map.of("jsonrpc", "2.0", "id", i, "method", "ping", "params", Map.of()));

@@ -218,23 +218,27 @@ final class McpHttpTransport {
             }
             Object id = request.get("id");
             boolean hasId = request.containsKey("id");
-            if (!hasId || "initialize".equals(request.getString("method"))) {
-                if (hasId) responses.add(rpcError(id, -32600, "initialize must be sent as a single request"));
+            if (!"2.0".equals(request.getString("jsonrpc"))) {
+                responses.add(rpcError(hasId ? id : null, -32600, "Invalid Request"));
                 continue;
             }
-            if (!"2.0".equals(request.getString("jsonrpc"))) {
-                responses.add(rpcError(id, -32600, "Invalid Request"));
+            String method = request.getString("method");
+            if (method == null || method.isBlank()) {
+                responses.add(rpcError(hasId ? id : null, -32600, "Invalid Request: method is required"));
+                continue;
+            }
+            if ("initialize".equals(method)) {
+                responses.add(rpcError(hasId ? id : null, -32600,
+                        "initialize must be sent as a single request"));
                 continue;
             }
             if (id != null && !(id instanceof String) && !(id instanceof Number)) {
                 responses.add(rpcError(null, -32600, "Invalid Request: id must be a string, number, or null"));
                 continue;
             }
-            String method = request.getString("method");
             Object rawParams = request.get("params");
-            if (method == null || method.isBlank()
-                    || rawParams != null && !(rawParams instanceof JSONObject)) {
-                responses.add(rpcError(id, -32602, "Invalid params"));
+            if (rawParams != null && !(rawParams instanceof JSONObject)) {
+                responses.add(rpcError(hasId ? id : null, -32602, "Invalid params"));
                 continue;
             }
             DispatchResult dispatched;
