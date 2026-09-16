@@ -30,6 +30,10 @@ Streamable HTTP 客户端应在 POST 请求中发送
 `initialize` 外的请求必须携带 `Mcp-Session-Id`；缺失返回 `400/-32002`，过期或
 身份不匹配的 session 返回 `404/-32002`。
 
+POST 也接受 JSON-RPC batch，但每批最多 32 条。响应只包含带 `id` 的 request；
+notification 不产生响应，整批都是 notification 时返回 `202` 空 body。`initialize`
+必须作为单独请求发送，不能混入 batch。
+
 需要 server-to-client 事件流时显式开启 SSE：
 
 ```java
