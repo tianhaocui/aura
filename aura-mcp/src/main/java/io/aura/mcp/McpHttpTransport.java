@@ -3,6 +3,7 @@ package io.aura.mcp;
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONWriter;
 import com.alibaba.fastjson2.JSONObject;
+import com.alibaba.fastjson2.JSONArray;
 import io.aura.AuraMcpRuntime;
 import io.aura.web.BaseContext;
 
@@ -119,13 +120,18 @@ final class McpHttpTransport {
             respondError(context, null, 401, -32001, "Authentication required");
             return;
         }
-        JSONObject request;
+        Object parsed;
         try {
-            request = context.body(JSONObject.class);
+            parsed = JSON.parse(context.bodyText());
         } catch (Exception invalidJson) {
             respondError(context, null, 400, -32700, "Parse error");
             return;
         }
+        if (parsed instanceof JSONArray batch) {
+            postBatch(context, runtime, userId, batch);
+            return;
+        }
+        JSONObject request = parsed instanceof JSONObject value ? value : null;
         Object id = request == null ? null : request.get("id");
         boolean hasId = request != null && request.containsKey("id");
         if (request == null || !"2.0".equals(request.getString("jsonrpc"))) {
@@ -187,6 +193,72 @@ final class McpHttpTransport {
             return;
         }
         writeRpc(context, rpcResult(id, dispatched.result()));
+    }
+
+    private void postBatch(BaseContext context, AuraMcpRuntime runtime,
+                           String userId, JSONArray batch) {
+        if (batch.isEmpty() || batch.size() > 32) {
+            respondError(context, null, 400, -32600, "Invalid Request: batch size must be 1..32");
+            return;
+        }
+        String sessionId = context.header(SESSION_HEADER);
+        if (sessionId == null || sessionId.isBlank()) {
+            respondError(context, null, 400, -32002, "Mcp-Session-Id is required");
+            return;
+        }
+        if (sessions.access(sessionId, userId).isEmpty()) {
+            respondError(context, null, 404, -32002, "MCP session not found or expired");
+            return;
+        }
+        List<Map<String, Object>> responses = new java.util.ArrayList<>();
+        for (Object raw : batch) {
+            if (!(raw instanceof JSONObject request)) {
+                responses.add(rpcError(null, -32600, "Invalid Request"));
+                continue;
+            }
+            Object id = request.get("id");
+            boolean hasId = request.containsKey("id");
+            if (!hasId || "initialize".equals(request.getString("method"))) {
+                if (hasId) responses.add(rpcError(id, -32600, "initialize must be sent as a single request"));
+                continue;
+            }
+            if (!"2.0".equals(request.getString("jsonrpc"))) {
+                responses.add(rpcError(id, -32600, "Invalid Request"));
+                continue;
+            }
+            if (id != null && !(id instanceof String) && !(id instanceof Number)) {
+                responses.add(rpcError(null, -32600, "Invalid Request: id must be a string, number, or null"));
+                continue;
+            }
+            String method = request.getString("method");
+            Object rawParams = request.get("params");
+            if (method == null || method.isBlank()
+                    || rawParams != null && !(rawParams instanceof JSONObject)) {
+                responses.add(rpcError(id, -32602, "Invalid params"));
+                continue;
+            }
+            DispatchResult dispatched;
+            try {
+                dispatched = dispatch(runtime, userId, method,
+                        request.getJSONObject("params") == null
+                                ? new JSONObject() : request.getJSONObject("params"));
+            } catch (RuntimeException invalid) {
+                dispatched = new DispatchResult(null, true);
+            }
+            if (!hasId) continue;
+            if (dispatched.invalidParams()) {
+                responses.add(rpcError(id, -32602, "Invalid params"));
+            } else if (dispatched.result() == null) {
+                responses.add(rpcError(id, -32601, "Method not found: " + method));
+            } else {
+                responses.add(rpcResult(id, dispatched.result()));
+            }
+        }
+        if (responses.isEmpty()) {
+            context.status(202).raw("");
+        } else {
+            writeRpc(context, responses);
+        }
     }
 
     void delete(BaseContext context) {
@@ -354,15 +426,20 @@ final class McpHttpTransport {
     }
 
     private void respondError(BaseContext context, Object id, int status, int code, String message) {
-        Map<String, Object> error = new LinkedHashMap<>();
-        error.put("jsonrpc", "2.0");
-        error.put("id", id);
-        error.put("error", Map.of("code", code, "message", message));
+        Map<String, Object> error = rpcError(id, code, message);
         context.status(status);
         writeRpc(context, error);
     }
 
-    private void writeRpc(BaseContext context, Map<String, Object> response) {
+    private static Map<String, Object> rpcError(Object id, int code, String message) {
+        Map<String, Object> error = new LinkedHashMap<>();
+        error.put("jsonrpc", "2.0");
+        error.put("id", id);
+        error.put("error", Map.of("code", code, "message", message));
+        return error;
+    }
+
+    private void writeRpc(BaseContext context, Object response) {
         String json = JSON.toJSONString(response, JSONWriter.Feature.WriteNulls);
         if (json.getBytes(java.nio.charset.StandardCharsets.UTF_8).length > maxResponseBytes) {
             writeOversizeError(context);

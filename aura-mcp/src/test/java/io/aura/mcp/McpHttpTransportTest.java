@@ -196,6 +196,33 @@ class McpHttpTransportTest {
     }
 
     @Test
+    void batchRequestsReturnOnlyCorrelatedResponsesAndBoundBatchSize() {
+        String session = initialize("Bearer alice", 1).header(McpHttpTransport.SESSION_HEADER);
+        TestClient.Response response = client.post("/mcp")
+                .header("Authorization", "Bearer alice")
+                .header(McpHttpTransport.SESSION_HEADER, session)
+                .header("Accept", "application/json, text/event-stream")
+                .body(java.util.List.of(
+                        Map.of("jsonrpc", "2.0", "id", 2, "method", "ping", "params", Map.of()),
+                        Map.of("jsonrpc", "2.0", "method", "notifications/initialized", "params", Map.of()),
+                        Map.of("jsonrpc", "2.0", "id", 3, "method", "tools/list", "params", Map.of())))
+                .expect(200);
+        com.alibaba.fastjson2.JSONArray responses = JSON.parseArray(response.body());
+        assertThat(responses).hasSize(2);
+        assertThat(responses.getJSONObject(0).getInteger("id")).isEqualTo(2);
+        assertThat(responses.getJSONObject(1).getInteger("id")).isEqualTo(3);
+
+        java.util.List<Map<String, Object>> oversized = new java.util.ArrayList<>();
+        for (int i = 0; i < 33; i++) {
+            oversized.add(Map.of("jsonrpc", "2.0", "id", i, "method", "ping", "params", Map.of()));
+        }
+        assertThat(errorCode(client.post("/mcp")
+                .header("Authorization", "Bearer alice")
+                .header(McpHttpTransport.SESSION_HEADER, session)
+                .body(oversized).expect(400))).isEqualTo(-32600);
+    }
+
+    @Test
     void sessionIsIdentityBoundWithoutDestroyingTheOwnersSession() {
         String session = initialize("Bearer alice", 1).header(McpHttpTransport.SESSION_HEADER);
 

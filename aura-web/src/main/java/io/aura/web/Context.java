@@ -148,6 +148,15 @@ public class Context implements BaseContext {
         return body((java.lang.reflect.Type) type);
     }
 
+    @Override public String bodyText() throws IOException {
+        if (cachedBody == null) {
+            exchange.startBlocking();
+            long maxSize = app != null ? app.maxBodySize() : 10 * 1024 * 1024L;
+            cachedBody = readBody(exchange.getInputStream(), maxSize);
+        }
+        return cachedBody;
+    }
+
     @Override @SuppressWarnings("unchecked")
     public <T> T body(java.lang.reflect.Type type) throws IOException {
         if (cachedBody == null) {

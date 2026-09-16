@@ -8,6 +8,10 @@ public interface BaseContext {
     String query(String name, String defaultValue);
     String header(String name);
     String cookie(String name);
+    /** Returns the raw request body when the adapter can expose it safely. */
+    default String bodyText() throws Exception {
+        throw new UnsupportedOperationException("Raw body access is not supported in this context");
+    }
     <T> T body(Class<T> type) throws Exception;
     /** Decodes a body using a generic Java reflection type such as List<Order>. */
     @SuppressWarnings("unchecked")
