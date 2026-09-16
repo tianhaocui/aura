@@ -2,7 +2,27 @@
 
 HTTP server, routing, request/response context, middleware, and testing.
 
-## Router
+## Canonical 1.0 module routes
+
+New applications contribute transport-neutral routes from an explicit module:
+
+```java
+AuraApp.create()
+    .use(new AuraModule() {
+        public ModuleMetadata descriptor() { return ModuleMetadata.of("orders", "1.0.0"); }
+        public void install(ModuleContext context) {
+            context.route(new RouteContribution("GET", "/orders",
+                    (BaseHandler) ctx -> ctx.json(List.of())));
+        }
+    })
+    .start();
+```
+
+`TestClient.of(app)` verifies the same route contract without opening a listener.
+The fluent `Router` and `Aura` builder examples below are retained for migration
+reference only and are not the recommended 1.0 authoring path.
+
+## Router (legacy compatibility)
 
 Route registration with middleware, grouping, and exception handling.
 

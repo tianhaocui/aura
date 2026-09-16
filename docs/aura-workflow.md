@@ -5,7 +5,7 @@
 The runtime can be installed as a standard Aura module. A business module can then require the shared registry from `ModuleContext` and register its own workflows without an adapter layer:
 
 ```java
-Aura.create()
+AuraApp.create()
     .use(WorkflowModule.create())
     .use(OrderModule.create())
     .start();

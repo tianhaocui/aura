@@ -25,20 +25,18 @@ and `stop(...)` own external resources. `TestClient.of(app)` runs the install
 phase without starting external resources, so module routes remain testable in
 memory.
 
-### Quick Start
+### Quick Start (1.0)
 
 ```java
-// One-line startup (auto-scans caller's package)
-Aura.run(args);
-
-// With configuration
-Aura.create()
-    .port(8080)
-    .cors(true)
-    .mcp(true)
-    .scan("com.example")
-    .start(args);
+AuraApp.create(new AuraConfig().port(8080))
+    .use(HealthModule.create())
+    .use(new ApplicationModule())
+    .start();
 ```
+
+The old `Aura` builder and package scanning APIs below are retained only as a
+migration reference and are deprecated for removal. New code must use explicit
+`AuraModule` composition and `ModuleContext` capabilities.
 
 ### Builder Methods
 
