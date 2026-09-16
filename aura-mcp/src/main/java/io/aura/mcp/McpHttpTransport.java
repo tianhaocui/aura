@@ -19,12 +19,72 @@ final class McpHttpTransport {
     private final McpRouter router;
     private final McpSessionManager sessions;
     private final int maxResponseBytes;
+    private final McpSseHub sseHub;
+    private final String httpPath;
 
-    McpHttpTransport(McpRouter router, McpSessionManager sessions, int maxResponseBytes) {
+    McpHttpTransport(McpRouter router, McpSessionManager sessions, int maxResponseBytes,
+                     McpSseHub sseHub, String httpPath) {
         this.router = java.util.Objects.requireNonNull(router, "router");
         this.sessions = java.util.Objects.requireNonNull(sessions, "sessions");
         if (maxResponseBytes < 1) throw new IllegalArgumentException("maxResponseBytes must be positive");
         this.maxResponseBytes = maxResponseBytes;
+        this.sseHub = sseHub;
+        this.httpPath = httpPath;
+    }
+
+    void get(BaseContext context) {
+        if (!originAllowed(context)) {
+            context.status(403).raw("Origin is not allowed");
+            return;
+        }
+        if (context.header("Accept") == null
+                || !context.header("Accept").toLowerCase(java.util.Locale.ROOT).contains("text/event-stream")) {
+            context.status(406).raw("MCP SSE requires Accept: text/event-stream");
+            return;
+        }
+        AuraMcpRuntime runtime = runtime(context);
+        String userId = authenticate(runtime, context);
+        if (userId == null) {
+            context.status(401).raw("Authentication required");
+            return;
+        }
+        String sessionId = context.header(SESSION_HEADER);
+        if (sessionId == null || sessionId.isBlank()) {
+            context.status(400).raw("Mcp-Session-Id is required");
+            return;
+        }
+        if (sessions.access(sessionId, userId).isEmpty()) {
+            context.status(404).raw("MCP session not found or expired");
+            return;
+        }
+        if (sseHub == null) {
+            context.status(405).raw("MCP SSE is not enabled");
+            return;
+        }
+        try {
+            io.aura.web.SseEmitter emitter = context.sse();
+            if (!sseHub.attach(sessionId, emitter, context.cancellationToken())) {
+                context.status(409).raw("MCP session already has an SSE stream");
+                emitter.close();
+                return;
+            }
+            emitter.send("endpoint", httpPath);
+            while (!context.isCancelled()) {
+                try {
+                    if (sessions.access(sessionId, userId).isEmpty()) break;
+                    emitter.send("heartbeat", "");
+                    Thread.sleep(1_000);
+                } catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                    break;
+                }
+            }
+        } catch (Exception failure) {
+            sseHub.close(sessionId);
+            if (!context.isResponseStarted()) context.status(500).raw("MCP SSE unavailable");
+        } finally {
+            if (context.isCancelled()) sseHub.close(sessionId);
+        }
     }
 
     void post(BaseContext context) {
@@ -115,10 +175,12 @@ final class McpHttpTransport {
             respondError(context, null, 401, -32001, "Authentication required");
             return;
         }
-        if (!sessions.close(context.header(SESSION_HEADER), userId)) {
+        String sessionId = context.header(SESSION_HEADER);
+        if (!sessions.close(sessionId, userId)) {
             respondError(context, null, 404, -32002, "MCP session not found or expired");
             return;
         }
+        if (sseHub != null) sseHub.close(sessionId);
         context.status(204).raw("");
     }
 

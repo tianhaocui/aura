@@ -13,6 +13,8 @@ public class BaseRouteBuilder {
     public String description;
     public String returnType;
     public Map<String, Object> responseSchema = Map.of();
+    /** Marks a route as long-lived so the normal request timeout is not applied. */
+    public boolean streaming;
     public final Map<String, String> paramDescriptions = new LinkedHashMap<>();
     private final List<ApiParameter> parameters = new ArrayList<>();
 
@@ -22,6 +24,11 @@ public class BaseRouteBuilder {
 
     public BaseRouteBuilder describe(String description) {
         this.description = description;
+        return this;
+    }
+
+    public BaseRouteBuilder streaming() {
+        this.streaming = true;
         return this;
     }
 

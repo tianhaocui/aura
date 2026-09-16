@@ -102,6 +102,69 @@ class McpHttpTransportTest {
     }
 
     @Test
+    void realUndertowSseStreamPublishesIdentityBoundServerMessages() throws Exception {
+        int port;
+        try (ServerSocket socket = new ServerSocket(0)) {
+            port = socket.getLocalPort();
+        }
+        McpRouter router = new McpRouter();
+        router.tool("ping_tool", "Ping").handler(ctx -> "pong");
+        McpModule sseModule = McpModule.create(router).http("/mcp", 2,
+                Duration.ofMinutes(5), 16 * 1024).sse();
+        AuraApp app = AuraApp.create(new io.aura.AuraConfig().port(port))
+                .mcpAuthenticate(metadata -> "alice")
+                .use(sseModule);
+        HttpClient http = HttpClient.newHttpClient();
+        URI endpoint = URI.create("http://127.0.0.1:" + port + "/mcp");
+        java.io.BufferedReader reader = null;
+        try {
+            app.start();
+            HttpResponse<String> initialized = http.send(
+                    HttpRequest.newBuilder(endpoint)
+                            .header("Authorization", "Bearer alice")
+                            .header("Content-Type", "application/json")
+                            .POST(HttpRequest.BodyPublishers.ofString(JSON.toJSONString(initialize(1))))
+                            .build(), HttpResponse.BodyHandlers.ofString());
+            String session = initialized.headers()
+                    .firstValue(McpHttpTransport.SESSION_HEADER).orElseThrow();
+
+            HttpResponse<java.io.InputStream> stream = http.send(
+                    HttpRequest.newBuilder(endpoint)
+                            .header("Authorization", "Bearer alice")
+                            .header("Accept", "text/event-stream")
+                            .header(McpHttpTransport.SESSION_HEADER, session)
+                            .GET().build(), HttpResponse.BodyHandlers.ofInputStream());
+            assertThat(stream.statusCode()).isEqualTo(200);
+            assertThat(stream.headers().firstValue("Content-Type").orElse(""))
+                    .contains("text/event-stream");
+            reader = new java.io.BufferedReader(
+                    new java.io.InputStreamReader(stream.body(), java.nio.charset.StandardCharsets.UTF_8));
+            String initial = readEvent(reader);
+            assertThat(initial).contains("event: endpoint");
+            assertThat(sseModule.publish(session, "notifications/test", Map.of("value", "ready")))
+                    .isTrue();
+            String message = "";
+            for (int i = 0; i < 5 && !message.contains("event: message"); i++) {
+                message = readEvent(reader);
+            }
+            assertThat(message).contains("event: message").contains("notifications/test").contains("ready");
+        } finally {
+            if (reader != null) reader.close();
+            app.stop();
+        }
+    }
+
+    private static String readEvent(java.io.BufferedReader reader) throws Exception {
+        StringBuilder frame = new StringBuilder();
+        String line;
+        while ((line = reader.readLine()) != null) {
+            if (line.isEmpty()) break;
+            frame.append(line).append('\n');
+        }
+        return frame.toString();
+    }
+
+    @Test
     void sessionCarriesIdentityAndSupportsToolCalls() {
         TestClient.Response initialized = initialize("Bearer alice", 1);
         String session = initialized.header(McpHttpTransport.SESSION_HEADER);

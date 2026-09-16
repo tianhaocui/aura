@@ -43,6 +43,7 @@ final class RouteAssembler {
                 default -> throw new IllegalArgumentException("Unsupported route method: " + entry.method());
             };
             if (entry.description() != null) builder.describe(entry.description());
+            if (Boolean.TRUE.equals(entry.metadata().get("streaming"))) builder.streaming();
             Object returnType = entry.metadata().get("returnType");
             if (returnType != null) builder.returnType = returnType.toString();
             builder.responseSchema = entry.responseSchema();
