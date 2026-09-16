@@ -92,6 +92,10 @@ class McpSecurityTest {
                 .hasRootCauseInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> resolver.invoke(bridge, "/orders?redirect=https://evil.test", ""))
                 .hasRootCauseInstanceOf(IllegalArgumentException.class);
+        McpBridge prefixed = new McpBridge("https://example.test/api",
+                new PrintStream(new ByteArrayOutputStream()), null, true);
+        Object resolved = resolver.invoke(prefixed, "/orders", "");
+        assertThat(resolved.toString()).isEqualTo("https://example.test/api/orders");
     }
 
     @Test

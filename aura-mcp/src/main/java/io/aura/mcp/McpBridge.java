@@ -180,13 +180,21 @@ public class McpBridge {
                 || path.indexOf('?') >= 0 || path.indexOf('#') >= 0) {
             throw new IllegalArgumentException("Schema route path must be an absolute path without query or fragment");
         }
-        URI relative = URI.create(path + (query == null ? "" : query));
-        URI target = baseUri.resolve(relative).normalize();
+        URI target = URI.create(baseUrl + path + (query == null ? "" : query)).normalize();
         if (!baseUri.getScheme().equalsIgnoreCase(target.getScheme())
                 || !java.util.Objects.equals(baseUri.getHost(), target.getHost())
                 || effectivePort(baseUri) != effectivePort(target)
                 || target.getUserInfo() != null || target.getRawFragment() != null) {
             throw new IllegalArgumentException("Schema route resolves outside the bridge origin");
+        }
+        String basePath = baseUri.getRawPath();
+        if (basePath == null || basePath.isEmpty() || "/".equals(basePath)) basePath = "";
+        else if (basePath.endsWith("/")) basePath = basePath.substring(0, basePath.length() - 1);
+        String targetPath = target.getRawPath();
+        if (!basePath.isEmpty()
+                && !targetPath.equals(basePath)
+                && !targetPath.startsWith(basePath + "/")) {
+            throw new IllegalArgumentException("Schema route escapes the configured base path");
         }
         return target;
     }
