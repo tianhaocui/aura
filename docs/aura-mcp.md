@@ -23,6 +23,13 @@ AuraApp.create()
 由 `McpModule.create(router).http()` 显式启用。HTTP transport 默认限制响应为
 1MB，可通过四参数 `.http(path, maxSessions, idleTtl, maxResponseBytes)` 调整。
 
+Streamable HTTP 客户端应在 POST 请求中发送
+`Accept: application/json, text/event-stream`。为兼容旧客户端，当前实现允许
+省略该 header，但如果显式提供则必须包含 `application/json`、
+`text/event-stream` 或 `*/*`，否则返回稳定的 `406/-32005` 错误。除
+`initialize` 外的请求必须携带 `Mcp-Session-Id`；缺失返回 `400/-32002`，过期或
+身份不匹配的 session 返回 `404/-32002`。
+
 需要 server-to-client 事件流时显式开启 SSE：
 
 ```java
