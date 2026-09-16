@@ -65,9 +65,20 @@ final class McpHttpTransport {
             context.status(409).raw("MCP session already has an SSE stream");
             return;
         }
+        long lastEventId = -1L;
+        String lastEventHeader = context.header("Last-Event-ID");
+        if (lastEventHeader != null && !lastEventHeader.isBlank()) {
+            try {
+                lastEventId = Long.parseLong(lastEventHeader.trim());
+                if (lastEventId < 0) throw new NumberFormatException();
+            } catch (NumberFormatException invalid) {
+                context.status(400).raw("Last-Event-ID must be a non-negative integer");
+                return;
+            }
+        }
         try {
             io.aura.web.SseEmitter emitter = context.sse();
-            if (!sseHub.attach(sessionId, emitter, context.cancellationToken())) {
+            if (!sseHub.attach(sessionId, emitter, context.cancellationToken(), lastEventId)) {
                 context.status(409).raw("MCP session already has an SSE stream");
                 emitter.close();
                 return;
@@ -193,7 +204,7 @@ final class McpHttpTransport {
             respondError(context, null, 404, -32002, "MCP session not found or expired");
             return;
         }
-        if (sseHub != null) sseHub.close(sessionId);
+        if (sseHub != null) sseHub.remove(sessionId);
         context.status(204).raw("");
     }
 

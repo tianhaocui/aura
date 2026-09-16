@@ -47,7 +47,8 @@ SSE GET 必须携带 `Accept: text/event-stream`、认证信息和
 `Mcp-Session-Id`。连接会发送 `endpoint` 和 `heartbeat` 事件；业务模块可通过
 `module.publish(sessionId, method, params)` 发送 server notification。每个 session
 最多一个 SSE 连接，事件大小受 HTTP response budget 限制，断开和 DELETE 会清理连接。
-当前实现不提供 `Last-Event-ID` 重放，也不把 POST response 自动转成 SSE；需要完整
+事件带有 session 内单调递增 ID，并保留最多 128 条事件用于
+`Last-Event-ID` 重连重放。当前实现不把 POST response 自动转成 SSE；需要完整
 streamable HTTP 双向协商时仍应使用 POST JSON-RPC 契约并由客户端轮询响应。
 
 ## McpRouter (Selective Tool Exposure)
