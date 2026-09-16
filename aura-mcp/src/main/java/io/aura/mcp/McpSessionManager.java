@@ -88,6 +88,19 @@ public final class McpSessionManager implements AutoCloseable {
         }
     }
 
+    /** Checks identity and TTL without refreshing the session's last-access time. */
+    public boolean active(String sessionId, String userId) {
+        String identity = normalizeIdentity(userId);
+        if (sessionId == null || sessionId.isBlank() || identity == null) return false;
+        SessionState state = sessions.get(sessionId);
+        if (state == null) return false;
+        if (expired(state, clock.instant())) {
+            sessions.remove(sessionId, state);
+            return false;
+        }
+        return state.userId.equals(identity);
+    }
+
     public boolean close(String sessionId, String userId) {
         String identity = normalizeIdentity(userId);
         if (sessionId == null || identity == null) return false;

@@ -98,7 +98,8 @@ final class McpHttpTransport {
             sseHub.close(sessionId);
             if (!context.isResponseStarted()) context.status(500).raw("MCP SSE unavailable");
         } finally {
-            if (context.isCancelled()) sseHub.close(sessionId);
+            if (sessions.active(sessionId, userId)) sseHub.close(sessionId);
+            else sseHub.remove(sessionId);
         }
     }
 
