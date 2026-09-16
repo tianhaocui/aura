@@ -76,6 +76,49 @@ class AiClientTest {
     }
 
     @Test
+    void usageTotalsAccumulateAcrossChatAndStreamingAndCanReset() throws Exception {
+        AiProvider provider = new AiProvider() {
+            @Override public AiResponse chat(AiRequest request) {
+                return new AiResponse("chat", "model",
+                        Map.of("prompt_tokens", 2, "completion_tokens", 3, "total_tokens", 5,
+                                "cost_micros", 7), null);
+            }
+            @Override public void stream(AiRequest request, AiStreamHandler handler) {
+                handler.onComplete(new AiResponse("stream", "model",
+                        Map.of("prompt_tokens", 4, "completion_tokens", 1, "total_tokens", 5,
+                                "cost_micros", 11), null));
+            }
+        };
+        try (AiClient client = new AiClient(provider)) {
+            client.chat(new AiRequest("one"));
+            client.stream(new AiRequest("two"), token -> { });
+            assertThat(client.usageTotals())
+                    .isEqualTo(new AiUsageTotals(2, 6, 4, 10, 18, 0));
+            client.resetUsage();
+            assertThat(client.usageTotals()).isEqualTo(AiUsageTotals.empty());
+        }
+    }
+
+    @Test
+    void usageTotalsCountUnknownProviderUsage() throws Exception {
+        try (AiClient client = new AiClient(request -> AiResponse.text("ok"))) {
+            client.chat(new AiRequest("unknown"));
+            assertThat(client.usageTotals().unknownUsage()).isEqualTo(1);
+        }
+    }
+
+    @Test
+    void malformedUsageDoesNotBreakAnUnbudgetedResponse() throws Exception {
+        AiProvider provider = request -> new AiResponse("ok", "model",
+                Map.of("total_tokens", "not-a-number"), null);
+        try (AiClient client = new AiClient(provider)) {
+            assertThat(client.chat(new AiRequest("malformed")).content()).isEqualTo("ok");
+            assertThat(client.usageTotals().requests()).isEqualTo(1);
+            assertThat(client.usageTotals().unknownUsage()).isEqualTo(1);
+        }
+    }
+
+    @Test
     void requestsUseDeterministicSensitiveFieldRedactionByDefault() {
         AiRequest request = new AiRequest("password=hidden token=secret");
         assertThat(request.redactedPrompt()).isEqualTo("password=<redacted> token=<redacted>");

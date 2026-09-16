@@ -17,6 +17,7 @@ import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.atomic.AtomicLong;
 
 /** Synchronous and streaming facade around an {@link AiProvider}. */
 public final class AiClient implements AutoCloseable {
@@ -28,6 +29,12 @@ public final class AiClient implements AutoCloseable {
     private final AiProvider provider;
     private final ExecutorService executor;
     private final boolean ownsExecutor;
+    private final AtomicLong requests = new AtomicLong();
+    private final AtomicLong inputTokens = new AtomicLong();
+    private final AtomicLong outputTokens = new AtomicLong();
+    private final AtomicLong totalTokens = new AtomicLong();
+    private final AtomicLong costMicros = new AtomicLong();
+    private final AtomicLong unknownUsage = new AtomicLong();
 
     public AiClient(AiProvider provider) {
         this(provider, createDefaultExecutor(), true);
@@ -45,6 +52,22 @@ public final class AiClient implements AutoCloseable {
 
     public AiProvider provider() { return provider; }
 
+    /** Returns a snapshot of cumulative usage observed by this client. */
+    public AiUsageTotals usageTotals() {
+        return new AiUsageTotals(requests.get(), inputTokens.get(), outputTokens.get(),
+                totalTokens.get(), costMicros.get(), unknownUsage.get());
+    }
+
+    /** Resets cumulative usage counters for a new accounting window. */
+    public void resetUsage() {
+        requests.set(0);
+        inputTokens.set(0);
+        outputTokens.set(0);
+        totalTokens.set(0);
+        costMicros.set(0);
+        unknownUsage.set(0);
+    }
+
     public AiResponse chat(AiRequest request) throws Exception {
         Objects.requireNonNull(request, "request");
         request.cancellationToken().throwIfCancelled();
@@ -58,6 +81,7 @@ public final class AiClient implements AutoCloseable {
             });
             try {
                 AiResponse response = await(future, remaining, request.cancellationToken());
+                recordUsage(response);
                 enforceBudget(request, response);
                 return response;
             } catch (TimeoutException | CancellationException | InterruptedException error) {
@@ -109,6 +133,7 @@ public final class AiClient implements AutoCloseable {
                 }
                 @Override public void onComplete(AiResponse response) {
                     request.cancellationToken().throwIfCancelled();
+                    recordUsage(response);
                     try {
                         enforceBudget(request, response);
                     } catch (AiBudgetExceededException exceeded) {
@@ -180,6 +205,33 @@ public final class AiClient implements AutoCloseable {
         if (budget.maxCostMicros() > 0 && usage.costMicros() > budget.maxCostMicros()) {
             throw AiBudgetExceededException.exceeded("costMicros", budget.maxCostMicros(), usage.costMicros());
         }
+    }
+
+    private void recordUsage(AiResponse response) {
+        requests.incrementAndGet();
+        final AiUsage usage;
+        try {
+            usage = AiUsage.from(response == null ? null : response.usage());
+        } catch (RuntimeException malformedUsage) {
+            // Observability must not make an otherwise valid response fail.
+            // Budget enforcement still parses strictly immediately afterwards
+            // whenever the request requires provider usage.
+            unknownUsage.incrementAndGet();
+            return;
+        }
+        addKnown(inputTokens, usage.inputTokens());
+        addKnown(outputTokens, usage.outputTokens());
+        addKnown(totalTokens, usage.totalTokens());
+        addKnown(costMicros, usage.costMicros());
+        if (!usage.hasTokenUsage() && !usage.hasCost()) unknownUsage.incrementAndGet();
+    }
+
+    private static void addKnown(AtomicLong target, long value) {
+        if (value <= 0) return;
+        target.accumulateAndGet(value, (current, addition) -> {
+            long result = current + addition;
+            return result < current ? Long.MAX_VALUE : result;
+        });
     }
 
     private static void enforceOutputCharacters(AiRequest request, long actual) {

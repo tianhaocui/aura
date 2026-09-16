@@ -29,6 +29,7 @@ AiRequest request = AiRequest.builder()
 
 AiResponse response = client.chat(request);
 OrderSummary summary = StructuredOutput.parse(response, OrderSummary.class);
+AiUsageTotals window = client.usageTotals();
 ```
 
 ## 设计边界
@@ -38,6 +39,9 @@ OrderSummary summary = StructuredOutput.parse(response, OrderSummary.class);
 - 取消是协作式的；provider 应在网络读取和 token 回调之间检查 `request.cancellationToken()`。
 - `StructuredOutput` 使用安全 JSON 解析，不执行 AutoType；业务校验通过 `parseAndValidate` 注入。
 - `ConversationStore`、`EmbeddingProvider` 和 `Retriever` 只定义扩展契约，不引入数据库、向量库或具体云厂商依赖。
+- `AiClient.usageTotals()` exposes cumulative request/token/cost counters for one
+  accounting window. Call `resetUsage()` at the start of a new window; unknown
+  provider usage is counted separately instead of being guessed.
 
 ## 流式输出
 
