@@ -23,6 +23,26 @@ AuraApp.create()
 由 `McpModule.create(router).http()` 显式启用。HTTP transport 默认限制响应为
 1MB，可通过四参数 `.http(path, maxSessions, idleTtl, maxResponseBytes)` 调整。
 
+需要 server-to-client 事件流时显式开启 SSE：
+
+```java
+McpModule module = McpModule.create(mcpRouter)
+        .http("/mcp", 1024, Duration.ofMinutes(30), 1024 * 1024)
+        .sse();
+
+AuraApp.create()
+        .mcpAuthenticate(metadata -> tokenService.userId(metadata.get("authorization")))
+        .use(module)
+        .start();
+```
+
+SSE GET 必须携带 `Accept: text/event-stream`、认证信息和
+`Mcp-Session-Id`。连接会发送 `endpoint` 和 `heartbeat` 事件；业务模块可通过
+`module.publish(sessionId, method, params)` 发送 server notification。每个 session
+最多一个 SSE 连接，事件大小受 HTTP response budget 限制，断开和 DELETE 会清理连接。
+当前实现不提供 `Last-Event-ID` 重放，也不把 POST response 自动转成 SSE；需要完整
+streamable HTTP 双向协商时仍应使用 POST JSON-RPC 契约并由客户端轮询响应。
+
 ## McpRouter (Selective Tool Exposure)
 
 For a route already described by the shared `ApiRoute` contract, use
