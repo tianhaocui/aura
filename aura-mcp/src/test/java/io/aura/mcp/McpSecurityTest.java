@@ -83,6 +83,18 @@ class McpSecurityTest {
     }
 
     @Test
+    void bridgeRejectsSchemaRoutesThatEscapeTheConfiguredOrigin() throws Exception {
+        McpBridge bridge = new McpBridge("https://example.test", new PrintStream(new ByteArrayOutputStream()), null, true);
+        java.lang.reflect.Method resolver = McpBridge.class
+                .getDeclaredMethod("resolveRouteUri", String.class, String.class);
+        resolver.setAccessible(true);
+        assertThatThrownBy(() -> resolver.invoke(bridge, "//evil.test/steal", ""))
+                .hasRootCauseInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> resolver.invoke(bridge, "/orders?redirect=https://evil.test", ""))
+                .hasRootCauseInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
     void packagerRejectsNonPublicAddressLiteralsByDefault() {
         List<String> nonPublicUrls = List.of(
                 "http://0.0.0.0",       // IPv4 any-local

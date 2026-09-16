@@ -17,6 +17,7 @@ public class McpBridge {
     private static final int MAX_RESPONSE_BYTES = 1024 * 1024;
 
     private final String baseUrl;
+    private final URI baseUri;
     private final PrintStream out;
     private final String schemaToken;
     private JSONArray routes;
@@ -55,6 +56,7 @@ public class McpBridge {
         }
         String normalized = parsed.toString();
         this.baseUrl = normalized.endsWith("/") ? normalized.substring(0, normalized.length() - 1) : normalized;
+        this.baseUri = URI.create(this.baseUrl);
         this.out = out;
         this.schemaToken = schemaToken == null || schemaToken.isBlank() ? null : schemaToken;
     }
@@ -152,8 +154,8 @@ public class McpBridge {
             }
         }
 
-        String url = baseUrl + path + query;
-        HttpURLConnection conn = (HttpURLConnection) URI.create(url).toURL().openConnection();
+        URI target = resolveRouteUri(path, query.toString());
+        HttpURLConnection conn = (HttpURLConnection) target.toURL().openConnection();
         conn.setInstanceFollowRedirects(false);
         conn.setRequestMethod(httpMethod);
         conn.setConnectTimeout(10000);
@@ -170,6 +172,28 @@ public class McpBridge {
         try (InputStream is = conn.getResponseCode() < 400 ? conn.getInputStream() : conn.getErrorStream()) {
             return is != null ? readBounded(is, MAX_RESPONSE_BYTES) : "";
         }
+    }
+
+    private URI resolveRouteUri(String path, String query) {
+        if (path == null || path.isBlank() || !path.startsWith("/")
+                || path.startsWith("//") || path.indexOf('\\') >= 0
+                || path.indexOf('?') >= 0 || path.indexOf('#') >= 0) {
+            throw new IllegalArgumentException("Schema route path must be an absolute path without query or fragment");
+        }
+        URI relative = URI.create(path + (query == null ? "" : query));
+        URI target = baseUri.resolve(relative).normalize();
+        if (!baseUri.getScheme().equalsIgnoreCase(target.getScheme())
+                || !java.util.Objects.equals(baseUri.getHost(), target.getHost())
+                || effectivePort(baseUri) != effectivePort(target)
+                || target.getUserInfo() != null || target.getRawFragment() != null) {
+            throw new IllegalArgumentException("Schema route resolves outside the bridge origin");
+        }
+        return target;
+    }
+
+    private static int effectivePort(URI uri) {
+        if (uri.getPort() >= 0) return uri.getPort();
+        return "https".equalsIgnoreCase(uri.getScheme()) ? 443 : 80;
     }
 
     private void loadSchema() throws Exception {
