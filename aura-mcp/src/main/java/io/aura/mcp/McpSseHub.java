@@ -25,6 +25,10 @@ final class McpSseHub implements AutoCloseable {
         return true;
     }
 
+    boolean connected(String sessionId) {
+        return connections.containsKey(sessionId);
+    }
+
     boolean publish(String sessionId, String method, Map<String, ?> params) {
         Connection connection = connections.get(sessionId);
         if (connection == null) return false;

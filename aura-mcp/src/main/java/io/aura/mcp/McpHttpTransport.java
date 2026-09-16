@@ -61,6 +61,10 @@ final class McpHttpTransport {
             context.status(405).raw("MCP SSE is not enabled");
             return;
         }
+        if (sseHub.connected(sessionId)) {
+            context.status(409).raw("MCP session already has an SSE stream");
+            return;
+        }
         try {
             io.aura.web.SseEmitter emitter = context.sse();
             if (!sseHub.attach(sessionId, emitter, context.cancellationToken())) {
