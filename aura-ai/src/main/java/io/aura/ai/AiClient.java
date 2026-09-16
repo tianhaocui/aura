@@ -81,7 +81,7 @@ public final class AiClient implements AutoCloseable {
             });
             try {
                 AiResponse response = await(future, remaining, request.cancellationToken());
-                recordUsage(response);
+                recordUsage(request, response);
                 enforceBudget(request, response);
                 return response;
             } catch (TimeoutException | CancellationException | InterruptedException error) {
@@ -133,7 +133,7 @@ public final class AiClient implements AutoCloseable {
                 }
                 @Override public void onComplete(AiResponse response) {
                     request.cancellationToken().throwIfCancelled();
-                    recordUsage(response);
+                    recordUsage(request, response);
                     try {
                         enforceBudget(request, response);
                     } catch (AiBudgetExceededException exceeded) {
@@ -180,7 +180,7 @@ public final class AiClient implements AutoCloseable {
         enforceOutputCharacters(request, response.content().length());
         AiBudget budget = request.budget();
         if (!budget.requiresUsage()) return;
-        AiUsage usage = AiUsage.from(response.usage());
+        AiUsage usage = usageFor(request, response);
         if (budget.maxInputTokens() > 0 && usage.inputTokens() < 0) {
             throw AiBudgetExceededException.missing("inputTokens", budget.maxInputTokens());
         }
@@ -207,11 +207,11 @@ public final class AiClient implements AutoCloseable {
         }
     }
 
-    private void recordUsage(AiResponse response) {
+    private void recordUsage(AiRequest request, AiResponse response) {
         requests.incrementAndGet();
         final AiUsage usage;
         try {
-            usage = AiUsage.from(response == null ? null : response.usage());
+            usage = usageFor(request, response);
         } catch (RuntimeException malformedUsage) {
             // Observability must not make an otherwise valid response fail.
             // Budget enforcement still parses strictly immediately afterwards
@@ -224,6 +224,14 @@ public final class AiClient implements AutoCloseable {
         addKnown(totalTokens, usage.totalTokens());
         addKnown(costMicros, usage.costMicros());
         if (!usage.hasTokenUsage() && !usage.hasCost()) unknownUsage.incrementAndGet();
+    }
+
+    private static AiUsage usageFor(AiRequest request, AiResponse response) {
+        AiUsage reported = AiUsage.from(response == null ? null : response.usage());
+        if (reported.hasCost() || request == null || request.pricing() == null) return reported;
+        long estimated = request.pricing().estimateCostMicros(reported);
+        return estimated < 0 ? reported : new AiUsage(reported.inputTokens(),
+                reported.outputTokens(), reported.totalTokens(), estimated);
     }
 
     private static void addKnown(AtomicLong target, long value) {

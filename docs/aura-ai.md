@@ -32,6 +32,20 @@ OrderSummary summary = StructuredOutput.parse(response, OrderSummary.class);
 AiUsageTotals window = client.usageTotals();
 ```
 
+When a provider reports token counts but not cost, supply explicit model pricing
+instead of relying on a hidden default:
+
+```java
+AiRequest request = AiRequest.builder()
+        .prompt("Summarize this order")
+        .pricing(AiPricing.of(250, 1_000)) // micro-units per million tokens
+        .budget(AiBudget.builder().maxCostMicros(20_000).build())
+        .build();
+```
+
+Pricing is opt-in and rounded up conservatively; Aura never guesses a vendor's
+rates. Reported provider cost always takes precedence over the estimate.
+
 ## 设计边界
 
 - `AiProvider` 负责具体 HTTP/API 协议；`AiClient` 负责统一超时、取消和同步/流式调用。

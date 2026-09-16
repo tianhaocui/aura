@@ -119,6 +119,34 @@ class AiClientTest {
     }
 
     @Test
+    void explicitPricingDerivesCostForBudgetAndUsageTotals() throws Exception {
+        AiProvider provider = request -> new AiResponse("ok", "model",
+                Map.of("prompt_tokens", 1_000, "completion_tokens", 500), null);
+        AiRequest request = AiRequest.builder()
+                .prompt("priced")
+                .pricing(AiPricing.of(2_000, 4_000))
+                .budget(AiBudget.builder().maxCostMicros(4).build())
+                .build();
+        try (AiClient client = new AiClient(provider)) {
+            assertThat(client.chat(request).content()).isEqualTo("ok");
+            assertThat(client.usageTotals().costMicros()).isEqualTo(4);
+        }
+    }
+
+    @Test
+    void explicitPricingIsConservativeAndCostBudgetStillFailsClosed() {
+        AiProvider provider = request -> new AiResponse("ok", "model",
+                Map.of("prompt_tokens", 1, "completion_tokens", 0), null);
+        AiRequest request = AiRequest.builder()
+                .prompt("priced")
+                .pricing(AiPricing.of(1, 0))
+                .budget(AiBudget.builder().maxCostMicros(0).build())
+                .build();
+        assertThat(request.pricing().estimateCostMicros(
+                new AiUsage(1, 0, 1, -1))).isEqualTo(1);
+    }
+
+    @Test
     void requestsUseDeterministicSensitiveFieldRedactionByDefault() {
         AiRequest request = new AiRequest("password=hidden token=secret");
         assertThat(request.redactedPrompt()).isEqualTo("password=<redacted> token=<redacted>");
