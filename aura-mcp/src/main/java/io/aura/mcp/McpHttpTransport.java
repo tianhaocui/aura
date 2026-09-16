@@ -96,6 +96,11 @@ final class McpHttpTransport {
             respondError(context, null, 403, -32004, "Origin is not allowed");
             return;
         }
+        if (!acceptsJsonRpc(context)) {
+            respondError(context, null, 406, -32005,
+                    "MCP POST requires Accept: application/json or text/event-stream");
+            return;
+        }
         AuraMcpRuntime runtime = runtime(context);
         String userId = authenticate(runtime, context);
         if (userId == null) {
@@ -137,6 +142,10 @@ final class McpHttpTransport {
         }
 
         String sessionId = context.header(SESSION_HEADER);
+        if (sessionId == null || sessionId.isBlank()) {
+            respondError(context, id, 400, -32002, "Mcp-Session-Id is required");
+            return;
+        }
         if (sessions.access(sessionId, userId).isEmpty()) {
             respondError(context, id, 404, -32002, "MCP session not found or expired");
             return;
@@ -289,6 +298,20 @@ final class McpHttpTransport {
         if (configured == null || configured.isBlank()) return false;
         return java.util.Arrays.stream(configured.split(","))
                 .map(String::trim).anyMatch(origin::equals);
+    }
+
+    private static boolean acceptsJsonRpc(BaseContext context) {
+        String accept = context.header("Accept");
+        if (accept == null || accept.isBlank()) return true;
+        for (String value : accept.split(",")) {
+            String mediaType = value.split(";", 2)[0].trim();
+            if ("application/json".equalsIgnoreCase(mediaType)
+                    || "text/event-stream".equalsIgnoreCase(mediaType)
+                    || "*/*".equals(mediaType)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static boolean validText(JSONObject params, String key) {

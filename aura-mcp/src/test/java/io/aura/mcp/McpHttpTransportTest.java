@@ -57,6 +57,22 @@ class McpHttpTransportTest {
     }
 
     @Test
+    void postRejectsUnsupportedAcceptAndMissingSessionUsesBadRequest() {
+        TestClient.Response unsupported = client.post("/mcp")
+                .header("Authorization", "Bearer alice")
+                .header("Accept", "text/html")
+                .body(initialize(1)).expect(406);
+        assertThat(errorCode(unsupported)).isEqualTo(-32005);
+
+        TestClient.Response missingSession = client.post("/mcp")
+                .header("Authorization", "Bearer alice")
+                .header("Accept", "application/json, text/event-stream")
+                .body(Map.of("jsonrpc", "2.0", "id", 2, "method", "ping",
+                        "params", Map.of())).expect(400);
+        assertThat(errorCode(missingSession)).isEqualTo(-32002);
+    }
+
+    @Test
     void realUndertowSocketCarriesAuthenticatedMcpSession() throws Exception {
         int port;
         try (ServerSocket socket = new ServerSocket(0)) {
