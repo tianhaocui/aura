@@ -1,6 +1,5 @@
 package io.aura.web;
 
-import io.aura.Aura;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -17,34 +16,27 @@ class MiddlewareTest {
     @BeforeEach
     void setup() {
         log.clear();
-        Aura app = Aura.create()
-            .exception(RuntimeException.class, (e, ctx) -> {
-                ctx.status(400).text("error: " + e.getMessage());
-            })
-            .routes((BaseRouter r) -> {
-                r.before(ctx -> log.add("global-before"));
-                r.after(ctx -> log.add("global-after"));
+        Router router = new Router();
+        router.before(ctx -> log.add("global-before"));
+        router.after(ctx -> log.add("global-after"));
 
-                r.get("/hello", ctx -> {
-                    log.add("handler");
-                    ctx.text("hi");
-                });
+        router.get("/hello", ctx -> {
+            log.add("handler");
+            ctx.text("hi");
+        });
 
-                r.group("/api", api -> {
-                    api.before(ctx -> log.add("api-before"));
-                    api.after(ctx -> log.add("api-after"));
+        router.group("/api", api -> {
+            api.before(ctx -> log.add("api-before"));
+            api.after(ctx -> log.add("api-after"));
 
-                    api.get("/test", ctx -> {
-                        log.add("api-handler");
-                        ctx.text("api ok");
-                    });
-                });
-
-                r.get("/fail", ctx -> {
-                    throw new RuntimeException("boom");
-                });
+            api.get("/test", ctx -> {
+                log.add("api-handler");
+                ctx.text("api ok");
             });
-        client = TestClient.of(app);
+        });
+
+        router.get("/fail", ctx -> { throw new RuntimeException("boom"); });
+        client = TestApplications.client(router);
     }
 
     @Test
@@ -64,10 +56,10 @@ class MiddlewareTest {
     }
 
     @Test
-    void exceptionHandler_catches() {
+    void defaultExceptionHandler_mapsUnexpectedFailure() {
         var resp = client.get("/fail").execute();
-        assertThat(resp.status()).isEqualTo(400);
-        assertThat(resp.body()).isEqualTo("error: boom");
+        assertThat(resp.status()).isEqualTo(500);
+        assertThat(resp.body()).contains("boom");
     }
 
     @Test

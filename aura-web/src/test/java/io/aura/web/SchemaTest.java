@@ -1,9 +1,8 @@
 package io.aura.web;
 
-import io.aura.Aura;
+import com.alibaba.fastjson2.JSON;
 
 import java.util.List;
-import java.util.Map;
 
 public class SchemaTest {
 
@@ -23,40 +22,32 @@ public class SchemaTest {
         }
     }
 
-    public static void main(String[] args) throws Exception {
+    public static void main(String[] args) {
         var userService = new UserService();
 
-        Aura app = Aura.create()
-            .port(9091)
-            .set("app.name", "Schema Test App")
-            .routes(r -> {
-                Router router = (Router) r;
-                r.get("/health", ctx -> ctx.text("ok"))
+        Router router = new Router();
+        router.get("/health", ctx -> ctx.text("ok"))
                     .describe("Health check endpoint");
 
-                router.get("/user/{id}", userService, "get")
+        router.get("/user/{id}", userService, "get")
                     .describe("Get user by ID")
                     .param("id", "User ID");
 
-                router.post("/user", userService, "create")
+        router.post("/user", userService, "create")
                     .describe("Create a new user");
 
-                router.get("/user/search", userService, "search")
+        router.get("/user/search", userService, "search")
                     .describe("Search users by name")
                     .param("name", "Search keyword")
                     .param("page", "Page number");
-            });
-        app.start();
-
-        Thread.sleep(1000);
+        TestClient client = TestApplications.client(router);
 
         // Test: schema endpoint
-        String schema = httpGet("http://localhost:9091/__schema__");
+        String schema = JSON.toJSONString(client.schema());
         System.out.println("Schema response:");
         System.out.println(schema);
 
         // Basic assertions
-        assert schema.contains("Schema Test App") : "Missing app name";
         assert schema.contains("Get user by ID") : "Missing route description";
         assert schema.contains("User ID") : "Missing param description";
         assert schema.contains("Search keyword") : "Missing search param description";
@@ -67,24 +58,10 @@ public class SchemaTest {
         assert schema.contains("\"source\":\"query\"") : "Missing query source";
 
         // Test: routes still work
-        String user = httpGet("http://localhost:9091/user/42");
+        String user = client.get("/user/42").execute().body();
         System.out.println("\nGET /user/42: " + user);
         assert user.contains("user-42") : "Route broken after schema changes";
 
         System.out.println("\nAll tests passed!");
-        app.stop();
-    }
-
-    static String httpGet(String url) throws Exception {
-        var conn = new java.net.URL(url).openConnection();
-        conn.setConnectTimeout(3000);
-        conn.setReadTimeout(3000);
-        try (var is = conn.getInputStream()) {
-            return new String(is.readAllBytes());
-        } catch (java.io.IOException e) {
-            try (var es = ((java.net.HttpURLConnection) conn).getErrorStream()) {
-                return es != null ? new String(es.readAllBytes()) : e.getMessage();
-            }
-        }
     }
 }

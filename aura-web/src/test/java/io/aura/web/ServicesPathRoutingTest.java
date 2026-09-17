@@ -1,9 +1,12 @@
 package io.aura.web;
 
-import io.aura.Aura;
+import io.aura.AuraApp;
+import io.aura.AuraModule;
+import io.aura.ModuleContext;
 import io.aura.annotation.Get;
 import io.aura.annotation.Path;
 import io.aura.annotation.Post;
+import io.aura.contract.ModuleMetadata;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -29,26 +32,10 @@ class ServicesPathRoutingTest {
     }
 
     @Test
-    void pathServicesAutoRouted() {
-        Aura app = Aura.create();
+    void pathServiceRegistrationProducesAnnotatedRoutes() {
         Repo repo = new Repo();
-        app.register(repo);
-        app.services(ItemController.class);
-
         Router router = new Router();
-        for (Object svc : app.services()) {
-            ServiceRegistrar.register(svc, router);
-        }
-
-        // Before start, services() list has no route instances
-        // Simulate the resolve + add @Path beans logic that start() performs
-        var registry = new java.util.LinkedHashMap<Class<?>, Object>();
-        registry.put(Aura.class, app);
-        registry.put(Repo.class, repo);
-        registry.put(ItemController.class, new ItemController(repo));
-        Object bean = registry.get(ItemController.class);
-
-        ServiceRegistrar.register(bean, router);
+        ServiceRegistrar.register(new ItemController(repo), router);
         List<CompiledRoute> routes = UndertowStarter.compileRoutes(router);
 
         assertThat(routes).anyMatch(r -> r.method().equals("GET") && r.rawPath().equals("/api/items/{id}"));
@@ -70,13 +57,20 @@ class ServicesPathRoutingTest {
     }
 
     @Test
-    void auraServicesContainsPathBeansAfterResolve() {
-        Aura app = Aura.create();
-        app.register(new Repo());
-        app.services(ItemController.class, PureService.class);
+    void explicitModulePublishesPathServiceWithItsDependency() {
+        AuraApp app = AuraApp.create().use(new AuraModule() {
+            @Override public ModuleMetadata descriptor() {
+                return ModuleMetadata.of("items", "1.0.0");
+            }
 
-        // Verify initial state
-        assertThat(app.services()).isEmpty();
-        assertThat(app.serviceClasses()).containsExactly(ItemController.class, PureService.class);
+            @Override public void install(ModuleContext context) {
+                context.register(new Repo());
+                context.service(new ItemController(context.require(Repo.class)));
+            }
+        });
+
+        TestClient.Response response = TestClient.of(app).get("/api/items/7").execute();
+        assertThat(response.status()).isEqualTo(200);
+        assertThat(response.body()).contains("item-7");
     }
 }

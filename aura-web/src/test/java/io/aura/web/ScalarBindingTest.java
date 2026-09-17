@@ -1,6 +1,5 @@
 package io.aura.web;
 
-import io.aura.Aura;
 import io.aura.annotation.Get;
 import org.junit.jupiter.api.Test;
 
@@ -9,7 +8,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 class ScalarBindingTest {
     @Test
     void reflectionRoutesBindEverySupportedJavaScalarFromQueryParameters() {
-        TestClient client = TestClient.of(Aura.create().service(new ScalarService()));
+        Router router = new Router();
+        ServiceRegistrar.register(new ScalarService(), router);
+        TestClient client = TestApplications.client(router);
 
         client.get("/scalars")
                 .query("floatValue", "1.5")

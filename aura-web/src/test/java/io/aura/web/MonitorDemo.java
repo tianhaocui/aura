@@ -1,6 +1,7 @@
 package io.aura.web;
 
-import io.aura.Aura;
+import io.aura.AuraConfig;
+import io.aura.contract.RouteContribution;
 
 import java.lang.management.ManagementFactory;
 import java.lang.management.MemoryMXBean;
@@ -23,25 +24,21 @@ public class MonitorDemo {
     record HealthStatus(String status, long uptimeMs, String startedAt) {}
 
     public static void main(String[] args) {
-        var app = Aura.create().port(8080).cors(true);
+        BaseHandler health = counted(ctx -> ctx.json(new HealthStatus(
+                "UP",
+                System.currentTimeMillis() - startTime,
+                Instant.ofEpochMilli(startTime).toString())));
 
-        // 健康检查
-        app.get("/health", (java.util.function.Supplier<HealthStatus>) () ->
-                new HealthStatus("UP",
-                        System.currentTimeMillis() - startTime,
-                        Instant.ofEpochMilli(startTime).toString()));
-
-        // 系统信息
-        app.get("/status", (java.util.function.Supplier<Map<String, Object>>) () -> {
+        BaseHandler status = counted(ctx -> {
             MemoryMXBean mem = ManagementFactory.getMemoryMXBean();
             ThreadMXBean threads = ManagementFactory.getThreadMXBean();
             RuntimeMXBean runtime = ManagementFactory.getRuntimeMXBean();
 
-            var status = new LinkedHashMap<String, Object>();
-            status.put("app", "Aura Monitor Demo");
-            status.put("uptime", formatDuration(runtime.getUptime()));
-            status.put("requests", requestCount.get());
-            status.put("errors", errorCount.get());
+            var payload = new LinkedHashMap<String, Object>();
+            payload.put("app", "Aura Monitor Demo");
+            payload.put("uptime", formatDuration(runtime.getUptime()));
+            payload.put("requests", requestCount.get());
+            payload.put("errors", errorCount.get());
 
             var memory = new LinkedHashMap<String, Object>();
             long used = mem.getHeapMemoryUsage().getUsed() / 1024 / 1024;
@@ -49,49 +46,49 @@ public class MonitorDemo {
             memory.put("heapUsed", used + "MB");
             memory.put("heapMax", max + "MB");
             memory.put("usage", String.format("%.1f%%", (double) used / max * 100));
-            status.put("memory", memory);
+            payload.put("memory", memory);
 
             var threadInfo = new LinkedHashMap<String, Object>();
             threadInfo.put("active", threads.getThreadCount());
             threadInfo.put("peak", threads.getPeakThreadCount());
             threadInfo.put("daemon", threads.getDaemonThreadCount());
-            status.put("threads", threadInfo);
+            payload.put("threads", threadInfo);
 
-            status.put("jvm", Map.of(
+            payload.put("jvm", Map.of(
                     "version", System.getProperty("java.version"),
                     "vendor", System.getProperty("java.vendor"),
                     "os", System.getProperty("os.name") + " " + System.getProperty("os.arch")
             ));
 
-            return status;
+            ctx.json(payload);
         });
 
-        // 最近错误
-        app.get("/errors", (java.util.function.Supplier<List<Map<String, Object>>>) () -> recentErrors);
-
-        // 手动触发 GC
-        app.post("/gc", (java.util.function.Supplier<Map<String, String>>) () -> {
+        BaseHandler errors = counted(ctx -> ctx.json(recentErrors));
+        BaseHandler gc = counted(ctx -> {
             System.gc();
-            return Map.of("result", "GC triggered");
+            ctx.json(Map.of("result", "GC triggered"));
         });
 
-        // 请求计数中间件
-        app.exception(Exception.class, (e, ctx) -> {
+        BaseHandler failure = counted(ctx -> {
+            RuntimeException error = new RuntimeException("test error");
             errorCount.incrementAndGet();
             recentErrors.add(Map.of(
                     "time", Instant.now().toString(),
                     "path", ctx.url(),
-                    "error", e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName()
+                    "error", error.getMessage()
             ));
             if (recentErrors.size() > 50) recentErrors.remove(0);
-            ctx.status(500).json(Map.of("error", e.getMessage()));
+            throw error;
         });
-        app.routes((BaseRouter r) -> {
-            r.before(ctx -> requestCount.incrementAndGet());
 
-            // 故意报错的测试端点
-            r.get("/fail", ctx -> { throw new RuntimeException("test error"); });
-        });
+        var app = TestApplications.app(
+                new AuraConfig().port(8080).cors(true),
+                "monitor-demo",
+                new RouteContribution("GET", "/health", health),
+                new RouteContribution("GET", "/status", status),
+                new RouteContribution("GET", "/errors", errors),
+                new RouteContribution("POST", "/gc", gc),
+                new RouteContribution("GET", "/fail", failure));
 
         app.start();
         System.out.println("Monitor API running on http://localhost:8080");
@@ -99,6 +96,13 @@ public class MonitorDemo {
         System.out.println("  GET  /status  - 系统状态");
         System.out.println("  GET  /errors  - 最近错误");
         System.out.println("  POST /gc      - 触发 GC");
+    }
+
+    private static BaseHandler counted(BaseHandler handler) {
+        return ctx -> {
+            requestCount.incrementAndGet();
+            handler.handle(ctx);
+        };
     }
 
     static String formatDuration(long ms) {

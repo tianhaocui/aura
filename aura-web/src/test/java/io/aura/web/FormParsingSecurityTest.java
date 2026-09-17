@@ -1,6 +1,8 @@
 package io.aura.web;
 
-import io.aura.Aura;
+import io.aura.AuraApp;
+import io.aura.AuraConfig;
+import io.aura.contract.RouteContribution;
 import org.junit.jupiter.api.Test;
 
 import java.net.ServerSocket;
@@ -17,8 +19,9 @@ class FormParsingSecurityTest {
     @Test
     void parsesUrlEncodedFormsWithExplicitParserConfiguration() throws Exception {
         int port = freePort();
-        Aura app = Aura.create().port(port)
-                .routes(r -> r.post("/form", ctx -> ctx.text(ctx.formField("name"))));
+        AuraApp app = TestApplications.app(new AuraConfig().port(port), "form-parser",
+                new RouteContribution("POST", "/form",
+                        (BaseHandler) ctx -> ctx.text(ctx.formField("name"))));
         app.start();
         try {
             HttpRequest request = HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/form"))
@@ -41,8 +44,11 @@ class FormParsingSecurityTest {
         int port = freePort();
         String boundary = "aura-security-boundary";
         byte[] body = multipart(boundary, "upload", "payload.txt", "12345");
-        Aura app = Aura.create().port(port).env("prod").maxUploadSize(4).maxBodySize(1024 * 1024)
-                .routes(r -> r.post("/upload", ctx -> ctx.text(String.valueOf(ctx.file("upload").size()))));
+        AuraConfig config = new AuraConfig().port(port).env("prod")
+                .maxUploadSize(4).maxBodySize(1024 * 1024);
+        AuraApp app = TestApplications.app(config, "upload-limit",
+                new RouteContribution("POST", "/upload",
+                        (BaseHandler) ctx -> ctx.text(String.valueOf(ctx.file("upload").size()))));
         app.start();
         try {
             HttpRequest request = HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/upload"))

@@ -1,12 +1,8 @@
 package io.aura.web;
 
 import com.alibaba.fastjson2.JSON;
-import io.aura.Aura;
 import io.aura.AuraApp;
 import io.aura.AuraConfig;
-import io.aura.AuraModule;
-import io.aura.ModuleContext;
-import io.aura.contract.ModuleMetadata;
 import io.aura.contract.RouteContribution;
 import io.aura.snapshot.ExceptionSnapshot;
 import io.aura.snapshot.Snapshot;
@@ -39,7 +35,7 @@ class SnapshotReplayTest {
 
     @Test
     void snapshotRecordsArtifactsExternalCallsAndRedactsSensitiveData() throws Exception {
-        Aura app = Aura.create().snapshot(s -> s.enabled(true).async(false).dir(tempDir));
+        AuraConfig config = new AuraConfig().snapshot(s -> s.enabled(true).async(false).dir(tempDir));
         Router router = new Router();
         router.post("/checkout", ctx -> {
             Snapshot.put("systemX.data", Map.of("level", "VIP", "paymentToken", "tok_123"));
@@ -50,7 +46,7 @@ class SnapshotReplayTest {
             throw new ApiException(400, "PAYMENT_REJECTED", "payment rejected", "payment");
         });
 
-        TestClient.Response resp = new TestClient(app, router)
+        TestClient.Response resp = TestApplications.client(config, router)
                 .post("/checkout")
                 .header("Authorization", "Bearer inbound")
                 .body(Map.of("userId", "u1", "password", "secret"))
@@ -74,14 +70,14 @@ class SnapshotReplayTest {
 
     @Test
     void snapshotRedactsTopLevelArtifactKeysAndNonSensitiveHeaderValuesOnDisk() throws Exception {
-        Aura app = Aura.create().snapshot(s -> s.enabled(true).async(false).dir(tempDir));
+        AuraConfig config = new AuraConfig().snapshot(s -> s.enabled(true).async(false).dir(tempDir));
         Router router = new Router();
         router.get("/capture", ctx -> {
             Snapshot.put("token", "raw-artifact-secret");
             throw new RuntimeException("failed");
         });
 
-        new TestClient(app, router)
+        TestApplications.client(config, router)
                 .get("/capture")
                 .header("X-Debug", "password=header-secret https://headers.example/private?token=url-secret")
                 .execute();
@@ -131,14 +127,15 @@ class SnapshotReplayTest {
     @Test
     void snapshotRetentionEvictsOldFilesAndReportsDrops() throws Exception {
         java.util.concurrent.atomic.AtomicReference<String> drop = new java.util.concurrent.atomic.AtomicReference<>();
-        Aura app = Aura.create().snapshot(s -> s.enabled(true).async(false).dir(tempDir)
+        AuraConfig config = new AuraConfig().snapshot(s -> s.enabled(true).async(false).dir(tempDir)
                 .maxSnapshots(1).maxStorageSize(1024 * 1024).onDrop(drop::set));
         Router router = new Router();
         router.get("/fail", ctx -> { throw new RuntimeException("failure"); });
 
-        new TestClient(app, router).get("/fail").execute();
+        TestClient client = TestApplications.client(config, router);
+        client.get("/fail").execute();
         Path first = Files.list(tempDir).findFirst().orElseThrow();
-        new TestClient(app, router).get("/fail").execute();
+        client.get("/fail").execute();
 
         assertThat(Files.list(tempDir).toList()).hasSize(1);
         assertThat(Files.list(tempDir).findFirst().orElseThrow()).isNotEqualTo(first);
@@ -148,15 +145,19 @@ class SnapshotReplayTest {
     @Test
     void snapshotRetentionReportsDropWhenStorageCannotFitOneFile() throws Exception {
         java.util.concurrent.atomic.AtomicReference<String> drop = new java.util.concurrent.atomic.AtomicReference<>();
-        Aura app = Aura.create().snapshot(s -> s.enabled(true).async(false).dir(tempDir)
-                .maxSnapshots(1).maxSnapshotFileSize(1).onDrop(drop::set));
+        java.util.concurrent.atomic.AtomicLong dropCount = new java.util.concurrent.atomic.AtomicLong();
+        AuraConfig config = new AuraConfig().snapshot(s -> s.enabled(true).async(false).dir(tempDir)
+                .maxSnapshots(1).maxSnapshotFileSize(1).onDrop(reason -> {
+                    drop.set(reason);
+                    dropCount.incrementAndGet();
+                }));
         Router router = new Router();
         router.get("/fail", ctx -> { throw new RuntimeException("failure"); });
 
-        new TestClient(app, router).get("/fail").execute();
+        TestApplications.client(config, router).get("/fail").execute();
 
         assertThat(drop.get()).isEqualTo("file-too-large");
-        assertThat(SnapshotRecorder.dropped(app)).isEqualTo(1L);
+        assertThat(dropCount.get()).isEqualTo(1L);
     }
 
     @Test
@@ -165,7 +166,7 @@ class SnapshotReplayTest {
         ExceptionSnapshot snapshot = snapshot();
         Files.writeString(snapshotFile, JSON.toJSONString(snapshot));
 
-        AuraApp app = AuraApp.create().use(routes("replay-payment",
+        AuraApp app = AuraApp.create().use(TestApplications.routes("replay-payment",
                 new RouteContribution("POST", "/pay", (BaseHandler) ctx -> {
             UserDto user = new SnapshotHttpClient("systemX", "https://x.example.com")
                     .get("/users/u1", UserDto.class);
@@ -326,14 +327,14 @@ class SnapshotReplayTest {
 
     @Test
     void snapshotOmitsSensitivePathQueryAndExceptionDetails() throws Exception {
-        Aura app = Aura.create().snapshot(s -> s.enabled(true).async(false).dir(tempDir)
+        AuraConfig config = new AuraConfig().snapshot(s -> s.enabled(true).async(false).dir(tempDir)
                 .maxStackTraceSize(128).maxSnapshotFileSize(64 * 1024).maxStorageSize(256 * 1024));
         Router router = new Router();
         router.get("/reset", ctx -> {
             throw new RuntimeException("password=super-secret token=reset-secret");
         });
 
-        TestClient.Response response = new TestClient(app, router)
+        TestClient.Response response = TestApplications.client(config, router)
                 .get("/reset?token=reset-secret&user=alice")
                 .execute();
 
@@ -346,13 +347,13 @@ class SnapshotReplayTest {
 
     @Test
     void snapshotRedactsStructuredExceptionFields() throws Exception {
-        Aura app = Aura.create().snapshot(s -> s.enabled(true).async(false).dir(tempDir));
+        AuraConfig config = new AuraConfig().snapshot(s -> s.enabled(true).async(false).dir(tempDir));
         Router router = new Router();
         router.get("/field", ctx -> {
             throw new ApiException(400, "password=secret-code", "failed", "password=field-secret");
         });
 
-        new TestClient(app, router).get("/field").execute();
+        TestApplications.client(config, router).get("/field").execute();
 
         String json = Files.readString(Files.list(tempDir).findFirst().orElseThrow());
         assertThat(json).contains("password=<redacted>")
@@ -361,11 +362,11 @@ class SnapshotReplayTest {
 
     @Test
     void snapshotStoresRouteTemplateInsteadOfSensitivePathValue() throws Exception {
-        Aura app = Aura.create().snapshot(s -> s.enabled(true).async(false).dir(tempDir));
+        AuraConfig config = new AuraConfig().snapshot(s -> s.enabled(true).async(false).dir(tempDir));
         Router router = new Router();
         router.get("/reset/{token}", ctx -> { throw new RuntimeException("failed"); });
 
-        new TestClient(app, router).get("/reset/reset-secret").execute();
+        TestApplications.client(config, router).get("/reset/reset-secret").execute();
 
         String json = Files.readString(Files.list(tempDir).findFirst().orElseThrow());
         assertThat(json).contains("\"path\":\"/reset/redacted\"")
@@ -377,7 +378,7 @@ class SnapshotReplayTest {
     void dynamicPathSnapshotReplaysWithoutNotFound() throws Exception {
         AuraApp app = AuraApp.create(new AuraConfig()
                         .snapshot(s -> s.enabled(true).async(false).dir(tempDir)))
-                .use(routes("replay-dynamic-path",
+                .use(TestApplications.routes("replay-dynamic-path",
                         new RouteContribution("GET", "/users/{id}", (BaseHandler) ctx -> {
                     throw new ApiException(400, "USER_LOOKUP_FAILED", "user lookup failed");
                 }))).prepare();
@@ -405,18 +406,6 @@ class SnapshotReplayTest {
 
         assertThatCode(() -> redactor.query(Map.of("value", "http://["))).doesNotThrowAnyException();
         assertThat(redactor.query(Map.of("value", "http://["))).containsEntry("value", "http://[");
-    }
-
-    private static AuraModule routes(String id, RouteContribution... routes) {
-        return new AuraModule() {
-            @Override public ModuleMetadata descriptor() {
-                return ModuleMetadata.of(id, "1.0.0");
-            }
-
-            @Override public void install(ModuleContext context) {
-                for (RouteContribution route : routes) context.route(route);
-            }
-        };
     }
 
     @Test
@@ -549,14 +538,14 @@ class SnapshotReplayTest {
     }
 
     private ExceptionSnapshot recordStackSnapshot(Path dir, int maxStackTraceSize) throws Exception {
-        Aura app = Aura.create().snapshot(s -> s.enabled(true).async(false).dir(dir)
+        AuraConfig config = new AuraConfig().snapshot(s -> s.enabled(true).async(false).dir(dir)
                 .maxStackTraceSize(maxStackTraceSize));
         Router router = new Router();
         router.get("/stack", ctx -> {
             throw new RuntimeException("outer-stack-secret", new IllegalStateException("inner-stack-secret"));
         });
 
-        new TestClient(app, router).get("/stack").execute();
+        TestApplications.client(config, router).get("/stack").execute();
 
         String json = Files.readString(Files.list(dir).findFirst().orElseThrow());
         return JSON.parseObject(json, ExceptionSnapshot.class);

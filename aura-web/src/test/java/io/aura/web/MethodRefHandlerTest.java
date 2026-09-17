@@ -1,6 +1,6 @@
 package io.aura.web;
 
-import io.aura.Aura;
+import io.aura.AuraWebRuntime;
 import org.junit.jupiter.api.Test;
 
 import java.util.HashMap;
@@ -10,7 +10,7 @@ import static org.assertj.core.api.Assertions.*;
 
 class MethodRefHandlerTest {
 
-    private static final Aura APP = Aura.create();
+    private static final AuraWebRuntime APP = TestApplications.runtime();
 
     // --- service classes with named parameters (compiled with -parameters) ---
 

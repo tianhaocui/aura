@@ -1,15 +1,19 @@
 package io.aura.web;
 
-import io.aura.Aura;
+import io.aura.AuraApp;
+import io.aura.AuraConfig;
+import io.aura.AuraModule;
+import io.aura.ModuleContext;
+import io.aura.contract.ModuleMetadata;
 import org.junit.jupiter.api.Test;
 
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.WebSocket;
-import java.util.List;
 import java.util.concurrent.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.function.Consumer;
 
 import static org.assertj.core.api.Assertions.*;
 
@@ -19,11 +23,23 @@ class WebSocketTest {
 
     private int nextPort() { return PORT_SEQ.getAndIncrement(); }
 
+    private AuraApp app(int port, Consumer<ModuleContext> configure) {
+        return AuraApp.create(new AuraConfig().port(port)).use(new AuraModule() {
+            @Override public ModuleMetadata descriptor() {
+                return ModuleMetadata.of("websocket-test", "1.0.0");
+            }
+
+            @Override public void install(ModuleContext context) {
+                configure.accept(context);
+            }
+        });
+    }
+
     @Test
     void echo() throws Exception {
         int port = nextPort();
-        var app = Aura.create().port(port)
-            .routes(r -> r.ws("/ws/echo", ws ->
+        var app = app(port, context ->
+            context.webSocket("/ws/echo", ws ->
                 ws.onMessage((conn, msg) -> conn.send("echo:" + msg))
             ));
         app.start();
@@ -50,8 +66,8 @@ class WebSocketTest {
     void pathParams() throws Exception {
         int port = nextPort();
         var received = new CompletableFuture<String>();
-        var app = Aura.create().port(port)
-            .routes(r -> r.ws("/ws/room/{roomId}", ws ->
+        var app = app(port, context ->
+            context.webSocket("/ws/room/{roomId}", ws ->
                 ws.onOpen(conn -> conn.send("joined:" + conn.path("roomId")))
             ));
         app.start();
@@ -75,29 +91,24 @@ class WebSocketTest {
     @Test
     void beforeMiddleware_rejectsUnauthorized() throws Exception {
         int port = nextPort();
-        var app = Aura.create().port(port)
-            .routes(r -> {
-                r.before(ctx -> {
-                    if (ctx.header("Authorization") == null) {
-                        ctx.status(401).abort();
-                    }
-                });
-                r.ws("/ws/secure", ws ->
-                    ws.onMessage((conn, msg) -> conn.send(msg))
-                );
+        var app = app(port, context -> {
+            context.before(ctx -> {
+                if (ctx.header("Authorization") == null) {
+                    ctx.status(401).abort();
+                }
             });
+            context.webSocket("/ws/secure", ws ->
+                ws.onMessage((conn, msg) -> conn.send(msg))
+            );
+        });
         app.start();
         try {
             var failed = new CompletableFuture<Throwable>();
             HttpClient.newHttpClient().newWebSocketBuilder()
                 .buildAsync(URI.create("ws://localhost:" + port + "/ws/secure"),
                     new WebSocket.Listener() {})
-                .whenComplete((ws, err) -> {
-                    if (err != null) failed.complete(err);
-                    else failed.complete(null);
-                });
-            var err = failed.get(3, TimeUnit.SECONDS);
-            assertThat(err).isNotNull();
+                .whenComplete((ws, err) -> failed.complete(err));
+            assertThat(failed.get(3, TimeUnit.SECONDS)).isNotNull();
         } finally {
             app.stop();
         }
@@ -107,8 +118,8 @@ class WebSocketTest {
     void onClose_fires() throws Exception {
         int port = nextPort();
         var closed = new CompletableFuture<Integer>();
-        var app = Aura.create().port(port)
-            .routes(r -> r.ws("/ws/close", ws ->
+        var app = app(port, context ->
+            context.webSocket("/ws/close", ws ->
                 ws.onClose((conn, code, reason) -> closed.complete(code))
             ));
         app.start();
@@ -126,8 +137,8 @@ class WebSocketTest {
     @Test
     void multipleMessages() throws Exception {
         int port = nextPort();
-        var app = Aura.create().port(port)
-            .routes(r -> r.ws("/ws/multi", ws ->
+        var app = app(port, context ->
+            context.webSocket("/ws/multi", ws ->
                 ws.onMessage((conn, msg) -> conn.send(msg.toUpperCase()))
             ));
         app.start();
@@ -161,8 +172,8 @@ class WebSocketTest {
     void broadcast() throws Exception {
         int port = nextPort();
         var connections = ConcurrentHashMap.<WsConnection>newKeySet();
-        var app = Aura.create().port(port)
-            .routes(r -> r.ws("/ws/broadcast", ws -> {
+        var app = app(port, context ->
+            context.webSocket("/ws/broadcast", ws -> {
                 ws.onOpen(connections::add);
                 ws.onMessage((conn, msg) -> {
                     for (WsConnection c : connections) c.send(msg);
@@ -211,8 +222,8 @@ class WebSocketTest {
     void connectionAttributes() throws Exception {
         int port = nextPort();
         var received = new CompletableFuture<String>();
-        var app = Aura.create().port(port)
-            .routes(r -> r.ws("/ws/attrs", ws -> {
+        var app = app(port, context ->
+            context.webSocket("/ws/attrs", ws -> {
                 ws.onOpen(conn -> conn.set("name", "alice"));
                 ws.onMessage((conn, msg) -> conn.send(conn.get("name", String.class) + ":" + msg));
             }));
@@ -239,8 +250,8 @@ class WebSocketTest {
     void onError_routesHandlerException() throws Exception {
         int port = nextPort();
         var error = new CompletableFuture<Throwable>();
-        var app = Aura.create().port(port)
-            .routes(r -> r.ws("/ws/err", ws -> {
+        var app = app(port, context ->
+            context.webSocket("/ws/err", ws -> {
                 ws.onMessage((conn, msg) -> { throw new RuntimeException("boom"); });
                 ws.onError((conn, err) -> error.complete(err));
             }));

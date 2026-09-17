@@ -1,21 +1,19 @@
 package io.aura.web;
 
-import io.aura.Aura;
+import io.aura.AuraApp;
+import io.aura.contract.RouteContribution;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 class PermissionAuthorizationTest {
     @Test
-    void permissionMiddlewareUsesSharedAuthorizationFunction() {
-        Aura app = Aura.create()
-                .auth(ctx -> "user-1")
-                .authorize((user, permission) -> user.equals("user-1") && permission.equals("orders.read"))
-                .routes(routes -> routes.group("/orders", group -> {
-                    group.before(Aura.requireAuth());
-                    group.before(Aura.requirePermission("orders.read"));
-                    group.get("/list", ctx -> ctx.text("ok"));
-                }));
+    void routeAuthorizationUsesSharedFunctions() {
+        AuraApp app = TestApplications.app(
+                        "permission-allowed",
+                        new RouteContribution("GET", "/orders/list", protectedHandler("orders.read", "ok")))
+                .authenticate(ctx -> "user-1")
+                .authorize((user, permission) -> user.equals("user-1") && permission.equals("orders.read"));
 
         TestClient.Response response = TestClient.of(app).get("/orders/list").execute();
         assertThat(response.status()).isEqualTo(200);
@@ -24,17 +22,34 @@ class PermissionAuthorizationTest {
 
     @Test
     void deniedPermissionAbortsWithForbidden() {
-        Aura app = Aura.create()
-                .auth(ctx -> "user-1")
-                .authorize((user, permission) -> false)
-                .routes(routes -> routes.group("/orders", group -> {
-                    group.before(Aura.requireAuth());
-                    group.before(Aura.requirePermission("orders.read"));
-                    group.get("/list", ctx -> ctx.text("must-not-run"));
-                }));
+        AuraApp app = TestApplications.app(
+                        "permission-denied",
+                        new RouteContribution("GET", "/orders/list",
+                                protectedHandler("orders.read", "must-not-run")))
+                .authenticate(ctx -> "user-1")
+                .authorize((user, permission) -> false);
 
         TestClient.Response response = TestClient.of(app).get("/orders/list").execute();
         assertThat(response.status()).isEqualTo(403);
         assertThat(response.body()).contains("Forbidden");
+    }
+
+    private static BaseHandler protectedHandler(String permission, String response) {
+        return ctx -> {
+            String userId = ctx.app().authFunction().apply(ctx);
+            if (userId == null || userId.isBlank()) {
+                ctx.status(401).json(java.util.Map.of("error", "Unauthorized"));
+                ctx.abort();
+                return;
+            }
+            ctx.set("_userId", userId);
+            if (ctx.app().permissionChecker() == null
+                    || !ctx.app().permissionChecker().test(userId, permission)) {
+                ctx.status(403).json(java.util.Map.of("error", "Forbidden", "permission", permission));
+                ctx.abort();
+                return;
+            }
+            ctx.text(response);
+        };
     }
 }

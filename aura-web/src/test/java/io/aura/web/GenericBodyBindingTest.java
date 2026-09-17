@@ -1,6 +1,5 @@
 package io.aura.web;
 
-import io.aura.Aura;
 import io.aura.annotation.Post;
 import io.aura.annotation.Path;
 import org.junit.jupiter.api.Test;
@@ -13,7 +12,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class GenericBodyBindingTest {
     @Test
     void reflectionRoutesDecodeParameterizedCollections() {
-        TestClient client = TestClient.of(Aura.create().service(new CollectionService()));
+        TestClient client = client();
 
         assertThat(client.post("/batch")
                 .body(List.of(new Item("a"), new Item("b")))
@@ -25,8 +24,14 @@ class GenericBodyBindingTest {
 
     @Test
     void missingCollectionBodyPreservesNullableBodyBinding() {
-        TestClient client = TestClient.of(Aura.create().service(new CollectionService()));
+        TestClient client = client();
         assertThat(client.post("/batch").expect(200).body()).contains("null");
+    }
+
+    private static TestClient client() {
+        Router router = new Router();
+        ServiceRegistrar.register(new CollectionService(), router);
+        return TestApplications.client(router);
     }
 
     @Path("")

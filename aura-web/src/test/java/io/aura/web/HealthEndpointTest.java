@@ -1,6 +1,7 @@
 package io.aura.web;
 
-import io.aura.Aura;
+import io.aura.AuraApp;
+import io.aura.HealthModule;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.*;
@@ -9,7 +10,7 @@ class HealthEndpointTest {
 
     @Test
     void health_returnsUp() {
-        var app = Aura.create().health();
+        var app = AuraApp.create().use(HealthModule.create());
         var client = TestClient.of(app);
 
         var resp = client.get("/health").execute();
@@ -19,21 +20,13 @@ class HealthEndpointTest {
 
     @Test
     void health_returns503_afterShutdown() {
-        var app = Aura.create().health();
+        var app = AuraApp.create().use(HealthModule.create());
         var client = TestClient.of(app);
 
         // Verify UP first
         client.get("/health").expect(200);
 
-        // Simulate shutdown flag (stop() would normally do this but also shuts down starter)
-        // Use reflection to set shuttingDown since stop() requires starter
-        try {
-            var field = Aura.class.getDeclaredField("shuttingDown");
-            field.setAccessible(true);
-            field.set(app, true);
-        } catch (Exception e) {
-            throw new RuntimeException(e);
-        }
+        app.stop();
 
         var resp = client.get("/health").execute();
         assertThat(resp.status()).isEqualTo(503);
@@ -42,7 +35,7 @@ class HealthEndpointTest {
 
     @Test
     void isShuttingDown_initiallyFalse() {
-        var app = Aura.create();
-        assertThat(app.isShuttingDown()).isFalse();
+        var runtime = TestApplications.runtime();
+        assertThat(runtime.isShuttingDown()).isFalse();
     }
 }

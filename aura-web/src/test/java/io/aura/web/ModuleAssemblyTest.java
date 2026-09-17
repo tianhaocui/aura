@@ -1,6 +1,5 @@
 package io.aura.web;
 
-import io.aura.Aura;
 import io.aura.AuraApp;
 import io.aura.AuraRuntime;
 import io.aura.AuraWebRuntime;
@@ -17,7 +16,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class ModuleAssemblyTest {
     @Test
     void moduleRoutesAreAvailableToInMemoryTestClient() {
-        Aura app = Aura.create().use(new AuraModule() {
+        AuraApp app = AuraApp.create().use(new AuraModule() {
             @Override public ModuleMetadata descriptor() {
                 return ModuleMetadata.of("greeting", "1.0.0");
             }
@@ -34,7 +33,7 @@ class ModuleAssemblyTest {
 
     @Test
     void frameworkNeutralRouteContributionsRunAndFeedSchemaMetadata() {
-        Aura app = Aura.create().use(new AuraModule() {
+        AuraApp app = AuraApp.create().use(new AuraModule() {
             @Override public ModuleMetadata descriptor() {
                 return ModuleMetadata.of("contract-routes", "1.0.0");
             }
@@ -54,7 +53,7 @@ class ModuleAssemblyTest {
 
     @Test
     void routeContributionWithoutHandlerFailsDuringModuleInstallation() {
-        Aura app = Aura.create().use(new AuraModule() {
+        AuraApp app = AuraApp.create().use(new AuraModule() {
             @Override public ModuleMetadata descriptor() {
                 return ModuleMetadata.of("invalid-routes", "1.0.0");
             }
@@ -63,7 +62,7 @@ class ModuleAssemblyTest {
             }
         });
 
-        org.assertj.core.api.Assertions.assertThatThrownBy(app::prepareModules)
+        org.assertj.core.api.Assertions.assertThatThrownBy(app::prepare)
                 .isInstanceOf(io.aura.ModuleException.class)
                 .extracting("code").isEqualTo("AURA_ROUTE_HANDLER_MISSING");
     }
@@ -71,7 +70,7 @@ class ModuleAssemblyTest {
     @Test
     void routeContributorIsEvaluatedExactlyOnce() {
         java.util.concurrent.atomic.AtomicInteger calls = new java.util.concurrent.atomic.AtomicInteger();
-        Aura app = Aura.create().use(new AuraModule() {
+        AuraApp app = AuraApp.create().use(new AuraModule() {
             @Override public ModuleMetadata descriptor() {
                 return ModuleMetadata.of("single-evaluation", "1.0.0");
             }
@@ -101,13 +100,13 @@ class ModuleAssemblyTest {
         });
 
         AuraRuntime runtime = app.runtimeView();
-        assertThat(runtime).isNotInstanceOf(Aura.class);
+        assertThat(runtime).isNotSameAs(app);
         assertThat(TestClient.of(runtime).get("/runtime-client").expect(200).body()).isEqualTo("ok");
     }
 
     @Test
     void testClientDoesNotRequireTheConcreteAuraImplementation() {
-        Aura app = Aura.create().use(new AuraModule() {
+        AuraApp app = AuraApp.create().use(new AuraModule() {
             @Override public ModuleMetadata descriptor() {
                 return ModuleMetadata.of("runtime-proxy", "1.0.0");
             }
@@ -117,10 +116,11 @@ class ModuleAssemblyTest {
             }
         });
 
+        AuraRuntime delegate = app.runtimeView();
         AuraWebRuntime runtime = (AuraWebRuntime) java.lang.reflect.Proxy.newProxyInstance(
                 AuraWebRuntime.class.getClassLoader(),
                 new Class<?>[]{AuraWebRuntime.class},
-                (proxy, method, args) -> method.invoke(app, args));
+                (proxy, method, args) -> method.invoke(delegate, args));
 
         assertThat(TestClient.of((AuraRuntime) runtime)
                 .get("/runtime-proxy").expect(200).body()).isEqualTo("proxy-ok");
@@ -159,8 +159,9 @@ class ModuleAssemblyTest {
                         context.route(new RouteContribution(
                                 "GET", "/authenticated",
                                 (BaseHandler) ctx -> {
-                                    Aura.requireAuth().handle(ctx);
-                                    if (!ctx.isAborted()) ctx.text(ctx.userId());
+                                    String userId = ctx.app().authFunction().apply(ctx);
+                                    ctx.set("_userId", userId);
+                                    ctx.text(ctx.userId());
                                 }));
                     }
                 });

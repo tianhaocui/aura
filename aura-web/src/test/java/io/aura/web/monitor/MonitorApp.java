@@ -1,7 +1,12 @@
 package io.aura.web.monitor;
 
-import io.aura.Aura;
-import io.aura.web.BaseRouter;
+import io.aura.AuraApp;
+import io.aura.AuraConfig;
+import io.aura.AuraModule;
+import io.aura.ModuleContext;
+import io.aura.contract.ModuleMetadata;
+import io.aura.contract.RouteContribution;
+import io.aura.web.BaseHandler;
 
 import java.util.Map;
 import java.util.concurrent.Executors;
@@ -37,36 +42,30 @@ public class MonitorApp {
             }
         }, 0, 10, TimeUnit.SECONDS);
 
-        var app = Aura.create()
-                .port(8080)
-                .cors(true)
-                .mcp(true)
-                .service(serverService, alertService)
-                .exception(Exception.class, (e, ctx) ->
-                        ctx.status(500).json(Map.of("error", e.getMessage())))
-                .routes((BaseRouter r) -> {
-                    r.before(ctx -> ctx.set("startTime", System.currentTimeMillis()));
-                    r.after(ctx -> {
-                        long start = ctx.get("startTime", Long.class);
-                        System.out.printf("[%s] %s %s → %dms%n",
-                                java.time.LocalTime.now().withNano(0),
-                                ctx.method(), ctx.url(),
-                                System.currentTimeMillis() - start);
-                    });
+        AuraConfig config = new AuraConfig().port(8080).cors(true);
+        var app = AuraApp.create(config).use(new AuraModule() {
+            @Override public ModuleMetadata descriptor() {
+                return ModuleMetadata.of("monitor", "1.0.0");
+            }
 
-                    r.get("/health", ctx -> ctx.json(Map.of(
+            @Override public void install(ModuleContext context) {
+                context.service(serverService);
+                context.service(alertService);
+                context.route(new RouteContribution("GET", "/health", (BaseHandler) ctx -> ctx.json(Map.of(
                             "status", "UP",
                             "uptime", formatUptime(System.currentTimeMillis() - localhost.registeredAt())
-                    )));
+                    ))));
 
-                    r.get("/metrics/current", ctx -> ctx.json(collector.collect()));
+                context.route(new RouteContribution("GET", "/metrics/current",
+                        (BaseHandler) ctx -> ctx.json(collector.collect())));
 
-                    r.get("/dashboard", ctx -> ctx.json(Map.of(
+                context.route(new RouteContribution("GET", "/dashboard", (BaseHandler) ctx -> ctx.json(Map.of(
                             "servers", serverService.summary(),
                             "alerts", alertService.triggeredCount(),
                             "system", collector.collect()
-                    )));
-                });
+                    ))));
+            }
+        });
 
         app.start();
 
@@ -93,7 +92,7 @@ public class MonitorApp {
         System.out.println("  ---");
         System.out.println("  GET  /__schema__          - API schema (for AI agents)");
         System.out.println();
-        System.out.println("MCP enabled — AI agents can call all endpoints as tools.");
+        System.out.println("Routes are contributed by the explicit monitor module.");
     }
 
     private static void updateServerStatus(ServerService service, int serverId, Metrics metrics) {

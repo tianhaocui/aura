@@ -1,6 +1,8 @@
 package io.aura.web;
 
-import io.aura.Aura;
+import io.aura.AuraApp;
+import io.aura.AuraConfig;
+import io.aura.contract.RouteContribution;
 import org.junit.jupiter.api.Test;
 
 import java.net.ServerSocket;
@@ -16,8 +18,14 @@ class OpenApiEndpointTest {
     void exposesOpenApiWhenEnabledInProduction() throws Exception {
         int port;
         try (ServerSocket socket = new ServerSocket(0)) { port = socket.getLocalPort(); }
-        Aura app = Aura.create().port(port).env("prod").openApi(true)
-                .routes(r -> r.get("/orders/{id}", ctx -> ctx.text("ok")).describe("Get order"));
+        AuraApp app = TestApplications.app(
+                new AuraConfig().port(port).env("prod").openApi(true),
+                "openapi-endpoint",
+                new RouteContribution(
+                        "GET",
+                        "/orders/{id}",
+                        (BaseHandler) ctx -> ctx.text("ok"),
+                        java.util.Map.of("description", "Get order")));
         app.start();
         try {
             HttpResponse<String> response = HttpClient.newHttpClient().send(

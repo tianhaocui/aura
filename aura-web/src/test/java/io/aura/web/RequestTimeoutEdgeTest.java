@@ -1,6 +1,6 @@
 package io.aura.web;
 
-import io.aura.Aura;
+import io.aura.AuraConfig;
 import org.junit.jupiter.api.Test;
 
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -10,21 +10,23 @@ import static org.assertj.core.api.Assertions.*;
 class RequestTimeoutEdgeTest {
 
     @Test
-    void requestTimeout_negativeClampedToZero() {
-        Aura app = Aura.create().requestTimeout(-1);
-        assertThat(app.requestTimeout()).isEqualTo(0);
+    void requestTimeout_negativeRejected() {
+        assertThatThrownBy(() -> TestApplications.runtime(new AuraConfig().requestTimeout(-1)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("requestTimeout cannot be negative");
     }
 
     @Test
-    void requestTimeout_negativeHundredClampedToZero() {
-        Aura app = Aura.create().requestTimeout(-100);
-        assertThat(app.requestTimeout()).isEqualTo(0);
+    void requestTimeout_largeNegativeRejected() {
+        assertThatThrownBy(() -> TestApplications.runtime(new AuraConfig().requestTimeout(-100)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("requestTimeout cannot be negative");
     }
 
     @Test
     void requestTimeout_zeroMeansDisabled() {
-        Aura app = Aura.create().requestTimeout(0);
-        assertThat(app.requestTimeout()).isEqualTo(0);
+        assertThat(TestApplications.runtime(new AuraConfig().requestTimeout(0)).requestTimeout())
+                .isEqualTo(0);
     }
 
     @Test

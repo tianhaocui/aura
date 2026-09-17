@@ -1,6 +1,6 @@
 package io.aura.web;
 
-import io.aura.Aura;
+import io.aura.AuraConfig;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.*;
@@ -8,26 +8,26 @@ import static org.assertj.core.api.Assertions.*;
 class GzipEdgeTest {
 
     @Test
-    void gzipMinSize_negativeViaBuilder_clampedToZero() {
-        Aura app = Aura.create().gzipMinSize(-1);
-        assertThat(app.gzipMinSize()).isEqualTo(0);
+    void gzipMinSize_negative_clampedToZero() {
+        AuraConfig config = new AuraConfig().gzipMinSize(-1);
+        assertThat(config.gzipMinSize()).isEqualTo(0);
     }
 
     @Test
     void gzipMinSize_zeroAllowed() {
-        Aura app = Aura.create().gzipMinSize(0);
-        assertThat(app.gzipMinSize()).isEqualTo(0);
+        AuraConfig config = new AuraConfig().gzipMinSize(0);
+        assertThat(config.gzipMinSize()).isEqualTo(0);
     }
 
     @Test
     void gzipMinSize_largeValue() {
-        Aura app = Aura.create().gzipMinSize(1024 * 1024);
-        assertThat(app.gzipMinSize()).isEqualTo(1024 * 1024);
+        AuraConfig config = new AuraConfig().gzipMinSize(1024 * 1024);
+        assertThat(config.gzipMinSize()).isEqualTo(1024 * 1024);
     }
 
     @Test
     void gzip_enabledWithSse_routeCompilesCleanly() {
-        Aura app = Aura.create().gzip(true);
+        AuraConfig config = new AuraConfig().gzip(true);
         Router router = new Router();
         router.get("/events", ctx -> {
             var sse = ctx.sse();
@@ -36,6 +36,6 @@ class GzipEdgeTest {
         });
         var routes = UndertowStarter.compileRoutes(router);
         assertThat(routes).hasSize(1);
-        assertThat(app.gzip()).isTrue();
+        assertThat(config.gzip()).isTrue();
     }
 }
