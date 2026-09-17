@@ -15,7 +15,11 @@ class AiEvaluationManifestTest {
 
     @Test
     void manifestCoversTheCanonicalTaskSetAndMetrics() throws Exception {
-        Path root = Path.of(System.getProperty("maven.multiModuleProjectDirectory"));
+        Path root = Path.of("").toAbsolutePath();
+        while (root != null && !Files.isRegularFile(root.resolve("evals/tasks.json"))) {
+            root = root.getParent();
+        }
+        assertThat(root).as("repository root containing evals/tasks.json").isNotNull();
         JSONObject manifest = JSON.parseObject(Files.readString(root.resolve("evals/tasks.json")));
         assertThat(manifest.getInteger("schemaVersion")).isEqualTo(1);
         JSONArray tasks = manifest.getJSONArray("tasks");
