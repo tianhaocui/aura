@@ -6,10 +6,17 @@ import java.util.Map;
 /** Stable, transport-neutral description shared by schema and adapter generators. */
 public record ApiRoute(String method, String path, String description, String returnType,
                        List<ApiParameter> params, String example,
-                       Map<String, Object> responseSchema) {
+                       Map<String, Object> responseSchema,
+                       boolean authenticated, String permission) {
     public ApiRoute(String method, String path, String description, String returnType,
                     List<ApiParameter> params, String example) {
-        this(method, path, description, returnType, params, example, Map.of());
+        this(method, path, description, returnType, params, example, Map.of(), false, null);
+    }
+
+    public ApiRoute(String method, String path, String description, String returnType,
+                    List<ApiParameter> params, String example,
+                    Map<String, Object> responseSchema) {
+        this(method, path, description, returnType, params, example, responseSchema, false, null);
     }
 
     public ApiRoute {
@@ -19,5 +26,10 @@ public record ApiRoute(String method, String path, String description, String re
         path = path.trim();
         params = params == null ? List.of() : List.copyOf(params);
         responseSchema = responseSchema == null ? Map.of() : Map.copyOf(responseSchema);
+        if (permission != null) {
+            permission = permission.trim();
+            if (permission.isEmpty()) permission = null;
+            else authenticated = true;
+        }
     }
 }

@@ -345,4 +345,30 @@ class McpRouterTest {
         Object result = mcp.invoke("ts", Map.of());
         assertThat(result).isEqualTo(0L);
     }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void apiRouteSecurityMetadataProtectsGeneratedTool() throws Exception {
+        var route = new io.aura.contract.ApiRoute(
+                "DELETE", "/orders/{id}", "Delete order", "void",
+                List.of(new io.aura.contract.ApiParameter(
+                        "id", "long", "path", true, "Order ID")),
+                null, Map.of(), true, "orders.delete");
+        McpRouter mcp = new McpRouter().tool(route, ctx -> "deleted");
+
+        Map<String, Object> schema = mcp.buildSchema();
+        Map<String, Object> tool = ((List<Map<String, Object>>) schema.get("tools")).get(0);
+        assertThat(tool).containsEntry("x-aura-authenticated", true)
+                .containsEntry("x-aura-permission", "orders.delete");
+        assertThatThrownBy(() -> mcp.invoke("delete_orders_by_id", Map.of("id", 1)))
+                .isInstanceOf(SecurityException.class)
+                .hasMessageContaining("authentication required");
+        assertThatThrownBy(() -> mcp.invoke("delete_orders_by_id", Map.of("id", 1),
+                "user-1", (user, permission) -> false))
+                .isInstanceOf(SecurityException.class)
+                .hasMessageContaining("denied");
+        assertThat(mcp.invoke("delete_orders_by_id", Map.of("id", 1),
+                "user-1", (user, permission) -> permission.equals("orders.delete")))
+                .isEqualTo("deleted");
+    }
 }

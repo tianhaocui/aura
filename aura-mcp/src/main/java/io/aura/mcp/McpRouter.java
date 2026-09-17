@@ -26,7 +26,7 @@ public class McpRouter implements McpRouterSpec {
                         List.of()))
                 .toList();
         register(new McpTool(McpUtil.buildToolName(route.method(), route.path()),
-                route.description(), params, handler));
+                route.description(), params, handler, route.permission(), route.authenticated()));
         return this;
     }
 
@@ -119,6 +119,7 @@ public class McpRouter implements McpRouterSpec {
             var entry = new LinkedHashMap<String, Object>();
             entry.put("name", tool.name());
             if (tool.description() != null) entry.put("description", tool.description());
+            if (tool.authenticated()) entry.put("x-aura-authenticated", true);
             if (tool.permission() != null) entry.put("x-aura-permission", tool.permission());
             entry.put("inputSchema", buildInputSchema(tool.params()));
             toolList.add(entry);
@@ -137,11 +138,14 @@ public class McpRouter implements McpRouterSpec {
                 .filter(t -> t.name().equals(toolName))
                 .findFirst()
                 .orElseThrow(() -> new IllegalArgumentException("Tool not found: " + toolName));
+        if (tool.authenticated() && (userId == null || userId.isBlank())) {
+            throw new SecurityException("MCP authentication required for tool " + toolName);
+        }
         if (tool.permission() != null) {
             if (authorizer == null) {
                 throw new SecurityException("MCP authorization is not configured for tool " + toolName);
             }
-            if (userId == null || userId.isBlank() || !authorizer.test(userId, tool.permission())) {
+            if (!authorizer.test(userId, tool.permission())) {
                 throw new SecurityException("MCP permission denied for tool " + toolName);
             }
         }

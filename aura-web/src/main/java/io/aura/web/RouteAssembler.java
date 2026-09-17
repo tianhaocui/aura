@@ -48,6 +48,10 @@ final class RouteAssembler {
             };
             if (entry.description() != null) builder.describe(entry.description());
             if (Boolean.TRUE.equals(entry.metadata().get("streaming"))) builder.streaming();
+            builder.authenticated = Boolean.TRUE.equals(entry.metadata().get(
+                    io.aura.contract.RouteContribution.AUTHENTICATED));
+            Object permission = entry.metadata().get(io.aura.contract.RouteContribution.PERMISSION);
+            builder.permission = permission == null ? null : permission.toString();
             Object returnType = entry.metadata().get("returnType");
             if (returnType != null) builder.returnType = returnType.toString();
             builder.responseSchema = entry.responseSchema();

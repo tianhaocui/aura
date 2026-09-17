@@ -166,6 +166,10 @@ rg -q 'BoundedJson\.encode' \
   "$repo_root/aura-mcp/src/main/java/io/aura/mcp/McpSseHub.java"
 rg -q 'annotationProcessorPaths' "$repo_root/examples/aura-generated/pom.xml"
 rg -q 'responseSchema' "$repo_root/aura-contract/src/main/java/io/aura/contract/ApiRoute.java"
+rg -q 'boolean authenticated, String permission' \
+  "$repo_root/aura-contract/src/main/java/io/aura/contract/ApiRoute.java"
+rg -q 'route\.permission\(\), route\.authenticated\(\)' \
+  "$repo_root/aura-mcp/src/main/java/io/aura/mcp/McpRouter.java"
 rg -q 'rateLimitMaxKeys' "$repo_root/aura-core/src/main/java/io/aura/AuraConfig.java"
 rg -q 'trustedProxies' "$repo_root/aura-core/src/main/java/io/aura/AuraConfig.java"
 rg -q 'aura.tls.keystore-path' "$repo_root/aura-core/src/main/java/io/aura/AuraConfig.java"

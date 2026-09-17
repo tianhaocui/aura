@@ -22,6 +22,8 @@ public final class OpenApiGenerator {
             Map<String, Object> operation = new LinkedHashMap<>();
             if (route.description() != null) operation.put("description", route.description());
             operation.put("operationId", operationId(route));
+            if (route.authenticated()) operation.put("x-aura-authenticated", true);
+            if (route.permission() != null) operation.put("x-aura-permission", route.permission());
             List<Map<String, Object>> parameters = new ArrayList<>();
             List<ApiParameter> body = new ArrayList<>();
             for (ApiParameter parameter : route.params()) {

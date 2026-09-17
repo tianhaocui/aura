@@ -37,7 +37,9 @@ public final class ApiRouteCatalog {
         Map<String, Object> responseSchema = responseSchema(route);
         return new ApiRoute(route.method(), route.rawPath(),
                 route.meta() == null ? null : route.meta().description(),
-                route.meta() == null ? null : route.meta().returnType(), parameters, example, responseSchema);
+                route.meta() == null ? null : route.meta().returnType(), parameters, example, responseSchema,
+                route.meta() != null && route.meta().authenticated(),
+                route.meta() == null ? null : route.meta().permission());
     }
 
     private static Map<String, Object> responseSchema(CompiledRoute route) {

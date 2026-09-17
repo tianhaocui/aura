@@ -15,6 +15,8 @@ public class BaseRouteBuilder {
     public Map<String, Object> responseSchema = Map.of();
     /** Marks a route as long-lived so the normal request timeout is not applied. */
     public boolean streaming;
+    public boolean authenticated;
+    public String permission;
     public final Map<String, String> paramDescriptions = new LinkedHashMap<>();
     private final List<ApiParameter> parameters = new ArrayList<>();
 

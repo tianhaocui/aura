@@ -46,17 +46,17 @@ public record CompiledRoute(String method, String rawPath, Pattern pattern, List
 
     public record RouteMeta(String description, String returnType, Map<String, String> params,
                             List<ApiParameter> parameters, Map<String, Object> responseSchema,
-                            boolean streaming) {
+                            boolean streaming, boolean authenticated, String permission) {
         public RouteMeta(String description, String returnType, Map<String, String> params,
                          List<ApiParameter> parameters) {
-            this(description, returnType, params, parameters, Map.of(), false);
+            this(description, returnType, params, parameters, Map.of(), false, false, null);
         }
         public RouteMeta(String description, String returnType, Map<String, String> params) {
-            this(description, returnType, params, List.of(), Map.of(), false);
+            this(description, returnType, params, List.of(), Map.of(), false, false, null);
         }
         public RouteMeta(String description, String returnType, Map<String, String> params,
                          List<ApiParameter> parameters, Map<String, Object> responseSchema) {
-            this(description, returnType, params, parameters, responseSchema, false);
+            this(description, returnType, params, parameters, responseSchema, false, false, null);
         }
         public RouteMeta {
             params = params == null ? Map.of()

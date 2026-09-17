@@ -492,7 +492,7 @@ public class UndertowStarter implements AuraStarter {
             var route = rb.route;
             var meta = new CompiledRoute.RouteMeta(
                     rb.description, rb.returnType, rb.paramDescriptions, rb.parameters(), rb.responseSchema,
-                    rb.streaming);
+                    rb.streaming, rb.authenticated, rb.permission);
             result.add(CompiledRoute.compile(route.method(), prefix, route.path(),
                     before, route.handler(), after, meta));
         }

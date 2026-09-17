@@ -34,6 +34,11 @@ route descriptions without making `aura-contract` depend on Undertow or a specif
 router implementation. Route metadata can include `ApiParameter` values for
 handlers that cannot be inspected through reflection.
 
+`ApiRoute.authenticated()` and `permission()` preserve the policy declared by
+`RouteContribution` through Schema, OpenAPI, and generated MCP tools. Adapters
+must fail closed when an authenticated route has no caller identity or a
+permissioned route has no authorizer.
+
 `PermissionRegistry` provides an explicit, duplicate-checked list of permission
 ids contributed by modules. Authorization implementations can consume its
 snapshot without depending on Aura's runtime registry.

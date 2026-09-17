@@ -23,7 +23,7 @@ final class RouteContract {
         ApiRoute description = ApiRouteCatalog.describe(route, null);
         return new ApiRoute(description.method(), description.path(), description.description(),
                 description.returnType(), description.params(), buildCurlExample(route, description.params(), app),
-                description.responseSchema());
+                description.responseSchema(), description.authenticated(), description.permission());
     }
 
     static Map<String, Object> schema(AuraWebRuntime app, List<CompiledRoute> routes) {

@@ -19,6 +19,13 @@ class PermissionAuthorizationTest {
         TestClient.Response response = TestClient.of(app).get("/orders/list").execute();
         assertThat(response.status()).isEqualTo(200);
         assertThat(response.body()).isEqualTo("ok");
+        @SuppressWarnings("unchecked")
+        java.util.List<io.aura.contract.ApiRoute> routes =
+                (java.util.List<io.aura.contract.ApiRoute>) TestClient.of(app).schema().get("routes");
+        assertThat(routes.get(0).authenticated()).isTrue();
+        assertThat(routes.get(0).permission()).isEqualTo("orders.read");
+        assertThat(TestClient.of(app).openApi().toString())
+                .contains("x-aura-authenticated", "x-aura-permission", "orders.read");
     }
 
     @Test
