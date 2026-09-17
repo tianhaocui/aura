@@ -7,6 +7,10 @@ root_version="$(sed -n 's:.*<version>\([^<]*\)</version>.*:\1:p' "$pom" | head -
 test -n "$root_version"
 rg -q '<undertow.version>2\.3\.(2[1-9]|[3-9][0-9])\.Final</undertow.version>' "$pom"
 rg -q '<parameters>true</parameters>' "$pom"
+if rg -q '<module>aura-dev</module>' "$pom"; then
+  echo "legacy aura-dev module must not re-enter the 1.0 reactor" >&2
+  exit 1
+fi
 
 while IFS= read -r module; do
   test -d "$repo_root/$module"
