@@ -1,0 +1,61 @@
+{
+  "schemaVersion": 1,
+  "tasks": [
+    {
+      "id": "crud-module",
+      "category": "crud",
+      "maxTokens": 4000,
+      "prompt": "Create an Aura 1.0 business module with list/get/create/update/delete order routes, explicit route metadata, and TestClient verification. Use AuraApp and use(...); do not use removed Builder APIs.",
+      "verificationTests": ["io.aura.web.ServiceTest", "example.generated.GeneratedAppTest"]
+    },
+    {
+      "id": "route-authorization",
+      "category": "auth",
+      "maxTokens": 3000,
+      "prompt": "Protect one Aura route with authentication and orders.read permission while leaving a login route public. Verify stable 401 and 403 codes with TestClient.",
+      "verificationTests": ["io.aura.web.PermissionAuthorizationTest", "io.aura.web.AuthTest"]
+    },
+    {
+      "id": "validated-body",
+      "category": "validation",
+      "maxTokens": 2500,
+      "prompt": "Bind and validate a required record request body in an Aura module. Return structured validation errors and verify missing, malformed, and valid bodies with TestClient.",
+      "verificationTests": ["io.aura.web.BodyOrThrowTest", "io.aura.BeanValidatorTest"]
+    },
+    {
+      "id": "database-transaction",
+      "category": "database",
+      "maxTokens": 4000,
+      "prompt": "Compose Aura DatabaseModule with a business module, run a parameterized transaction, and verify rollback, pagination bounds, and named database lookup without raw where fragments.",
+      "verificationTests": ["io.aura.db.DbIntegrationTest", "io.aura.db.DatabaseModuleTest"]
+    },
+    {
+      "id": "bounded-upload",
+      "category": "upload",
+      "maxTokens": 2500,
+      "prompt": "Implement a multipart upload route with AuraConfig upload limits and a real Undertow test proving an oversized file is rejected without unbounded reads.",
+      "verificationTests": ["io.aura.web.FormParsingSecurityTest"]
+    },
+    {
+      "id": "sse-stream",
+      "category": "sse",
+      "maxTokens": 3000,
+      "prompt": "Implement an Aura SSE route, mark it streaming, send named events with IDs, and verify framing, cancellation, and no gzip on the real adapter path.",
+      "verificationTests": ["io.aura.web.ContextTest", "io.aura.web.TestClientTest"]
+    },
+    {
+      "id": "bounded-websocket",
+      "category": "websocket",
+      "maxTokens": 3500,
+      "prompt": "Contribute an authenticated WebSocket endpoint from ModuleContext, echo messages, and prove an oversized message closes with code 1009 before the handler runs.",
+      "verificationTests": ["io.aura.web.WebSocketTest"]
+    },
+    {
+      "id": "authenticated-mcp",
+      "category": "mcp",
+      "maxTokens": 5000,
+      "prompt": "Expose an authenticated permissioned Aura MCP tool over bounded HTTP/SSE, negotiate the protocol, handle JSON-RPC batch notifications, and verify a real Undertow socket session.",
+      "verificationTests": ["io.aura.mcp.McpHttpTransportTest", "io.aura.mcp.McpSecurityTest"]
+    }
+  ]
+}

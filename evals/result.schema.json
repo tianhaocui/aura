@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Aura AI evaluation result",
+  "type": "object",
+  "required": [
+    "taskId", "runId", "model", "inputTokens", "outputTokens",
+    "firstPassSuccess", "repairRounds", "errorCodes", "durationMs", "commit"
+  ],
+  "properties": {
+    "taskId": {"type": "string", "minLength": 1},
+    "runId": {"type": "string", "minLength": 1},
+    "model": {"type": "string", "minLength": 1},
+    "inputTokens": {"type": "integer", "minimum": 0},
+    "outputTokens": {"type": "integer", "minimum": 0},
+    "firstPassSuccess": {"type": "boolean"},
+    "repairRounds": {"type": "integer", "minimum": 0},
+    "errorCodes": {"type": "array", "items": {"type": "string"}},
+    "durationMs": {"type": "integer", "minimum": 0},
+    "commit": {"type": "string", "minLength": 7}
+  },
+  "additionalProperties": false
+}

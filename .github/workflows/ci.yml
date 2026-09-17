@@ -28,6 +28,10 @@ jobs:
       - name: Module and Documentation Contract
         run: bash scripts/verify-aura-contracts.sh
 
+      - name: AI Golden Evaluation
+        if: matrix.java == 17
+        run: bash scripts/verify-ai-evals.sh
+
       - name: Upload Coverage Report
         if: always() && matrix.java == 17
         uses: actions/upload-artifact@v4
