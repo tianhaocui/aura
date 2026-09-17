@@ -1,7 +1,6 @@
 package io.aura.web;
 
 import com.alibaba.fastjson2.JSON;
-import io.aura.Aura;
 import io.aura.AuraWebRuntime;
 import io.aura.contract.CancellationToken;
 import io.aura.AuraEvent;
@@ -267,7 +266,7 @@ public class UndertowStarter implements AuraStarter {
         }
 
         if ("GET".equals(method) && "/openapi.json".equals(path)) {
-            if (!app.openApiEnabled() && !Aura.isDevMode()) {
+            if (!app.openApiEnabled() && !app.devMode()) {
                 exchange.setStatusCode(404);
                 exchange.endExchange();
                 return;
@@ -436,7 +435,7 @@ public class UndertowStarter implements AuraStarter {
             }
         }
         exchange.setStatusCode(404);
-        if (Aura.isDevMode()) {
+        if (app.devMode()) {
             exchange.getResponseHeaders().put(Headers.CONTENT_TYPE, "application/json");
             exchange.getResponseSender().send(buildRouteDiagnostic(method, path));
         } else {

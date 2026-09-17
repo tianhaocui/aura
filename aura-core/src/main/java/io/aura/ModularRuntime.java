@@ -56,9 +56,11 @@ final class ModularRuntime implements AuraWebRuntime {
     private AuraStarter starter;
     private McpStarter mcpStarter;
     private volatile Thread keepAliveThread;
+    private volatile boolean devMode;
 
     ModularRuntime(AuraConfig source) {
         this.config = AuraConfigSnapshot.from(source);
+        this.devMode = config.devMode();
         this.tlsContext = createTlsContext(source);
         this.properties.putAll(source.properties());
         registry.put(ModularRuntime.class, this);
@@ -141,7 +143,7 @@ final class ModularRuntime implements AuraWebRuntime {
                         "AuraApp configuration is frozen at creation; use AuraApp.create(Path.of(\"...\")) or AuraApp.create(Properties)");
             }
             if ("--mcp-stdio".equals(arg)) stdio = true;
-            if ("--dev".equals(arg)) ReloadState.devMode = true;
+            if ("--dev".equals(arg)) devMode = true;
             if (arg.startsWith("--") && arg.contains("=")) {
                 int equals = arg.indexOf('=');
                 property("aura." + arg.substring(2, equals), arg.substring(equals + 1));
@@ -233,6 +235,7 @@ final class ModularRuntime implements AuraWebRuntime {
     @Override public Set<String> allowedHosts() { return config.allowedHosts(); }
     @Override public boolean securityHeaders() { return config.securityHeaders(); }
     @Override public boolean openApiEnabled() { return config.openApiEnabled(); }
+    @Override public boolean devMode() { return devMode; }
     @Override public int concurrencyLimit() { return config.concurrencyLimit(); }
     @Override public int rateLimitPerSecond() { return config.rateLimitPerSecond(); }
     @Override public int rateLimitMaxKeys() { return config.rateLimitMaxKeys(); }

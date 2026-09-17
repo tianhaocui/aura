@@ -16,8 +16,8 @@ import java.util.function.Function;
  * Stable runtime contract consumed by the optional HTTP adapter.
  *
  * <p>The contract keeps transport configuration and registered contributions
- * behind the runtime boundary. A Web adapter must not depend on the concrete
- * {@link Aura} builder implementation.</p>
+ * behind the runtime boundary. A Web adapter must not depend on an application
+ * facade implementation.</p>
  */
 public interface AuraWebRuntime extends AuraMcpRuntime {
     /** Returns the initialized TLS context without exposing keystore credentials. */
@@ -46,6 +46,7 @@ public interface AuraWebRuntime extends AuraMcpRuntime {
     Set<String> allowedHosts();
     boolean securityHeaders();
     boolean openApiEnabled();
+    boolean devMode();
     int concurrencyLimit();
     int rateLimitPerSecond();
     int rateLimitMaxKeys();

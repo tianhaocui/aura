@@ -29,6 +29,7 @@ public final class AuraConfigSnapshot {
     private final Set<String> allowedHosts;
     private final boolean securityHeaders;
     private final boolean openApiEnabled;
+    private final boolean devMode;
     private final String keyStorePath;
     private final String staticFilesPath;
     private final boolean spa;
@@ -59,6 +60,7 @@ public final class AuraConfigSnapshot {
         this.allowedHosts = Set.copyOf(source.allowedHosts());
         this.securityHeaders = source.securityHeaders();
         this.openApiEnabled = source.openApiEnabled();
+        this.devMode = source.devMode();
         this.keyStorePath = source.keyStorePath();
         this.staticFilesPath = source.staticFilesPath();
         this.spa = source.spa();
@@ -92,6 +94,7 @@ public final class AuraConfigSnapshot {
     public Set<String> allowedHosts() { return allowedHosts; }
     public boolean securityHeaders() { return securityHeaders; }
     public boolean openApiEnabled() { return openApiEnabled; }
+    public boolean devMode() { return devMode; }
     public boolean tlsEnabled() { return keyStorePath != null; }
     public String keyStorePath() { return keyStorePath; }
     public String staticFilesPath() { return staticFilesPath; }

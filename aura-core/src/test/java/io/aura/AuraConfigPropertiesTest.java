@@ -18,6 +18,7 @@ class AuraConfigPropertiesTest {
         properties.setProperty("aura.rate-limit-max-keys", "1234");
         properties.setProperty("aura.allowed-hosts", "api.example, admin.example ");
         properties.setProperty("aura.openapi", "true");
+        properties.setProperty("aura.dev-mode", "true");
         properties.setProperty("aura.orders.timeout", "5");
 
         AuraConfig config = AuraConfig.fromProperties(properties);
@@ -30,6 +31,7 @@ class AuraConfigPropertiesTest {
         assertThat(app.config().rateLimitMaxKeys()).isEqualTo(1234);
         assertThat(app.config().allowedHosts()).containsExactlyInAnyOrder("api.example", "admin.example");
         assertThat(app.config().openApiEnabled()).isTrue();
+        assertThat(app.config().devMode()).isTrue();
         app.use(new AuraModule() {
             @Override public io.aura.contract.ModuleMetadata descriptor() {
                 return io.aura.contract.ModuleMetadata.of("orders", "1.0.0");

@@ -229,6 +229,7 @@ public class Aura implements AuraWebRuntime {
     public java.util.Set<String> allowedHosts() { return config.allowedHosts(); }
     public boolean securityHeaders() { return config.securityHeaders(); }
     public boolean openApiEnabled() { return config.openApiEnabled(); }
+    @Override public boolean devMode() { return ReloadState.devMode || config.devMode(); }
 
     public Aura set(String key, String value) {
         props.put(key, value);

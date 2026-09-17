@@ -64,6 +64,8 @@ public final class AuraConfig {
         if (securityHeaders != null) config.securityHeaders(parseBoolean(securityHeaders, "aura.security-headers"));
         String openApi = value(properties, "aura.openapi", "AURA_OPENAPI");
         if (openApi != null) config.openApi(parseBoolean(openApi, "aura.openapi"));
+        String devMode = value(properties, "aura.dev-mode", "AURA_DEV_MODE");
+        if (devMode != null) config.devMode(parseBoolean(devMode, "aura.dev-mode"));
         String cors = value(properties, "aura.cors", "AURA_CORS");
         if (cors != null) config.cors("true".equalsIgnoreCase(cors) ? "*" : cors);
         String staticFiles = value(properties, "aura.static-files", "AURA_STATIC_FILES");
@@ -122,6 +124,7 @@ public final class AuraConfig {
     private final Set<String> allowedHosts = new LinkedHashSet<>();
     private boolean securityHeaders = true;
     private boolean openApiEnabled;
+    private boolean devMode;
     private String keyStorePath;
     private String keyStorePassword;
     private String staticFilesPath;
@@ -156,6 +159,7 @@ public final class AuraConfig {
     }
     public AuraConfig securityHeaders(boolean value) { securityHeaders = value; return this; }
     public AuraConfig openApi(boolean value) { openApiEnabled = value; return this; }
+    public AuraConfig devMode(boolean value) { devMode = value; return this; }
     public AuraConfig tls(String keyStore, String password) {
         keyStorePath = requireText(keyStore, "TLS keystore path");
         keyStorePassword = password;
@@ -219,6 +223,7 @@ public final class AuraConfig {
     public Set<String> allowedHosts() { return Set.copyOf(allowedHosts); }
     public boolean securityHeaders() { return securityHeaders; }
     public boolean openApiEnabled() { return openApiEnabled; }
+    public boolean devMode() { return devMode; }
     public boolean tlsEnabled() { return keyStorePath != null; }
     public String keyStorePath() { return keyStorePath; }
     String keyStorePassword() { return keyStorePassword; }

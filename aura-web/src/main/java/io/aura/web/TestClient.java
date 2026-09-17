@@ -25,6 +25,8 @@ public class TestClient {
         UndertowStarter.detectDuplicateRoutes(compiled);
     }
 
+    /** @deprecated Migrate the application to {@link AuraApp}. */
+    @Deprecated(forRemoval = true, since = "1.0.0")
     public static TestClient of(Aura app) {
         return of((AuraWebRuntime) app);
     }
@@ -144,7 +146,7 @@ public class TestClient {
                     }
                 }
 
-                if (Aura.isDevMode()) {
+                if (app.devMode()) {
                     String diagnostic = buildRouteDiagnostic(method, routePath);
                     return new Response(404, diagnostic, Map.of("Content-Type", "application/json"));
                 }

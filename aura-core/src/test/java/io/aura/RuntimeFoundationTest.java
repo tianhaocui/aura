@@ -125,6 +125,7 @@ class RuntimeFoundationTest {
         Aura app = Aura.create();
         assertThat(app.rateLimitPerSecond()).isZero();
         assertThat(app.concurrencyLimit()).isZero();
+        assertThat(app.devMode()).isFalse();
         assertThatThrownBy(() -> new AuraConfig().tls("missing.p12", "").validate()).isInstanceOf(IllegalArgumentException.class);
     }
 
