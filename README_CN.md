@@ -4,357 +4,133 @@
 
 **A**I · **U**sable · **R**apid · **A**utonomous
 
-AI 原生 Java 后端框架。**AI 开发 → AI 测试 → AI 使用。**
+Aura 是面向 AI 开发的 Java 17+ 后端运行时。稳定性是第一条红线；第二条红线是让 AI
+开发更准确、更快、更少出错、可验证、省 Token、易学习。
 
-设计红线：稳定性第一；在不牺牲稳定性的前提下，一切 API、错误信息、文档和测试都优先服务于 AI 的准确、快速、少出错、可验证、省 Token 和易学习。
+Aura 1.0 只有一种应用模型：能力模块与业务模块通过 `use(...)` 显式组装。同一份路由
+契约同时驱动内存测试、Undertow、`/__schema__`、OpenAPI、生成代码和 MCP，避免多套
+定义漂移。
 
-核心运行模块保持轻量，能力按模块按需引入。一个依赖启动。无选择、无魔法、无样板代码。
-
-## 为什么选 Aura
-
-| | 做什么 | 怎么做 |
-|--|--------|--------|
-| **AI 开发** | AI 用最少上下文生成正确的后端代码 | 120 行开发指南，Just Service 模式，零注解 |
-| **AI 测试** | AI 立即验证自己写的代码，不需要启动 HTTP 服务器 | 内置 TestClient，内存级路由测试 |
-| **AI 使用** | AI agent 自动发现并调用你的 API | MCP 原生支持 + `/__schema__` 自描述 |
-
-## 立即体验
-
-添加到你的 Claude Desktop / Cursor MCP 配置：
-
-```json
-{
-  "mcpServers": {
-    "aura-demo": {
-      "command": "npx",
-      "args": ["aura-demo-mcp@0.3.0"]
-    }
-  }
-}
-```
-
-AI agent 获得 7 个工具（创建/列表/获取/更新/删除/搜索/统计 todos）。[源码](https://github.com/tianhaocui/aura-demo)
-
-## 快速开始
+## 安装
 
 ```xml
 <dependency>
-    <groupId>io.github.tianhaocui</groupId>
-    <artifactId>aura-web</artifactId>
-    <version>1.0.0</version>
+  <groupId>io.github.tianhaocui</groupId>
+  <artifactId>aura-web</artifactId>
+  <version>1.0.0</version>
 </dependency>
-<!-- 需要添加 SLF4J 实现，如 logback-classic -->
 ```
 
+只有在需要时才增加 `aura-db`、`aura-workflow`、`aura-ai`、`aura-mcp` 或
+`aura-processor`。
+
+## 创建应用
+
 ```java
-AuraApp.create()
+AuraApp app = AuraApp.create(new AuraConfig().port(8080))
+    .use(HealthModule.create())
     .use(new AuraModule() {
         @Override public ModuleMetadata descriptor() {
             return ModuleMetadata.of("hello", "1.0.0");
         }
+
         @Override public void install(ModuleContext context) {
             context.route(new RouteContribution(
-                    "GET", "/hello", (BaseHandler) ctx -> ctx.text("hello world")));
+                "GET", "/hello",
+                (BaseHandler) request -> request.text("hello world")));
         }
-    })
-    .start();
-```
-
-AI 能力（可选模块）：
-
-```xml
-<dependency>
-    <groupId>io.github.tianhaocui</groupId>
-    <artifactId>aura-ai</artifactId>
-    <version>1.0.0</version>
-</dependency>
-```
-
-`aura-ai` 提供 provider-neutral 的 `AiClient`、同步/流式调用、超时与取消、结构化 JSON 输出、预算和会话/RAG 扩展接口；具体模型厂商通过 `AiProvider` SPI 接入。
-
-新项目请先阅读 [Aura 1.0 迁移与 API 指南](docs/migration-to-1.0.md)。
-
-## Just Service（旧 Builder）
-
-Service 方法就是普通 Java 方法。没有 Controller，没有 DAO，不需要注解。
-
-```java
-Aura.create().port(8080)
-    .service(new UserService())
-    .start();
-
-@Path("/user")
-class UserService {
-    User get(int id) { return db.findById("user", id); }
-    List<User> list() { return db.table("user").find(); }
-    User create(CreateReq req) { /* 插入 */ return user; }
-    void delete(int id) { db.deleteById("user", id); }
-}
-
-record User(int id, String name, int age) {}
-record CreateReq(String name, int age) {}
-```
-
-一行代码注册 5 个 CRUD 路由。参数自动绑定：
-- `int/long/String` → 先匹配路径参数，再匹配查询参数（按名称）
-- `record/POJO` → 请求体（JSON）
-- 非 void 返回值 → 自动 JSON 响应
-
-## AI 测试
-
-TestClient 在内存中运行路由。不启动 HTTP 服务器，不占端口，不等待。
-
-```java
-var app = Aura.create().service(new UserService());
-var test = TestClient.of(app);
-
-test.get("/user/1").expect(200).bodyContains("Alice");
-test.post("/user").body(new CreateReq("tom", 25)).expect(200);
-test.get("/notfound").expect(404);
-```
-
-AI 写代码 → AI 跑 TestClient → AI 确认通过。闭环。
-
-## AI 使用（MCP + Schema）
-
-每个 Aura 应用都能被 AI agent 自动发现。
-
-```java
-Aura.create().port(8080)
-    .service(new UserService())
-    .start(args); // 传入 --mcp-stdio 启用 MCP
-// HTTP :8080, schema 在 /__schema__
-```
-
-`GET /__schema__` 返回完整 API 结构——端点、参数、类型、curl 示例。AI agent 调一次就知道所有接口。
-
-MCP 部署方式：
-- **stdio** — `java -jar app.jar --mcp-stdio`，用于 Claude Desktop / Cursor
-- **npm 发布** — `McpPackager` 生成可分发的 npm 包，`--publish` 直接发布到 registry
-
-### 选择性暴露（McpRouter）
-
-不是所有 API 都该做成 MCP 工具。McpRouter 让你精确控制：
-
-```java
-McpRouter mcp = new McpRouter();
-mcp.tool("get_user", userService, "get", "获取用户");
-mcp.tool("create_order", "创建订单")
-   .param("product", String.class, "商品名")
-   .param("status", OrderStatus.class, "订单状态")  // 枚举自动映射
-   .handler(ctx -> orderService.create(ctx.getString("product"), ctx.getEnum("status", OrderStatus.class)));
-
-Aura.create().mcp(mcp).start(args);
-```
-
-特性：枚举自动映射（label→code）、Map 映射、多 API 聚合。详见 [docs/aura-mcp.md](docs/aura-mcp.md)。
-
-## 数据库
-
-```java
-Db db = Db.create(url, user, pass);
-
-// 动态 SQL — null/空白参数自动跳过（推荐用于复杂查询）
-String sql = "SELECT * FROM user #where(name, '=', name) #and(age, '>', age) #orderBy(created)";
-db.find(sql, filterMap);
-db.paginate(sql, filterMap, pageNum, pageSize);
-// ctx.pageNum() 和 ctx.pageSize() 解析 ?page= 和 ?pageSize=，带安全默认值
-
-// Query builder — 简单 CRUD 快捷方式
-db.table("user").where("age", ">", 18).orderBy("name").find();
-db.table("user").where("id", 1).findOne();
-db.table("user").whereNull("deleted_at").find();       // WHERE deleted_at IS NULL
-db.table("user").whereNotNull("email").find();         // WHERE email IS NOT NULL
-
-// 快捷方法
-db.findById("user", id);
-db.deleteById("user", id);
-
-// Row CRUD — insert() 返回自身，并填充生成的主键
-Row.of("user").set("name", "tom").set("age", 25).insert(db);
-
-// insertFull() — insert + re-fetch including server-generated columns (e.g. created_at)
-Row full = Row.of("user").set("name", "tom").insertFull(db);
-
-// findById → modify → update roundtrip (timestamp columns preserved as LocalDateTime)
-Row found = db.findById("user", id);
-found.set("name", "updated").update(db);
-
-// exclude server-managed columns from update
-found.exclude("created_at").set("name", "updated").update(db);
-
-// Query builder — 删除和批量更新
-db.table("user").where("status", "inactive").delete();
-db.table("user").where("id", 1).update(Row.of("user").set("name", "new"));
-
-// 批量插入 — 自动合并列，缺失列填 null
-db.batchInsert("points", List.of(
-    Row.of("points").set("lat", 39.9).set("lng", 116.4),
-    Row.of("points").set("lat", 40.0).set("lng", 116.5)
-));
-// 或通过 Row 静态方法
-Row.batchInsert(db, rows);
-
-// 部分更新 — null 值跳过（只更新非 null 字段）
-db.updateDynamic("user", Map.of("name", "tom", "age", 30), "id", 1);
-
-// 事务
-db.transaction(() -> {
-    db.execute("UPDATE account SET balance = balance - ? WHERE id = ?", 100, 1);
-    db.execute("UPDATE account SET balance = balance + ? WHERE id = ?", 100, 2);
-});
-```
-
-## 文件上传
-
-```java
-// multipart/form-data
-UploadedFile f = ctx.file("avatar");
-f.name()        // 原始文件名
-f.data()        // byte[]
-f.contentType() // MIME 类型
-f.size()        // 字节数
-```
-
-## 文件下载
-
-```java
-ctx.sendFile("report.pdf", fileBytes);
-ctx.sendFile("data.csv", csvBytes, "text/csv");
-```
-
-自动设置 `Content-Disposition: attachment`。默认 content type 为 `application/octet-stream`。
-
-## SSE（服务器推送事件）
-
-```java
-r.get("/stream", ctx -> {
-    SseEmitter sse = ctx.sse();
-    sse.send("hello");                       // data: hello
-    sse.send("message", "payload");          // 命名事件
-    sse.send("update", "content", "msg-1"); // 带 id
-    sse.close();
-});
-
-// AI 流式输出示例
-r.post("/chat", ctx -> {
-    ChatReq req = ctx.body(ChatReq.class);
-    SseEmitter sse = ctx.sse();
-    aiClient.streamChat(req.message(), token -> sse.send("token", token));
-    sse.send("done", "");
-    sse.close();
-});
-```
-
-## 认证
-
-```java
-// 内置 JWT — 一行搞定
-Aura.create().jwt("secret").routes(r -> {
-    r.group("/api", api -> {
-        api.before(Aura.requireAuth());
-        api.get("/me", ctx -> db.findById("user", ctx.userId()));
     });
-    r.post("/login", ctx -> {
-        // 验证用户名密码...
-        ctx.json(Map.of("token", ctx.app().signJwt(userId)));
-    });
-}).start();
 
-// 自定义认证（OAuth、IAM、任何方案）
-app.auth(ctx -> myIamClient.verify(ctx.header("X-Token")));
+app.start();
 ```
 
-## 中间件
+每个模块都有 ID、版本、依赖要求和显式贡献。缺失依赖、版本不兼容、循环依赖和重复
+路由都会在启动时用稳定错误码失败。
 
-```java
-app.routes(r -> {
-    r.before(ctx -> { /* 认证、日志 */ });
-    r.after(ctx -> { /* 计时 */ });
-    r.group("/api", api -> {
-        api.before(authMiddleware);  // 仅 /api/** 路由需要认证
-        api.get("/items", itemService, "list");
-        api.post("/items", itemService, "create");
-    });
-    r.exception(BizException.class, (e, ctx) -> ctx.status(400).json(Map.of("error", e.getMessage())));
-});
-```
-
-`group()` + `before()` 是作用域认证的标准模式——公开路由放外面，受保护路由放 group 里面。
-
-## 配置
+## 组装能力
 
 ```java
 AuraApp.create()
-    .port(8080)              // HTTP 端口
-    .cors(true)              // CORS 允许所有来源
-    .maxBodySize(10 * 1024 * 1024L) // 请求体大小限制（默认 10MB）
-    .requestTimeout(30)      // 超时 30 秒返回 503（环境变量 AURA_REQUEST_TIMEOUT）
-    .gzip(true)              // 响应压缩（环境变量 AURA_GZIP）
-    .gzipMinSize(1024)       // 最小压缩字节数（默认 1KB）
-    .spa(true)               // SPA 模式：未知路径回退到 /index.html
-    .mcp(true)               // 启用 --mcp-stdio 模式
-    .staticFiles("/public")  // 静态文件
-    .prop("db.url", "...")   // 自定义属性（环境变量 DB_URL 优先）
-    .onStart(a -> { ... })   // 生命周期钩子
-    .onStop(a -> { ... })
-    .start(args);            // 支持 --port=N --env=X --mcp-stdio
+    .use(HealthModule.create())
+    .use(DatabaseModule.create(db))
+    .use(WorkflowModule.create())
+    .use(AiModule.create(provider))
+    .use(McpModule.create(router).http().sse())
+    .use(OrderModule.create())
+    .start();
 ```
 
-重复路由（相同 method + path）在启动时检测并抛出 `IllegalStateException`。
+模块可以作为普通 Maven artifact 发布。用户只需增加依赖并调用一次 `use(...)`，不需要
+额外转换、适配或硬编码启动逻辑。
+
+## 针对指定用户扩展流程
+
+基础 workflow 定义通用下单流程，variant 可以插入指定客户的步骤，不需要复制或分叉
+整条流程：
+
+```java
+WorkflowDefinition<OrderContext> order = WorkflowDefinition
+    .<OrderContext>named("order")
+    .step("place", steps::place)
+    .step("ship", steps::ship)
+    .step("decrement-stock", steps::decrementStock)
+    .variant("quality-customer", variant -> variant
+        .insertAfter("place", "inventory-check", steps::inventoryCheck)
+        .insertAfter("inventory-check", "quality-check", steps::qualityCheck))
+    .build();
+```
+
+通过 `WorkflowSelector` 根据租户或用户上下文选择 variant。框架在执行前校验最终 DAG，
+并统一处理重试、取消、补偿和幂等语义。
+
+## 不启动服务器也能验证
+
+```java
+AuraApp app = AuraApp.create()
+    .use(OrderModule.create())
+    .prepare();
+
+TestClient test = TestClient.of(app);
+test.post("/orders").body(new CreateOrder("sku-1", 2)).expect(200);
+test.get("/orders/1").expect(200).bodyContains("sku-1");
+
+Map<String, Object> schema = test.schema();
+Map<String, Object> openApi = test.openApi();
+```
+
+这是标准 AI 闭环：生成代码、编译、运行 `TestClient`、读取结构化错误，确认后再启动真实
+服务。
+
+## 生产边界
+
+- 不可变且经过校验的 `AuraConfigSnapshot`。
+- 确定的 `NEW -> STARTING -> RUNNING -> STOPPING -> STOPPED` 生命周期。
+- 请求体、上传、外部响应、线程池、快照、MCP batch/replay 和限流 key 全部有界。
+- 超时、断连、停机、workflow、数据库和 AI 调用都传播取消信号。
+- CORS、WebSocket Origin、可信代理、Host、TLS 和 schema 暴露均显式配置。
+- 启动、绑定、路由和运行时错误都有稳定、可搜索的结构化错误码。
 
 ## 模块
 
-| 模块 | 用途 | 必需 |
-|------|------|------|
-| aura-contract | 无运行时依赖的模块、路由、健康、取消和错误契约 | 可选 |
-| aura-core | 应用生命周期、配置、注册表 | 是（传递依赖） |
-| aura-web | HTTP 路由、上下文、中间件、TestClient | 是 |
-| aura-db | 数据库、Row、Query builder、动态 SQL | 可选 |
-| aura-mcp | MCP 服务器、工具自动生成、npm 打包 | 可选 |
-| aura-ai | Provider-neutral AI 客户端、流式调用、结构化输出 | 可选 |
-| aura-workflow | 类型安全流程变体、重试和补偿 | 可选 |
-| aura-dev | 开发期源码监听与热重载 | 可选 |
+| 模块 | 作用 |
+|---|---|
+| `aura-contract` | 轻依赖的模块、路由、错误、健康和取消契约 |
+| `aura-core` | 配置、生命周期、模块图、能力注册表 |
+| `aura-web` | Undertow、路由、schema/OpenAPI、快照、`TestClient` |
+| `aura-db` | 轻量 SQL、事务、分页、migration SPI |
+| `aura-workflow` | 类型化 DAG、variant、重试、补偿、取消 |
+| `aura-ai` | Provider SPI、同步/SSE、工具调用、结构化输出、预算 |
+| `aura-mcp` | tools/resources/prompts、鉴权 HTTP/SSE/stdio transport |
+| `aura-processor` | 可选的路由元数据和参数绑定代码生成 |
 
-最小依赖：`aura-web`（自动引入 `aura-core`）。
+## 文档
 
-## 生态
+- [AI 开发指南](AI_GUIDE.md)
+- [1.0 总文档](docs/DOCUMENTATION.md)
+- [模块开发](docs/aura-module.md)
+- [从旧版本迁移](docs/migration-to-1.0.md)
+- [可运行的模块组装示例](examples/aura-composed)
+- [可运行的代码生成示例](examples/aura-generated)
 
-| 项目 | 说明 |
-|------|------|
-| [aura-demo](https://github.com/tianhaocui/aura-demo) | 完整 CRUD 示例，带 MCP，已发布为 npm 包 |
-| [aura-skill](https://github.com/tianhaocui/aura-skill) | AI 技能生成 — 将 Aura API 转为 Claude Code skills |
-
-## 完整示例
-
-```java
-public class App {
-    public static void main(String[] args) {
-        Db db = Db.create("jdbc:mysql://localhost/mydb", "root", "");
-
-        Aura.create()
-            .port(8080).cors(true)
-            .onStart(a -> a.register(db))
-            .onStop(a -> db.close())
-            .service(new UserService(db))
-            .routes(r -> {
-                r.get("/health", ctx -> ctx.text("ok"));
-                r.exception(Exception.class, (e, ctx) ->
-                    ctx.status(500).json(Map.of("error", e.getMessage())));
-            })
-            .start();
-    }
-}
-```
-
-HTTP :8080。使用 `--mcp-stdio` 启动即可让 AI agent 访问。
-
-## AI 编码工具集成
-
-让你的 AI IDE 默认使用 Aura。将对应文件复制到项目根目录：
-
-- **Cursor** → 复制 [AI_GUIDE.md](AI_GUIDE.md) 为 `.cursorrules`
-- **Claude Code** → 复制 [AI_GUIDE.md](AI_GUIDE.md) 为 `CLAUDE.md`
-- **Copilot** → 复制到 `.github/copilot-instructions.md`
-
-120 行开发指南，AI 读一次就能正确生成 Aura 代码。
+1.0 之前的示例只保留在带版本号的 legacy 文档中，用于迁移参考。新应用统一使用
+`AuraApp` 和显式模块。
