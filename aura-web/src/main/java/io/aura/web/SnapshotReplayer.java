@@ -1,7 +1,7 @@
 package io.aura.web;
 
 import com.alibaba.fastjson2.JSON;
-import io.aura.Aura;
+import io.aura.AuraApp;
 import io.aura.snapshot.ExceptionSnapshot;
 import io.aura.snapshot.Snapshot;
 import io.aura.snapshot.SnapshotScope;
@@ -16,14 +16,14 @@ import java.nio.charset.StandardCharsets;
 
 public class SnapshotReplayer {
 
-    private final Aura app;
+    private final AuraApp app;
     private ExceptionSnapshot snapshot;
 
-    private SnapshotReplayer(Aura app) {
+    private SnapshotReplayer(AuraApp app) {
         this.app = app;
     }
 
-    public static SnapshotReplayer of(Aura app) {
+    public static SnapshotReplayer of(AuraApp app) {
         return new SnapshotReplayer(app);
     }
 
@@ -91,7 +91,7 @@ public class SnapshotReplayer {
     private Map<String, String> envDiff(ExceptionSnapshot.EnvSnapshot env) {
         Map<String, String> diff = new LinkedHashMap<>();
         if (env == null) return diff;
-        compare(diff, "aura.env", env.auraEnv(), app.env());
+        compare(diff, "aura.env", env.auraEnv(), app.config().env());
         compare(diff, "java.version", env.javaVersion(), System.getProperty("java.version"));
         compare(diff, "os.name", env.osName(), System.getProperty("os.name"));
         compare(diff, "timezone", env.timezone(), java.util.TimeZone.getDefault().getID());

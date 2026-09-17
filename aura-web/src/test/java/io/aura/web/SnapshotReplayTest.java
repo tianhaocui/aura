@@ -2,6 +2,12 @@ package io.aura.web;
 
 import com.alibaba.fastjson2.JSON;
 import io.aura.Aura;
+import io.aura.AuraApp;
+import io.aura.AuraConfig;
+import io.aura.AuraModule;
+import io.aura.ModuleContext;
+import io.aura.contract.ModuleMetadata;
+import io.aura.contract.RouteContribution;
 import io.aura.snapshot.ExceptionSnapshot;
 import io.aura.snapshot.Snapshot;
 import io.aura.snapshot.SnapshotScope;
@@ -159,13 +165,13 @@ class SnapshotReplayTest {
         ExceptionSnapshot snapshot = snapshot();
         Files.writeString(snapshotFile, JSON.toJSONString(snapshot));
 
-        Aura app = Aura.create();
-        app.routes(r -> r.post("/pay", ctx -> {
+        AuraApp app = AuraApp.create().use(routes("replay-payment",
+                new RouteContribution("POST", "/pay", (BaseHandler) ctx -> {
             UserDto user = new SnapshotHttpClient("systemX", "https://x.example.com")
                     .get("/users/u1", UserDto.class);
             Snapshot.put("systemX.user", user);
             throw new ApiException(400, "PAYMENT_REJECTED", "payment rejected for " + user.level());
-        }));
+        }))).prepare();
 
         SnapshotReplayer.ReplayResult result = SnapshotReplayer.of(app)
                 .load(snapshotFile)
@@ -369,10 +375,12 @@ class SnapshotReplayTest {
 
     @Test
     void dynamicPathSnapshotReplaysWithoutNotFound() throws Exception {
-        Aura app = Aura.create().snapshot(s -> s.enabled(true).async(false).dir(tempDir))
-                .routes(r -> r.get("/users/{id}", ctx -> {
+        AuraApp app = AuraApp.create(new AuraConfig()
+                        .snapshot(s -> s.enabled(true).async(false).dir(tempDir)))
+                .use(routes("replay-dynamic-path",
+                        new RouteContribution("GET", "/users/{id}", (BaseHandler) ctx -> {
                     throw new ApiException(400, "USER_LOOKUP_FAILED", "user lookup failed");
-                }));
+                }))).prepare();
 
         TestClient.Response recorded = TestClient.of(app).get("/users/user-secret").execute();
         assertThat(recorded.status()).isEqualTo(400);
@@ -397,6 +405,18 @@ class SnapshotReplayTest {
 
         assertThatCode(() -> redactor.query(Map.of("value", "http://["))).doesNotThrowAnyException();
         assertThat(redactor.query(Map.of("value", "http://["))).containsEntry("value", "http://[");
+    }
+
+    private static AuraModule routes(String id, RouteContribution... routes) {
+        return new AuraModule() {
+            @Override public ModuleMetadata descriptor() {
+                return ModuleMetadata.of(id, "1.0.0");
+            }
+
+            @Override public void install(ModuleContext context) {
+                for (RouteContribution route : routes) context.route(route);
+            }
+        };
     }
 
     @Test
