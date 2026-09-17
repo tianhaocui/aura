@@ -346,7 +346,7 @@ public class Context implements BaseContext {
         String xff = exchange.getRequestHeaders().getFirst("X-Forwarded-For");
         var addr = exchange.getSourceAddress();
         String peer = addr != null ? addr.getAddress().getHostAddress() : null;
-        String configured = app != null ? app.prop("aura.trusted-proxies") : null;
+        String configured = app == null ? null : String.join(",", app.trustedProxies());
         return resolveClientIp(configured, peer, xff);
     }
 

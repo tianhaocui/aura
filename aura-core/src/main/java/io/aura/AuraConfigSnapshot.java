@@ -27,6 +27,7 @@ public final class AuraConfigSnapshot {
     private final int rateLimitMaxKeys;
     private final String publicOrigin;
     private final Set<String> allowedHosts;
+    private final Set<String> trustedProxies;
     private final boolean securityHeaders;
     private final boolean openApiEnabled;
     private final boolean devMode;
@@ -58,6 +59,7 @@ public final class AuraConfigSnapshot {
         this.rateLimitMaxKeys = source.rateLimitMaxKeys();
         this.publicOrigin = source.publicOrigin();
         this.allowedHosts = Set.copyOf(source.allowedHosts());
+        this.trustedProxies = Set.copyOf(source.trustedProxies());
         this.securityHeaders = source.securityHeaders();
         this.openApiEnabled = source.openApiEnabled();
         this.devMode = source.devMode();
@@ -92,6 +94,7 @@ public final class AuraConfigSnapshot {
     public int rateLimitMaxKeys() { return rateLimitMaxKeys; }
     public String publicOrigin() { return publicOrigin; }
     public Set<String> allowedHosts() { return allowedHosts; }
+    public Set<String> trustedProxies() { return trustedProxies; }
     public boolean securityHeaders() { return securityHeaders; }
     public boolean openApiEnabled() { return openApiEnabled; }
     public boolean devMode() { return devMode; }

@@ -604,7 +604,7 @@ public class UndertowStarter implements AuraStarter {
         String host = exchange.getHostAndPort();
         String peer = exchange.getSourceAddress() == null || exchange.getSourceAddress().getAddress() == null
                 ? null : exchange.getSourceAddress().getAddress().getHostAddress();
-        if (Context.isTrustedProxy(app.prop("aura.trusted-proxies"), peer)) {
+        if (Context.isTrustedProxy(String.join(",", app.trustedProxies()), peer)) {
             String forwardedProto = exchange.getRequestHeaders().getFirst("X-Forwarded-Proto");
             String forwardedHost = exchange.getRequestHeaders().getFirst("X-Forwarded-Host");
             if (forwardedProto != null && forwardedProto.matches("(?i)https?")) scheme = forwardedProto.toLowerCase();

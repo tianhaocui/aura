@@ -45,6 +45,7 @@ public interface AuraWebRuntime extends AuraMcpRuntime {
     int gzipMinSize();
     JsonConfig jsonConfig();
     Set<String> allowedHosts();
+    Set<String> trustedProxies();
     boolean securityHeaders();
     boolean openApiEnabled();
     boolean devMode();

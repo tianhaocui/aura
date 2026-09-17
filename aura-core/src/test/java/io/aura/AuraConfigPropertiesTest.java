@@ -17,6 +17,7 @@ class AuraConfigPropertiesTest {
         properties.setProperty("aura.max-upload-size", "4096");
         properties.setProperty("aura.rate-limit-max-keys", "1234");
         properties.setProperty("aura.allowed-hosts", "api.example, admin.example ");
+        properties.setProperty("aura.trusted-proxies", "127.0.0.1, 10.0.0.0/8");
         properties.setProperty("aura.openapi", "true");
         properties.setProperty("aura.dev-mode", "true");
         properties.setProperty("aura.orders.timeout", "5");
@@ -30,6 +31,7 @@ class AuraConfigPropertiesTest {
         assertThat(app.config().maxUploadSize()).isEqualTo(4096);
         assertThat(app.config().rateLimitMaxKeys()).isEqualTo(1234);
         assertThat(app.config().allowedHosts()).containsExactlyInAnyOrder("api.example", "admin.example");
+        assertThat(app.config().trustedProxies()).containsExactlyInAnyOrder("127.0.0.1", "10.0.0.0/8");
         assertThat(app.config().openApiEnabled()).isTrue();
         assertThat(app.config().devMode()).isTrue();
         app.use(new AuraModule() {
@@ -60,5 +62,15 @@ class AuraConfigPropertiesTest {
         assertThatThrownBy(() -> AuraConfig.fromProperties(properties))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("aura.openapi");
+    }
+
+    @Test
+    void rejectsHostnamesAndMalformedTrustedProxyCidrs() {
+        assertThatThrownBy(() -> new AuraConfig().trustedProxies("proxy.internal"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("numeric IP");
+        assertThatThrownBy(() -> new AuraConfig().trustedProxies("10.0.0.0/99"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("invalid trusted proxy");
     }
 }

@@ -98,12 +98,12 @@ class CtxIpTest {
                 app);
 
         assertThat(ctx.ip()).isEqualTo(Context.resolveClientIp(
-                app.prop("aura.trusted-proxies"), "127.0.0.1", forwardedFor));
+                String.join(",", app.trustedProxies()), "127.0.0.1", forwardedFor));
         assertThat(ctx.ip()).isEqualTo("203.0.113.25");
     }
 
     private static AuraConfig config(String trustedProxies) {
-        return new AuraConfig().property("aura.trusted-proxies", trustedProxies);
+        return new AuraConfig().trustedProxies(trustedProxies.split(","));
     }
 
     private static TestClient client(AuraConfig config) {

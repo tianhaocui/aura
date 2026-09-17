@@ -96,6 +96,17 @@ Selected `AuraConfig` controls include:
 TLS credentials are consumed internally when the runtime is created. The
 public `AuraConfigSnapshot` does not expose the keystore password.
 
+```properties
+aura.tls.keystore-path=/run/secrets/server.p12
+aura.tls.keystore-password=${injected-by-the-deployment}
+aura.trusted-proxies=10.0.0.0/8,fd00::/8
+```
+
+The equivalent environment variables are `AURA_TLS_KEYSTORE_PATH`,
+`AURA_TLS_KEYSTORE_PASSWORD`, and `AURA_TRUSTED_PROXIES`. Trusted proxy entries
+must be numeric IP addresses or CIDRs; hostnames and malformed prefixes fail
+configuration validation.
+
 ## Cancellation
 
 `CancellationToken` is the shared cooperative cancellation contract. A request

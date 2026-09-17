@@ -104,7 +104,7 @@ public class MockContext extends Context {
     @Override
     public String ip() {
         String xff = headers.get("X-Forwarded-For");
-        String trusted = app != null ? app.prop("aura.trusted-proxies") : null;
+        String trusted = app == null ? null : String.join(",", app.trustedProxies());
         return Context.resolveClientIp(trusted, "127.0.0.1", xff);
     }
 

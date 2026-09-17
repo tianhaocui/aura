@@ -236,6 +236,7 @@ final class ModularRuntime implements AuraWebRuntime {
     @Override public PrintStream mcpStdout() { return mcpStdout; }
     @Override public McpRouterSpec mcpRouter() { return mcpRouter != null ? mcpRouter : getBean(McpRouterSpec.class); }
     @Override public Set<String> allowedHosts() { return config.allowedHosts(); }
+    @Override public Set<String> trustedProxies() { return config.trustedProxies(); }
     @Override public boolean securityHeaders() { return config.securityHeaders(); }
     @Override public boolean openApiEnabled() { return config.openApiEnabled(); }
     @Override public boolean devMode() { return devMode; }

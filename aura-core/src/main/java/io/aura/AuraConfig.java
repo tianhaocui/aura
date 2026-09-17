@@ -60,6 +60,8 @@ public final class AuraConfig {
         if (publicOrigin != null) config.publicOrigin(publicOrigin);
         String allowedHosts = value(properties, "aura.allowed-hosts", "AURA_ALLOWED_HOSTS");
         if (allowedHosts != null) config.allowedHosts(allowedHosts.split(","));
+        String trustedProxies = value(properties, "aura.trusted-proxies", "AURA_TRUSTED_PROXIES");
+        if (trustedProxies != null) config.trustedProxies(trustedProxies.split(","));
         String securityHeaders = value(properties, "aura.security-headers", "AURA_SECURITY_HEADERS");
         if (securityHeaders != null) config.securityHeaders(parseBoolean(securityHeaders, "aura.security-headers"));
         String openApi = value(properties, "aura.openapi", "AURA_OPENAPI");
@@ -78,6 +80,10 @@ public final class AuraConfig {
         String gzip = value(properties, "aura.gzip", "AURA_GZIP");
         if (gzip != null) config.gzip(parseBoolean(gzip, "aura.gzip"));
         config.gzipMinSize(parseInt(value(properties, "aura.gzip-min-size", "AURA_GZIP_MIN_SIZE"), config.gzipMinSize, "aura.gzip-min-size"));
+        String keyStorePath = value(properties, "aura.tls.keystore-path", "AURA_TLS_KEYSTORE_PATH");
+        String keyStorePassword = value(properties, "aura.tls.keystore-password", "AURA_TLS_KEYSTORE_PASSWORD");
+        if (keyStorePath != null) config.tls(keyStorePath, keyStorePassword);
+        else if (keyStorePassword != null) throw new IllegalArgumentException("aura.tls.keystore-path is required when a TLS password is configured");
         return config.validate();
     }
 
@@ -122,6 +128,7 @@ public final class AuraConfig {
     private int rateLimitMaxKeys = DEFAULT_RATE_LIMIT_MAX_KEYS;
     private String publicOrigin;
     private final Set<String> allowedHosts = new LinkedHashSet<>();
+    private final Set<String> trustedProxies = new LinkedHashSet<>();
     private boolean securityHeaders = true;
     private boolean openApiEnabled;
     private boolean devMode;
@@ -155,6 +162,18 @@ public final class AuraConfig {
     public AuraConfig allowedHosts(String... hosts) {
         allowedHosts.clear();
         if (hosts != null) for (String host : hosts) if (host != null && !host.isBlank()) allowedHosts.add(host.trim().toLowerCase());
+        return this;
+    }
+    public AuraConfig trustedProxies(String... proxies) {
+        trustedProxies.clear();
+        if (proxies != null) {
+            for (String proxy : proxies) {
+                if (proxy == null || proxy.isBlank()) continue;
+                String rule = proxy.trim();
+                validateProxyRule(rule);
+                trustedProxies.add(rule);
+            }
+        }
         return this;
     }
     public AuraConfig securityHeaders(boolean value) { securityHeaders = value; return this; }
@@ -221,6 +240,7 @@ public final class AuraConfig {
     public int rateLimitMaxKeys() { return rateLimitMaxKeys; }
     public String publicOrigin() { return publicOrigin; }
     public Set<String> allowedHosts() { return Set.copyOf(allowedHosts); }
+    public Set<String> trustedProxies() { return Set.copyOf(trustedProxies); }
     public boolean securityHeaders() { return securityHeaders; }
     public boolean openApiEnabled() { return openApiEnabled; }
     public boolean devMode() { return devMode; }
@@ -265,6 +285,30 @@ public final class AuraConfig {
     private static String requireText(String value, String name) {
         if (value == null || value.isBlank()) throw new IllegalArgumentException(name + " must not be blank");
         return value.trim();
+    }
+    private static void validateProxyRule(String rule) {
+        String[] parts = rule.split("/", -1);
+        if (parts.length > 2 || parts[0].isBlank() || !parts[0].matches("[0-9A-Fa-f:.]+")) {
+            throw new IllegalArgumentException("trusted proxy must be a numeric IP address or CIDR: " + rule);
+        }
+        try {
+            java.net.InetAddress address = java.net.InetAddress.getByName(parts[0]);
+            if (parts[0].indexOf(':') < 0) {
+                String[] octets = parts[0].split("\\.", -1);
+                if (octets.length != 4) throw new IllegalArgumentException("invalid IPv4 address");
+                for (String octet : octets) {
+                    int value = Integer.parseInt(octet);
+                    if (value < 0 || value > 255) throw new IllegalArgumentException("invalid IPv4 octet");
+                }
+            }
+            if (parts.length == 2) {
+                int prefix = Integer.parseInt(parts[1]);
+                int max = address.getAddress().length * 8;
+                if (prefix < 0 || prefix > max) throw new IllegalArgumentException("CIDR prefix out of range");
+            }
+        } catch (Exception error) {
+            throw new IllegalArgumentException("invalid trusted proxy rule: " + rule, error);
+        }
     }
     private static String blankToNull(String value) { return value == null || value.isBlank() ? null : value.trim(); }
 }

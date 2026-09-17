@@ -113,6 +113,7 @@ Configure controls once with `AuraConfig` before creating the app:
 ```java
 AuraConfig config = new AuraConfig()
         .allowedHosts("api.example.com")
+        .trustedProxies("10.0.0.0/8", "fd00::/8")
         .publicOrigin("https://api.example.com")
         .securityHeaders(true)
         .maxBodySize(10 * 1024 * 1024L)
