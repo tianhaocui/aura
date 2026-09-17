@@ -26,6 +26,9 @@ shutdown) is cancelled. Cancelling a child does not cancel its parents.
 `StructuredError` and `ContractException` preserve a stable error code,
 message, and details map for protocol-specific serialization.
 
+`ExecutorMetrics` is the dependency-free queue/worker/completion/rejection/
+timeout snapshot used by optional database, AI, and observability modules.
+
 `RuntimeState` defines the stable lifecycle vocabulary used by replaceable Aura
 runtime implementations: `NEW`, `STARTING`, `RUNNING`, `STOPPING`, and `STOPPED`.
 

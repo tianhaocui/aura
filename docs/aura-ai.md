@@ -119,3 +119,8 @@ AiRequest request = AiRequest.builder()
 
 Only HTTP 429/5xx and I/O failures are retried. Streaming calls are not retried automatically,
 because replaying partial tokens would produce ambiguous output.
+
+`AiClient.executorMetrics()` reports worker limit, active/queued work, queue
+capacity, completed tasks, rejections, and timeouts for the default bounded
+executor. A caller-supplied executor is marked opaque while its rejection and
+timeout counters remain available.

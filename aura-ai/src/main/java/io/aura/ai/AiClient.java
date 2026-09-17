@@ -35,6 +35,8 @@ public final class AiClient implements AutoCloseable {
     private final AtomicLong totalTokens = new AtomicLong();
     private final AtomicLong costMicros = new AtomicLong();
     private final AtomicLong unknownUsage = new AtomicLong();
+    private final AtomicLong rejectedRequests = new AtomicLong();
+    private final AtomicLong timedOutRequests = new AtomicLong();
 
     public AiClient(AiProvider provider) {
         this(provider, createDefaultExecutor(), true);
@@ -51,6 +53,17 @@ public final class AiClient implements AutoCloseable {
     }
 
     public AiProvider provider() { return provider; }
+
+    public io.aura.contract.ExecutorMetrics executorMetrics() {
+        if (executor instanceof ThreadPoolExecutor pool) {
+            return new io.aura.contract.ExecutorMetrics("ai", true,
+                    pool.getMaximumPoolSize(), pool.getActiveCount(), pool.getQueue().size(),
+                    pool.getQueue().size() + pool.getQueue().remainingCapacity(),
+                    pool.getCompletedTaskCount(), rejectedRequests.get(), timedOutRequests.get());
+        }
+        return io.aura.contract.ExecutorMetrics.opaque(
+                "ai-external", rejectedRequests.get(), timedOutRequests.get());
+    }
 
     /** Returns a snapshot of cumulative usage observed by this client. */
     public AiUsageTotals usageTotals() {
@@ -85,6 +98,7 @@ public final class AiClient implements AutoCloseable {
                 enforceBudget(request, response);
                 return response;
             } catch (TimeoutException | CancellationException | InterruptedException error) {
+                if (error instanceof TimeoutException) timedOutRequests.incrementAndGet();
                 request.cancellationToken().cancel();
                 future.cancel(true);
                 if (error instanceof InterruptedException) Thread.currentThread().interrupt();
@@ -157,6 +171,7 @@ public final class AiClient implements AutoCloseable {
                 throw exceeded;
             }
         } catch (TimeoutException | CancellationException | InterruptedException error) {
+            if (error instanceof TimeoutException) timedOutRequests.incrementAndGet();
             request.cancellationToken().cancel();
             future.cancel(true);
             if (error instanceof InterruptedException) Thread.currentThread().interrupt();
@@ -293,6 +308,7 @@ public final class AiClient implements AutoCloseable {
         try {
             return executor.submit(task);
         } catch (RejectedExecutionException error) {
+            rejectedRequests.incrementAndGet();
             throw new RejectedExecutionException(
                     "AI request rejected because the executor is saturated or shut down", error);
         }

@@ -45,6 +45,8 @@ test -f "$repo_root/examples/aura-composed/src/test/java/example/ComposedAppTest
 test -f "$repo_root/examples/aura-generated/pom.xml"
 test -f "$repo_root/examples/aura-generated/src/test/java/example/generated/GeneratedAppTest.java"
 test -f "$repo_root/aura-web/src/main/java/io/aura/web/RouteContract.java"
+test -f "$repo_root/aura-contract/src/main/java/io/aura/contract/ExecutorMetrics.java"
+test -f "$repo_root/aura-web/src/main/java/io/aura/web/SnapshotMetrics.java"
 for removed in \
   "$repo_root/aura-core/src/main/java/io/aura/Aura.java" \
   "$repo_root/aura-core/src/main/java/io/aura/AuraPlugin.java" \
@@ -139,6 +141,10 @@ if rg -n '/__schema__/workflows' "$repo_root/aura-workflow/src/main"; then
 fi
 rg -q 'onCancel' \
   "$repo_root/aura-db/src/main/java/io/aura/db/Db.java"
+rg -q 'independentTransactionMetrics' \
+  "$repo_root/aura-db/src/main/java/io/aura/db/Db.java"
+rg -q 'executorMetrics' \
+  "$repo_root/aura-ai/src/main/java/io/aura/ai/AiClient.java"
 if rg -n 'BodyHandlers\.ofString\(' \
     "$repo_root/aura-web/src/main/java/io/aura/web/SnapshotHttpClient.java"; then
   echo "unbounded external response body handler found" >&2

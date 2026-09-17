@@ -126,6 +126,12 @@ db.transaction(() -> {
 // WARNING: ThreadLocal state NOT inherited
 db.transactionIndependent(() -> db.execute(auditSql, args));
 
+// Cancellable and time-bounded independent work. Pass the token to DB calls.
+db.transactionIndependent(Duration.ofSeconds(2), ctx.cancellationToken(), token ->
+        db.executeCancellable(auditSql, token, args));
+
+ExecutorMetrics txMetrics = Db.independentTransactionMetrics();
+
 // Manual control
 try (var tx = db.beginTransaction()) {
     db.execute(sql1, args1);

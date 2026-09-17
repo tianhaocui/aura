@@ -68,6 +68,19 @@ class SnapshotRecorder {
         return recorder == null ? 0L : recorder.dropped.get();
     }
 
+    static SnapshotMetrics metrics(AuraWebRuntime app) {
+        SnapshotRecorder recorder = RECORDERS.get(app);
+        SnapshotOptions options = app.snapshotOptions();
+        if (recorder == null) {
+            return new SnapshotMetrics(0, 0, options.async() ? options.queueSize() : 0,
+                    options.async(), false);
+        }
+        return new SnapshotMetrics(recorder.dropped.get(),
+                recorder.queue == null ? 0 : recorder.queue.size(),
+                recorder.queue == null ? 0 : recorder.queue.size() + recorder.queue.remainingCapacity(),
+                recorder.queue != null, recorder.writer != null && recorder.writer.isAlive());
+    }
+
     void record(Exception e, CompiledRoute route, Context ctx, HttpServerExchange exchange, SnapshotScope scope) {
         Map<String, String> headers = new LinkedHashMap<>();
         exchange.getRequestHeaders().forEach(h -> headers.put(h.getHeaderName().toString(), h.getFirst()));

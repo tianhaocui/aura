@@ -184,3 +184,7 @@ SnapshotReplayer.of(app)
         .expectSameStatus()
         .expectSameCode();
 ```
+
+`SnapshotMetrics.of(app)` exposes dropped snapshots, current queue depth,
+configured capacity, async mode, and writer liveness without starting a writer.
+Use `SnapshotOptions.onDrop(...)` and `onWriteFailure(...)` for alert callbacks.

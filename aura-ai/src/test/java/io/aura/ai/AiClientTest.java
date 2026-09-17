@@ -48,6 +48,9 @@ class AiClientTest {
             assertThatThrownBy(() -> client.chat(new AiRequest("overflow")))
                     .isInstanceOf(RejectedExecutionException.class)
                     .hasMessageContaining("saturated or shut down");
+            assertThat(client.executorMetrics().observable()).isTrue();
+            assertThat(client.executorMetrics().queueCapacity()).isEqualTo(1);
+            assertThat(client.executorMetrics().rejected()).isEqualTo(1);
         } finally {
             release.countDown();
             executor.shutdownNow();
@@ -323,6 +326,7 @@ class AiClientTest {
             assertThatThrownBy(() -> client.chat(new AiRequest("slow", Duration.ofMillis(40))))
                     .isInstanceOf(TimeoutException.class);
             assertThat(started.await(1, TimeUnit.SECONDS)).isTrue();
+            assertThat(client.executorMetrics().timedOut()).isEqualTo(1);
         } catch (Exception error) {
             throw new AssertionError(error);
         }

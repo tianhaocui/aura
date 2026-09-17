@@ -11,12 +11,15 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ArrayBlockingQueue;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CompletionException;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.CancellationException;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
+import java.time.Duration;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
@@ -28,6 +31,8 @@ public class Db implements AutoCloseable {
             Math.min(8, Runtime.getRuntime().availableProcessors()));
     private static final int INDEPENDENT_TX_QUEUE_CAPACITY = 256;
     private static final AtomicInteger INDEPENDENT_TX_THREAD_ID = new AtomicInteger();
+    private static final AtomicLong INDEPENDENT_TX_REJECTED = new AtomicLong();
+    private static final AtomicLong INDEPENDENT_TX_TIMED_OUT = new AtomicLong();
     private final ThreadLocal<TransactionContext> txContext = new ThreadLocal<>();
     private static final ThreadPoolExecutor INDEPENDENT_TX_POOL = new ThreadPoolExecutor(
             INDEPENDENT_TX_THREADS,
@@ -428,25 +433,68 @@ public class Db implements AutoCloseable {
     }
 
     public <T> T transactionIndependent(Supplier<T> block) {
+        return transactionIndependent(Duration.ZERO, new CancellationToken(), ignored -> block.get());
+    }
+
+    /** Runs an independent transaction with cooperative cancellation and an optional absolute timeout. */
+    public <T> T transactionIndependent(Duration timeout, CancellationToken cancellationToken,
+                                        Function<CancellationToken, T> block) {
         Objects.requireNonNull(block, "block");
-        CompletableFuture<T> future = new CompletableFuture<>();
+        Objects.requireNonNull(timeout, "timeout");
+        Objects.requireNonNull(cancellationToken, "cancellationToken");
+        if (timeout.isNegative()) throw new IllegalArgumentException("timeout cannot be negative");
+        cancellationToken.throwIfCancelled();
+        java.util.concurrent.Future<T> future;
         try {
-            INDEPENDENT_TX_POOL.execute(() -> {
-                try {
-                    future.complete(doTransaction(block));
-                } catch (Throwable e) {
-                    future.completeExceptionally(e);
-                }
+            future = INDEPENDENT_TX_POOL.submit(() -> {
+                cancellationToken.throwIfCancelled();
+                return doTransaction(() -> block.apply(cancellationToken));
             });
         } catch (RejectedExecutionException e) {
+            INDEPENDENT_TX_REJECTED.incrementAndGet();
             throw new DbException("Independent transaction executor is saturated or shut down", e);
         }
+        long deadline = timeout.isZero() ? Long.MAX_VALUE : System.nanoTime() + timeout.toNanos();
+        CancellationToken.Registration registration = cancellationToken.onCancel(() -> future.cancel(true));
         try {
-            return future.join();
-        } catch (CompletionException e) {
-            Throwable cause = e.getCause();
-            throw cause instanceof RuntimeException re ? re : new DbException(cause);
+            while (true) {
+                cancellationToken.throwIfCancelled();
+                long remaining = deadline == Long.MAX_VALUE ? Long.MAX_VALUE : deadline - System.nanoTime();
+                if (remaining <= 0) {
+                    INDEPENDENT_TX_TIMED_OUT.incrementAndGet();
+                    cancellationToken.cancel();
+                    future.cancel(true);
+                    throw new DbException("Independent transaction timed out");
+                }
+                try {
+                    long waitNanos = remaining == Long.MAX_VALUE
+                            ? TimeUnit.MILLISECONDS.toNanos(100)
+                            : Math.min(remaining, TimeUnit.MILLISECONDS.toNanos(100));
+                    return future.get(waitNanos, TimeUnit.NANOSECONDS);
+                } catch (TimeoutException polling) {
+                    // Recheck the cancellation token and absolute deadline.
+                }
+            }
+        } catch (InterruptedException interrupted) {
+            future.cancel(true);
+            Thread.currentThread().interrupt();
+            throw new DbException("Independent transaction interrupted", interrupted);
+        } catch (CancellationException cancelled) {
+            throw cancelled;
+        } catch (ExecutionException execution) {
+            Throwable cause = execution.getCause();
+            throw cause instanceof RuntimeException runtime ? runtime : new DbException(cause);
+        } finally {
+            registration.close();
         }
+    }
+
+    public static io.aura.contract.ExecutorMetrics independentTransactionMetrics() {
+        return new io.aura.contract.ExecutorMetrics("db-independent-transaction", true,
+                INDEPENDENT_TX_POOL.getMaximumPoolSize(), INDEPENDENT_TX_POOL.getActiveCount(),
+                INDEPENDENT_TX_POOL.getQueue().size(), INDEPENDENT_TX_QUEUE_CAPACITY,
+                INDEPENDENT_TX_POOL.getCompletedTaskCount(), INDEPENDENT_TX_REJECTED.get(),
+                INDEPENDENT_TX_TIMED_OUT.get());
     }
 
     /** Manual transaction control. Caller is responsible for commit/rollback/close. */
@@ -660,6 +708,7 @@ public class Db implements AutoCloseable {
 
     public static class DbException extends RuntimeException {
         public DbException(Throwable cause) { super(cause); }
+        public DbException(String message) { super(message); }
         public DbException(String message, Throwable cause) { super(message, cause); }
     }
 }
