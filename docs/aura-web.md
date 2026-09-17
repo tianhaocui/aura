@@ -136,6 +136,39 @@ Inbound WebSocket text and binary messages are buffered only up to
 `maxWebSocketMessageSize`; oversized messages are closed with status 1009 before
 the application message handler runs.
 
+## Admission Policy
+
+`AuraConfig.rateLimitPerSecond` and `concurrencyLimit` provide simple default
+IP/global controls. For route or API-key policies, install one explicit module
+that owns the replaceable admission policy:
+
+```java
+public final class AdmissionModule implements AuraModule {
+    private final StandardAdmissionPolicy policy = StandardAdmissionPolicy.builder()
+            .perIp(100, 65_536)
+            .perApiKey(500, 10_000)
+            .routeRate("/orders/{id}", 20)
+            .globalConcurrency(200)
+            .routeConcurrency("/reports", 4)
+            .build();
+
+    public ModuleMetadata descriptor() {
+        return ModuleMetadata.of("admission", "1.0.0");
+    }
+
+    public void install(ModuleContext context) {
+        context.admissionPolicy(policy);
+        context.register(policy); // optional metrics lookup
+    }
+}
+```
+
+When a custom policy is installed it replaces the default controls instead of
+running a second hidden limiter. Requests contain method, raw path, matched
+route template, validated client IP, and `X-API-Key`. Rejections return stable
+`AURA_RATE_LIMITED` or `AURA_CONCURRENCY_LIMITED` codes. The standard policy
+exposes bounded key count, in-flight count, and rejection counters.
+
 ## Snapshots
 
 Snapshot recording redacts credentials, query values, bodies, exception text,

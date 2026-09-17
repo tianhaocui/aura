@@ -110,6 +110,45 @@ class DeploymentSecurityTest {
         }
     }
 
+    @Test
+    void moduleAdmissionPolicyUsesRouteTemplatesAndReplacesDefaultControl() throws Exception {
+        int port = availablePort();
+        StandardAdmissionPolicy policy = StandardAdmissionPolicy.builder()
+                .routeRate("/orders/{id}", 1)
+                .perApiKey(100, 16)
+                .build();
+        AuraConfig config = new AuraConfig().port(port).rateLimitPerSecond(1);
+        AuraApp app = AuraApp.create(config).use(new io.aura.AuraModule() {
+            @Override public io.aura.contract.ModuleMetadata descriptor() {
+                return io.aura.contract.ModuleMetadata.of("admission", "1.0.0");
+            }
+
+            @Override public void install(io.aura.ModuleContext context) {
+                context.admissionPolicy(policy);
+                context.route(new RouteContribution("GET", "/orders/{id}",
+                        (BaseHandler) request -> request.text(request.path("id"))));
+                context.route(new RouteContribution("GET", "/health",
+                        (BaseHandler) request -> request.text("ok")));
+            }
+        });
+        try {
+            app.start();
+            HttpResponse<String> first = getPath(port, "/orders/1", "key-1");
+            HttpResponse<String> second = getPath(port, "/orders/2", "key-2");
+            assertThat(first.statusCode()).isEqualTo(200);
+            assertThat(second.statusCode()).isEqualTo(429);
+            assertThat(second.body()).contains(StandardAdmissionPolicy.RATE_LIMITED);
+
+            // The custom policy replaces AuraConfig's default peer-IP limiter.
+            for (int i = 0; i < 5; i++) {
+                assertThat(getPath(port, "/health", "health-" + i).statusCode()).isEqualTo(200);
+            }
+            assertThat(policy.rateRejections()).isEqualTo(1);
+        } finally {
+            app.stop();
+        }
+    }
+
     private AuraApp app(AuraConfig config, String id) {
         return TestApplications.app(config, id,
                 new RouteContribution("GET", "/ok", (BaseHandler) request -> request.text("ok")));
@@ -138,6 +177,12 @@ class DeploymentSecurityTest {
                         .header("X-Forwarded-Host", "api.example")
                         .POST(HttpRequest.BodyPublishers.noBody())
                         .build(), HttpResponse.BodyHandlers.ofString());
+    }
+
+    private HttpResponse<String> getPath(int port, String path, String apiKey) throws Exception {
+        return http.send(HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port + path))
+                        .header("X-API-Key", apiKey)
+                        .GET().build(), HttpResponse.BodyHandlers.ofString());
     }
 
     private static int availablePort() throws Exception {

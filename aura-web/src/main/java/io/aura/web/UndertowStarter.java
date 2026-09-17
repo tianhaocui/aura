@@ -195,8 +195,8 @@ public class UndertowStarter implements AuraStarter {
         String path = exchange.getRequestURI();
 
         if (!hostAllowed(exchange)) { app.emit(AuraEvent.of("request.rejected.host", java.util.Map.of("method", method))); reject(exchange, 421, "Misdirected Request"); return; }
-        if (!admit(exchange)) return;
-        if (app.concurrencyLimit() > 0) {
+        if (!admit(exchange, method, path)) return;
+        if (app.admissionPolicy() == null && app.concurrencyLimit() > 0) {
             exchange.addExchangeCompleteListener((completed, next) -> { inFlight.decrementAndGet(); next.proceed(); });
         }
         if (app.securityHeaders()) {
@@ -622,7 +622,39 @@ public class UndertowStarter implements AuraStarter {
         catch (IllegalArgumentException e) { return false; }
     }
 
-    private boolean admit(HttpServerExchange exchange) {
+    private boolean admit(HttpServerExchange exchange, String method, String path) {
+        io.aura.web.AdmissionPolicy custom = app.admissionPolicy();
+        if (custom != null) {
+            String peer = peerIp(exchange);
+            String clientIp = Context.resolveClientIp(
+                    String.join(",", app.trustedProxies()), peer,
+                    exchange.getRequestHeaders().getFirst("X-Forwarded-For"));
+            io.aura.web.AdmissionDecision decision;
+            try {
+                decision = custom.admit(new io.aura.web.AdmissionRequest(
+                        method, path, matchedRoutePattern(method, path), clientIp,
+                        exchange.getRequestHeaders().getFirst("X-API-Key")));
+                if (decision == null) throw new IllegalStateException("Admission policy returned null");
+            } catch (RuntimeException failure) {
+                log.error("Admission policy failed closed for {} {}", method, path, failure);
+                rejectAdmission(exchange, 503, "AURA_ADMISSION_POLICY_ERROR", 0);
+                return false;
+            }
+            if (!decision.allowed()) {
+                app.emit(AuraEvent.of("request.rejected.admission", java.util.Map.of(
+                        "method", method, "path", path, "status", decision.status(),
+                        "code", decision.code())));
+                rejectAdmission(exchange, decision.status(), decision.code(),
+                        decision.retryAfterSeconds());
+                decision.close();
+                return false;
+            }
+            exchange.addExchangeCompleteListener((completed, next) -> {
+                try { decision.close(); } finally { next.proceed(); }
+            });
+            return true;
+        }
+
         int limit = app.concurrencyLimit();
         if (limit > 0 && inFlight.incrementAndGet() > limit) {
             app.emit(AuraEvent.of("request.rejected.concurrency", java.util.Map.of("limit", limit)));
@@ -630,9 +662,7 @@ public class UndertowStarter implements AuraStarter {
         }
         int rate = app.rateLimitPerSecond();
         if (rate > 0) {
-            String peer = exchange.getSourceAddress() == null
-                    || exchange.getSourceAddress().getAddress() == null
-                    ? null : exchange.getSourceAddress().getAddress().getHostAddress();
+            String peer = peerIp(exchange);
             String forwardedFor = exchange.getRequestHeaders().getFirst("X-Forwarded-For");
             String key = Context.resolveClientIp(
                     String.join(",", app.trustedProxies()), peer, forwardedFor);
@@ -646,6 +676,38 @@ public class UndertowStarter implements AuraStarter {
             }
         }
         return true;
+    }
+
+    private String matchedRoutePattern(String method, String path) {
+        for (CompiledRoute route : compiledRoutes) {
+            if ((route.method().equals(method)
+                    || "HEAD".equals(method) && "GET".equals(route.method()))
+                    && route.match(path) != null) return route.rawPath();
+        }
+        if ("GET".equals(method)) {
+            for (CompiledWsRoute route : compiledWsRoutes) {
+                if (route.match(path) != null) return route.rawPath();
+            }
+        }
+        return path;
+    }
+
+    private static String peerIp(HttpServerExchange exchange) {
+        return exchange.getSourceAddress() == null
+                || exchange.getSourceAddress().getAddress() == null
+                ? null : exchange.getSourceAddress().getAddress().getHostAddress();
+    }
+
+    private static void rejectAdmission(HttpServerExchange exchange, int status,
+                                        String code, int retryAfterSeconds) {
+        exchange.setStatusCode(status);
+        exchange.getResponseHeaders().put(Headers.CONTENT_TYPE, "application/json; charset=utf-8");
+        if (retryAfterSeconds > 0) {
+            exchange.getResponseHeaders().put(new HttpString("Retry-After"),
+                    Integer.toString(retryAfterSeconds));
+        }
+        exchange.getResponseSender().send(JSON.toJSONString(java.util.Map.of(
+                "error", "Request admission rejected", "code", code)));
     }
 
     private static void reject(HttpServerExchange exchange, int status, String message) {

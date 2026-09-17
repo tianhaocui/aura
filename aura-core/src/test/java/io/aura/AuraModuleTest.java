@@ -236,6 +236,28 @@ class AuraModuleTest {
     }
 
     @Test
+    void onlyOneModuleCanOwnTheAdmissionPolicy() {
+        AuraModule first = admissionModule("first-admission");
+        AuraModule second = admissionModule("second-admission");
+
+        assertThatThrownBy(() -> AuraApp.create().use(first).use(second).prepare())
+                .isInstanceOf(ModuleException.class)
+                .extracting("code").isEqualTo("AURA_ADMISSION_POLICY_DUPLICATE");
+    }
+
+    private static AuraModule admissionModule(String id) {
+        return new AuraModule() {
+            @Override public io.aura.contract.ModuleMetadata descriptor() {
+                return io.aura.contract.ModuleMetadata.of(id, "1.0.0");
+            }
+
+            @Override public void install(ModuleContext context) {
+                context.admissionPolicy(request -> io.aura.web.AdmissionDecision.allow());
+            }
+        };
+    }
+
+    @Test
     void moduleContributesValidatedWebSocketEndpoint() {
         AuraApp app = AuraApp.create().use(new AuraModule() {
             @Override public io.aura.contract.ModuleMetadata descriptor() {

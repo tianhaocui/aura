@@ -175,6 +175,8 @@ rg -q 'trustedProxies' "$repo_root/aura-core/src/main/java/io/aura/AuraConfig.ja
 rg -q 'aura.tls.keystore-path' "$repo_root/aura-core/src/main/java/io/aura/AuraConfig.java"
 rg -q 'maxWebSocketMessageSize' "$repo_root/aura-core/src/main/java/io/aura/AuraConfig.java"
 rg -q 'FixedWindowRateLimiter' "$repo_root/aura-web/src/main/java/io/aura/web/UndertowStarter.java"
+rg -q 'context.admissionPolicy' "$repo_root/docs/aura-web.md"
+rg -q 'matchedRoutePattern' "$repo_root/aura-web/src/main/java/io/aura/web/UndertowStarter.java"
 rg -q 'void webSocket' "$repo_root/aura-core/src/main/java/io/aura/ModuleContext.java"
 rg -q 'webSocketContributions' "$repo_root/aura-web/src/main/java/io/aura/web/RouteAssembler.java"
 

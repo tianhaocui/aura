@@ -66,5 +66,6 @@ public interface AuraWebRuntime extends AuraMcpRuntime {
     List<BaseHandler> beforeHandlers();
     List<BaseHandler> afterHandlers();
     Function<Object, Object> resultWrapper();
+    io.aura.web.AdmissionPolicy admissionPolicy();
     SnapshotOptions snapshotOptions();
 }

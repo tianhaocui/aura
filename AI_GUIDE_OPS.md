@@ -115,6 +115,22 @@ interrupts the handler thread, and returns 503 when no response was committed.
 
 **Gzip**: `gzip(true)` compresses responses larger than `gzipMinSize` (default 1KB). Env: `AURA_GZIP=true`.
 
+## Admission Controls
+
+For a simple application, configure global IP rate and concurrency limits in
+`AuraConfig`. When rules differ by route or API key, one capability module owns
+a `StandardAdmissionPolicy` and contributes it with
+`context.admissionPolicy(policy)`. Do not implement counters in request handlers.
+
+```java
+StandardAdmissionPolicy policy = StandardAdmissionPolicy.builder()
+        .perIp(100, 65_536)
+        .perApiKey(500, 10_000)
+        .routeRate("/orders/{id}", 20)
+        .routeConcurrency("/reports", 4)
+        .build();
+```
+
 ## Packaging (Fat Jar)
 
 ```xml

@@ -45,6 +45,9 @@ public interface ModuleContext extends io.aura.contract.CapabilityLookup {
     /** Installs the single application-wide successful return-value wrapper. */
     void resultWrapper(java.util.function.Function<Object, Object> wrapper);
 
+    /** Replaces the default global admission controls with one module-owned policy. */
+    void admissionPolicy(io.aura.web.AdmissionPolicy policy);
+
     void healthCheck(io.aura.contract.HealthCheck healthCheck);
 
     io.aura.contract.PermissionRegistry permissions();
