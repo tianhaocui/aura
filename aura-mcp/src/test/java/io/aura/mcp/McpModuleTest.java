@@ -1,6 +1,6 @@
 package io.aura.mcp;
 
-import io.aura.Aura;
+import io.aura.AuraApp;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -9,12 +9,11 @@ class McpModuleTest {
     @Test
     void contributesRouterThroughAuraModuleAssembly() {
         McpRouter router = new McpRouter();
-        Aura app = Aura.create().use(McpModule.create(router));
+        AuraApp app = AuraApp.create().use(McpModule.create(router));
 
-        app.prepareModules();
+        app.prepare();
 
-        assertThat(app.getBean(McpRouter.class)).isSameAs(router);
-        assertThat(app.mcpRouter()).isSameAs(router);
+        assertThat(app.require(McpRouter.class)).isSameAs(router);
         assertThat(router.buildSchema()).containsKey("tools");
     }
 }

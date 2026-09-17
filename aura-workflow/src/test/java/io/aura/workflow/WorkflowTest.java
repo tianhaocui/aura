@@ -1,7 +1,7 @@
 package io.aura.workflow;
 
 import org.junit.jupiter.api.Test;
-import io.aura.Aura;
+import io.aura.AuraApp;
 import io.aura.AuraModule;
 import io.aura.ModuleContext;
 import io.aura.contract.ModuleMetadata;
@@ -140,7 +140,7 @@ class WorkflowTest {
 
     @Test
     void workflowRuntimeComposesThroughAuraModuleContext() {
-        Aura app = Aura.create()
+        AuraApp app = AuraApp.create()
                 .use(WorkflowModule.create())
                 .use(new AuraModule() {
                     @Override public ModuleMetadata descriptor() {
@@ -157,9 +157,9 @@ class WorkflowTest {
                     }
                 });
 
-        app.prepareModules();
+        app.prepare();
         @SuppressWarnings("unchecked")
-        WorkflowRuntime<List<String>> runtime = (WorkflowRuntime<List<String>>) (WorkflowRuntime<?>) app.getBean(WorkflowRuntime.class);
+        WorkflowRuntime<List<String>> runtime = (WorkflowRuntime<List<String>>) (WorkflowRuntime<?>) app.require(WorkflowRuntime.class);
         List<String> events = new ArrayList<>();
         WorkflowResult result = runtime.execute("fulfillment", events);
 
