@@ -7,8 +7,7 @@ public final class OrderModule implements AuraModule {
     @Override public ModuleMetadata descriptor() {
         return ModuleMetadata.of("order", "1.0.0")
                 .requires("workflow")
-                .provides("order.api", "order.workflow")
-                .build();
+                .provides("order.api", "order.workflow");
     }
 
     @Override public void install(ModuleContext context) {
@@ -35,15 +34,19 @@ AuraApp.create()
 - Lambda routes can declare parameters explicitly when reflection cannot infer them:
 
 ```java
-routes.post("/orders", handler)
-        .param("customerId", "string", "query", true, "Customer identifier")
-        .param("order", "Order", "body", true, "Order payload");
+context.route(new RouteContribution("POST", "/orders", handler, Map.of(
+        "parameters", List.of(
+                new ApiParameter("customerId", "string", "query", true,
+                        "Customer identifier"),
+                new ApiParameter("order", "Order", "body", true,
+                        "Order payload")))));
 ```
 
   These declarations feed `/__schema__`, OpenAPI, and other adapters from the same contract.
-- New transport-neutral modules contribute `RouteContribution` values through `context.route(...)`;
-  the Web adapter executes the handler and preserves the same metadata. The older
-  Web-specific `ModuleContext` route/middleware methods are not part of the 1.0 contract.
+- New transport-neutral modules contribute `RouteContribution` values through
+  `context.route(...)`; the Web adapter executes the handler and preserves the
+  same metadata. `context.before/after/exception/resultWrapper` and
+  `context.webSocket(...)` are explicit optional Web policy contributions.
 - Dependencies are declared with `requires(...)`; Aura checks missing modules and cycles before starting the server.
 - Modular startup rejects service methods compiled without Java parameter names with
   `AURA_PARAMETER_NAMES_MISSING`; compile application modules with Maven's
@@ -63,6 +66,15 @@ AuraApp.create()
         .authenticate(ctx -> tokenService.userId(ctx.header("Authorization")))
         .use(new OrderModule())
         .start();
+```
+
+Protect individual routes with the same metadata used by HTTP and AI adapters:
+
+```java
+context.route(new RouteContribution("GET", "/orders", handler)
+        .permission("orders.read"));
+context.route(new RouteContribution("GET", "/profile", profileHandler)
+        .authenticated());
 ```
 
 Web runtime settings belong to the same central configuration passed to `AuraApp`:
@@ -99,23 +111,27 @@ use `code: "VALIDATION_ERROR"` and expose those same fields for each invalid
 property. Clients should branch on `code` and `field`, not parse the human
 message.
 
-Inside a route group, use `Aura.requirePermission("orders.read")` after `Aura.requireAuth()`.
 - `TestClient.of(app)` runs module installation but does not start external resources, so module routes can be tested in memory.
 - `TestClient.schema()` and `TestClient.openApi()` expose the same generated
   route documents as `/__schema__` and `/openapi.json`, which lets contract tests
   run without opening a listener.
 - `healthCheck(...)` registrations are available through `AuraWebRuntime.healthChecks()` and the
   fail-closed `healthStatus()` aggregate for readiness adapters.
-- For application-level capability lookup, call `app.prepare()` followed by `app.find(Type.class)` or `app.require(Type.class)`; use `app.runtimeView()` when an adapter needs the stable runtime contract.
+- For application-level capability lookup, call `app.prepare()` followed by
+  `app.find(Type.class)` or `app.require(Type.class)`. Named capabilities use
+  `context.register("audit", value)` and `context.require("audit", Type.class)`.
+  Use `app.runtimeView()` when an adapter needs the stable runtime contract.
 - `aura-db` provides `DatabaseModule.create(db)`. A business module can declare `requires("db")` and obtain the same `Db` instance with `context.require(Db.class)`.
-- New applications should use `AuraApp`; the older `Aura` builder is an implementation detail and is not the recommended module authoring API.
+- `AuraApp` is the only application entry point in 1.0.
 - The optional `aura-processor` mirrors the reflection CRUD convention for
   `@Path` services and emits direct route code. Do not install generated and
   reflection routes for the same service.
 - Request bodies may be concrete records/POJOs or parameterized collections.
   Use `RequestType.parameterized(List.class, Item.class)` for a generic body;
   empty bodies remain nullable unless the handler rejects them.
-- `AiModule` contributes an `AiClient`; `McpModule` contributes an `McpRouter`. They do not silently open network listeners. Use the application's explicit MCP transport flag or configuration when starting.
+- `AiModule` contributes an `AiClient`; `McpModule` contributes an `McpRouter`.
+  They do not silently open network listeners. Enable MCP transport explicitly
+  with `McpModule.create(router).http()` and optionally `.sse()`.
 - Do not use global registries, static tenant state, reflection-based module discovery, or numeric step positions.
 
 Snapshot storage is bounded by default. Configure `maxSnapshots(...)`, `maxStorageSize(...)`, and

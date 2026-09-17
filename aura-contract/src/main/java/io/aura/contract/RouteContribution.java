@@ -7,6 +7,8 @@ import java.util.Map;
 /** Framework-neutral description of one route contributed by a module. */
 public record RouteContribution(String method, String path, Object handler,
                                 Map<String, Object> metadata) {
+    public static final String AUTHENTICATED = "authenticated";
+    public static final String PERMISSION = "x-aura-permission";
     public RouteContribution {
         if (method == null || method.isBlank()) {
             throw new IllegalArgumentException("route method must not be blank");
@@ -37,6 +39,25 @@ public record RouteContribution(String method, String path, Object handler,
     public String returnType() {
         Object value = metadata.get("returnType");
         return value == null ? null : value.toString();
+    }
+
+    /** Returns a copy that requires a successfully authenticated request. */
+    public RouteContribution authenticated() {
+        return withMetadata(AUTHENTICATED, true);
+    }
+
+    /** Returns a copy that requires authentication and one application permission. */
+    public RouteContribution permission(String permission) {
+        if (permission == null || permission.isBlank()) {
+            throw new IllegalArgumentException("route permission must not be blank");
+        }
+        return withMetadata(PERMISSION, permission.trim()).withMetadata(AUTHENTICATED, true);
+    }
+
+    private RouteContribution withMetadata(String key, Object value) {
+        Map<String, Object> copy = new LinkedHashMap<>(metadata);
+        copy.put(key, value);
+        return new RouteContribution(method, path, handler, copy);
     }
 
     /** Optional structured JSON schema for the route response. */

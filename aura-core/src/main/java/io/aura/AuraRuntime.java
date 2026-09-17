@@ -8,7 +8,7 @@ import java.util.List;
 import java.util.Optional;
 
 /** Replaceable 1.0 runtime surface used by AuraApp and adapters. */
-public interface AuraRuntime extends AutoCloseable {
+public interface AuraRuntime extends AutoCloseable, io.aura.contract.CapabilityLookup {
     RuntimeState state();
     /** Immutable configuration captured for this runtime. */
     AuraConfigSnapshot config();
@@ -26,7 +26,7 @@ public interface AuraRuntime extends AutoCloseable {
     void stop();
     List<ModuleMetadata> moduleDescriptors();
     PermissionRegistry permissions();
-    <T> Optional<T> find(Class<T> type);
+    @Override <T> Optional<T> find(Class<T> type);
 
     default boolean isRunning() { return state() == RuntimeState.RUNNING; }
 

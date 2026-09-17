@@ -69,8 +69,8 @@ AuraApp.create()
 整条流程：
 
 ```java
-WorkflowDefinition<OrderContext> order = WorkflowDefinition
-    .<OrderContext>named("order")
+WorkflowDefinition<OrderContext> order = Workflow
+    .<OrderContext>builder("order")
     .step("place", steps::place)
     .step("ship", steps::ship)
     .step("decrement-stock", steps::decrementStock)

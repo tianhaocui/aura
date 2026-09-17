@@ -35,6 +35,7 @@ final class RouteAssembler {
         for (var entry : app.directRoutes()) {
             BaseHandler handler = entry.handler() instanceof BaseHandler h
                     ? h : new LambdaHandler(entry.handler());
+            handler = secure(app, entry, handler);
             BaseRouteBuilder builder = switch (entry.method()) {
                 case "GET" -> router.get(entry.path(), handler);
                 case "POST" -> router.post(entry.path(), handler);
@@ -59,5 +60,36 @@ final class RouteAssembler {
                 }
             }
         }
+    }
+
+    private static BaseHandler secure(AuraWebRuntime app, io.aura.RouteEntry entry,
+                                      BaseHandler next) {
+        Object permissionValue = entry.metadata().get(io.aura.contract.RouteContribution.PERMISSION);
+        boolean authenticated = Boolean.TRUE.equals(
+                entry.metadata().get(io.aura.contract.RouteContribution.AUTHENTICATED))
+                || permissionValue != null;
+        if (!authenticated) return next;
+        String permission = permissionValue == null ? null : permissionValue.toString();
+        return request -> {
+            String userId = app.authFunction() == null ? null : app.authFunction().apply(request);
+            if (userId == null || userId.isBlank()) {
+                request.status(401).json(java.util.Map.of(
+                        "error", "Authentication required",
+                        "code", "AURA_AUTHENTICATION_REQUIRED"));
+                request.abort();
+                return;
+            }
+            request.set("_userId", userId);
+            if (permission != null && (app.permissionChecker() == null
+                    || !app.permissionChecker().test(userId, permission))) {
+                request.status(403).json(java.util.Map.of(
+                        "error", "Permission denied",
+                        "code", "AURA_PERMISSION_DENIED",
+                        "permission", permission));
+                request.abort();
+                return;
+            }
+            next.handle(request);
+        };
     }
 }

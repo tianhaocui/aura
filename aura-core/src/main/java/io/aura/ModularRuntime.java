@@ -209,6 +209,11 @@ final class ModularRuntime implements AuraWebRuntime {
     @Override public List<ModuleMetadata> moduleDescriptors() { return moduleManager.descriptors(); }
     @Override public PermissionRegistry permissions() { return permissions; }
     @Override public <T> Optional<T> find(Class<T> type) { return Optional.ofNullable(getBean(type)); }
+    @Override public <T> Optional<T> find(String name, Class<T> type) {
+        if (name == null || type == null) return Optional.empty();
+        Object value = namedRegistry.get(name);
+        return type.isInstance(value) ? Optional.of(type.cast(value)) : Optional.empty();
+    }
 
     @Override public int port() { return config.port(); }
     @Override public String env() { return config.env(); }
@@ -225,6 +230,7 @@ final class ModularRuntime implements AuraWebRuntime {
     @Override public CorsConfig corsConfig() { return config.corsConfig(); }
     @Override public long maxBodySize() { return config.maxBodySize(); }
     @Override public long maxUploadSize() { return config.maxUploadSize(); }
+    @Override public long maxWebSocketMessageSize() { return config.maxWebSocketMessageSize(); }
     @Override public int shutdownTimeout() { return config.shutdownTimeout(); }
     @Override public boolean accessLog() { return config.accessLog(); }
     @Override public String accessLogFormat() { return config.accessLogFormat(); }
@@ -294,7 +300,12 @@ final class ModularRuntime implements AuraWebRuntime {
         trackLifecycle(value);
         return value;
     }
-    private void register(String name, Object value) { if (name == null || name.isBlank()) throw new IllegalArgumentException("registration name must not be blank"); namedRegistry.put(name, register(value)); }
+    private void register(String name, Object value) {
+        if (name == null || name.isBlank()) throw new IllegalArgumentException("registration name must not be blank");
+        Object registered = register(value);
+        Object existing = namedRegistry.putIfAbsent(name, registered);
+        if (existing != null) throw new IllegalStateException("Named capability already registered: " + name);
+    }
     private ModuleContext moduleContext(AuraModule module) { return new ModuleContextImpl(module, module.descriptor()); }
     private void trackLifecycle(Object value) { if (value instanceof AutoCloseable closeable && !closeables.contains(closeable)) closeables.add(closeable); }
 
@@ -304,6 +315,9 @@ final class ModularRuntime implements AuraWebRuntime {
         @Override public ModuleMetadata currentModule() { return descriptor; }
         @Override public <T> T require(Class<T> type) { T value = getBean(type); if (value == null) throw new ModuleException("AURA_CAPABILITY_MISSING", descriptor.id(), "Module " + descriptor.id() + " requires capability " + type.getName()); return value; }
         @Override public <T> Optional<T> find(Class<T> type) { return Optional.ofNullable(getBean(type)); }
+        @Override public <T> Optional<T> find(String name, Class<T> type) {
+            return ModularRuntime.this.find(name, type);
+        }
         @Override public void register(Object value) { ModularRuntime.this.register(value); }
         @Override public void register(String name, Object value) { ModularRuntime.this.register(name, value); }
         @Override public void service(Object service) { ModularRuntime.this.register(service); services.add(service); }

@@ -14,6 +14,20 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class ContractTypesTest {
+
+    @Test
+    void routeSecurityMetadataIsExplicitAndImmutable() {
+        RouteContribution route = new RouteContribution("get", "/orders", new Object())
+                .permission("orders.read");
+
+        assertThat(route.method()).isEqualTo("GET");
+        assertThat(route.metadata()).containsEntry(RouteContribution.AUTHENTICATED, true)
+                .containsEntry(RouteContribution.PERMISSION, "orders.read");
+        assertThatThrownBy(() -> route.metadata().put("other", true))
+                .isInstanceOf(UnsupportedOperationException.class);
+        assertThatThrownBy(() -> route.permission(" "))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
     @Test
     void metadataIsImmutableAndNormalizesIdentity() {
         var requirements = new ArrayList<>(List.of(ModuleRequirement.of(" db ")));

@@ -179,8 +179,22 @@ db.find("SELECT * FROM user WHERE id IN (" + Db.in(ids) + ")", ids.toArray());
 ```java
 Db main = Db.create("main", "jdbc:mysql://host/main", user, pass);
 Db log  = Db.create("log", "jdbc:mysql://host/log", user, pass);
-app.register("main", main).register("log", log);
-Db logDb = app.getBean("log", Db.class);
+
+public final class DatabasesModule implements AuraModule {
+    public ModuleMetadata descriptor() {
+        return ModuleMetadata.of("databases", "1.0.0").provides("db.main", "db.log");
+    }
+    public void install(ModuleContext context) {
+        context.register("main", main);
+        context.register("log", log);
+    }
+    public void stop(ModuleContext context) {
+        main.close();
+        log.close();
+    }
+}
+
+Db logDb = context.require("log", Db.class); // from a dependent business module
 
 // Custom DataSource (full HikariCP control — pool size, timeout, driver-specific props)
 HikariConfig config = new HikariConfig();
@@ -207,10 +221,10 @@ Page<Row> page = db.table("rides")
 // Use Query.delete() instead of raw SQL DELETE
 db.table("tournaments").where("id", id).delete();
 
-// Use group + before for scoped auth
-r.group("/api", api -> {
-    api.before(ctx -> jwt.requireAuth(ctx));
-    api.get("/rides", rideService, "list");
-});
-r.post("/auth/login", authService, "login"); // outside = no auth
+// Route-scoped auth and authorization are metadata, not hand-written middleware.
+context.route(new RouteContribution(
+        "GET", "/api/rides", (BaseHandler) ctx -> ctx.json(rideService.list()))
+        .permission("rides.read"));
+context.route(new RouteContribution(
+        "POST", "/auth/login", (BaseHandler) ctx -> ctx.json(authService.login(ctx))));
 ```

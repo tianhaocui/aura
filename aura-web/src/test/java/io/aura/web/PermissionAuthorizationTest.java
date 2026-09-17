@@ -11,7 +11,8 @@ class PermissionAuthorizationTest {
     void routeAuthorizationUsesSharedFunctions() {
         AuraApp app = TestApplications.app(
                         "permission-allowed",
-                        new RouteContribution("GET", "/orders/list", protectedHandler("orders.read", "ok")))
+                        new RouteContribution("GET", "/orders/list",
+                                (BaseHandler) ctx -> ctx.text("ok")).permission("orders.read"))
                 .authenticate(ctx -> "user-1")
                 .authorize((user, permission) -> user.equals("user-1") && permission.equals("orders.read"));
 
@@ -25,31 +26,25 @@ class PermissionAuthorizationTest {
         AuraApp app = TestApplications.app(
                         "permission-denied",
                         new RouteContribution("GET", "/orders/list",
-                                protectedHandler("orders.read", "must-not-run")))
+                                (BaseHandler) ctx -> ctx.text("must-not-run"))
+                                .permission("orders.read"))
                 .authenticate(ctx -> "user-1")
                 .authorize((user, permission) -> false);
 
         TestClient.Response response = TestClient.of(app).get("/orders/list").execute();
         assertThat(response.status()).isEqualTo(403);
-        assertThat(response.body()).contains("Forbidden");
+        assertThat(response.body()).contains("AURA_PERMISSION_DENIED");
     }
 
-    private static BaseHandler protectedHandler(String permission, String response) {
-        return ctx -> {
-            String userId = ctx.app().authFunction().apply(ctx);
-            if (userId == null || userId.isBlank()) {
-                ctx.status(401).json(java.util.Map.of("error", "Unauthorized"));
-                ctx.abort();
-                return;
-            }
-            ctx.set("_userId", userId);
-            if (ctx.app().permissionChecker() == null
-                    || !ctx.app().permissionChecker().test(userId, permission)) {
-                ctx.status(403).json(java.util.Map.of("error", "Forbidden", "permission", permission));
-                ctx.abort();
-                return;
-            }
-            ctx.text(response);
-        };
+    @Test
+    void authenticatedRouteRejectsMissingIdentity() {
+        AuraApp app = TestApplications.app("auth-required",
+                new RouteContribution("GET", "/me",
+                        (BaseHandler) ctx -> ctx.text(ctx.userId())).authenticated());
+
+        TestClient.Response response = TestClient.of(app).get("/me").execute();
+
+        assertThat(response.status()).isEqualTo(401);
+        assertThat(response.body()).contains("AURA_AUTHENTICATION_REQUIRED");
     }
 }

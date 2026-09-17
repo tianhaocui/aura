@@ -3,22 +3,22 @@
 ## SSE (Server-Sent Events)
 
 ```java
-r.get("/stream", ctx -> {
+context.route(new RouteContribution("GET", "/stream", (BaseHandler) ctx -> {
     SseEmitter sse = ctx.sse();
     sse.send("hello");                       // data: hello
     sse.send("message", "payload");          // named event
     sse.send("update", "content", "msg-1"); // with id
     sse.close();
-});
+}, Map.of("streaming", true)));
 
 // AI streaming example
-r.post("/chat", ctx -> {
+context.route(new RouteContribution("POST", "/chat", (BaseHandler) ctx -> {
     ChatReq req = ctx.body(ChatReq.class);
     SseEmitter sse = ctx.sse();
     aiClient.streamChat(req.message(), token -> sse.send("token", token));
     sse.send("done", "");
     sse.close();
-});
+}, Map.of("streaming", true)));
 ```
 
 ## File Upload
@@ -45,46 +45,55 @@ ctx.sendFile("data.csv", csvBytes, "text/csv");           // custom content type
 ## Common Integrations
 
 ```java
-// --- Local Cache (Caffeine) ---
-var cache = Caffeine.newBuilder().maximumSize(10_000).expireAfterWrite(Duration.ofMinutes(5)).build();
-app.register(cache);
-app.onStop(a -> cache.invalidateAll());
-User user = cache.get(userId, id -> db.findById("user", id));
+public final class InfrastructureModule implements AuraModule {
+    private final Cache<String, User> cache = Caffeine.newBuilder()
+            .maximumSize(10_000)
+            .expireAfterWrite(Duration.ofMinutes(5))
+            .build();
+    private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
+    private final SnapshotHttpClient upstream = new SnapshotHttpClient(
+            "upstream", "https://api.example.com");
 
-// --- Redis (Redisson) ---
-var config = new Config();
-config.useSingleServer().setAddress("redis://localhost:6379");
-var redisson = Redisson.create(config);
-app.register(redisson);
-app.onStop(a -> redisson.shutdown());
-RMapCache<String, Object> map = redisson.getMapCache("sessions");
-map.put(token, session, 30, TimeUnit.MINUTES);
+    public ModuleMetadata descriptor() {
+        return ModuleMetadata.of("infrastructure", "1.0.0")
+                .requires("db")
+                .provides("cache", "upstream.http");
+    }
 
-// --- Scheduled Tasks ---
-var scheduler = Executors.newScheduledThreadPool(1);
-app.onStart(a -> scheduler.scheduleAtFixedRate(() -> {
-    db.table("sessions").where("expired_at", "<", LocalDateTime.now()).delete();
-}, 0, 1, TimeUnit.HOURS));
-app.onStop(a -> scheduler.shutdownNow());
+    public void install(ModuleContext context) {
+        context.register(cache);
+        context.register(upstream);
+    }
 
-// --- HTTP Client (JDK) ---
-var http = HttpClient.newHttpClient();
-app.register(http);
-var req = HttpRequest.newBuilder(URI.create("https://api.example.com/data")).build();
-var resp = http.send(req, HttpResponse.BodyHandlers.ofString());
+    public void start(ModuleContext context) {
+        Db db = context.require(Db.class);
+        scheduler.scheduleAtFixedRate(() ->
+                db.table("sessions").where("expired_at", "<", LocalDateTime.now()).delete(),
+                0, 1, TimeUnit.HOURS);
+    }
+
+    public void stop(ModuleContext context) {
+        scheduler.shutdownNow();
+        cache.invalidateAll();
+    }
+}
+
+// In a request handler: bounded response + timeout + request cancellation.
+User user = upstream.get("/users/" + id, User.class, ctx.cancellationToken());
 ```
 
 ## Configuration Details
 
 Properties resolution priority (highest to lowest):
-1. `--key=value` startup args
-2. Environment variable (`KEY_NAME` — `.` and `-` → `_`, uppercased)
-3. System Property (`-Dkey=value`)
-4. `app.set(key, value)`
-5. `aura-{env}.properties`
-6. `aura.properties`
+1. Environment variable (`AURA_ORDERS_TIMEOUT` for `aura.orders.timeout`)
+2. JVM system property (`-Daura.orders.timeout=5`)
+3. The `Properties`/file passed to `AuraApp.create(...)`
+4. Explicit `AuraConfig` defaults
 
-Startup args override any key: `--aura.port=9090 --db.url=jdbc:mysql://...`
+Aura does not search classpath profiles implicitly. Supply the deployment file
+explicitly with `AuraApp.create(Path.of("/etc/aura.properties"))`. Startup args
+support `--dev`, `--mcp-stdio`, and module properties such as
+`--orders.timeout=5`; runtime settings are frozen at application creation.
 
 Framework keys in `aura.properties`:
 ```properties
@@ -96,11 +105,13 @@ aura.max-body-size=10485760
 aura.shutdown-timeout=30
 ```
 
-Custom keys: `db.url=...` in `aura.properties` is overridden by env var `DB_URL`.
+Module keys such as `aura.orders.timeout` are overridden by environment variable
+`AURA_ORDERS_TIMEOUT`.
 
 **Graceful shutdown** is built-in: on SIGTERM/SIGINT, waits up to `shutdownTimeout` seconds for in-flight requests. Default: 30s.
 
-**Request timeout**: `requestTimeout(seconds)` — returns 503 JSON on timeout. Handler thread is NOT interrupted.
+**Request timeout**: `requestTimeout(seconds)` cancels the request token,
+interrupts the handler thread, and returns 503 when no response was committed.
 
 **Gzip**: `gzip(true)` compresses responses larger than `gzipMinSize` (default 1KB). Env: `AURA_GZIP=true`.
 

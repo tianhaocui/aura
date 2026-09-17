@@ -197,6 +197,45 @@ class AuraModuleTest {
     }
 
     @Test
+    void namedCapabilitiesComposeWithoutGlobalLookups() {
+        StringBuilder main = new StringBuilder("main");
+        StringBuilder audit = new StringBuilder("audit");
+        AuraModule databases = new AuraModule() {
+            @Override public io.aura.contract.ModuleMetadata descriptor() {
+                return io.aura.contract.ModuleMetadata.of("databases", "1.0.0");
+            }
+
+            @Override public void install(ModuleContext context) {
+                context.register("main", main);
+                context.register("audit", audit);
+            }
+        };
+        AuraApp app = AuraApp.create().use(databases).prepare();
+
+        assertThat(app.require("main", StringBuilder.class)).isSameAs(main);
+        assertThat(app.find("audit", CharSequence.class)).contains(audit);
+        assertThat(app.find("missing", StringBuilder.class)).isEmpty();
+    }
+
+    @Test
+    void duplicateNamedCapabilitiesFailPreparation() {
+        AuraModule module = new AuraModule() {
+            @Override public io.aura.contract.ModuleMetadata descriptor() {
+                return io.aura.contract.ModuleMetadata.of("duplicates", "1.0.0");
+            }
+
+            @Override public void install(ModuleContext context) {
+                context.register("db", new StringBuilder("first"));
+                context.register("db", new StringBuilder("second"));
+            }
+        };
+
+        assertThatThrownBy(() -> AuraApp.create().use(module).prepare())
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("already registered");
+    }
+
+    @Test
     void moduleContributesValidatedWebSocketEndpoint() {
         AuraApp app = AuraApp.create().use(new AuraModule() {
             @Override public io.aura.contract.ModuleMetadata descriptor() {

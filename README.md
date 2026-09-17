@@ -72,8 +72,8 @@ A base workflow owns the common order path. A variant inserts customer-specific
 steps without copying or branching the entire workflow:
 
 ```java
-WorkflowDefinition<OrderContext> order = WorkflowDefinition
-    .<OrderContext>named("order")
+WorkflowDefinition<OrderContext> order = Workflow
+    .<OrderContext>builder("order")
     .step("place", steps::place)
     .step("ship", steps::ship)
     .step("decrement-stock", steps::decrementStock)

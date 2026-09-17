@@ -98,7 +98,11 @@ public final class AuraApp implements AutoCloseable {
     public io.aura.contract.PermissionRegistry permissions() { return runtime.permissions(); }
     public List<io.aura.contract.ModuleMetadata> modules() { return runtime.moduleDescriptors(); }
     public <T> Optional<T> find(Class<T> type) { return runtime.find(type); }
+    public <T> Optional<T> find(String name, Class<T> type) { return runtime.find(name, type); }
     public <T> T require(Class<T> type) {
         return runtime.require(type);
+    }
+    public <T> T require(String name, Class<T> type) {
+        return runtime.require(name, type);
     }
 }

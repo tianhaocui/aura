@@ -177,9 +177,11 @@ context.route(new RouteContribution("GET", "/orders/{id}",
 For lambda routes, declare metadata explicitly when reflection cannot infer it:
 
 ```java
-router.get("/orders/{id}", handler)
-        .describe("Get one order")
-        .param("id", "long", "path", true, "Order identifier");
+context.route(new RouteContribution("GET", "/orders/{id}", handler, Map.of(
+        "description", "Get one order",
+        "parameters", List.of(new ApiParameter(
+                "id", "long", "path", true, "Order identifier"))))
+        .permission("orders.read"));
 ```
 
 Binding is fixed: `int`/`long`/`String` use path then query parameters;
