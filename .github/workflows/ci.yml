@@ -9,13 +9,17 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        java: [17, 23]
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: 17
+          java-version: ${{ matrix.java }}
           cache: maven
 
       - name: Test + Coverage Check
@@ -25,9 +29,21 @@ jobs:
         run: bash scripts/verify-aura-contracts.sh
 
       - name: Upload Coverage Report
-        if: always()
+        if: always() && matrix.java == 17
         uses: actions/upload-artifact@v4
         with:
           name: coverage-report
           path: '**/target/site/jacoco/'
           retention-days: 7
+
+  dependency-review:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Reject newly introduced vulnerable dependencies
+        uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: high
