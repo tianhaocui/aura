@@ -1,447 +1,139 @@
-# aura-web
+# aura-web 1.0
 
-HTTP server, routing, request/response context, middleware, and testing.
+`aura-web` is the optional Undertow adapter. It compiles the route contributions
+installed by `AuraModule`s and uses the same compiled contract for real HTTP,
+`TestClient`, `/__schema__`, OpenAPI, and MCP discovery.
 
-## Canonical 1.0 module routes
-
-New applications contribute transport-neutral routes from an explicit module:
-
-```java
-AuraApp.create()
-    .use(new AuraModule() {
-        public ModuleMetadata descriptor() { return ModuleMetadata.of("orders", "1.0.0"); }
-        public void install(ModuleContext context) {
-            context.route(new RouteContribution("GET", "/orders",
-                    (BaseHandler) ctx -> ctx.json(List.of())));
-        }
-    })
-    .start();
-```
-
-`TestClient.of(app)` verifies the same route contract without opening a listener.
-The fluent `Router` and `Aura` builder examples below are retained for migration
-reference only and are not the recommended 1.0 authoring path.
-
-## Router (legacy compatibility)
-
-Route registration with middleware, grouping, and exception handling.
-
-### Route Methods
+## Route Contributions
 
 ```java
-// Lambda handler
-r.get("/path", ctx -> ctx.json(data));
-r.post("/path", ctx -> ctx.json(ctx.body(Req.class)));
-
-// Method reference (auto parameter binding)
-r.get("/user/{id}", userService, "get");
-r.post("/user", userService, "create");
-
-// CRUD shortcut (registers up to 5 routes)
-r.crud("/user", userService);
-```
-
-**Route priority**: exact paths always beat parameterized paths regardless of registration order.
-`/api/items/search` matches before `/api/items/{id}` even if `{id}` was registered first.
-
-### RouteBuilder (chaining after route registration)
-
-```java
-r.get("/user/{id}", userService, "get")
- .describe("Get user by ID")
- .param("id", "User ID");
-```
-
-### Middleware
-
-```java
-r.before(ctx -> { /* runs before handler */ });
-r.after(ctx -> { /* runs after handler, even on error */ });
-```
-
-### Grouping
-
-```java
-r.group("/api", api -> {
-    api.before(authMiddleware);
-    api.get("/items", itemService, "list");
-    api.post("/items", itemService, "create");
-});
-```
-
-### Exception Handling
-
-```java
-r.exception(NotFoundException.class, (e, ctx) -> ctx.status(404).json(Map.of("error", e.getMessage())));
-r.exception(Exception.class, (e, ctx) -> ctx.status(500).json(Map.of("error", "Internal Error")));
-```
-
-### CRUD Convention
-
-```java
-r.crud("/user", userService);
-// Scans service for methods named: get, list, create, update, delete
-// GET    /user/{id}  → get(int id)
-// GET    /user       → list()
-// POST   /user       → create(...)
-// PUT    /user/{id}  → update(int id, ...)
-// DELETE /user/{id}  → delete(int id)
-// Missing methods are skipped.
-```
-
-### Selective CRUD
-
-```java
-// Only register specific methods
-r.crud("/user", userService, "get", "list");
-// Valid method names: get, list, create, update, delete
-// Invalid names throw IllegalArgumentException at startup
-```
-
-### Abort
-
-```java
-r.before(ctx -> {
-    if (!isAuthenticated(ctx)) {
-        ctx.status(401).text("Unauthorized");
-        ctx.abort(); // skip handler, after-middleware still runs
+public final class OrdersModule implements AuraModule {
+    @Override public ModuleMetadata descriptor() {
+        return ModuleMetadata.of("orders", "1.0.0");
     }
-});
-// ctx.isAborted() returns true after abort() is called
-// If abort() is called without setting a status, response defaults to 403 (Forbidden)
+
+    @Override public void install(ModuleContext context) {
+        context.route(new RouteContribution(
+                "POST", "/orders",
+                (BaseHandler) request -> {
+                    CreateOrder body = request.bodyOrThrow(CreateOrder.class);
+                    request.status(201).json(orderService.create(body));
+                },
+                "Create an order"));
+    }
+}
 ```
 
----
+Generated and reflective routes both produce `ApiRoute`/`ApiParameter`
+metadata. Prefer the optional `aura-processor` for production builds and keep
+reflection for prototypes.
 
 ## Context
 
-Request/response wrapper passed to handlers.
+Common request methods:
 
-### Request
+| Method | Purpose |
+|---|---|
+| `path`, `pathInt`, `pathLong` | Bound path parameters |
+| `query`, `queryRequired`, `queryInt`, `queryLong`, `queryBool` | Query values |
+| `body`, `bodyOrThrow` | Bounded JSON body binding and validation |
+| `header`, `cookie`, `formField`, `file` | Request metadata and uploads |
+| `pageNum`, `pageSize` | Validated pagination |
+| `ip` | Peer address or trusted-proxy forwarded address |
+| `cancellationToken`, `isCancelled` | Timeout/disconnect/shutdown cancellation |
 
-| Method | Returns | Description |
-|--------|---------|-------------|
-| `path(String name)` | String | Path parameter value |
-| `query(String name)` | String | Query parameter value |
-| `query(String name, String default)` | String | Query param with default |
-| `queryInt(String name, int default)` | int | Query param as int (null/blank/invalid → default) |
-| `queryLong(String name, long default)` | long | Query param as long (null/blank/invalid → default) |
-| `queryBool(String name, boolean default)` | boolean | Query param as boolean (only "true" → true) |
-| `header(String name)` | String | Request header |
-| `cookie(String name)` | String | Cookie value |
-| `body(Class<T> type)` | T | JSON-deserialized request body |
-| `pageNum()` | int | `?page=` parsed as int (default 1, min 1) |
-| `pageSize()` | int | `?pageSize=` parsed as int (default 20, max 500) |
-| `file(String field)` | UploadedFile | Multipart file upload field |
-| `method()` | String | HTTP method (GET, POST, ...) |
-| `url()` | String | Request URI |
-| `cancellationToken()` | CancellationToken | Cooperative cancellation for timeout, disconnect, and shutdown |
-| `isCancelled()` | boolean | Whether the request cancellation signal has fired |
-| `abort()` | void | Skip handler execution (before-middleware only) |
-| `isAborted()` | boolean | Whether abort() was called |
-| `set(String key, Object value)` | void | Store named attribute |
-| `get(String key, Class<T> type)` | T | Retrieve named attribute |
+Common response methods:
 
-### Response
+| Method | Purpose |
+|---|---|
+| `status` | Set status code |
+| `json`, `jsonRaw`, `text`, `html`, `raw` | Write a response |
+| `header`, `cookie` | Response metadata |
+| `redirect` | Validated redirect without CRLF injection |
+| `sendFile` | Attachment response |
+| `sse` | Server-Sent Events emitter |
 
-| Method | Returns | Description |
-|--------|---------|-------------|
-| `status(int code)` | Context | Set status code (chainable) |
-| `json(Object obj)` | void | Send JSON response |
-| `text(String text)` | void | Send plain text response |
-| `sendFile(String name, byte[] data)` | void | Send file download (octet-stream) |
-| `sendFile(String name, byte[] data, String type)` | void | Send file download with content type |
-| `redirect(String url)` | void | 302 redirect |
-| `header(String name, String value)` | Context | Set response header |
-| `cookie(String name, String value, int maxAge)` | Context | Set cookie (HttpOnly + Secure) |
-| `sse()` | SseEmitter | Open SSE stream (text/event-stream) |
-
-**Note**: `ctx.json(row)` works directly — Row extends LinkedHashMap and serializes as a JSON object. No manual Map conversion needed. Use `.select("col1, col2")` in the query to control which fields appear in the output.
-
-**Security**: `redirect(url)` throws `IllegalArgumentException` if the URL contains `\r` or `\n` (CRLF injection prevention).
-
-### External HTTP calls
-
-`SnapshotHttpClient` only accepts relative paths within its configured HTTP(S)
-base URI. Redirects are disabled, response bodies have a bounded default size,
-and requests have an absolute timeout. For a downstream call started by a
-handler, pass the request token so client disconnects and timeouts cancel the
-request and response-body read:
-
-```java
-var user = http.get("/users/" + id, User.class, ctx.cancellationToken());
-```
-
----
-
-## SSE (Server-Sent Events)
-
-```java
-r.get("/stream", ctx -> {
-    SseEmitter sse = ctx.sse();
-    sse.send("hello");                          // data: hello
-    sse.send("message", "payload");             // named event
-    sse.send("update", "content", "msg-1");     // with id
-    sse.close();
-});
-```
-
-`ctx.sse()` sets `Content-Type: text/event-stream`, disables buffering, and returns an `SseEmitter`.
-
-### SseEmitter
-
-| Method | Description |
-|--------|-------------|
-| `send(String data)` | Send `data:` event |
-| `send(String event, String data)` | Send named event |
-| `send(String event, String data, String id)` | Send named event with id |
-| `close()` | Close the stream |
-
-**Security**: Event names and IDs are automatically sanitized — `\r` and `\n` characters are stripped to prevent SSE injection. Multiline data is split into multiple `data:` lines per the SSE spec.
-
-**AI streaming example:**
-
-```java
-r.post("/chat", ctx -> {
-    ChatReq req = ctx.body(ChatReq.class);
-    SseEmitter sse = ctx.sse();
-    // stream tokens from AI model
-    aiClient.streamChat(req.message(), token -> {
-        sse.send("token", token);
-    });
-    sse.send("done", "");
-    sse.close();
-});
-```
-
-### Attributes
-
-```java
-ctx.set(currentUser);           // store by type
-User u = ctx.get(User.class);  // retrieve by type
-
-ctx.set("key", value);          // store by name
-Object v = ctx.get("key", Object.class);
-
-ctx.app().get(Db.class);       // access registry
-```
-
----
-
-## File Upload
-
-```java
-UploadedFile f = ctx.file("avatar"); // multipart/form-data field
-f.name()        // original filename
-f.data()        // byte[]
-f.contentType() // MIME type, e.g. "image/png"
-f.size()        // bytes
-
-// Increase limit for large files (default 10MB):
-Aura.create().maxBodySize(500 * 1024 * 1024L)
-```
-
----
-
-## Handler
-
-```java
-@FunctionalInterface
-public interface BaseHandler {
-    void handle(BaseContext ctx) throws Exception;
-}
-```
-
----
-
-## ExceptionHandler
-
-```java
-@FunctionalInterface
-public interface BaseExceptionHandler<T extends Exception> {
-    void handle(T exception, BaseContext ctx);
-}
-```
-
----
-
-## Error Handling
-
-Unhandled exceptions always return JSON `{"error": "message"}`.
-- `IllegalArgumentException` and `ValidationException` → 400
-- All other unhandled exceptions → 500
-- Dev mode (`AURA_ENV=dev`): response includes `"trace"` field with full stack trace
-- Production (`AURA_ENV=prod`): only the message is shown
-
----
+Request bodies, form fields, uploads, and external response reads have explicit
+limits. Upload APIs do not expose an unbounded `readAllBytes()` path.
 
 ## TestClient
 
-In-memory route execution for testing. No HTTP server needed.
+```java
+AuraApp app = AuraApp.create()
+        .use(new OrdersModule())
+        .prepare();
+
+TestClient client = TestClient.of(app);
+client.post("/orders")
+        .body(new CreateOrder("sku-1", 2))
+        .expect(201);
+
+Map<String, Object> schema = client.schema();
+Map<String, Object> openApi = client.openApi();
+```
+
+`TestClient` installs the same modules, compiles the same routes, applies the
+same binding and exception resolution, and returns the same structured errors
+as Undertow. Use a real Undertow socket test only for transport behavior such as
+TLS, compression, multipart parsing, SSE, WebSocket, disconnects, and headers.
+
+## Structured Errors
+
+Use `ApiException` or another `CodedException` for expected failures. Responses
+include a stable `code`, location/field when relevant, reason, and repair hint.
+Production 500 responses do not include raw exception messages or stack traces.
+
+## Schema And OpenAPI
+
+`/__schema__` is disabled in production unless explicitly protected or enabled
+by the application policy. `/openapi.json` requires `AuraConfig.openApi(true)`
+outside explicit dev mode. Both are generated from the same compiled routes.
+
+## SSE And WebSocket
+
+`request.sse()` returns an `SseEmitter`. Event names and IDs are sanitized,
+streaming routes are excluded from the normal request timeout and gzip path,
+and application protocols must bound queues and replay history.
+
+WebSocket handshakes enforce the configured Origin policy. Missing Origin is
+not implicitly trusted when the application requires browser-origin checks.
+
+## Production Controls
+
+Configure controls once with `AuraConfig` before creating the app:
 
 ```java
-var app = Aura.create().service(new UserService());
-var test = TestClient.of(app);
+AuraConfig config = new AuraConfig()
+        .allowedHosts("api.example.com")
+        .publicOrigin("https://api.example.com")
+        .securityHeaders(true)
+        .maxBodySize(10 * 1024 * 1024L)
+        .maxUploadSize(1024 * 1024L)
+        .requestTimeout(30)
+        .concurrencyLimit(200)
+        .rateLimitPerSecond(100)
+        .rateLimitMaxKeys(65_536)
+        .gzip(true);
 
-// GET
-test.get("/user/1").expect(200).bodyContains("Alice");
-
-// POST with body
-test.post("/user").body(new CreateReq("tom", 25)).expect(200);
-
-// Full response access
-Response resp = test.get("/user/1").execute();
-int status = resp.status();
-String body = resp.body();
-User user = resp.json(User.class);
-
-// Headers
-test.get("/api/data").header("Authorization", "Bearer token").expect(200);
-
-// 404
-test.get("/notfound").expect(404);
-
-// PUT with body
-test.put("/user/1").body(Map.of("name", "updated")).expect(200);
-
-// DELETE
-test.delete("/user/1").expect(204);
+AuraApp app = AuraApp.create(config).use(new OrdersModule());
 ```
 
-### Request
+Trusted proxies are explicit. Forwarded headers from untrusted peers are
+ignored. Credentialed CORS requires explicit origins; wildcard credentials are
+rejected. Dynamic Origin responses include `Vary: Origin`.
 
-| Method | Description |
-|--------|-------------|
-| `header(String name, String value)` | Add request header |
-| `body(Object obj)` | Set JSON request body |
-| `execute()` | Execute and return Response |
-| `expect(int statusCode)` | Execute and assert status |
+## Snapshots
 
-### Response
+Snapshot recording redacts credentials, query values, bodies, exception text,
+stacks, and external URLs according to `SnapshotOptions`. Retention is bounded
+by TTL, count, total bytes, per-file bytes, sampling, and writer queue capacity.
 
-| Method | Description |
-|--------|-------------|
-| `status()` | HTTP status code |
-| `body()` | Response body as String |
-| `json(Class<T>)` | Deserialize body to type |
-| `expect(int)` | Assert status code |
-| `bodyContains(String)` | Assert body contains text |
-
----
-
-## MethodRefHandler
-
-Wraps a service method for automatic parameter binding.
-
-### Parameter Binding Rules
-
-| Parameter type | Source | Example |
-|---|---|---|
-| `int`, `long`, `String` | Path param by name, then query param | `get(int id)` |
-| `double`, `boolean` | Path param by name, then query param | `filter(boolean active)` |
-| `Integer`, `Long`, `Boolean` | Path param by name, then query param; returns `null` when absent | `filter(Boolean active)` |
-| `record` or POJO | Request body (JSON) | `create(CreateReq req)` |
-| `Context` | Framework context | `handle(Context ctx)` |
-
-### Return Value
-
-- Non-void → auto-serialized to JSON
-- void → no response body
-
-### Direct Invocation (for MCP)
+Replay uses the canonical application facade:
 
 ```java
-Object result = handler.invokeWithArgs(Map.of("id", 1));
+SnapshotReplayer.of(app)
+        .load(snapshotPath)
+        .replay()
+        .expectSameStatus()
+        .expectSameCode();
 ```
-
----
-
-## Built-in Endpoints
-
-### `GET /__schema__`
-
-Returns full API structure as JSON:
-
-```json
-{
-  "name": "App Name",
-  "routes": [
-    {
-      "method": "GET",
-      "path": "/user/{id}",
-      "description": "Get user by ID",
-      "returnType": "User",
-      "params": [{"name": "id", "type": "int", "source": "path", "description": "User ID"}],
-      "example": "curl http://localhost:8080/user/1"
-    }
-  ]
-}
-```
-
----
-
-## File Download
-
-```java
-ctx.sendFile("report.pdf", fileBytes);
-ctx.sendFile("data.csv", csvBytes, "text/csv");
-```
-
-Sets `Content-Disposition: attachment; filename="<name>"` and `Content-Length`. Default content type is `application/octet-stream`. Filenames with quotes are escaped automatically.
-
----
-
-## Configuration
-
-| Feature | How |
-|---------|-----|
-| CORS | `app.cors(true)` — CORS allow all origins, includes `Access-Control-Max-Age: 86400` |
-| Static files | `app.staticFiles("/public")` — Serve from classpath with `Cache-Control` + `ETag` (86400s) |
-| SPA mode | `app.spa(true)` — SPA mode: unknown paths fall back to `/index.html` |
-| Body size limit | `app.maxBodySize(bytes)` — default 10MB |
-| Request timeout | `app.requestTimeout(seconds)` — 503 JSON on timeout (env: `AURA_REQUEST_TIMEOUT`) |
-| Gzip | `app.gzip(true)` — response compression (env: `AURA_GZIP`) |
-| Gzip min size | `app.gzipMinSize(bytes)` — min response size to compress (default: 1024) |
-| Graceful shutdown | `app.shutdownTimeout(seconds)` — default 30s |
-
----
-
-## Request Timeout
-
-```java
-Aura.create().requestTimeout(30).start(); // or env AURA_REQUEST_TIMEOUT=30
-```
-
-When a handler exceeds the configured timeout:
-1. A 503 JSON response `{"error":"Request timeout"}` is sent to the client
-2. The handler thread is **not** interrupted — it continues running but cannot write to the response
-3. Thread safety is guaranteed via `AtomicBoolean` CAS — only one of timeout/handler can send the response
-
-Use for protecting against slow downstream calls. For long-running tasks, check a cancellation flag cooperatively.
-
----
-
-## Gzip Compression
-
-```java
-Aura.create().gzip(true).gzipMinSize(1024).start(); // or env AURA_GZIP=true
-```
-
-- Responses smaller than `gzipMinSize` (default 1KB) are sent uncompressed
-- Only compresses when client sends `Accept-Encoding: gzip`
-- Streaming responses (SSE) are not compressed
-
----
-
-## Route Conflict Detection
-
-Aura detects duplicate routes at startup and fails fast:
-
-```java
-app.routes(r -> {
-    r.get("/api/users", handler1);
-    r.get("/api/users", handler2); // IllegalStateException at startup
-});
-```
-
-Detection compares `method + path` (including parameterized paths like `/users/{id}`). Different methods on the same path are allowed. Routes inside `group()` are expanded before checking.

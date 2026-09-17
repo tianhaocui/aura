@@ -77,6 +77,12 @@ if rg -n 'Aura\.create\(|\.plugin\(' "$repo_root/README.md" "$repo_root/README_C
 fi
 rg -q 'AuraApp\.create\(' "$repo_root/README.md"
 rg -q 'AuraApp\.create\(' "$repo_root/README_CN.md"
+if rg -n 'Aura\.create\(|AuraPlugin|Aura\.requireAuth' \
+    "$repo_root/docs/aura-core.md" "$repo_root/docs/aura-web.md" \
+    "$repo_root/.claude/skills/aura/SKILL.md"; then
+  echo "legacy API found in canonical module documentation or AI skill" >&2
+  exit 1
+fi
 if rg -n '0\.6\.1|Aura\.create\(|\.plugin\(' \
     "$repo_root/AI_GUIDE_DB.md" "$repo_root/AI_GUIDE_MCP.md" "$repo_root/AI_GUIDE_OPS.md"; then
   echo "legacy API found in canonical AI extension guides" >&2

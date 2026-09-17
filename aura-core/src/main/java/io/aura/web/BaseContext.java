@@ -142,7 +142,8 @@ public interface BaseContext {
     // --- auth ---
     default String userId() {
         Object id = get("_userId", Object.class);
-        if (id == null) throw new IllegalStateException("Not authenticated — use Aura.requireAuth() middleware");
+        if (id == null) throw new IllegalStateException(
+                "Not authenticated - configure AuraApp.authenticate(...) and route authorization");
         return id.toString();
     }
 
