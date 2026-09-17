@@ -35,6 +35,7 @@ final class ModularRuntime implements AuraWebRuntime {
     private final Map<String, Object> namedRegistry = new ConcurrentHashMap<>();
     private final List<Object> services = new CopyOnWriteArrayList<>();
     private final List<RouteEntry> directRoutes = new CopyOnWriteArrayList<>();
+    private final List<WebSocketContribution> webSocketContributions = new CopyOnWriteArrayList<>();
     private final List<AutoCloseable> closeables = new CopyOnWriteArrayList<>();
     private final List<io.aura.contract.HealthCheck> healthChecks = new CopyOnWriteArrayList<>();
     private final List<AuraEventListener> eventListeners = new CopyOnWriteArrayList<>();
@@ -214,6 +215,7 @@ final class ModularRuntime implements AuraWebRuntime {
     @Override public Consumer<?> routeConfig() { return null; }
     @Override public List<Object> services() { return List.copyOf(services); }
     @Override public List<RouteEntry> directRoutes() { return List.copyOf(directRoutes); }
+    @Override public List<WebSocketContribution> webSocketContributions() { return List.copyOf(webSocketContributions); }
     @Override public List<String> scanPackages() { return List.of(); }
     @Override public List<Class<?>> serviceClasses() { return List.of(); }
     @Override public String staticFilesPath() { return config.staticFilesPath(); }
@@ -308,6 +310,9 @@ final class ModularRuntime implements AuraWebRuntime {
             if (route.handler() == null) throw new ModuleException("AURA_ROUTE_HANDLER_MISSING", descriptor.id(), "Route contribution " + route.method() + " " + route.path() + " has no handler");
             route.parameters();
             directRoutes.add(new RouteEntry(route.method(), route.path(), route.handler(), route.description(), route.metadata()));
+        }
+        @Override public void webSocket(String path, java.util.function.Consumer<io.aura.web.WsHandler> configure) {
+            webSocketContributions.add(new WebSocketContribution(path, configure));
         }
         @Override public void healthCheck(io.aura.contract.HealthCheck check) { if (check != null) healthChecks.add(check); }
         @Override public PermissionRegistry permissions() { return permissions; }

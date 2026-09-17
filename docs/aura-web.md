@@ -97,6 +97,14 @@ and application protocols must bound queues and replay history.
 
 WebSocket handshakes enforce the configured Origin policy. Missing Origin is
 not implicitly trusted when the application requires browser-origin checks.
+Business modules contribute endpoints explicitly:
+
+```java
+context.webSocket("/events", socket -> socket
+        .onOpen(connection -> connection.send("ready"))
+        .onMessage((connection, text) -> connection.send("echo:" + text))
+        .onClose((connection, code, reason) -> { }));
+```
 
 ## Production Controls
 

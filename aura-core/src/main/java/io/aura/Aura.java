@@ -38,6 +38,7 @@ public class Aura implements AuraWebRuntime {
     private Consumer<?> routeConfig;
     private final List<Object> services = new ArrayList<>();
     private final List<RouteEntry> directRoutes = new ArrayList<>();
+    private final List<WebSocketContribution> webSocketContributions = new ArrayList<>();
     private final List<String> scanPackages = new ArrayList<>();
     private final List<Class<?>> serviceClasses = new ArrayList<>();
     private final List<Reloadable> reloadables = new ArrayList<>();
@@ -802,6 +803,7 @@ public class Aura implements AuraWebRuntime {
     }
     public List<Object> services() { return services; }
     public List<RouteEntry> directRoutes() { return directRoutes; }
+    public List<WebSocketContribution> webSocketContributions() { return webSocketContributions; }
     public List<String> scanPackages() { return scanPackages; }
     public List<Class<?>> serviceClasses() { return serviceClasses; }
     public String staticFilesPath() { return staticFilesPath; }
@@ -876,6 +878,9 @@ public class Aura implements AuraWebRuntime {
             }
             directRoutes.add(new RouteEntry(route.method(), route.path(), route.handler(),
                     route.description(), route.metadata()));
+        }
+        @Override public void webSocket(String path, java.util.function.Consumer<io.aura.web.WsHandler> configure) {
+            webSocketContributions.add(new WebSocketContribution(path, configure));
         }
         @Override public void healthCheck(io.aura.contract.HealthCheck healthCheck) { Aura.this.healthCheck(healthCheck); }
         @Override public io.aura.contract.PermissionRegistry permissions() { return permissionRegistry; }

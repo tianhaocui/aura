@@ -196,6 +196,29 @@ class AuraModuleTest {
         assertThat(app.permissions().contains("orders.read")).isTrue();
     }
 
+    @Test
+    void moduleContributesValidatedWebSocketEndpoint() {
+        AuraApp app = AuraApp.create().use(new AuraModule() {
+            @Override public io.aura.contract.ModuleMetadata descriptor() {
+                return io.aura.contract.ModuleMetadata.of("events", "1.0.0");
+            }
+
+            @Override public void install(ModuleContext context) {
+                context.webSocket("/events", socket -> socket.onMessage((connection, text) -> { }));
+            }
+        });
+
+        app.prepare();
+
+        AuraWebRuntime runtime = (AuraWebRuntime) app.runtimeView();
+        assertThat(runtime.webSocketContributions()).singleElement()
+                .extracting(WebSocketContribution::path)
+                .isEqualTo("/events");
+        assertThatThrownBy(() -> new WebSocketContribution("events", handler -> { }))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("start with");
+    }
+
     private static AuraModule module(String id, List<String> dependencies, List<String> installed) {
         return new AuraModule() {
             @Override public io.aura.contract.ModuleMetadata descriptor() {

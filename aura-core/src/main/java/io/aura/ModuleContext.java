@@ -30,6 +30,9 @@ public interface ModuleContext extends io.aura.contract.CapabilityLookup {
 
     void route(io.aura.contract.RouteContribution route);
 
+    /** Adds one WebSocket endpoint owned by the current business module. */
+    void webSocket(String path, java.util.function.Consumer<io.aura.web.WsHandler> configure);
+
     void healthCheck(io.aura.contract.HealthCheck healthCheck);
 
     io.aura.contract.PermissionRegistry permissions();

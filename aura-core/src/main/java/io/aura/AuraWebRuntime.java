@@ -28,6 +28,7 @@ public interface AuraWebRuntime extends AuraMcpRuntime {
     Consumer<?> routeConfig();
     List<Object> services();
     List<RouteEntry> directRoutes();
+    List<WebSocketContribution> webSocketContributions();
     List<String> scanPackages();
     List<Class<?>> serviceClasses();
     String staticFilesPath();

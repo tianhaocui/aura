@@ -14,6 +14,9 @@ final class RouteAssembler {
         app.prepareModules();
         Router router = new Router();
         registerDirectRoutes(app, router);
+        for (var contribution : app.webSocketContributions()) {
+            router.ws(contribution.path(), contribution.configure());
+        }
 
         @SuppressWarnings("unchecked")
         Consumer<BaseRouter> configuredRoutes = (Consumer<BaseRouter>) app.routeConfig();
