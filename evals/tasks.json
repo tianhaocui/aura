@@ -47,7 +47,7 @@
       "id": "bounded-websocket",
       "category": "websocket",
       "maxTokens": 3500,
-      "prompt": "Contribute an authenticated WebSocket endpoint from ModuleContext, echo messages, and prove an oversized message closes with code 1009 before the handler runs.",
+      "prompt": "Contribute an authenticated Aura WebSocket endpoint from ModuleContext, echo messages, and prove an oversized message closes with code 1009 before the handler runs.",
       "verificationTests": ["io.aura.web.WebSocketTest"]
     },
     {
