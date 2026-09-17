@@ -216,7 +216,7 @@ public final class AuraConfig {
     public boolean openApiEnabled() { return openApiEnabled; }
     public boolean tlsEnabled() { return keyStorePath != null; }
     public String keyStorePath() { return keyStorePath; }
-    public String keyStorePassword() { return keyStorePassword; }
+    String keyStorePassword() { return keyStorePassword; }
     public String staticFilesPath() { return staticFilesPath; }
     public boolean spa() { return spa; }
     public String corsOrigin() { return corsOrigin; }

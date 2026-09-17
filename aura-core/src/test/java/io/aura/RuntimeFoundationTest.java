@@ -175,6 +175,12 @@ class RuntimeFoundationTest {
         assertThat(app.config().snapshotOptions().maxBodySize()).isEqualTo(4096);
     }
 
+    @Test void publicConfigSnapshotDoesNotExposeTlsPassword() {
+        assertThat(java.util.Arrays.stream(AuraConfigSnapshot.class.getMethods())
+                .map(java.lang.reflect.Method::getName))
+                .doesNotContain("keyStorePassword");
+    }
+
     @Test void modularRuntimeRejectsPropertyChangesAfterPreparation() {
         AuraApp app = AuraApp.create().property("aura.orders.timeout", "5");
         app.prepare();

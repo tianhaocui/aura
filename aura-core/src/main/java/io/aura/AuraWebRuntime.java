@@ -20,6 +20,8 @@ import java.util.function.Function;
  * {@link Aura} builder implementation.</p>
  */
 public interface AuraWebRuntime extends AuraMcpRuntime {
+    /** Returns the initialized TLS context without exposing keystore credentials. */
+    default javax.net.ssl.SSLContext tlsContext() { return null; }
     int port();
     String env();
     int workers();

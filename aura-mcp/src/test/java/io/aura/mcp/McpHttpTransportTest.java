@@ -118,6 +118,73 @@ class McpHttpTransportTest {
     }
 
     @Test
+    void realUndertowSocketHandlesJsonRpcBatchesAndNotificationOnlyBatches() throws Exception {
+        int port;
+        try (ServerSocket socket = new ServerSocket(0)) {
+            port = socket.getLocalPort();
+        }
+        McpRouter router = new McpRouter();
+        router.tool("ping_tool", "Ping").handler(ctx -> "pong");
+        AuraApp app = AuraApp.create(new io.aura.AuraConfig().port(port))
+                .mcpAuthenticate(metadata -> "Bearer alice".equals(metadata.get("authorization"))
+                        ? "alice" : null)
+                .use(McpModule.create(router).http());
+        HttpClient http = HttpClient.newHttpClient();
+        URI endpoint = URI.create("http://127.0.0.1:" + port + "/mcp");
+        try {
+            app.start();
+            HttpResponse<String> initialized = http.send(
+                    HttpRequest.newBuilder(endpoint)
+                            .header("Authorization", "Bearer alice")
+                            .header("Content-Type", "application/json")
+                            .POST(HttpRequest.BodyPublishers.ofString(JSON.toJSONString(initialize(1))))
+                            .build(),
+                    HttpResponse.BodyHandlers.ofString());
+            assertThat(initialized.statusCode()).isEqualTo(200);
+            String session = initialized.headers()
+                    .firstValue(McpHttpTransport.SESSION_HEADER).orElseThrow();
+
+            HttpResponse<String> batch = http.send(
+                    HttpRequest.newBuilder(endpoint)
+                            .header("Authorization", "Bearer alice")
+                            .header("Accept", "application/json, text/event-stream")
+                            .header(McpHttpTransport.SESSION_HEADER, session)
+                            .header("Content-Type", "application/json")
+                            .POST(HttpRequest.BodyPublishers.ofString(JSON.toJSONString(java.util.List.of(
+                                    Map.of("jsonrpc", "2.0", "id", 2, "method", "ping", "params", Map.of()),
+                                    Map.of("jsonrpc", "2.0", "method", "notifications/initialized",
+                                            "params", Map.of()),
+                                    Map.of("jsonrpc", "2.0", "id", 3, "method", "tools/list",
+                                            "params", Map.of())))))
+                            .build(),
+                    HttpResponse.BodyHandlers.ofString());
+            assertThat(batch.statusCode()).isEqualTo(200);
+            com.alibaba.fastjson2.JSONArray responses = JSON.parseArray(batch.body());
+            assertThat(responses).hasSize(2);
+            assertThat(responses.getJSONObject(0).getInteger("id")).isEqualTo(2);
+            assertThat(responses.getJSONObject(1).getInteger("id")).isEqualTo(3);
+
+            HttpResponse<String> notifications = http.send(
+                    HttpRequest.newBuilder(endpoint)
+                            .header("Authorization", "Bearer alice")
+                            .header("Accept", "application/json, text/event-stream")
+                            .header(McpHttpTransport.SESSION_HEADER, session)
+                            .header("Content-Type", "application/json")
+                            .POST(HttpRequest.BodyPublishers.ofString(JSON.toJSONString(java.util.List.of(
+                                    Map.of("jsonrpc", "2.0", "method", "notifications/initialized",
+                                            "params", Map.of()),
+                                    Map.of("jsonrpc", "2.0", "method", "notifications/initialized",
+                                            "params", Map.of())))))
+                            .build(),
+                    HttpResponse.BodyHandlers.ofString());
+            assertThat(notifications.statusCode()).isEqualTo(202);
+            assertThat(notifications.body()).isEmpty();
+        } finally {
+            app.stop();
+        }
+    }
+
+    @Test
     void realUndertowSseStreamPublishesIdentityBoundServerMessages() throws Exception {
         int port;
         try (ServerSocket socket = new ServerSocket(0)) {

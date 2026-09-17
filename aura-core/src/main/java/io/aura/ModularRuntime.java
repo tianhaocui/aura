@@ -29,6 +29,7 @@ import java.util.function.Function;
  */
 final class ModularRuntime implements AuraWebRuntime {
     private final AuraConfigSnapshot config;
+    private final javax.net.ssl.SSLContext tlsContext;
     private final Map<String, String> properties = new ConcurrentHashMap<>();
     private final Map<Class<?>, Object> registry = new ConcurrentHashMap<>();
     private final Map<String, Object> namedRegistry = new ConcurrentHashMap<>();
@@ -58,8 +59,34 @@ final class ModularRuntime implements AuraWebRuntime {
 
     ModularRuntime(AuraConfig source) {
         this.config = AuraConfigSnapshot.from(source);
+        this.tlsContext = createTlsContext(source);
         this.properties.putAll(source.properties());
         registry.put(ModularRuntime.class, this);
+    }
+
+    @Override public javax.net.ssl.SSLContext tlsContext() { return tlsContext; }
+
+    private static javax.net.ssl.SSLContext createTlsContext(AuraConfig source) {
+        if (!source.tlsEnabled()) return null;
+        try {
+            java.security.KeyStore keyStore = java.security.KeyStore.getInstance(java.security.KeyStore.getDefaultType());
+            try (java.io.InputStream input = java.nio.file.Files.newInputStream(java.nio.file.Path.of(source.keyStorePath()))) {
+                keyStore.load(input, source.keyStorePassword().toCharArray());
+            }
+            var keyManagerFactory = javax.net.ssl.KeyManagerFactory.getInstance(
+                    javax.net.ssl.KeyManagerFactory.getDefaultAlgorithm());
+            char[] password = source.keyStorePassword().toCharArray();
+            try {
+                keyManagerFactory.init(keyStore, password);
+            } finally {
+                java.util.Arrays.fill(password, '\0');
+            }
+            var context = javax.net.ssl.SSLContext.getInstance("TLS");
+            context.init(keyManagerFactory.getKeyManagers(), null, null);
+            return context;
+        } catch (Exception error) {
+            throw new IllegalArgumentException("TLS keystore could not be initialized", error);
+        }
     }
 
     @Override public RuntimeState state() { return state.get(); }

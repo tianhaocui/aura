@@ -203,6 +203,28 @@ public class Aura implements AuraWebRuntime {
     public int rateLimitPerSecond() { return config.rateLimitPerSecond(); }
     public int concurrencyLimit() { return config.concurrencyLimit(); }
     public String publicOrigin() { return config.publicOrigin(); }
+    @Override public javax.net.ssl.SSLContext tlsContext() {
+        if (!config.tlsEnabled()) return null;
+        try {
+            java.security.KeyStore keyStore = java.security.KeyStore.getInstance(java.security.KeyStore.getDefaultType());
+            try (java.io.InputStream input = java.nio.file.Files.newInputStream(java.nio.file.Path.of(config.keyStorePath()))) {
+                keyStore.load(input, config.keyStorePassword().toCharArray());
+            }
+            var keyManagerFactory = javax.net.ssl.KeyManagerFactory.getInstance(
+                    javax.net.ssl.KeyManagerFactory.getDefaultAlgorithm());
+            char[] password = config.keyStorePassword().toCharArray();
+            try {
+                keyManagerFactory.init(keyStore, password);
+            } finally {
+                java.util.Arrays.fill(password, '\0');
+            }
+            var context = javax.net.ssl.SSLContext.getInstance("TLS");
+            context.init(keyManagerFactory.getKeyManagers(), null, null);
+            return context;
+        } catch (Exception error) {
+            throw new IllegalArgumentException("TLS keystore could not be initialized", error);
+        }
+    }
     public java.util.Set<String> allowedHosts() { return config.allowedHosts(); }
     public boolean securityHeaders() { return config.securityHeaders(); }
     public boolean openApiEnabled() { return config.openApiEnabled(); }

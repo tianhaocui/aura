@@ -29,7 +29,6 @@ public final class AuraConfigSnapshot {
     private final boolean securityHeaders;
     private final boolean openApiEnabled;
     private final String keyStorePath;
-    private final String keyStorePassword;
     private final String staticFilesPath;
     private final boolean spa;
     private final String corsOrigin;
@@ -59,7 +58,6 @@ public final class AuraConfigSnapshot {
         this.securityHeaders = source.securityHeaders();
         this.openApiEnabled = source.openApiEnabled();
         this.keyStorePath = source.keyStorePath();
-        this.keyStorePassword = source.keyStorePassword();
         this.staticFilesPath = source.staticFilesPath();
         this.spa = source.spa();
         this.corsOrigin = source.corsOrigin();
@@ -93,7 +91,6 @@ public final class AuraConfigSnapshot {
     public boolean openApiEnabled() { return openApiEnabled; }
     public boolean tlsEnabled() { return keyStorePath != null; }
     public String keyStorePath() { return keyStorePath; }
-    public String keyStorePassword() { return keyStorePassword; }
     public String staticFilesPath() { return staticFilesPath; }
     public boolean spa() { return spa; }
     public String corsOrigin() { return corsOrigin; }

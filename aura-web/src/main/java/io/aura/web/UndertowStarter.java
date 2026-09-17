@@ -37,7 +37,6 @@ import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.ConcurrentHashMap;
 
 public class UndertowStarter implements AuraStarter {
 
@@ -51,7 +50,7 @@ public class UndertowStarter implements AuraStarter {
     private ClassPathResourceManager resourceManager;
     private volatile List<CompiledRoute> compiledRoutes;
     private volatile List<CompiledWsRoute> compiledWsRoutes;
-    private final ConcurrentHashMap<String, WindowCounter> rateCounters = new ConcurrentHashMap<>();
+    private final FixedWindowRateLimiter rateLimiter = new FixedWindowRateLimiter();
     private final AtomicInteger inFlight = new AtomicInteger();
 
     @Override
@@ -124,7 +123,7 @@ public class UndertowStarter implements AuraStarter {
         var builder = Undertow.builder().setWorkerThreads(app.workers()).setHandler(rootHandler);
         if (app.config().tlsEnabled()) {
             try {
-                builder.addHttpsListener(app.port(), "0.0.0.0", tlsContext(app.config().keyStorePath(), app.config().keyStorePassword()));
+                builder.addHttpsListener(app.port(), "0.0.0.0", app.tlsContext());
             } catch (Exception e) {
                 throw new IllegalArgumentException("TLS configuration is invalid; HTTPS listener was not started", e);
             }
@@ -633,8 +632,7 @@ public class UndertowStarter implements AuraStarter {
         if (rate > 0) {
             String key = exchange.getSourceAddress() == null ? "unknown" : exchange.getSourceAddress().getHostString();
             long now = System.currentTimeMillis() / 1000;
-            WindowCounter counter = rateCounters.compute(key, (k, old) -> old == null || old.second != now ? new WindowCounter(now) : old);
-            if (counter.count.incrementAndGet() > rate) {
+            if (!rateLimiter.tryAcquire(key, rate, now)) {
                 app.emit(AuraEvent.of("request.rejected.rate", java.util.Map.of("ratePerSecond", rate, "key", key)));
                 if (limit > 0) inFlight.decrementAndGet();
                 exchange.getResponseHeaders().put(new HttpString("Retry-After"), "1");
@@ -648,18 +646,6 @@ public class UndertowStarter implements AuraStarter {
         exchange.setStatusCode(status);
         exchange.getResponseHeaders().put(Headers.CONTENT_TYPE, "application/json; charset=utf-8");
         exchange.getResponseSender().send("{\"error\":\"" + message + "\"}");
-    }
-
-    private static javax.net.ssl.SSLContext tlsContext(String path, String password) throws Exception {
-        java.security.KeyStore ks = java.security.KeyStore.getInstance(java.security.KeyStore.getDefaultType());
-        try (var in = java.nio.file.Files.newInputStream(java.nio.file.Path.of(path))) { ks.load(in, password.toCharArray()); }
-        var kmf = javax.net.ssl.KeyManagerFactory.getInstance(javax.net.ssl.KeyManagerFactory.getDefaultAlgorithm());
-        kmf.init(ks, password.toCharArray());
-        var ssl = javax.net.ssl.SSLContext.getInstance("TLS"); ssl.init(kmf.getKeyManagers(), null, null); return ssl;
-    }
-
-    private static final class WindowCounter {
-        final long second; final AtomicInteger count = new AtomicInteger(); WindowCounter(long second) { this.second = second; }
     }
 
     private static boolean isUnsafeMethod(String method) {
