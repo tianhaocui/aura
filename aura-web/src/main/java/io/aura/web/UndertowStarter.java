@@ -699,7 +699,7 @@ public class UndertowStarter implements AuraStarter {
     }
 
     private List<CompiledWsRoute> compileWsRoutes(BaseRouter router) {
-        return compileWsRoutes(router, "", new ArrayList<>());
+        return compileWsRoutes(router, "", new ArrayList<>(app.beforeHandlers()));
     }
 
     private List<CompiledWsRoute> compileWsRoutes(BaseRouter router, String prefix,

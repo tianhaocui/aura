@@ -33,6 +33,18 @@ public interface ModuleContext extends io.aura.contract.CapabilityLookup {
     /** Adds one WebSocket endpoint owned by the current business module. */
     void webSocket(String path, java.util.function.Consumer<io.aura.web.WsHandler> configure);
 
+    /** Adds middleware applied before every assembled HTTP route and WebSocket handshake. */
+    void before(io.aura.web.BaseHandler handler);
+
+    /** Adds middleware applied after every assembled HTTP route. */
+    void after(io.aura.web.BaseHandler handler);
+
+    /** Registers structured handling for one application exception type. */
+    <T extends Exception> void exception(Class<T> type, io.aura.web.BaseExceptionHandler<T> handler);
+
+    /** Installs the single application-wide successful return-value wrapper. */
+    void resultWrapper(java.util.function.Function<Object, Object> wrapper);
+
     void healthCheck(io.aura.contract.HealthCheck healthCheck);
 
     io.aura.contract.PermissionRegistry permissions();

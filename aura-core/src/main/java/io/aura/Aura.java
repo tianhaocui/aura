@@ -882,6 +882,15 @@ public class Aura implements AuraWebRuntime {
         @Override public void webSocket(String path, java.util.function.Consumer<io.aura.web.WsHandler> configure) {
             webSocketContributions.add(new WebSocketContribution(path, configure));
         }
+        @Override public void before(io.aura.web.BaseHandler handler) { Aura.this.beforeHandlers.add(handler); }
+        @Override public void after(io.aura.web.BaseHandler handler) { Aura.this.afterHandlers.add(handler); }
+        @Override public <T extends Exception> void exception(
+                Class<T> type, io.aura.web.BaseExceptionHandler<T> handler) {
+            Aura.this.exceptionHandlers.put(type, handler);
+        }
+        @Override public void resultWrapper(java.util.function.Function<Object, Object> wrapper) {
+            Aura.this.resultWrapper = wrapper;
+        }
         @Override public void healthCheck(io.aura.contract.HealthCheck healthCheck) { Aura.this.healthCheck(healthCheck); }
         @Override public io.aura.contract.PermissionRegistry permissions() { return permissionRegistry; }
         @Override public String property(String key) {

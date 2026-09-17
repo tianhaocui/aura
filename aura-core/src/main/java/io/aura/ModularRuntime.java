@@ -51,6 +51,7 @@ final class ModularRuntime implements AuraWebRuntime {
     private io.aura.contract.McpAuthenticator mcpAuthenticator;
     private io.aura.contract.McpAuthorizer mcpAuthorizer;
     private Function<Object, Object> resultWrapper;
+    private String resultWrapperModule;
     private int mcpPort = -1;
     private PrintStream mcpStdout;
     private McpRouterSpec mcpRouter;
@@ -313,6 +314,29 @@ final class ModularRuntime implements AuraWebRuntime {
         }
         @Override public void webSocket(String path, java.util.function.Consumer<io.aura.web.WsHandler> configure) {
             webSocketContributions.add(new WebSocketContribution(path, configure));
+        }
+        @Override public void before(BaseHandler handler) {
+            if (handler == null) throw new ModuleException("AURA_MIDDLEWARE_INVALID", descriptor.id(), "Before middleware must not be null");
+            beforeHandlers.add(handler);
+        }
+        @Override public void after(BaseHandler handler) {
+            if (handler == null) throw new ModuleException("AURA_MIDDLEWARE_INVALID", descriptor.id(), "After middleware must not be null");
+            afterHandlers.add(handler);
+        }
+        @Override public <T extends Exception> void exception(Class<T> type, BaseExceptionHandler<T> handler) {
+            if (type == null || handler == null) {
+                throw new ModuleException("AURA_EXCEPTION_HANDLER_INVALID", descriptor.id(), "Exception type and handler must not be null");
+            }
+            exceptionHandlers.put(type, handler);
+        }
+        @Override public void resultWrapper(Function<Object, Object> wrapper) {
+            if (wrapper == null) throw new ModuleException("AURA_RESULT_WRAPPER_INVALID", descriptor.id(), "Result wrapper must not be null");
+            if (resultWrapper != null) {
+                throw new ModuleException("AURA_RESULT_WRAPPER_DUPLICATE", descriptor.id(),
+                        "Result wrapper already contributed by module " + resultWrapperModule);
+            }
+            resultWrapper = wrapper;
+            resultWrapperModule = descriptor.id();
         }
         @Override public void healthCheck(io.aura.contract.HealthCheck check) { if (check != null) healthChecks.add(check); }
         @Override public PermissionRegistry permissions() { return permissions; }
