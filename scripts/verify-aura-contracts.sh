@@ -32,6 +32,10 @@ test -f "$repo_root/docs/DOCUMENTATION.md"
 test -f "$repo_root/docs/legacy-documentation-0.6.md"
 test -f "$repo_root/aura-processor/src/main/java/io/aura/processor/AuraRouteProcessor.java"
 test -f "$repo_root/aura-processor/src/main/resources/META-INF/services/javax.annotation.processing.Processor"
+if rg -n '<jacoco.skip>true</jacoco.skip>' "$repo_root/aura-"*/pom.xml; then
+  echo "published modules must not bypass the coverage gate" >&2
+  exit 1
+fi
 test -f "$repo_root/examples/aura-composed/src/main/java/example/ComposedApp.java"
 test -f "$repo_root/examples/aura-composed/src/test/java/example/ComposedAppTest.java"
 test -f "$repo_root/examples/aura-generated/pom.xml"
@@ -97,6 +101,7 @@ rg -q 'AuraApp\.create\(' "$repo_root/README.md"
 rg -q 'AuraApp\.create\(' "$repo_root/README_CN.md"
 if rg -n 'Aura\.create\(|AuraPlugin|Aura\.requireAuth' \
     "$repo_root/docs/aura-core.md" "$repo_root/docs/aura-web.md" \
+    "$repo_root/docs/aura-module.md" \
     "$repo_root/.claude/skills/aura/SKILL.md"; then
   echo "legacy API found in canonical module documentation or AI skill" >&2
   exit 1
@@ -106,6 +111,14 @@ if rg -n '0\.6\.1|Aura\.create\(|\.plugin\(' \
   echo "legacy API found in canonical AI extension guides" >&2
   exit 1
 fi
+if rg -n 'app\.(register|onStart|onStop|set|getBean)\(|WorkflowDefinition[[:space:]]*$|\.named\("order"\)' \
+    "$repo_root/AI_GUIDE_DB.md" "$repo_root/AI_GUIDE_MCP.md" "$repo_root/AI_GUIDE_OPS.md" \
+    "$repo_root/README.md" "$repo_root/README_CN.md"; then
+  echo "non-compiling pre-1.0 example found in canonical AI documentation" >&2
+  exit 1
+fi
+rg -q 'permission\(String permission\)' \
+  "$repo_root/aura-contract/src/main/java/io/aura/contract/RouteContribution.java"
 
 if rg -n 'context\.routes\(' \
     "$repo_root/aura-"*/src/main "$repo_root/examples"; then
@@ -116,6 +129,10 @@ fi
 # Keep bounded-resource and cancellation invariants visible in the release gate.
 rg -q 'CancellationToken\.linked' \
   "$repo_root/aura-workflow/src/main/java/io/aura/workflow/WorkflowRuntime.java"
+if rg -n '/__schema__/workflows' "$repo_root/aura-workflow/src/main"; then
+  echo "workflow module must not bypass the unified schema exposure policy" >&2
+  exit 1
+fi
 rg -q 'onCancel' \
   "$repo_root/aura-db/src/main/java/io/aura/db/Db.java"
 if rg -n 'BodyHandlers\.ofString\(' \
@@ -133,11 +150,22 @@ rg -q 'DEFAULT_MAX_RESPONSE_BYTES' \
   "$repo_root/aura-mcp/src/main/java/io/aura/mcp/McpHttpTransport.java"
 rg -q 'MCP_RESPONSE_TOO_LARGE' \
   "$repo_root/aura-mcp/src/main/java/io/aura/mcp/McpHttpTransport.java"
+if rg -n 'JSON\.toJSONString' \
+    "$repo_root/aura-mcp/src/main/java/io/aura/mcp/McpHttpTransport.java" \
+    "$repo_root/aura-mcp/src/main/java/io/aura/mcp/McpSseHub.java"; then
+  echo "MCP transport must not allocate unbounded intermediate JSON strings" >&2
+  exit 1
+fi
+rg -q 'BoundedJson\.encode' \
+  "$repo_root/aura-mcp/src/main/java/io/aura/mcp/McpHttpTransport.java"
+rg -q 'BoundedJson\.encode' \
+  "$repo_root/aura-mcp/src/main/java/io/aura/mcp/McpSseHub.java"
 rg -q 'annotationProcessorPaths' "$repo_root/examples/aura-generated/pom.xml"
 rg -q 'responseSchema' "$repo_root/aura-contract/src/main/java/io/aura/contract/ApiRoute.java"
 rg -q 'rateLimitMaxKeys' "$repo_root/aura-core/src/main/java/io/aura/AuraConfig.java"
 rg -q 'trustedProxies' "$repo_root/aura-core/src/main/java/io/aura/AuraConfig.java"
 rg -q 'aura.tls.keystore-path' "$repo_root/aura-core/src/main/java/io/aura/AuraConfig.java"
+rg -q 'maxWebSocketMessageSize' "$repo_root/aura-core/src/main/java/io/aura/AuraConfig.java"
 rg -q 'FixedWindowRateLimiter' "$repo_root/aura-web/src/main/java/io/aura/web/UndertowStarter.java"
 rg -q 'void webSocket' "$repo_root/aura-core/src/main/java/io/aura/ModuleContext.java"
 rg -q 'webSocketContributions' "$repo_root/aura-web/src/main/java/io/aura/web/RouteAssembler.java"

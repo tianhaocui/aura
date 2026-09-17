@@ -11,11 +11,6 @@
     <artifactId>aura-processor</artifactId>
     <name>aura-processor</name>
     <description>Optional compile-time route and binding generator for Aura</description>
-    <!-- The processor is loaded by a separate javac classloader, so JaCoCo
-         cannot instrument its implementation during the JavaCompiler tests. -->
-    <properties>
-        <jacoco.skip>true</jacoco.skip>
-    </properties>
     <dependencies>
         <dependency>
             <groupId>io.github.tianhaocui</groupId>
