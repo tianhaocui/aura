@@ -11,29 +11,22 @@ import static org.assertj.core.api.Assertions.*;
 
 class RuntimeFoundationTest {
     @Test void strictConfigRejectsUnboundedAndInvalidValues() {
-        assertThatThrownBy(() -> Aura.create(new AuraConfig().maxBodySize(0))).isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> Aura.create(new AuraConfig().maxUploadSize(-1))).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> AuraApp.create(new AuraConfig().maxBodySize(0))).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> AuraApp.create(new AuraConfig().maxUploadSize(-1))).isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> new AuraConfig().pageSizeMax(0).validate()).isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> new AuraConfig().workers(0).validate()).isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> new AuraConfig().rateLimitMaxKeys(0).validate()).isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> new AuraConfig().rateLimitMaxKeys(1_000_001).validate()).isInstanceOf(IllegalArgumentException.class);
     }
 
-    @Test void createAcceptsCentralConfigAndLegacyCreateRemainsAvailable() {
-        assertThat(Aura.create(new AuraConfig().port(9090).workers(8)).port()).isEqualTo(9090);
-        assertThat(Aura.create().port()).isEqualTo(8080);
-    }
-
-    @Test
-    void legacyAuraBuilderIsExplicitlyDeprecatedForRemoval() {
-        Deprecated deprecated = Aura.class.getAnnotation(Deprecated.class);
-        assertThat(deprecated).isNotNull();
-        assertThat(deprecated.forRemoval()).isTrue();
-        assertThat(deprecated.since()).isEqualTo("1.0.0");
+    @Test void createAcceptsCentralConfig() {
+        AuraApp app = AuraApp.create(new AuraConfig().port(9090).workers(8));
+        assertThat(app.config().port()).isEqualTo(9090);
+        assertThat(app.config().workers()).isEqualTo(8);
     }
 
     @Test void runtimeContractExposesStableStateAndCapabilityLookup() {
-        AuraRuntime runtime = Aura.create();
+        AuraRuntime runtime = AuraApp.create().runtimeView();
         assertThat(runtime.state()).isEqualTo(io.aura.contract.RuntimeState.NEW);
         assertThat(runtime.find(String.class)).isEmpty();
         assertThat(runtime.config()).isNotNull();
@@ -88,7 +81,7 @@ class RuntimeFoundationTest {
     }
 
     @Test void lifecycleStopIsIdempotentAndTerminal() {
-        Aura app = Aura.create();
+        AuraApp app = AuraApp.create();
         assertThat(app.state()).isEqualTo(io.aura.contract.RuntimeState.NEW);
         app.stop(); app.stop();
         assertThat(app.state()).isEqualTo(io.aura.contract.RuntimeState.STOPPED);
@@ -96,8 +89,8 @@ class RuntimeFoundationTest {
     }
 
     @Test void healthChecksFailClosedWithoutExposingFailure() {
-        Aura app = Aura.create().healthCheck(() -> { throw new IllegalStateException("password=secret"); });
-        assertThat(app.healthStatus()).isEqualTo(HealthStatus.DOWN);
+        AuraApp app = AuraApp.create().healthCheck(() -> { throw new IllegalStateException("password=secret"); });
+        assertThat(((AuraWebRuntime) app.runtimeView()).healthStatus()).isEqualTo(HealthStatus.DOWN);
     }
 
     @Test void modularRuntimeExposesHealthChecksThroughStableWebContract() {
@@ -111,21 +104,21 @@ class RuntimeFoundationTest {
     }
 
     @Test void healthChecksTimeoutAndFailClosed() {
-        Aura app = Aura.create(new AuraConfig().healthCheckTimeout(1)).healthCheck(() -> {
+        AuraApp app = AuraApp.create(new AuraConfig().healthCheckTimeout(1)).healthCheck(() -> {
             Thread.sleep(10_000);
             return HealthStatus.UP;
         });
         long started = System.nanoTime();
-        assertThat(app.healthStatus()).isEqualTo(HealthStatus.DOWN);
+        assertThat(((AuraWebRuntime) app.runtimeView()).healthStatus()).isEqualTo(HealthStatus.DOWN);
         assertThat(System.nanoTime() - started)
                 .isLessThan(java.util.concurrent.TimeUnit.SECONDS.toNanos(3));
     }
 
     @Test void optionalRuntimeControlsDefaultOffAndTlsFailsFast() {
-        Aura app = Aura.create();
-        assertThat(app.rateLimitPerSecond()).isZero();
-        assertThat(app.concurrencyLimit()).isZero();
-        assertThat(app.devMode()).isFalse();
+        AuraWebRuntime runtime = (AuraWebRuntime) AuraApp.create().runtimeView();
+        assertThat(runtime.rateLimitPerSecond()).isZero();
+        assertThat(runtime.concurrencyLimit()).isZero();
+        assertThat(runtime.devMode()).isFalse();
         assertThatThrownBy(() -> new AuraConfig().tls("missing.p12", "").validate()).isInstanceOf(IllegalArgumentException.class);
     }
 
