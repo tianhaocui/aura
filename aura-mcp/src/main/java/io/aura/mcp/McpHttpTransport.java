@@ -1,7 +1,6 @@
 package io.aura.mcp;
 
 import com.alibaba.fastjson2.JSON;
-import com.alibaba.fastjson2.JSONWriter;
 import com.alibaba.fastjson2.JSONObject;
 import com.alibaba.fastjson2.JSONArray;
 import io.aura.AuraMcpRuntime;
@@ -343,7 +342,9 @@ final class McpHttpTransport {
             io.aura.contract.McpAuthorizer authorizer = runtime.mcpAuthorizer();
             Object value = router.invoke(toolName, args, userId,
                     authorizer == null ? null : authorizer::authorize);
-            return McpContent.result(value);
+            return McpContent.result(value, Math.max(1, maxResponseBytes / 2));
+        } catch (BoundedJson.LimitExceededException tooLarge) {
+            return McpContent.error("MCP_RESPONSE_TOO_LARGE");
         } catch (SecurityException denied) {
             return McpContent.error("MCP_PERMISSION_DENIED");
         } catch (Exception failure) {
@@ -444,8 +445,10 @@ final class McpHttpTransport {
     }
 
     private void writeRpc(BaseContext context, Object response) {
-        String json = JSON.toJSONString(response, JSONWriter.Feature.WriteNulls);
-        if (json.getBytes(java.nio.charset.StandardCharsets.UTF_8).length > maxResponseBytes) {
+        final String json;
+        try {
+            json = BoundedJson.encode(response, maxResponseBytes);
+        } catch (BoundedJson.LimitExceededException tooLarge) {
             writeOversizeError(context);
             return;
         }
@@ -453,10 +456,10 @@ final class McpHttpTransport {
     }
 
     private void writeOversizeError(BaseContext context) {
-        String fallback = JSON.toJSONString(McpContent.error("MCP_RESPONSE_TOO_LARGE"));
-        if (fallback.getBytes(java.nio.charset.StandardCharsets.UTF_8).length <= maxResponseBytes) {
+        try {
+            String fallback = BoundedJson.encode(McpContent.error("MCP_RESPONSE_TOO_LARGE"), maxResponseBytes);
             context.status(502).jsonRaw(fallback);
-        } else {
+        } catch (BoundedJson.LimitExceededException tooLarge) {
             // A valid JSON error would itself violate the configured byte
             // budget. Return a bounded empty body rather than bypassing the
             // limit through BaseContext.json(...).

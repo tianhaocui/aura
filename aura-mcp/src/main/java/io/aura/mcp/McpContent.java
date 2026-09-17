@@ -8,23 +8,29 @@ import java.util.List;
 import java.util.Map;
 
 final class McpContent {
+    private static final int DEFAULT_TEXT_BYTES = 1024 * 1024;
 
     private McpContent() {}
 
     static Map<String, Object> result(Object value) {
-        if (value instanceof McpOutput output) return output(output);
-        String text = value instanceof String string ? string : JSON.toJSONString(value);
+        return result(value, DEFAULT_TEXT_BYTES);
+    }
+
+    static Map<String, Object> result(Object value, int maxTextBytes) {
+        if (value instanceof McpOutput output) return output(output, maxTextBytes);
+        String text = value instanceof String string
+                ? string : BoundedJson.encode(value, maxTextBytes);
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("content", List.of(Map.of("type", "text", "text", text)));
 
-        Object structured = value instanceof String string ? parseObject(string) : JSON.toJSON(value);
-        if (structured instanceof JSONObject) {
+        Object structured = value instanceof String string ? parseObject(string) : value;
+        if (structured != null && !(structured instanceof String)) {
             result.put("structuredContent", structured);
         }
         return result;
     }
 
-    private static Map<String, Object> output(McpOutput output) {
+    private static Map<String, Object> output(McpOutput output, int maxTextBytes) {
         Map<String, Object> block = new LinkedHashMap<>();
         Map<String, Object> result = new LinkedHashMap<>();
         if (output instanceof McpText text) {
@@ -32,7 +38,7 @@ final class McpContent {
             block.put("text", text.text());
         } else if (output instanceof McpStructured structured) {
             block.put("type", "text");
-            block.put("text", JSON.toJSONString(structured.value()));
+            block.put("text", BoundedJson.encode(structured.value(), maxTextBytes));
             result.put("structuredContent", structured.value());
         } else if (output instanceof McpImage image) {
             block.put("type", "image");

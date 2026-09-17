@@ -19,5 +19,6 @@ class McpContentTest {
         Map<String, Object> result = McpContent.result(Map.of("ok", true));
         assertThat(result).containsKey("content").containsKey("structuredContent");
         assertThat(result.get("structuredContent")).isEqualTo(Map.of("ok", true));
+        assertThat(result.get("content").toString()).contains("ok", "true");
     }
 }

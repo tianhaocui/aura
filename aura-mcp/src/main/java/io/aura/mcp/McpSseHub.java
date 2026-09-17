@@ -3,7 +3,6 @@ package io.aura.mcp;
 import io.aura.contract.CancellationToken;
 import io.aura.web.SseEmitter;
 
-import java.nio.charset.StandardCharsets;
 import java.util.Map;
 import java.util.ArrayDeque;
 import java.util.Deque;
@@ -53,8 +52,12 @@ final class McpSseHub implements AutoCloseable {
         envelope.put("jsonrpc", "2.0");
         envelope.put("method", method);
         if (params != null) envelope.put("params", params);
-        String payload = com.alibaba.fastjson2.JSON.toJSONString(envelope);
-        if (payload.getBytes(StandardCharsets.UTF_8).length > maxEventBytes) return false;
+        final String payload;
+        try {
+            payload = BoundedJson.encode(envelope, maxEventBytes);
+        } catch (BoundedJson.LimitExceededException tooLarge) {
+            return false;
+        }
         try {
             synchronized (connection) {
                 if (connection.closed.get()) return false;

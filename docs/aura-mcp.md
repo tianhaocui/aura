@@ -22,6 +22,9 @@ AuraApp.create()
 `McpModule` 只注册 router，不隐式打开网络监听；stdio 由启动参数启用，HTTP
 由 `McpModule.create(router).http()` 显式启用。HTTP transport 默认限制响应为
 1MB，可通过四参数 `.http(path, maxSessions, idleTtl, maxResponseBytes)` 调整。
+HTTP responses、structured tool compatibility text 和 SSE notification 都通过
+同一个 streaming byte-budget encoder 输出；超过预算会立即中止，不会先分配完整的
+无界 JSON 字符串，再返回 `MCP_RESPONSE_TOO_LARGE`。
 
 Streamable HTTP 客户端应在 POST 请求中发送
 `Accept: application/json, text/event-stream`。为兼容旧客户端，当前实现允许
