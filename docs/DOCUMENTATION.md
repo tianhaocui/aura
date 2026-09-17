@@ -86,6 +86,15 @@ STOPPED`. Configuration is validated once and exposed to adapters as an
 immutable `AuraConfigSnapshot`. Request, workflow, database, AI, health, and
 snapshot execution paths use bounded resources and propagate cancellation.
 
+Admission controls are explicit and bounded. A deployment can limit requests
+per second and the number of distinct client keys retained by the limiter:
+
+```java
+AuraApp app = AuraApp.create(new AuraConfig()
+    .rateLimitPerSecond(100)
+    .rateLimitMaxKeys(65_536));
+```
+
 ## Stable Contracts
 
 Every failed request has a structured error with a stable `code`, field or

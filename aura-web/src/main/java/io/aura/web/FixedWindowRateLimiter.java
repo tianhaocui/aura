@@ -10,7 +10,7 @@ import java.util.concurrent.atomic.AtomicLong;
  * grow the process heap without bound.
  */
 final class FixedWindowRateLimiter {
-    static final int DEFAULT_MAX_KEYS = 65_536;
+    static final int DEFAULT_MAX_KEYS = io.aura.AuraConfig.DEFAULT_RATE_LIMIT_MAX_KEYS;
 
     private final int maxKeys;
     private final ConcurrentHashMap<String, WindowCounter> counters = new ConcurrentHashMap<>();

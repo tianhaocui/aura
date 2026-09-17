@@ -101,5 +101,7 @@ rg -q 'MCP_RESPONSE_TOO_LARGE' \
   "$repo_root/aura-mcp/src/main/java/io/aura/mcp/McpHttpTransport.java"
 rg -q 'annotationProcessorPaths' "$repo_root/examples/aura-generated/pom.xml"
 rg -q 'responseSchema' "$repo_root/aura-contract/src/main/java/io/aura/contract/ApiRoute.java"
+rg -q 'rateLimitMaxKeys' "$repo_root/aura-core/src/main/java/io/aura/AuraConfig.java"
+rg -q 'FixedWindowRateLimiter' "$repo_root/aura-web/src/main/java/io/aura/web/UndertowStarter.java"
 
 echo "Aura module and documentation contracts passed (version $root_version)"

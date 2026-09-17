@@ -24,6 +24,7 @@ public final class AuraConfigSnapshot {
     private final int pageSizeMax;
     private final int concurrencyLimit;
     private final int rateLimitPerSecond;
+    private final int rateLimitMaxKeys;
     private final String publicOrigin;
     private final Set<String> allowedHosts;
     private final boolean securityHeaders;
@@ -53,6 +54,7 @@ public final class AuraConfigSnapshot {
         this.pageSizeMax = source.pageSizeMax();
         this.concurrencyLimit = source.concurrencyLimit();
         this.rateLimitPerSecond = source.rateLimitPerSecond();
+        this.rateLimitMaxKeys = source.rateLimitMaxKeys();
         this.publicOrigin = source.publicOrigin();
         this.allowedHosts = Set.copyOf(source.allowedHosts());
         this.securityHeaders = source.securityHeaders();
@@ -85,6 +87,7 @@ public final class AuraConfigSnapshot {
     public int pageSizeMax() { return pageSizeMax; }
     public int concurrencyLimit() { return concurrencyLimit; }
     public int rateLimitPerSecond() { return rateLimitPerSecond; }
+    public int rateLimitMaxKeys() { return rateLimitMaxKeys; }
     public String publicOrigin() { return publicOrigin; }
     public Set<String> allowedHosts() { return allowedHosts; }
     public boolean securityHeaders() { return securityHeaders; }

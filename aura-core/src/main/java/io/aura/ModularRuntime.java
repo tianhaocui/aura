@@ -235,6 +235,7 @@ final class ModularRuntime implements AuraWebRuntime {
     @Override public boolean openApiEnabled() { return config.openApiEnabled(); }
     @Override public int concurrencyLimit() { return config.concurrencyLimit(); }
     @Override public int rateLimitPerSecond() { return config.rateLimitPerSecond(); }
+    @Override public int rateLimitMaxKeys() { return config.rateLimitMaxKeys(); }
     @Override public String publicOrigin() { return config.publicOrigin(); }
     @Override public boolean isShuttingDown() { return shuttingDown.get(); }
     @Override public List<io.aura.contract.HealthCheck> healthChecks() { return List.copyOf(healthChecks); }

@@ -17,6 +17,7 @@ import java.util.function.Consumer;
 public final class AuraConfig {
     public static final long DEFAULT_MAX_BODY_SIZE = 10L * 1024 * 1024;
     public static final long DEFAULT_MAX_UPLOAD_SIZE = 1024L * 1024;
+    public static final int DEFAULT_RATE_LIMIT_MAX_KEYS = 65_536;
 
     /** Loads framework settings from a properties file before application creation. */
     public static AuraConfig fromProperties(Path path) throws IOException {
@@ -53,6 +54,7 @@ public final class AuraConfig {
         config.pageSizeMax(parseInt(value(properties, "aura.page-size-max", "AURA_PAGE_SIZE_MAX"), config.pageSizeMax, "aura.page-size-max"));
         config.concurrencyLimit(parseInt(value(properties, "aura.concurrency-limit", "AURA_CONCURRENCY_LIMIT"), config.concurrencyLimit, "aura.concurrency-limit"));
         config.rateLimitPerSecond(parseInt(value(properties, "aura.rate-limit-per-second", "AURA_RATE_LIMIT_PER_SECOND"), config.rateLimitPerSecond, "aura.rate-limit-per-second"));
+        config.rateLimitMaxKeys(parseInt(value(properties, "aura.rate-limit-max-keys", "AURA_RATE_LIMIT_MAX_KEYS"), config.rateLimitMaxKeys, "aura.rate-limit-max-keys"));
 
         String publicOrigin = value(properties, "aura.public-origin", "AURA_PUBLIC_ORIGIN");
         if (publicOrigin != null) config.publicOrigin(publicOrigin);
@@ -115,6 +117,7 @@ public final class AuraConfig {
     private int pageSizeMax = 500;
     private int concurrencyLimit;
     private int rateLimitPerSecond;
+    private int rateLimitMaxKeys = DEFAULT_RATE_LIMIT_MAX_KEYS;
     private String publicOrigin;
     private final Set<String> allowedHosts = new LinkedHashSet<>();
     private boolean securityHeaders = true;
@@ -144,6 +147,7 @@ public final class AuraConfig {
     public AuraConfig pageSizeMax(int value) { pageSizeMax = value; return this; }
     public AuraConfig concurrencyLimit(int value) { concurrencyLimit = value; return this; }
     public AuraConfig rateLimitPerSecond(int value) { rateLimitPerSecond = value; return this; }
+    public AuraConfig rateLimitMaxKeys(int value) { rateLimitMaxKeys = value; return this; }
     public AuraConfig publicOrigin(String value) { publicOrigin = blankToNull(value); return this; }
     public AuraConfig allowedHosts(String... hosts) {
         allowedHosts.clear();
@@ -210,6 +214,7 @@ public final class AuraConfig {
     public int pageSizeMax() { return pageSizeMax; }
     public int concurrencyLimit() { return concurrencyLimit; }
     public int rateLimitPerSecond() { return rateLimitPerSecond; }
+    public int rateLimitMaxKeys() { return rateLimitMaxKeys; }
     public String publicOrigin() { return publicOrigin; }
     public Set<String> allowedHosts() { return Set.copyOf(allowedHosts); }
     public boolean securityHeaders() { return securityHeaders; }
@@ -245,6 +250,9 @@ public final class AuraConfig {
         }
         if (pageSizeMax < 1 || pageSizeMax > 100_000) throw new IllegalArgumentException("pageSizeMax is out of range");
         if (concurrencyLimit < 0 || rateLimitPerSecond < 0) throw new IllegalArgumentException("admission limits cannot be negative");
+        if (rateLimitMaxKeys < 1 || rateLimitMaxKeys > 1_000_000) {
+            throw new IllegalArgumentException("rateLimitMaxKeys must be between 1 and 1000000");
+        }
         if (tlsEnabled() && (keyStorePassword == null || keyStorePassword.isEmpty())) throw new IllegalArgumentException("TLS keystore password is required");
         return this;
     }

@@ -201,6 +201,7 @@ public class Aura implements AuraWebRuntime {
     public Aura openApi(boolean enabled) { config.openApi(enabled); return this; }
     public Aura tls(String keyStorePath, String password) { config.tls(keyStorePath, password).validate(); return this; }
     public int rateLimitPerSecond() { return config.rateLimitPerSecond(); }
+    @Override public int rateLimitMaxKeys() { return config.rateLimitMaxKeys(); }
     public int concurrencyLimit() { return config.concurrencyLimit(); }
     public String publicOrigin() { return config.publicOrigin(); }
     @Override public javax.net.ssl.SSLContext tlsContext() {

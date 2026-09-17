@@ -48,6 +48,7 @@ public interface AuraWebRuntime extends AuraMcpRuntime {
     boolean openApiEnabled();
     int concurrencyLimit();
     int rateLimitPerSecond();
+    int rateLimitMaxKeys();
     String publicOrigin();
     boolean isShuttingDown();
     List<io.aura.contract.HealthCheck> healthChecks();

@@ -15,6 +15,8 @@ class RuntimeFoundationTest {
         assertThatThrownBy(() -> Aura.create(new AuraConfig().maxUploadSize(-1))).isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> new AuraConfig().pageSizeMax(0).validate()).isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> new AuraConfig().workers(0).validate()).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> new AuraConfig().rateLimitMaxKeys(0).validate()).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> new AuraConfig().rateLimitMaxKeys(1_000_001).validate()).isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test void createAcceptsCentralConfigAndLegacyCreateRemainsAvailable() {

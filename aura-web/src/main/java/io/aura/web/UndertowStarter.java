@@ -50,13 +50,14 @@ public class UndertowStarter implements AuraStarter {
     private ClassPathResourceManager resourceManager;
     private volatile List<CompiledRoute> compiledRoutes;
     private volatile List<CompiledWsRoute> compiledWsRoutes;
-    private final FixedWindowRateLimiter rateLimiter = new FixedWindowRateLimiter();
+    private FixedWindowRateLimiter rateLimiter = new FixedWindowRateLimiter();
     private final AtomicInteger inFlight = new AtomicInteger();
 
     @Override
     @SuppressWarnings("unchecked")
     public void start(AuraWebRuntime app) {
         this.app = app;
+        rateLimiter = new FixedWindowRateLimiter(app.rateLimitMaxKeys());
         long t0 = System.currentTimeMillis();
 
         router = RouteAssembler.assemble(app);
