@@ -7,14 +7,21 @@ import java.util.Base64;
 
 public final class JwtSupport {
 
-    private final String secret;
+    private final byte[] secret;
     private final long expireSeconds;
 
     public JwtSupport(String secret, long expireSeconds) {
         if (secret == null || secret.isBlank()) {
             throw new IllegalArgumentException("JWT secret must not be blank");
         }
-        this.secret = secret;
+        byte[] secretBytes = secret.getBytes(StandardCharsets.UTF_8);
+        if (secretBytes.length < 32) {
+            throw new IllegalArgumentException("JWT secret must be at least 32 bytes");
+        }
+        if (expireSeconds <= 0) {
+            throw new IllegalArgumentException("JWT expiration must be positive");
+        }
+        this.secret = secretBytes;
         this.expireSeconds = expireSeconds;
     }
 
@@ -53,7 +60,7 @@ public final class JwtSupport {
     private String hmacSha256(String data) {
         try {
             Mac mac = Mac.getInstance("HmacSHA256");
-            mac.init(new SecretKeySpec(secret.getBytes(StandardCharsets.UTF_8), "HmacSHA256"));
+            mac.init(new SecretKeySpec(secret, "HmacSHA256"));
             byte[] hash = mac.doFinal(data.getBytes(StandardCharsets.UTF_8));
             return Base64.getUrlEncoder().withoutPadding().encodeToString(hash);
         } catch (Exception e) {
@@ -106,5 +113,4 @@ public final class JwtSupport {
         return null;
     }
 
-    private JwtSupport() { this("", 0); }
 }

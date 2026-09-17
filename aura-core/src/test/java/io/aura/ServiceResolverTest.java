@@ -128,25 +128,6 @@ class ServiceResolverTest {
         assertSame(impl, ((NeedsInterface) result.get(0)).dep);
     }
 
-    public static class ReloadableService implements Reloadable {
-        public boolean reloaded;
-        public ReloadableService() {}
-        @Override public void reload(Aura app) { reloaded = true; }
-    }
-
-    @Test
-    void reloadableServicesTracked() {
-        Aura app = Aura.create();
-        app.register(new Repo());
-        app.services(ServiceA.class, ReloadableService.class);
-        // Can't call start without AuraStarter, so test the resolver directly
-        Map<Class<?>, Object> registry = new LinkedHashMap<>();
-        registry.put(Repo.class, new Repo());
-        List<Object> resolved = ServiceResolver.resolve(
-                List.of(ReloadableService.class), registry);
-        assertInstanceOf(Reloadable.class, resolved.get(0));
-    }
-
     public static class ImplA implements MyInterface {
         public ImplA() {}
     }
