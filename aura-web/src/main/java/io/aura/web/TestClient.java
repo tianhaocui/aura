@@ -1,7 +1,6 @@
 package io.aura.web;
 
 import com.alibaba.fastjson2.JSON;
-import io.aura.Aura;
 import io.aura.AuraApp;
 import io.aura.AuraRuntime;
 import io.aura.AuraWebRuntime;
@@ -23,12 +22,6 @@ public class TestClient {
         this.router = router;
         this.compiled = UndertowStarter.compileRoutes(router, app);
         UndertowStarter.detectDuplicateRoutes(compiled);
-    }
-
-    /** @deprecated Migrate the application to {@link AuraApp}. */
-    @Deprecated(forRemoval = true, since = "1.0.0")
-    public static TestClient of(Aura app) {
-        return of((AuraWebRuntime) app);
     }
 
     private static TestClient of(AuraWebRuntime app) {

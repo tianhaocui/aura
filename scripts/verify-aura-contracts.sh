@@ -35,6 +35,22 @@ test -f "$repo_root/examples/aura-composed/src/test/java/example/ComposedAppTest
 test -f "$repo_root/examples/aura-generated/pom.xml"
 test -f "$repo_root/examples/aura-generated/src/test/java/example/generated/GeneratedAppTest.java"
 test -f "$repo_root/aura-web/src/main/java/io/aura/web/RouteContract.java"
+for removed in \
+  "$repo_root/aura-core/src/main/java/io/aura/Aura.java" \
+  "$repo_root/aura-core/src/main/java/io/aura/AuraPlugin.java" \
+  "$repo_root/aura-core/src/main/java/io/aura/Reloadable.java" \
+  "$repo_root/aura-core/src/main/java/io/aura/ReloadState.java" \
+  "$repo_root/aura-core/src/main/java/io/aura/web/BeforeBuilder.java"; do
+  if test -e "$removed"; then
+    echo "removed pre-1.0 API returned: $removed" >&2
+    exit 1
+  fi
+done
+if rg -n 'import io\.aura\.Aura;|Aura\.create\(|AuraPlugin|\bReloadable\b|BeforeBuilder' \
+    "$repo_root/aura-"*/src/main "$repo_root/aura-"*/src/test "$repo_root/examples"; then
+  echo "removed pre-1.0 API found in first-party code" >&2
+  exit 1
+fi
 rg -q 'RouteContract\.schema\(app, compiledRoutes\)' \
   "$repo_root/aura-web/src/main/java/io/aura/web/UndertowStarter.java"
 rg -q 'RouteContract\.openApi\(app, compiledRoutes\)' \

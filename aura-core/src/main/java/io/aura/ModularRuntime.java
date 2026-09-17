@@ -24,8 +24,8 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 
 /**
- * Independent 1.0 runtime used by AuraApp. It owns only modular contributions
- * and lifecycle state; the legacy Aura builder is not part of this runtime.
+ * Independent 1.0 runtime used by AuraApp. It owns modular contributions and
+ * lifecycle state behind the stable runtime contracts.
  */
 final class ModularRuntime implements AuraWebRuntime {
     private final AuraConfigSnapshot config;

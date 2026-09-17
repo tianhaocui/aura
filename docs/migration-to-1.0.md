@@ -14,23 +14,24 @@ AuraApp app = AuraApp.create()
         .start();
 ```
 
-The old `Aura` builder is deprecated for removal in 1.0. New modules must implement
-`AuraModule`, declare a stable descriptor, and obtain dependencies from `ModuleContext`.
-Do not add new production code that calls `Aura.create()`; migrate directly to
-`AuraApp.create().use(...)` and remove the old builder once all modules are migrated.
+The old `Aura` builder, `AuraPlugin`, `Reloadable`, and `BeforeBuilder` APIs are
+removed in 1.0. This is an intentional major-version compile break. New modules
+implement `AuraModule`, declare a stable descriptor, and obtain dependencies
+from `ModuleContext`. Replace old construction directly with
+`AuraApp.create().use(...)`; do not add a compatibility adapter.
 
 Adapters should depend on the replaceable `AuraRuntime` surface and its stable `RuntimeState`
-values rather than on the legacy Builder implementation.
+values rather than on an application facade implementation.
 
 From an application, obtain that surface with `app.runtimeView()` and use `isRunning()` or
 `state()` for lifecycle checks.
 The returned runtime is an adapter-owned implementation of the stable contract; applications and
-transport adapters should not cast it back to the legacy `Aura` builder.
+transport adapters should not cast it back to a concrete application facade.
 
 The in-memory verification adapter accepts the same seam:
 
 ```java
-TestClient.of(app.runtimeView()).get("/orders").expect(200);
+TestClient.of(app).get("/orders").expect(200);
 ```
 
 ## API mapping

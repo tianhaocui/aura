@@ -6,7 +6,7 @@ import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.Function;
 
-/** Owns module registration and lifecycle independently from the legacy Aura builder. */
+/** Owns deterministic module registration and lifecycle. */
 final class ModuleManager {
     private final List<AuraModule> modules = new CopyOnWriteArrayList<>();
     private final List<ModuleMetadata> installedDescriptors = new CopyOnWriteArrayList<>();

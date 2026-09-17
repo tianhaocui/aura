@@ -91,7 +91,7 @@ public final class AuraApp implements AutoCloseable {
     @Override public void close() { stop(); }
 
     public io.aura.contract.RuntimeState state() { return runtime.state(); }
-    /** Stable runtime view for adapters; it does not expose legacy Builder APIs. */
+    /** Stable runtime view for optional adapters. */
     public AuraRuntime runtimeView() { return runtime; }
     public boolean isRunning() { return runtime.isRunning(); }
     public AuraConfigSnapshot config() { return runtime.config(); }
