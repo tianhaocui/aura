@@ -22,6 +22,8 @@ test -f "$repo_root/docs/legacy-ai-guide-0.6.md"
 test -f "$repo_root/docs/aura-module.md"
 test -f "$repo_root/docs/aura-workflow.md"
 test -f "$repo_root/docs/migration-to-1.0.md"
+test -f "$repo_root/docs/DOCUMENTATION.md"
+test -f "$repo_root/docs/legacy-documentation-0.6.md"
 test -f "$repo_root/aura-processor/src/main/java/io/aura/processor/AuraRouteProcessor.java"
 test -f "$repo_root/aura-processor/src/main/resources/META-INF/services/javax.annotation.processing.Processor"
 test -f "$repo_root/examples/aura-composed/src/main/java/example/ComposedApp.java"
@@ -60,6 +62,11 @@ if rg -n '0\.6\.1|Aura\.create\(|\.plugin\(' "$repo_root/AI_GUIDE.md"; then
   exit 1
 fi
 rg -q 'AuraApp\.create\(\)' "$repo_root/AI_GUIDE.md"
+if rg -n 'Aura\.create\(|\.plugin\(' "$repo_root/docs/DOCUMENTATION.md"; then
+  echo "legacy API found in canonical documentation" >&2
+  exit 1
+fi
+rg -q 'AuraApp\.create\(\)' "$repo_root/docs/DOCUMENTATION.md"
 if rg -n '0\.6\.1|Aura\.create\(|\.plugin\(' \
     "$repo_root/AI_GUIDE_DB.md" "$repo_root/AI_GUIDE_MCP.md" "$repo_root/AI_GUIDE_OPS.md"; then
   echo "legacy API found in canonical AI extension guides" >&2
