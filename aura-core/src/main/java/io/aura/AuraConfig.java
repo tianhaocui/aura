@@ -17,6 +17,7 @@ import java.util.function.Consumer;
 public final class AuraConfig {
     public static final long DEFAULT_MAX_BODY_SIZE = 10L * 1024 * 1024;
     public static final long DEFAULT_MAX_UPLOAD_SIZE = 1024L * 1024;
+    public static final long DEFAULT_MAX_WEBSOCKET_MESSAGE_SIZE = 1024L * 1024;
     public static final int DEFAULT_RATE_LIMIT_MAX_KEYS = 65_536;
 
     /** Loads framework settings from a properties file before application creation. */
@@ -48,6 +49,7 @@ public final class AuraConfig {
         config.workers(parseInt(value(properties, "aura.workers", "AURA_WORKERS"), config.workers, "aura.workers"));
         config.maxBodySize(parseLong(value(properties, "aura.max-body-size", "AURA_MAX_BODY_SIZE"), config.maxBodySize, "aura.max-body-size"));
         config.maxUploadSize(parseLong(value(properties, "aura.max-upload-size", "AURA_MAX_UPLOAD_SIZE"), config.maxUploadSize, "aura.max-upload-size"));
+        config.maxWebSocketMessageSize(parseLong(value(properties, "aura.max-websocket-message-size", "AURA_MAX_WEBSOCKET_MESSAGE_SIZE"), config.maxWebSocketMessageSize, "aura.max-websocket-message-size"));
         config.shutdownTimeout(parseInt(value(properties, "aura.shutdown-timeout", "AURA_SHUTDOWN_TIMEOUT"), config.shutdownTimeout, "aura.shutdown-timeout"));
         config.requestTimeout(parseInt(value(properties, "aura.request-timeout", "AURA_REQUEST_TIMEOUT"), config.requestTimeout, "aura.request-timeout"));
         config.healthCheckTimeout(parseInt(value(properties, "aura.health-check-timeout", "AURA_HEALTH_CHECK_TIMEOUT"), config.healthCheckTimeout, "aura.health-check-timeout"));
@@ -119,6 +121,7 @@ public final class AuraConfig {
     private int workers = 200;
     private long maxBodySize = DEFAULT_MAX_BODY_SIZE;
     private long maxUploadSize = DEFAULT_MAX_UPLOAD_SIZE;
+    private long maxWebSocketMessageSize = DEFAULT_MAX_WEBSOCKET_MESSAGE_SIZE;
     private int shutdownTimeout = 30;
     private int requestTimeout;
     private int healthCheckTimeout = 1;
@@ -151,6 +154,7 @@ public final class AuraConfig {
     public AuraConfig workers(int value) { workers = value; return this; }
     public AuraConfig maxBodySize(long value) { maxBodySize = value; return this; }
     public AuraConfig maxUploadSize(long value) { maxUploadSize = value; return this; }
+    public AuraConfig maxWebSocketMessageSize(long value) { maxWebSocketMessageSize = value; return this; }
     public AuraConfig shutdownTimeout(int value) { shutdownTimeout = value; return this; }
     public AuraConfig requestTimeout(int value) { requestTimeout = value; return this; }
     public AuraConfig healthCheckTimeout(int value) { healthCheckTimeout = value; return this; }
@@ -231,6 +235,7 @@ public final class AuraConfig {
     public int workers() { return workers; }
     public long maxBodySize() { return maxBodySize; }
     public long maxUploadSize() { return maxUploadSize; }
+    public long maxWebSocketMessageSize() { return maxWebSocketMessageSize; }
     public int shutdownTimeout() { return shutdownTimeout; }
     public int requestTimeout() { return requestTimeout; }
     public int healthCheckTimeout() { return healthCheckTimeout; }
@@ -268,6 +273,9 @@ public final class AuraConfig {
         if (maxBodySize <= 0) throw new IllegalArgumentException("maxBodySize must be positive and bounded");
         if (maxUploadSize <= 0) throw new IllegalArgumentException("maxUploadSize must be positive and bounded");
         if (maxUploadSize > maxBodySize) throw new IllegalArgumentException("maxUploadSize cannot exceed maxBodySize");
+        if (maxWebSocketMessageSize < 1 || maxWebSocketMessageSize > 64L * 1024 * 1024) {
+            throw new IllegalArgumentException("maxWebSocketMessageSize must be between 1 byte and 64 MiB");
+        }
         if (shutdownTimeout < 0) throw new IllegalArgumentException("shutdownTimeout cannot be negative");
         if (requestTimeout < 0) throw new IllegalArgumentException("requestTimeout cannot be negative");
         if (healthCheckTimeout < 1 || healthCheckTimeout > 300) {

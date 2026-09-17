@@ -11,7 +11,8 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 record CompiledWsRoute(String rawPath, Pattern pattern, List<String> paramNames,
-                       List<BaseHandler> beforeHandlers, WsHandler wsHandler) {
+                       List<BaseHandler> beforeHandlers, WsHandler wsHandler,
+                       long maxMessageBytes) {
 
     Map<String, String> match(String path) {
         Matcher m = pattern.matcher(path);
@@ -39,6 +40,9 @@ record CompiledWsRoute(String rawPath, Pattern pattern, List<String> paramNames,
             }
 
             channel.getReceiveSetter().set(new AbstractReceiveListener() {
+                @Override protected long getMaxTextBufferSize() { return maxMessageBytes; }
+                @Override protected long getMaxBinaryBufferSize() { return maxMessageBytes; }
+
                 @Override
                 protected void onFullTextMessage(WebSocketChannel ch, BufferedTextMessage msg) {
                     if (wsHandler.onMessage != null) {
@@ -91,7 +95,8 @@ record CompiledWsRoute(String rawPath, Pattern pattern, List<String> paramNames,
         return params;
     }
 
-    static CompiledWsRoute compile(String path, List<BaseHandler> beforeHandlers, WsHandler handler) {
+    static CompiledWsRoute compile(String path, List<BaseHandler> beforeHandlers,
+                                   WsHandler handler, long maxMessageBytes) {
         List<String> paramNames = new ArrayList<>();
         String regex = path
                 .replace(".", "\\.")
@@ -103,6 +108,6 @@ record CompiledWsRoute(String rawPath, Pattern pattern, List<String> paramNames,
             paramNames.add(m.group(1));
         }
         return new CompiledWsRoute(path, Pattern.compile("^" + regex + "$"),
-                paramNames, beforeHandlers, handler);
+                paramNames, beforeHandlers, handler, maxMessageBytes);
     }
 }

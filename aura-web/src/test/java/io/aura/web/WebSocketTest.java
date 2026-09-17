@@ -13,6 +13,7 @@ import java.net.http.WebSocket;
 import java.util.concurrent.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 
 import static org.assertj.core.api.Assertions.*;
@@ -24,7 +25,11 @@ class WebSocketTest {
     private int nextPort() { return PORT_SEQ.getAndIncrement(); }
 
     private AuraApp app(int port, Consumer<ModuleContext> configure) {
-        return AuraApp.create(new AuraConfig().port(port)).use(new AuraModule() {
+        return app(new AuraConfig().port(port), configure);
+    }
+
+    private AuraApp app(AuraConfig config, Consumer<ModuleContext> configure) {
+        return AuraApp.create(config).use(new AuraModule() {
             @Override public ModuleMetadata descriptor() {
                 return ModuleMetadata.of("websocket-test", "1.0.0");
             }
@@ -33,6 +38,38 @@ class WebSocketTest {
                 configure.accept(context);
             }
         });
+    }
+
+    @Test
+    void oversizedMessageClosesConnectionWith1009BeforeHandlerRuns() throws Exception {
+        int port = nextPort();
+        var handled = new AtomicBoolean();
+        var app = app(new AuraConfig().port(port).maxWebSocketMessageSize(16), context ->
+                context.webSocket("/ws/bounded", ws ->
+                        ws.onMessage((connection, text) -> handled.set(true))));
+        app.start();
+        try {
+            var closeCode = new CompletableFuture<Integer>();
+            var ws = HttpClient.newHttpClient().newWebSocketBuilder()
+                    .buildAsync(URI.create("ws://localhost:" + port + "/ws/bounded"),
+                            new WebSocket.Listener() {
+                                @Override public void onOpen(WebSocket webSocket) {
+                                    webSocket.request(1);
+                                }
+
+                                @Override public CompletionStage<?> onClose(
+                                        WebSocket webSocket, int statusCode, String reason) {
+                                    closeCode.complete(statusCode);
+                                    return null;
+                                }
+                            }).join();
+            ws.sendText("x".repeat(128), true).join();
+
+            assertThat(closeCode.get(3, TimeUnit.SECONDS)).isEqualTo(1009);
+            assertThat(handled).isFalse();
+        } finally {
+            app.stop();
+        }
     }
 
     @Test

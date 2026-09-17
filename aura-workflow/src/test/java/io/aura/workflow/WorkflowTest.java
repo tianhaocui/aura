@@ -158,6 +158,8 @@ class WorkflowTest {
                 });
 
         app.prepare();
+        assertThat(((io.aura.AuraWebRuntime) app.runtimeView()).directRoutes())
+                .noneMatch(route -> route.path().startsWith("/__schema__"));
         @SuppressWarnings("unchecked")
         WorkflowRuntime<List<String>> runtime = (WorkflowRuntime<List<String>>) (WorkflowRuntime<?>) app.require(WorkflowRuntime.class);
         List<String> events = new ArrayList<>();

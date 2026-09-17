@@ -85,6 +85,7 @@ Selected `AuraConfig` controls include:
 | `workers` | `200` | positive |
 | `maxBodySize` | `10 MiB` | positive and bounded |
 | `maxUploadSize` | `1 MiB` | positive, not above body size |
+| `maxWebSocketMessageSize` | `1 MiB` | `1 byte..64 MiB` |
 | `requestTimeout` | `0` | non-negative seconds; `0` disables |
 | `healthCheckTimeout` | `1` | `1..300` seconds |
 | `pageSizeMax` | `500` | `1..100000` |

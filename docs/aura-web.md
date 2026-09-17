@@ -118,6 +118,7 @@ AuraConfig config = new AuraConfig()
         .securityHeaders(true)
         .maxBodySize(10 * 1024 * 1024L)
         .maxUploadSize(1024 * 1024L)
+        .maxWebSocketMessageSize(1024 * 1024L)
         .requestTimeout(30)
         .concurrencyLimit(200)
         .rateLimitPerSecond(100)
@@ -130,6 +131,10 @@ AuraApp app = AuraApp.create(config).use(new OrdersModule());
 Trusted proxies are explicit. Forwarded headers from untrusted peers are
 ignored. Credentialed CORS requires explicit origins; wildcard credentials are
 rejected. Dynamic Origin responses include `Vary: Origin`.
+
+Inbound WebSocket text and binary messages are buffered only up to
+`maxWebSocketMessageSize`; oversized messages are closed with status 1009 before
+the application message handler runs.
 
 ## Snapshots
 

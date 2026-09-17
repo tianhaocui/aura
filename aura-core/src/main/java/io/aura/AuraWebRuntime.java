@@ -37,6 +37,7 @@ public interface AuraWebRuntime extends AuraMcpRuntime {
     CorsConfig corsConfig();
     long maxBodySize();
     long maxUploadSize();
+    long maxWebSocketMessageSize();
     int shutdownTimeout();
     boolean accessLog();
     String accessLogFormat();

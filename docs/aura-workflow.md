@@ -119,3 +119,8 @@ Durable adapters can implement `saveSnapshot`, `findSnapshot`, and
 `listSnapshots` to persist and query this projection. `WorkflowRuntime` publishes
 the projection for synchronous and asynchronous executions; the legacy
 `save(WorkflowExecution)` callback remains available for in-process inspection.
+
+`WorkflowRegistry.schema()` returns the structured workflow/variant description
+for an authorized application route or MCP resource. `WorkflowModule` does not
+publish a schema HTTP endpoint automatically; schema exposure must use the same
+authentication policy as the rest of the application.

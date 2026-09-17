@@ -630,7 +630,13 @@ public class UndertowStarter implements AuraStarter {
         }
         int rate = app.rateLimitPerSecond();
         if (rate > 0) {
-            String key = exchange.getSourceAddress() == null ? "unknown" : exchange.getSourceAddress().getHostString();
+            String peer = exchange.getSourceAddress() == null
+                    || exchange.getSourceAddress().getAddress() == null
+                    ? null : exchange.getSourceAddress().getAddress().getHostAddress();
+            String forwardedFor = exchange.getRequestHeaders().getFirst("X-Forwarded-For");
+            String key = Context.resolveClientIp(
+                    String.join(",", app.trustedProxies()), peer, forwardedFor);
+            if (key == null || key.isBlank()) key = "unknown";
             long now = System.currentTimeMillis() / 1000;
             if (!rateLimiter.tryAcquire(key, rate, now)) {
                 app.emit(AuraEvent.of("request.rejected.rate", java.util.Map.of("ratePerSecond", rate, "key", key)));
@@ -710,7 +716,8 @@ public class UndertowStarter implements AuraStarter {
 
         for (BaseRouter.WsRoute ws : router.wsRoutes) {
             String fullPath = prefix + ws.path();
-            result.add(CompiledWsRoute.compile(fullPath, before, ws.handler()));
+            result.add(CompiledWsRoute.compile(
+                    fullPath, before, ws.handler(), app.maxWebSocketMessageSize()));
         }
         for (BaseRouter.Group group : router.groups) {
             result.addAll(compileWsRoutes(group.router(), prefix + group.prefix(), before));

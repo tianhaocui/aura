@@ -18,6 +18,7 @@ public final class AuraConfigSnapshot {
     private final int workers;
     private final long maxBodySize;
     private final long maxUploadSize;
+    private final long maxWebSocketMessageSize;
     private final int shutdownTimeout;
     private final int requestTimeout;
     private final int healthCheckTimeout;
@@ -50,6 +51,7 @@ public final class AuraConfigSnapshot {
         this.workers = source.workers();
         this.maxBodySize = source.maxBodySize();
         this.maxUploadSize = source.maxUploadSize();
+        this.maxWebSocketMessageSize = source.maxWebSocketMessageSize();
         this.shutdownTimeout = source.shutdownTimeout();
         this.requestTimeout = source.requestTimeout();
         this.healthCheckTimeout = source.healthCheckTimeout();
@@ -85,6 +87,7 @@ public final class AuraConfigSnapshot {
     public int workers() { return workers; }
     public long maxBodySize() { return maxBodySize; }
     public long maxUploadSize() { return maxUploadSize; }
+    public long maxWebSocketMessageSize() { return maxWebSocketMessageSize; }
     public int shutdownTimeout() { return shutdownTimeout; }
     public int requestTimeout() { return requestTimeout; }
     public int healthCheckTimeout() { return healthCheckTimeout; }
