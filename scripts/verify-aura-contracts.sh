@@ -135,6 +135,16 @@ fi
 # Keep bounded-resource and cancellation invariants visible in the release gate.
 rg -q 'CancellationToken\.linked' \
   "$repo_root/aura-workflow/src/main/java/io/aura/workflow/WorkflowRuntime.java"
+test -f "$repo_root/aura-workflow/src/main/java/io/aura/workflow/DurableWorkflowExecutionStore.java"
+rg -q 'saveLeased' \
+  "$repo_root/aura-workflow/src/main/java/io/aura/workflow/DurableWorkflowExecutionStore.java"
+if rg -n 'saveLeased\(WorkflowExecution[[:space:]]|void save\(WorkflowExecution' \
+  "$repo_root/aura-workflow/src/main"; then
+  echo "workflow persistence must accept redacted snapshots, not raw executions" >&2
+  exit 1
+fi
+rg -q 'recoveryCandidates' \
+  "$repo_root/aura-workflow/src/main/java/io/aura/workflow/WorkflowRuntime.java"
 if rg -n '/__schema__/workflows' "$repo_root/aura-workflow/src/main"; then
   echo "workflow module must not bypass the unified schema exposure policy" >&2
   exit 1

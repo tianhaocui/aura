@@ -8,6 +8,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 /** Cooperative cancellation signal shared by adapters and module implementations. */
 public final class CancellationToken {
     private final AtomicBoolean cancelled = new AtomicBoolean();
+    private final AtomicBoolean detached = new AtomicBoolean();
     private final CancellationToken[] parents;
     private final CopyOnWriteArrayList<Runnable> listeners = new CopyOnWriteArrayList<>();
     private final CopyOnWriteArrayList<Registration> parentRegistrations = new CopyOnWriteArrayList<>();
@@ -24,10 +25,13 @@ public final class CancellationToken {
     private CancellationToken(CancellationToken[] parents) {
         this.parents = parents;
         for (CancellationToken parent : parents) {
-            if (isCancelled()) break;
+            if (parent.isCancelled()) {
+                cancel();
+                break;
+            }
             Registration registration = parent.onCancel(this::cancel);
             parentRegistrations.add(registration);
-            if (isCancelled()) {
+            if (cancelled.get()) {
                 registration.close();
                 break;
             }
@@ -56,6 +60,7 @@ public final class CancellationToken {
 
     public boolean isCancelled() {
         if (cancelled.get()) return true;
+        if (detached.get()) return false;
         for (CancellationToken parent : parents) {
             if (parent.isCancelled()) return true;
         }
@@ -66,9 +71,15 @@ public final class CancellationToken {
         if (!cancelled.compareAndSet(false, true)) return false;
         for (Runnable listener : listeners) listener.run();
         listeners.clear();
+        detach();
+        return true;
+    }
+
+    /** Releases parent registrations after an operation finishes without cancelling it. */
+    public void detach() {
+        if (!detached.compareAndSet(false, true)) return;
         for (Registration registration : parentRegistrations) registration.close();
         parentRegistrations.clear();
-        return true;
     }
 
     /** Registers a best-effort callback invoked once when this token is cancelled. */

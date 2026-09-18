@@ -250,7 +250,10 @@ class WorkflowTest {
             WorkflowResult result = future.get(2, java.util.concurrent.TimeUnit.SECONDS);
             assertThat(result.cancelled()).isTrue();
             assertThat(result.failed()).isFalse();
-            assertThat(runtime.execution(result.execution().executionId())).contains(result.execution());
+            assertThat(runtime.execution(result.execution().executionId())).get().satisfies(stored -> {
+                assertThat(stored.executionId()).isEqualTo(result.execution().executionId());
+                assertThat(stored.status()).isEqualTo(result.execution().status());
+            });
             assertThat(result.execution().step("never-run").status())
                     .isEqualTo(StepExecution.Status.PENDING);
             assertThat(result.execution().step("long-step").status())
@@ -432,7 +435,10 @@ class WorkflowTest {
         try {
             WorkflowResult result = runtime.execute("sync-flow", new Object());
 
-            assertThat(runtime.execution(result.execution().executionId())).contains(result.execution());
+            assertThat(runtime.execution(result.execution().executionId())).get().satisfies(stored -> {
+                assertThat(stored.executionId()).isEqualTo(result.execution().executionId());
+                assertThat(stored.status()).isEqualTo(result.execution().status());
+            });
             assertThat(runtime.executions("sync-flow")).extracting(WorkflowExecution::executionId)
                     .containsExactly(result.execution().executionId());
         } finally {
@@ -448,7 +454,7 @@ class WorkflowTest {
                 .build());
         java.util.List<WorkflowExecutionSnapshot> snapshots = new java.util.concurrent.CopyOnWriteArrayList<>();
         WorkflowExecutionStore store = new WorkflowExecutionStore() {
-            @Override public void save(WorkflowExecution execution) { }
+            @Override public void retainLocal(WorkflowExecution execution) { }
             @Override public void saveSnapshot(WorkflowExecutionSnapshot snapshot) { snapshots.add(snapshot); }
             @Override public java.util.Optional<WorkflowExecution> find(String id) { return java.util.Optional.empty(); }
             @Override public java.util.List<WorkflowExecution> list(String workflowId) { return java.util.List.of(); }
@@ -524,9 +530,12 @@ class WorkflowTest {
         WorkflowExecution second = new WorkflowExecution("flow", null);
         WorkflowExecution third = new WorkflowExecution("flow", null);
 
-        store.save(first);
-        store.save(second);
-        store.save(third);
+        store.saveSnapshot(first.snapshot());
+        store.retainLocal(first);
+        store.saveSnapshot(second.snapshot());
+        store.retainLocal(second);
+        store.saveSnapshot(third.snapshot());
+        store.retainLocal(third);
 
         assertThat(store.maxExecutions()).isEqualTo(2);
         assertThat(store.list("flow")).extracting(WorkflowExecution::executionId)
@@ -567,7 +576,8 @@ class WorkflowTest {
     void inMemoryStoreKeepsSnapshotProjectionAlongsideExecution() {
         InMemoryWorkflowExecutionStore store = new InMemoryWorkflowExecutionStore(1);
         WorkflowExecution execution = new WorkflowExecution("flow", null);
-        store.save(execution);
+        store.saveSnapshot(execution.snapshot());
+        store.retainLocal(execution);
 
         assertThat(store.findSnapshot(execution.executionId())).isPresent();
         assertThat(store.findSnapshot(execution.executionId()).orElseThrow().executionId())
@@ -575,7 +585,24 @@ class WorkflowTest {
     }
 
     @Test
-    void idempotencyKeyDeduplicatesConcurrentAndRetainedExecutions() throws Exception {
+    void evictedSnapshotCannotBeRevivedAsAnUnboundedLocalExecution() {
+        InMemoryWorkflowExecutionStore store = new InMemoryWorkflowExecutionStore(1);
+        WorkflowExecution first = new WorkflowExecution("flow", null);
+        WorkflowExecution second = new WorkflowExecution("flow", null);
+
+        store.saveSnapshot(first.snapshot());
+        store.saveSnapshot(second.snapshot());
+        store.retainLocal(first);
+        store.retainLocal(second);
+
+        assertThat(store.find(first.executionId())).isEmpty();
+        assertThat(store.findSnapshot(first.executionId())).isEmpty();
+        assertThat(store.list("flow")).extracting(WorkflowExecution::executionId)
+                .containsExactly(second.executionId());
+    }
+
+    @Test
+    void idempotencyKeySharesConcurrentFutureAndRetainsRedactedTerminalState() throws Exception {
         WorkflowRegistry registry = new WorkflowRegistry();
         java.util.concurrent.CountDownLatch started = new java.util.concurrent.CountDownLatch(1);
         java.util.concurrent.CountDownLatch release = new java.util.concurrent.CountDownLatch(1);
@@ -599,13 +626,929 @@ class WorkflowTest {
             release.countDown();
 
             WorkflowResult result = first.get(2, java.util.concurrent.TimeUnit.SECONDS);
-            WorkflowResult retained = runtime.executeAsync("idempotent", new Object(), "message-42")
-                    .get(2, java.util.concurrent.TimeUnit.SECONDS);
+            var retained = runtime.executeAsync("idempotent", new Object(), "message-42");
+            assertThatThrownBy(() -> retained.get(2, java.util.concurrent.TimeUnit.SECONDS))
+                    .isInstanceOf(java.util.concurrent.ExecutionException.class)
+                    .cause().isInstanceOfSatisfying(WorkflowException.class, failure -> {
+                        assertThat(failure.code()).isEqualTo(WorkflowException.IDEMPOTENCY_RETAINED);
+                        assertThat(failure.details()).containsEntry(
+                                "executionId", result.execution().executionId());
+                    });
             assertThat(runs).hasValue(1);
-            assertThat(retained.execution().executionId()).isEqualTo(result.execution().executionId());
             assertThat(result.execution().idempotencyKey()).isEqualTo("message-42");
+            assertThat(runtime.execution(result.execution().executionId())).isEmpty();
+            assertThat(runtime.executionSnapshot(result.execution().executionId())).isPresent();
         } finally {
             runtime.close();
+        }
+    }
+
+    @Test
+    void durableLeasePreventsCrossRuntimeExecutionBeforeFirstRecordIsVisible() throws Exception {
+        WorkflowRegistry registry = new WorkflowRegistry();
+        AtomicInteger runs = new AtomicInteger();
+        registry.register(Workflow.<Object>builder("leased")
+                .step("once", context -> { runs.incrementAndGet(); return "done"; })
+                .build());
+        BlockingSaveStore store = new BlockingSaveStore();
+        WorkflowRuntime<Object> first = new WorkflowRuntime<>(
+                registry, store, 1, 8, java.time.Duration.ofMillis(300), "runtime-1");
+        WorkflowRuntime<Object> second = new WorkflowRuntime<>(
+                registry, store, 1, 8, java.time.Duration.ofMillis(300), "runtime-2");
+        try {
+            java.util.concurrent.atomic.AtomicReference<java.util.concurrent.CompletableFuture<WorkflowResult>> firstResult =
+                    new java.util.concurrent.atomic.AtomicReference<>();
+            java.util.concurrent.atomic.AtomicReference<Throwable> callerFailure =
+                    new java.util.concurrent.atomic.AtomicReference<>();
+            Thread caller = new Thread(() -> {
+                try {
+                    firstResult.set(first.executeAsync("leased", new Object(), "event-42"));
+                } catch (Throwable failure) {
+                    callerFailure.set(failure);
+                }
+            });
+            caller.start();
+            assertThat(store.saveEntered.await(2, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+
+            var duplicate = second.executeAsync("leased", new Object(), "event-42");
+            assertThatThrownBy(() -> duplicate.get(2, java.util.concurrent.TimeUnit.SECONDS))
+                    .isInstanceOf(java.util.concurrent.ExecutionException.class)
+                    .cause().isInstanceOf(WorkflowException.class)
+                    .extracting("code").isEqualTo(WorkflowException.LEASE_UNAVAILABLE);
+            assertThat(second.leaseConflicts()).isEqualTo(1);
+            assertThat(first.executorMetrics().queueCapacity()).isEqualTo(8);
+
+            store.allowSave.countDown();
+            caller.join(2_000);
+            assertThat(callerFailure.get()).isNull();
+            assertThat(firstResult.get()).isNotNull();
+            assertThat(firstResult.get().get(2, java.util.concurrent.TimeUnit.SECONDS).succeeded()).isTrue();
+            assertThat(runs).hasValue(1);
+            assertThat(store.currentLease("leased", "event-42")).isEmpty();
+        } finally {
+            store.allowSave.countDown();
+            first.close();
+            second.close();
+        }
+    }
+
+    @Test
+    void durableLeaseIsRenewedDuringLongRunningStep() throws Exception {
+        WorkflowRegistry registry = new WorkflowRegistry();
+        java.util.concurrent.CountDownLatch started = new java.util.concurrent.CountDownLatch(1);
+        java.util.concurrent.CountDownLatch release = new java.util.concurrent.CountDownLatch(1);
+        registry.register(Workflow.<Object>builder("renewed")
+                .step("wait", context -> {
+                    started.countDown();
+                    release.await(2, java.util.concurrent.TimeUnit.SECONDS);
+                    return null;
+                }).build());
+        InMemoryWorkflowExecutionStore store = new InMemoryWorkflowExecutionStore();
+        WorkflowRuntime<Object> runtime = new WorkflowRuntime<>(
+                registry, store, 1, 8, java.time.Duration.ofMillis(90), "runtime-renew");
+        try {
+            var future = runtime.executeAsync("renewed", new Object(), "event-renew");
+            assertThat(started.await(2, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+            Thread.sleep(220);
+            assertThat(store.currentLease("renewed", "event-renew")).isPresent();
+            assertThat(runtime.lostLeases()).isZero();
+            assertThat(runtime.activeLeases()).isEqualTo(1);
+            assertThat(runtime.leaseRenewalMetrics().queueCapacity()).isEqualTo(9);
+            release.countDown();
+            assertThat(future.get(2, java.util.concurrent.TimeUnit.SECONDS).succeeded()).isTrue();
+            assertThat(store.currentLease("renewed", "event-renew")).isEmpty();
+            assertThat(runtime.activeLeases()).isZero();
+        } finally {
+            release.countDown();
+            runtime.close();
+        }
+    }
+
+    @Test
+    void currentLeaseReflectsTheLatestRenewedExpiryInsideTheStep() throws Exception {
+        WorkflowRegistry registry = new WorkflowRegistry();
+        java.util.concurrent.atomic.AtomicReference<WorkflowRuntime<Object>> runtimeRef =
+                new java.util.concurrent.atomic.AtomicReference<>();
+        java.util.concurrent.atomic.AtomicReference<java.time.Instant> initialExpiry =
+                new java.util.concurrent.atomic.AtomicReference<>();
+        java.util.concurrent.atomic.AtomicReference<java.time.Instant> renewedExpiry =
+                new java.util.concurrent.atomic.AtomicReference<>();
+        registry.register(Workflow.<Object>builder("current-renewed-lease")
+                .step("inspect", context -> {
+                    initialExpiry.set(runtimeRef.get().currentLease().orElseThrow().expiresAt());
+                    Thread.sleep(220);
+                    renewedExpiry.set(runtimeRef.get().currentLease().orElseThrow().expiresAt());
+                    return null;
+                }).build());
+        WorkflowRuntime<Object> runtime = new WorkflowRuntime<>(
+                registry, new InMemoryWorkflowExecutionStore(), 1, 8,
+                java.time.Duration.ofMillis(90), "current-lease-runtime");
+        runtimeRef.set(runtime);
+        try {
+            assertThat(runtime.executeAsync(
+                    "current-renewed-lease", new Object(), "event-current")
+                    .get(2, java.util.concurrent.TimeUnit.SECONDS).succeeded()).isTrue();
+            assertThat(renewedExpiry.get()).isAfter(initialExpiry.get());
+        } finally {
+            runtime.close();
+        }
+    }
+
+    @Test
+    void leaseRenewalInfrastructureStartsOnlyForLeasedExecution() {
+        WorkflowRegistry registry = new WorkflowRegistry();
+        registry.register(Workflow.<Object>builder("lazy-renewal")
+                .step("done", context -> null).build());
+        WorkflowRuntime<Object> runtime = new WorkflowRuntime<>(registry);
+        try {
+            assertThat(runtime.leaseRenewalStarted()).isFalse();
+            assertThat(runtime.execute("lazy-renewal", new Object()).succeeded()).isTrue();
+            assertThat(runtime.leaseRenewalStarted()).isFalse();
+            assertThat(runtime.execute(
+                    "lazy-renewal", new Object(), WorkflowSelector.defaultVariant(),
+                    new CancellationToken(), "event-lazy").succeeded()).isTrue();
+            assertThat(runtime.leaseRenewalStarted()).isTrue();
+        } finally {
+            runtime.close();
+        }
+    }
+
+    @Test
+    void committedTerminalStateIsNotReversedByConcurrentRenewalLoss() throws Exception {
+        WorkflowRegistry registry = new WorkflowRegistry();
+        AtomicInteger runs = new AtomicInteger();
+        registry.register(Workflow.<Object>builder("commit-point")
+                .step("write", context -> {
+                    runs.incrementAndGet();
+                    return "committed";
+                }).build());
+        FinalCommitRenewalFailureStore store = new FinalCommitRenewalFailureStore();
+        WorkflowRuntime<Object> runtime = new WorkflowRuntime<>(registry, store, 1, 8,
+                java.time.Duration.ofMillis(60), "commit-runtime");
+        try {
+            WorkflowResult result = runtime.executeAsync(
+                    "commit-point", new Object(), "event-commit")
+                    .get(3, java.util.concurrent.TimeUnit.SECONDS);
+
+            assertThat(result.succeeded()).isTrue();
+            assertThat(store.renewalRejected.await(1, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+            assertThat(store.findSnapshotByIdempotencyKey("commit-point", "event-commit"))
+                    .get().extracting(WorkflowExecutionSnapshot::status)
+                    .isEqualTo(WorkflowExecution.Status.SUCCEEDED);
+            var retained = runtime.executeAsync(
+                    "commit-point", new Object(), "event-commit");
+            assertThatThrownBy(() -> retained.get(1, java.util.concurrent.TimeUnit.SECONDS))
+                    .isInstanceOf(java.util.concurrent.ExecutionException.class)
+                    .cause().isInstanceOf(WorkflowException.class)
+                    .extracting("code").isEqualTo(WorkflowException.IDEMPOTENCY_RETAINED);
+            assertThat(runs).hasValue(1);
+        } finally {
+            runtime.close();
+        }
+    }
+
+    @Test
+    void persistenceFailureAfterStepSuccessNeverRetriesTheBusinessStep() throws Exception {
+        WorkflowRegistry registry = new WorkflowRegistry();
+        AtomicInteger runs = new AtomicInteger();
+        registry.register(Workflow.<Object>builder("persist-after-success")
+                .step("external-write", context -> {
+                    runs.incrementAndGet();
+                    return "written";
+                }, StepMode.IDEMPOTENT, RetryPolicy.fixed(3, Duration.ZERO))
+                .build());
+        CommitThenFailStore store = new CommitThenFailStore();
+        WorkflowRuntime<Object> runtime = new WorkflowRuntime<>(registry, store, 1, 8,
+                java.time.Duration.ofSeconds(1), "persist-runtime");
+        try {
+            var result = runtime.executeAsync(
+                    "persist-after-success", new Object(), "event-persist");
+
+            assertThatThrownBy(() -> result.get(2, java.util.concurrent.TimeUnit.SECONDS))
+                    .isInstanceOf(java.util.concurrent.ExecutionException.class)
+                    .cause().isInstanceOf(WorkflowException.class)
+                    .extracting("code").isEqualTo(WorkflowException.STORE_FAILURE);
+            assertThat(runs).hasValue(1);
+            assertThat(store.findSnapshotByIdempotencyKey(
+                    "persist-after-success", "event-persist"))
+                    .get().satisfies(snapshot -> {
+                        assertThat(snapshot.status()).isEqualTo(WorkflowExecution.Status.RUNNING);
+                        assertThat(snapshot.steps()).singleElement()
+                                .extracting(WorkflowExecutionSnapshot.StepSnapshot::status)
+                                .isEqualTo(StepExecution.Status.SUCCEEDED);
+                    });
+        } finally {
+            runtime.close();
+        }
+    }
+
+    @Test
+    void leaseRenewalRegistrySupportsTokensThatAreOnlyUniquePerWorkflowKey() throws Exception {
+        WorkflowRegistry registry = new WorkflowRegistry();
+        java.util.concurrent.CountDownLatch started = new java.util.concurrent.CountDownLatch(2);
+        java.util.concurrent.CountDownLatch release = new java.util.concurrent.CountDownLatch(1);
+        registry.register(Workflow.<Object>builder("per-key-token")
+                .step("wait", context -> {
+                    started.countDown();
+                    release.await(2, java.util.concurrent.TimeUnit.SECONDS);
+                    return null;
+                }).build());
+        PerKeyEpochStore store = new PerKeyEpochStore();
+        WorkflowRuntime<Object> runtime = new WorkflowRuntime<>(registry, store, 2, 4,
+                java.time.Duration.ofMillis(90), "epoch-runtime");
+        try {
+            var first = runtime.executeAsync("per-key-token", new Object(), "event-a");
+            var second = runtime.executeAsync("per-key-token", new Object(), "event-b");
+            assertThat(started.await(1, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+
+            Thread.sleep(250);
+
+            assertThat(store.currentLease("per-key-token", "event-a")).isPresent();
+            assertThat(store.currentLease("per-key-token", "event-b")).isPresent();
+            assertThat(store.renewals.get()).isGreaterThanOrEqualTo(2);
+            release.countDown();
+            assertThat(first.get(2, java.util.concurrent.TimeUnit.SECONDS).succeeded()).isTrue();
+            assertThat(second.get(2, java.util.concurrent.TimeUnit.SECONDS).succeeded()).isTrue();
+        } finally {
+            release.countDown();
+            runtime.close();
+        }
+    }
+
+    @Test
+    void fencedSaveLossUpdatesLeaseHealthImmediately() throws Exception {
+        WorkflowRegistry registry = new WorkflowRegistry();
+        registry.register(Workflow.<Object>builder("save-lost")
+                .step("never", context -> null).build());
+        PerKeyEpochStore store = new PerKeyEpochStore();
+        store.rejectSaves.set(true);
+        WorkflowRuntime<Object> runtime = new WorkflowRuntime<>(registry, store, 1, 4,
+                java.time.Duration.ofSeconds(1), "save-lost-runtime");
+        try {
+            var result = runtime.executeAsync("save-lost", new Object(), "event-lost");
+            assertThatThrownBy(() -> result.get(1, java.util.concurrent.TimeUnit.SECONDS))
+                    .isInstanceOf(java.util.concurrent.ExecutionException.class)
+                    .cause().isInstanceOf(WorkflowException.class)
+                    .extracting("code").isEqualTo(WorkflowException.LEASE_LOST);
+            assertThat(runtime.lostLeases()).isEqualTo(1);
+            assertThat(runtime.activeLeases()).isZero();
+        } finally {
+            runtime.close();
+        }
+    }
+
+    @Test
+    void expiredLeaseCanBeTakenOverWithoutOldOwnerReleasingNewLease() throws Exception {
+        InMemoryWorkflowExecutionStore store = new InMemoryWorkflowExecutionStore(2);
+        WorkflowLease first = store.tryAcquire("lease-store", "event-1", "owner-1",
+                java.time.Duration.ofMillis(200)).orElseThrow();
+        assertThat(store.tryAcquire("lease-store", "event-1", "owner-2",
+                java.time.Duration.ofSeconds(1))).isEmpty();
+
+        Thread.sleep(250);
+        WorkflowLease second = store.tryAcquire("lease-store", "event-1", "owner-2",
+                java.time.Duration.ofSeconds(1)).orElseThrow();
+        assertThat(second.token()).isNotEqualTo(first.token());
+        assertThat(store.renew(first, java.time.Duration.ofSeconds(1))).isEmpty();
+        WorkflowExecution stale = new WorkflowExecution("lease-store", null, "event-1");
+        assertThatThrownBy(() -> store.saveLeased(stale.snapshot(), first))
+                .isInstanceOf(WorkflowException.class)
+                .extracting("code").isEqualTo(WorkflowException.LEASE_LOST);
+
+        store.release(first);
+        assertThat(store.currentLease("lease-store", "event-1")).contains(second);
+        store.release(second);
+        assertThat(store.currentLease("lease-store", "event-1")).isEmpty();
+    }
+
+    @Test
+    void leasedPersistenceRejectsMismatchedWorkflowIdentity() {
+        InMemoryWorkflowExecutionStore store = new InMemoryWorkflowExecutionStore();
+        WorkflowLease lease = store.tryAcquire("orders", "event-1", "owner-1",
+                java.time.Duration.ofSeconds(1)).orElseThrow();
+        WorkflowExecution wrongWorkflow = new WorkflowExecution("payments", null, "event-1");
+        WorkflowExecution wrongKey = new WorkflowExecution("orders", null, "event-2");
+
+        assertThatThrownBy(() -> store.saveLeased(
+                wrongWorkflow.snapshot(), lease))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("match the lease identity");
+        assertThatThrownBy(() -> store.saveLeased(
+                wrongKey.snapshot(), lease))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("match the lease identity");
+        assertThat(store.findByIdempotencyKey("orders", "event-1")).isEmpty();
+        assertThat(store.findSnapshotByIdempotencyKey("orders", "event-1")).isEmpty();
+
+        WorkflowExecution first = new WorkflowExecution("orders", null, "event-1");
+        WorkflowExecution second = new WorkflowExecution("orders", null, "event-1");
+        store.saveLeased(first.snapshot(), lease);
+        assertThatThrownBy(() -> store.saveLeased(second.snapshot(), lease))
+                .isInstanceOf(WorkflowException.class)
+                .extracting("code").isEqualTo(WorkflowException.IDEMPOTENCY_CONFLICT);
+    }
+
+    @Test
+    void closedRuntimeRejectsNewLeasedExecutionWithStableCode() {
+        WorkflowRegistry registry = new WorkflowRegistry();
+        registry.register(Workflow.<Object>builder("closed-runtime")
+                .step("never", context -> null).build());
+        WorkflowRuntime<Object> runtime = new WorkflowRuntime<>(registry);
+        runtime.close();
+
+        assertThatThrownBy(() -> runtime.execute(
+                "closed-runtime", new Object(), WorkflowSelector.defaultVariant(),
+                new CancellationToken(), "event-after-close"))
+                .isInstanceOf(WorkflowException.class)
+                .extracting("code").isEqualTo(WorkflowException.CANCELLED);
+    }
+
+    @Test
+    void businessStepCanReadFencingTokenOnlyDuringLeasedExecution() {
+        WorkflowRegistry registry = new WorkflowRegistry();
+        java.util.concurrent.atomic.AtomicReference<WorkflowRuntime<Object>> runtimeRef =
+                new java.util.concurrent.atomic.AtomicReference<>();
+        java.util.concurrent.atomic.AtomicReference<String> fencingToken =
+                new java.util.concurrent.atomic.AtomicReference<>();
+        registry.register(Workflow.<Object>builder("fenced")
+                .step("external-write", context -> {
+                    fencingToken.set(runtimeRef.get().currentLease().orElseThrow().token());
+                    return null;
+                }).build());
+        WorkflowRuntime<Object> runtime = new WorkflowRuntime<>(
+                registry, new InMemoryWorkflowExecutionStore(), 1, 8,
+                java.time.Duration.ofSeconds(1), "fencing-runtime");
+        runtimeRef.set(runtime);
+        try {
+            assertThat(runtime.execute("fenced", new Object(),
+                    WorkflowSelector.defaultVariant(), new io.aura.contract.CancellationToken(),
+                    "event-fenced").succeeded()).isTrue();
+            assertThat(fencingToken.get()).isNotBlank();
+            assertThat(runtime.currentLease()).isEmpty();
+        } finally {
+            runtime.close();
+        }
+    }
+
+    @Test
+    void nestedUnleasedExecutionHidesThenRestoresOuterFencingToken() {
+        WorkflowRegistry registry = new WorkflowRegistry();
+        java.util.concurrent.atomic.AtomicReference<WorkflowRuntime<Object>> runtimeRef =
+                new java.util.concurrent.atomic.AtomicReference<>();
+        java.util.List<String> tokens = new java.util.ArrayList<>();
+        java.util.concurrent.atomic.AtomicBoolean innerLeasePresent =
+                new java.util.concurrent.atomic.AtomicBoolean(true);
+        WorkflowDefinition<Object> inner = Workflow.<Object>builder("inner")
+                .step("read-outer-token", context -> {
+                    innerLeasePresent.set(runtimeRef.get().currentLease().isPresent());
+                    return null;
+                }).build();
+        registry.register(inner);
+        registry.register(Workflow.<Object>builder("outer")
+                .step("before", context -> {
+                    tokens.add(runtimeRef.get().currentLease().orElseThrow().token());
+                    runtimeRef.get().execute(inner, new Object(), WorkflowSelector.defaultVariant());
+                    tokens.add(runtimeRef.get().currentLease().orElseThrow().token());
+                    return null;
+                }).build());
+        WorkflowRuntime<Object> runtime = new WorkflowRuntime<>(
+                registry, new InMemoryWorkflowExecutionStore(), 1, 8,
+                java.time.Duration.ofSeconds(1), "nested-runtime");
+        runtimeRef.set(runtime);
+        try {
+            assertThat(runtime.execute("outer", new Object(),
+                    WorkflowSelector.defaultVariant(), new io.aura.contract.CancellationToken(),
+                    "event-outer").succeeded()).isTrue();
+            assertThat(tokens).hasSize(2).allMatch(tokens.get(0)::equals);
+            assertThat(innerLeasePresent).isFalse();
+            assertThat(runtime.currentLease()).isEmpty();
+        } finally {
+            runtime.close();
+        }
+    }
+
+    @Test
+    void asyncCompletionCallbackRunsAfterFencingScopeAndLeaseRelease() throws Exception {
+        WorkflowRegistry registry = new WorkflowRegistry();
+        java.util.concurrent.CountDownLatch started = new java.util.concurrent.CountDownLatch(1);
+        java.util.concurrent.CountDownLatch release = new java.util.concurrent.CountDownLatch(1);
+        registry.register(Workflow.<Object>builder("callback-scope")
+                .step("done", context -> {
+                    started.countDown();
+                    release.await(2, java.util.concurrent.TimeUnit.SECONDS);
+                    return null;
+                }).build());
+        InMemoryWorkflowExecutionStore store = new InMemoryWorkflowExecutionStore();
+        WorkflowRuntime<Object> runtime = new WorkflowRuntime<>(registry, store, 1, 8,
+                java.time.Duration.ofSeconds(1), "callback-runtime");
+        try {
+            java.util.concurrent.atomic.AtomicReference<java.util.Optional<WorkflowLease>> callbackLease =
+                    new java.util.concurrent.atomic.AtomicReference<>();
+            var future = runtime.executeAsync("callback-scope", new Object(), "event-callback");
+            assertThat(started.await(2, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+            future.whenComplete((result, failure) -> callbackLease.set(runtime.currentLease()));
+            release.countDown();
+            assertThat(future.get(2, java.util.concurrent.TimeUnit.SECONDS).succeeded()).isTrue();
+            assertThat(callbackLease.get()).isEmpty();
+            assertThat(store.currentLease("callback-scope", "event-callback")).isEmpty();
+        } finally {
+            release.countDown();
+            runtime.close();
+        }
+    }
+
+    @Test
+    void shutdownDoesNotReleaseLeaseWhileIgnoringCancellationStepStillRuns() throws Exception {
+        WorkflowRegistry registry = new WorkflowRegistry();
+        java.util.concurrent.CountDownLatch started = new java.util.concurrent.CountDownLatch(1);
+        java.util.concurrent.atomic.AtomicBoolean release = new java.util.concurrent.atomic.AtomicBoolean();
+        registry.register(Workflow.<Object>builder("shutdown-lease")
+                .step("ignore-cancellation", context -> {
+                    started.countDown();
+                    while (!release.get()) {
+                        java.util.concurrent.locks.LockSupport.parkNanos(
+                                java.util.concurrent.TimeUnit.MILLISECONDS.toNanos(5));
+                        Thread.interrupted();
+                    }
+                    return null;
+                }).build());
+        InMemoryWorkflowExecutionStore store = new InMemoryWorkflowExecutionStore();
+        WorkflowRuntime<Object> runtime = new WorkflowRuntime<>(registry, store, 1, 8,
+                java.time.Duration.ofMillis(300), "shutdown-runtime");
+        var future = runtime.executeAsync("shutdown-lease", new Object(), "event-shutdown");
+        assertThat(started.await(2, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+
+        runtime.close();
+
+        assertThat(store.currentLease("shutdown-lease", "event-shutdown")).isPresent();
+        Thread.sleep(350);
+        assertThat(store.currentLease("shutdown-lease", "event-shutdown")).isEmpty();
+        assertThat(runtime.lostLeases()).isEqualTo(1);
+        release.set(true);
+        assertThatThrownBy(() -> future.get(2, java.util.concurrent.TimeUnit.SECONDS))
+                .isInstanceOf(java.util.concurrent.CancellationException.class);
+        assertThat(store.findSnapshotByIdempotencyKey("shutdown-lease", "event-shutdown"))
+                .get().extracting(WorkflowExecutionSnapshot::status)
+                .isNotEqualTo(WorkflowExecution.Status.SUCCEEDED);
+        assertThat(store.findByIdempotencyKey("shutdown-lease", "event-shutdown")).isEmpty();
+
+        WorkflowRuntime<Object> recoveryRuntime = new WorkflowRuntime<>(registry, store, 1, 8,
+                java.time.Duration.ofMillis(300), "recovery-runtime");
+        try {
+            var duplicate = recoveryRuntime.executeAsync(
+                    "shutdown-lease", new Object(), "event-shutdown");
+            assertThatThrownBy(() -> duplicate.get(1, java.util.concurrent.TimeUnit.SECONDS))
+                    .isInstanceOf(java.util.concurrent.ExecutionException.class)
+                    .cause().isInstanceOf(WorkflowException.class)
+                    .extracting("code").isEqualTo(WorkflowException.IDEMPOTENCY_RETAINED);
+        } finally {
+            recoveryRuntime.close();
+        }
+    }
+
+    @Test
+    void leaseRegistryIsBoundedWithTheExecutionStore() {
+        InMemoryWorkflowExecutionStore store = new InMemoryWorkflowExecutionStore(1);
+        assertThat(store.tryAcquire("flow-a", "event-a", "owner",
+                java.time.Duration.ofSeconds(1))).isPresent();
+        assertThatThrownBy(() -> store.tryAcquire("flow-b", "event-b", "owner",
+                java.time.Duration.ofSeconds(1)))
+                .isInstanceOf(WorkflowException.class)
+                .extracting("code").isEqualTo(WorkflowException.LEASE_CAPACITY_EXHAUSTED);
+    }
+
+    @Test
+    void recoveryCandidatesAreReportedButNeverReplayedAutomatically() {
+        InMemoryWorkflowExecutionStore store = new InMemoryWorkflowExecutionStore();
+        WorkflowExecution abandoned = new WorkflowExecution("recoverable", null, "event-abandoned");
+        abandoned.start();
+        store.saveSnapshot(abandoned.snapshot());
+        store.retainLocal(abandoned);
+        WorkflowRuntime<Object> runtime = new WorkflowRuntime<>(new WorkflowRegistry(), store);
+        try {
+            assertThat(runtime.recoveryCandidates("recoverable")).singleElement().satisfies(candidate -> {
+                assertThat(candidate.snapshot().executionId()).isEqualTo(abandoned.executionId());
+                assertThat(candidate.currentlyLeased()).isFalse();
+            });
+            WorkflowLease lease = store.tryAcquire("recoverable", "event-abandoned",
+                    "recovery-worker", java.time.Duration.ofSeconds(1)).orElseThrow();
+            assertThat(runtime.recoveryCandidates("recoverable")).singleElement()
+                    .extracting(WorkflowRecoveryCandidate::currentlyLeased).isEqualTo(true);
+            store.release(lease);
+        } finally {
+            runtime.close();
+        }
+    }
+
+    @Test
+    void recoveryStoreFailuresUseStableCode() {
+        WorkflowExecutionStore failing = new WorkflowExecutionStore() {
+            @Override public void saveSnapshot(WorkflowExecutionSnapshot snapshot) { }
+            @Override public java.util.Optional<WorkflowExecution> find(String executionId) {
+                return java.util.Optional.empty();
+            }
+            @Override public java.util.List<WorkflowExecution> list(String workflowId) {
+                return java.util.List.of();
+            }
+            @Override public java.util.List<WorkflowExecutionSnapshot> listSnapshots(String workflowId) {
+                throw new IllegalStateException("database offline");
+            }
+        };
+        WorkflowRuntime<Object> runtime = new WorkflowRuntime<>(new WorkflowRegistry(), failing);
+        try {
+            assertThatThrownBy(() -> runtime.recoveryCandidates("orders"))
+                    .isInstanceOf(WorkflowException.class)
+                    .extracting("code").isEqualTo(WorkflowException.STORE_FAILURE);
+        } finally {
+            runtime.close();
+        }
+    }
+
+    @Test
+    void storeFailuresUseStableCodeBeforeBusinessStepsRun() {
+        WorkflowRegistry registry = new WorkflowRegistry();
+        AtomicInteger runs = new AtomicInteger();
+        registry.register(Workflow.<Object>builder("store-failure")
+                .step("must-not-run", context -> { runs.incrementAndGet(); return null; })
+                .build());
+        WorkflowExecutionStore failing = new WorkflowExecutionStore() {
+            @Override public void saveSnapshot(WorkflowExecutionSnapshot snapshot) {
+                throw new IllegalStateException("database offline");
+            }
+            @Override public java.util.Optional<WorkflowExecution> find(String executionId) { return java.util.Optional.empty(); }
+            @Override public java.util.List<WorkflowExecution> list(String workflowId) { return java.util.List.of(); }
+        };
+        WorkflowRuntime<Object> runtime = new WorkflowRuntime<>(registry, failing);
+        try {
+            var future = runtime.executeAsync("store-failure", new Object());
+            assertThatThrownBy(() -> future.get(2, java.util.concurrent.TimeUnit.SECONDS))
+                    .isInstanceOf(java.util.concurrent.ExecutionException.class)
+                    .cause().isInstanceOf(WorkflowException.class)
+                    .extracting("code").isEqualTo(WorkflowException.STORE_FAILURE);
+            assertThat(runs).hasValue(0);
+        } finally {
+            runtime.close();
+        }
+    }
+
+    @Test
+    void durableSnapshotPreventsReplayWhenMutableExecutionCannotBeReconstructed() throws Exception {
+        WorkflowRegistry registry = new WorkflowRegistry();
+        AtomicInteger runs = new AtomicInteger();
+        registry.register(Workflow.<Object>builder("snapshot-dedupe")
+                .step("external-write", context -> { runs.incrementAndGet(); return null; })
+                .build());
+        SharedSnapshotBackend backend = new SharedSnapshotBackend();
+        WorkflowRuntime<Object> first = new WorkflowRuntime<>(registry,
+                new SnapshotOnlyStore(backend), 1, 8,
+                java.time.Duration.ofSeconds(1), "snapshot-owner-1");
+        WorkflowRuntime<Object> second = new WorkflowRuntime<>(registry,
+                new SnapshotOnlyStore(backend), 1, 8,
+                java.time.Duration.ofSeconds(1), "snapshot-owner-2");
+        try {
+            assertThat(first.execute("snapshot-dedupe", new Object(),
+                    WorkflowSelector.defaultVariant(), new io.aura.contract.CancellationToken(),
+                    "event-snapshot").succeeded()).isTrue();
+
+            var duplicate = second.executeAsync("snapshot-dedupe", new Object(), "event-snapshot");
+            assertThatThrownBy(() -> duplicate.get(2, java.util.concurrent.TimeUnit.SECONDS))
+                    .isInstanceOf(java.util.concurrent.ExecutionException.class)
+                    .cause().isInstanceOf(WorkflowException.class)
+                    .extracting("code").isEqualTo(WorkflowException.IDEMPOTENCY_RETAINED);
+            assertThat(runs).hasValue(1);
+        } finally {
+            first.close();
+            second.close();
+        }
+    }
+
+    @Test
+    void visibleNonTerminalExecutionIsNeverReturnedAsACompletedDuplicate() throws Exception {
+        WorkflowRegistry registry = new WorkflowRegistry();
+        registry.register(Workflow.<Object>builder("visible-running")
+                .step("never", context -> null).build());
+        InMemoryWorkflowExecutionStore store = new InMemoryWorkflowExecutionStore();
+        WorkflowExecution running = new WorkflowExecution(
+                "visible-running", null, "event-running");
+        running.start();
+        store.saveSnapshot(running.snapshot());
+        store.retainLocal(running);
+        WorkflowLease lease = store.tryAcquire("visible-running", "event-running", "owner-1",
+                java.time.Duration.ofSeconds(1)).orElseThrow();
+        WorkflowRuntime<Object> runtime = new WorkflowRuntime<>(registry, store, 1, 8,
+                java.time.Duration.ofSeconds(1), "owner-2");
+        try {
+            var leased = runtime.executeAsync("visible-running", new Object(), "event-running");
+            assertThatThrownBy(() -> leased.get(2, java.util.concurrent.TimeUnit.SECONDS))
+                    .isInstanceOf(java.util.concurrent.ExecutionException.class)
+                    .cause().isInstanceOf(WorkflowException.class)
+                    .extracting("code").isEqualTo(WorkflowException.LEASE_UNAVAILABLE);
+
+            store.release(lease);
+            var abandoned = runtime.executeAsync("visible-running", new Object(), "event-running");
+            assertThatThrownBy(() -> abandoned.get(2, java.util.concurrent.TimeUnit.SECONDS))
+                    .isInstanceOf(java.util.concurrent.ExecutionException.class)
+                    .cause().isInstanceOf(WorkflowException.class)
+                    .extracting("code").isEqualTo(WorkflowException.IDEMPOTENCY_RETAINED);
+        } finally {
+            store.release(lease);
+            runtime.close();
+        }
+    }
+
+    private static final class BlockingSaveStore implements DurableWorkflowExecutionStore {
+        private final InMemoryWorkflowExecutionStore delegate = new InMemoryWorkflowExecutionStore();
+        private final java.util.concurrent.CountDownLatch saveEntered = new java.util.concurrent.CountDownLatch(1);
+        private final java.util.concurrent.CountDownLatch allowSave = new java.util.concurrent.CountDownLatch(1);
+
+        private void awaitSave() {
+            saveEntered.countDown();
+            try {
+                if (!allowSave.await(2, java.util.concurrent.TimeUnit.SECONDS)) {
+                    throw new IllegalStateException("save was not released");
+                }
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+                throw new IllegalStateException(interrupted);
+            }
+        }
+        @Override public void retainLocal(WorkflowExecution execution) {
+            delegate.retainLocal(execution);
+        }
+        @Override public void saveLeased(WorkflowExecutionSnapshot snapshot,
+                                         WorkflowLease lease) {
+            awaitSave();
+            delegate.saveLeased(snapshot, lease);
+        }
+        @Override public void saveSnapshot(WorkflowExecutionSnapshot snapshot) { delegate.saveSnapshot(snapshot); }
+        @Override public java.util.Optional<WorkflowExecutionSnapshot> findSnapshot(String id) { return delegate.findSnapshot(id); }
+        @Override public java.util.List<WorkflowExecutionSnapshot> listSnapshots(String id) { return delegate.listSnapshots(id); }
+        @Override public java.util.Optional<WorkflowExecution> find(String id) { return delegate.find(id); }
+        @Override public java.util.List<WorkflowExecution> list(String id) { return delegate.list(id); }
+        @Override public java.util.Optional<WorkflowExecution> findByIdempotencyKey(String flow, String key) {
+            return delegate.findByIdempotencyKey(flow, key);
+        }
+        @Override public java.util.Optional<WorkflowExecutionSnapshot> findSnapshotByIdempotencyKey(String flow, String key) {
+            return delegate.findSnapshotByIdempotencyKey(flow, key);
+        }
+        @Override public java.util.Optional<WorkflowLease> tryAcquire(String flow, String key, String owner, java.time.Duration ttl) {
+            return delegate.tryAcquire(flow, key, owner, ttl);
+        }
+        @Override public java.util.Optional<WorkflowLease> renew(WorkflowLease lease, java.time.Duration ttl) {
+            return delegate.renew(lease, ttl);
+        }
+        @Override public void release(WorkflowLease lease) { delegate.release(lease); }
+        @Override public java.util.Optional<WorkflowLease> currentLease(String flow, String key) {
+            return delegate.currentLease(flow, key);
+        }
+    }
+
+    private static final class FinalCommitRenewalFailureStore
+            implements DurableWorkflowExecutionStore {
+        private final InMemoryWorkflowExecutionStore delegate = new InMemoryWorkflowExecutionStore();
+        private final java.util.concurrent.CountDownLatch terminalSaved =
+                new java.util.concurrent.CountDownLatch(1);
+        private final java.util.concurrent.CountDownLatch renewalRejected =
+                new java.util.concurrent.CountDownLatch(1);
+
+        @Override public void retainLocal(WorkflowExecution execution) { delegate.retainLocal(execution); }
+        @Override public void saveLeased(WorkflowExecutionSnapshot snapshot,
+                                         WorkflowLease lease) {
+            delegate.saveLeased(snapshot, lease);
+            if (snapshot.status() == WorkflowExecution.Status.SUCCEEDED) {
+                terminalSaved.countDown();
+                try {
+                    if (!renewalRejected.await(2, java.util.concurrent.TimeUnit.SECONDS)) {
+                        throw new IllegalStateException("renewal failure was not observed");
+                    }
+                } catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                    throw new IllegalStateException(interrupted);
+                }
+            }
+        }
+        @Override public void saveSnapshot(WorkflowExecutionSnapshot snapshot) {
+            delegate.saveSnapshot(snapshot);
+        }
+        @Override public java.util.Optional<WorkflowExecutionSnapshot> findSnapshot(String id) {
+            return delegate.findSnapshot(id);
+        }
+        @Override public java.util.List<WorkflowExecutionSnapshot> listSnapshots(String id) {
+            return delegate.listSnapshots(id);
+        }
+        @Override public java.util.Optional<WorkflowExecution> find(String id) {
+            return delegate.find(id);
+        }
+        @Override public java.util.List<WorkflowExecution> list(String id) {
+            return delegate.list(id);
+        }
+        @Override public java.util.Optional<WorkflowExecution> findByIdempotencyKey(
+                String flow, String key) {
+            return delegate.findByIdempotencyKey(flow, key);
+        }
+        @Override public java.util.Optional<WorkflowExecutionSnapshot> findSnapshotByIdempotencyKey(
+                String flow, String key) {
+            return delegate.findSnapshotByIdempotencyKey(flow, key);
+        }
+        @Override public java.util.Optional<WorkflowLease> tryAcquire(
+                String flow, String key, String owner, java.time.Duration ttl) {
+            return delegate.tryAcquire(flow, key, owner, ttl);
+        }
+        @Override public java.util.Optional<WorkflowLease> renew(
+                WorkflowLease lease, java.time.Duration ttl) {
+            if (terminalSaved.getCount() == 0) {
+                renewalRejected.countDown();
+                return java.util.Optional.empty();
+            }
+            return delegate.renew(lease, ttl);
+        }
+        @Override public void release(WorkflowLease lease) { delegate.release(lease); }
+        @Override public java.util.Optional<WorkflowLease> currentLease(String flow, String key) {
+            return delegate.currentLease(flow, key);
+        }
+    }
+
+    private static final class CommitThenFailStore implements DurableWorkflowExecutionStore {
+        private final InMemoryWorkflowExecutionStore delegate = new InMemoryWorkflowExecutionStore();
+        private final java.util.concurrent.atomic.AtomicBoolean failed =
+                new java.util.concurrent.atomic.AtomicBoolean();
+
+        @Override public void retainLocal(WorkflowExecution execution) { delegate.retainLocal(execution); }
+        @Override public void saveLeased(WorkflowExecutionSnapshot snapshot,
+                                         WorkflowLease lease) {
+            delegate.saveLeased(snapshot, lease);
+            boolean completedStep = snapshot.status() == WorkflowExecution.Status.RUNNING
+                    && snapshot.steps().stream().anyMatch(
+                            step -> step.status() == StepExecution.Status.SUCCEEDED);
+            if (completedStep && failed.compareAndSet(false, true)) {
+                throw new IllegalStateException("commit acknowledgement lost");
+            }
+        }
+        @Override public void saveSnapshot(WorkflowExecutionSnapshot snapshot) {
+            delegate.saveSnapshot(snapshot);
+        }
+        @Override public java.util.Optional<WorkflowExecutionSnapshot> findSnapshot(String id) {
+            return delegate.findSnapshot(id);
+        }
+        @Override public java.util.List<WorkflowExecutionSnapshot> listSnapshots(String id) {
+            return delegate.listSnapshots(id);
+        }
+        @Override public java.util.Optional<WorkflowExecution> find(String id) {
+            return delegate.find(id);
+        }
+        @Override public java.util.List<WorkflowExecution> list(String id) {
+            return delegate.list(id);
+        }
+        @Override public java.util.Optional<WorkflowExecution> findByIdempotencyKey(
+                String flow, String key) {
+            return delegate.findByIdempotencyKey(flow, key);
+        }
+        @Override public java.util.Optional<WorkflowExecutionSnapshot> findSnapshotByIdempotencyKey(
+                String flow, String key) {
+            return delegate.findSnapshotByIdempotencyKey(flow, key);
+        }
+        @Override public java.util.Optional<WorkflowLease> tryAcquire(
+                String flow, String key, String owner, java.time.Duration ttl) {
+            return delegate.tryAcquire(flow, key, owner, ttl);
+        }
+        @Override public java.util.Optional<WorkflowLease> renew(
+                WorkflowLease lease, java.time.Duration ttl) {
+            return delegate.renew(lease, ttl);
+        }
+        @Override public void release(WorkflowLease lease) { delegate.release(lease); }
+        @Override public java.util.Optional<WorkflowLease> currentLease(String flow, String key) {
+            return delegate.currentLease(flow, key);
+        }
+    }
+
+    private static final class PerKeyEpochStore implements DurableWorkflowExecutionStore {
+        private final InMemoryWorkflowExecutionStore delegate = new InMemoryWorkflowExecutionStore();
+        private final java.util.Map<String, WorkflowLease> leases = new java.util.HashMap<>();
+        private final AtomicInteger renewals = new AtomicInteger();
+        private final java.util.concurrent.atomic.AtomicBoolean rejectSaves =
+                new java.util.concurrent.atomic.AtomicBoolean();
+
+        @Override public void retainLocal(WorkflowExecution execution) { delegate.retainLocal(execution); }
+        @Override public synchronized void saveLeased(
+                WorkflowExecutionSnapshot snapshot, WorkflowLease lease) {
+            if (rejectSaves.get()) {
+                throw new WorkflowException(WorkflowException.LEASE_LOST,
+                        "Workflow execution lease was lost before persistence");
+            }
+            WorkflowLease current = current(lease.workflowId(), lease.idempotencyKey());
+            if (current == null || !current.token().equals(lease.token())
+                    || !current.ownerId().equals(lease.ownerId())) {
+                throw new WorkflowException(WorkflowException.LEASE_LOST,
+                        "Workflow execution lease was lost before persistence");
+            }
+            delegate.saveSnapshot(snapshot);
+        }
+        @Override public void saveSnapshot(WorkflowExecutionSnapshot snapshot) {
+            delegate.saveSnapshot(snapshot);
+        }
+        @Override public java.util.Optional<WorkflowExecutionSnapshot> findSnapshot(String id) {
+            return delegate.findSnapshot(id);
+        }
+        @Override public java.util.List<WorkflowExecutionSnapshot> listSnapshots(String id) {
+            return delegate.listSnapshots(id);
+        }
+        @Override public java.util.Optional<WorkflowExecution> find(String id) {
+            return delegate.find(id);
+        }
+        @Override public java.util.List<WorkflowExecution> list(String id) {
+            return delegate.list(id);
+        }
+        @Override public java.util.Optional<WorkflowExecution> findByIdempotencyKey(
+                String flow, String key) {
+            return delegate.findByIdempotencyKey(flow, key);
+        }
+        @Override public java.util.Optional<WorkflowExecutionSnapshot> findSnapshotByIdempotencyKey(
+                String flow, String key) {
+            return delegate.findSnapshotByIdempotencyKey(flow, key);
+        }
+        @Override public synchronized java.util.Optional<WorkflowLease> tryAcquire(
+                String flow, String key, String owner, java.time.Duration ttl) {
+            if (current(flow, key) != null) return java.util.Optional.empty();
+            WorkflowLease lease = new WorkflowLease(
+                    flow, key, owner, "1", java.time.Instant.now().plus(ttl));
+            leases.put(leaseKey(flow, key), lease);
+            return java.util.Optional.of(lease);
+        }
+        @Override public synchronized java.util.Optional<WorkflowLease> renew(
+                WorkflowLease lease, java.time.Duration ttl) {
+            WorkflowLease current = current(lease.workflowId(), lease.idempotencyKey());
+            if (current == null || !current.token().equals(lease.token())
+                    || !current.ownerId().equals(lease.ownerId())) {
+                return java.util.Optional.empty();
+            }
+            WorkflowLease renewed = new WorkflowLease(
+                    lease.workflowId(), lease.idempotencyKey(), lease.ownerId(),
+                    lease.token(), java.time.Instant.now().plus(ttl));
+            leases.put(leaseKey(lease.workflowId(), lease.idempotencyKey()), renewed);
+            renewals.incrementAndGet();
+            return java.util.Optional.of(renewed);
+        }
+        @Override public synchronized void release(WorkflowLease lease) {
+            WorkflowLease current = current(lease.workflowId(), lease.idempotencyKey());
+            if (current != null && current.token().equals(lease.token())
+                    && current.ownerId().equals(lease.ownerId())) {
+                leases.remove(leaseKey(lease.workflowId(), lease.idempotencyKey()));
+            }
+        }
+        @Override public synchronized java.util.Optional<WorkflowLease> currentLease(
+                String flow, String key) {
+            return java.util.Optional.ofNullable(current(flow, key));
+        }
+        private WorkflowLease current(String flow, String key) {
+            String leaseKey = leaseKey(flow, key);
+            WorkflowLease current = leases.get(leaseKey);
+            if (current != null && current.expiredAt(java.time.Instant.now())) {
+                leases.remove(leaseKey);
+                return null;
+            }
+            return current;
+        }
+        private static String leaseKey(String flow, String key) {
+            return flow + "\u0000" + key;
+        }
+    }
+
+    private static final class SharedSnapshotBackend {
+        private final InMemoryWorkflowExecutionStore delegate = new InMemoryWorkflowExecutionStore();
+    }
+
+    private static final class SnapshotOnlyStore implements DurableWorkflowExecutionStore {
+        private final InMemoryWorkflowExecutionStore delegate;
+
+        private SnapshotOnlyStore(SharedSnapshotBackend backend) {
+            this.delegate = backend.delegate;
+        }
+
+        @Override public void retainLocal(WorkflowExecution execution) { delegate.retainLocal(execution); }
+        @Override public void saveLeased(WorkflowExecutionSnapshot snapshot,
+                                         WorkflowLease lease) {
+            delegate.saveLeased(snapshot, lease);
+        }
+        @Override public void saveSnapshot(WorkflowExecutionSnapshot snapshot) { delegate.saveSnapshot(snapshot); }
+        @Override public java.util.Optional<WorkflowExecutionSnapshot> findSnapshot(String id) { return delegate.findSnapshot(id); }
+        @Override public java.util.List<WorkflowExecutionSnapshot> listSnapshots(String id) { return delegate.listSnapshots(id); }
+        @Override public java.util.Optional<WorkflowExecution> find(String id) { return java.util.Optional.empty(); }
+        @Override public java.util.List<WorkflowExecution> list(String id) { return java.util.List.of(); }
+        @Override public java.util.Optional<WorkflowExecution> findByIdempotencyKey(String flow, String key) {
+            return java.util.Optional.empty();
+        }
+        @Override public java.util.Optional<WorkflowExecutionSnapshot> findSnapshotByIdempotencyKey(String flow, String key) {
+            return delegate.findSnapshotByIdempotencyKey(flow, key);
+        }
+        @Override public java.util.Optional<WorkflowLease> tryAcquire(String flow, String key, String owner, java.time.Duration ttl) {
+            return delegate.tryAcquire(flow, key, owner, ttl);
+        }
+        @Override public java.util.Optional<WorkflowLease> renew(WorkflowLease lease, java.time.Duration ttl) {
+            return delegate.renew(lease, ttl);
+        }
+        @Override public void release(WorkflowLease lease) { delegate.release(lease); }
+        @Override public java.util.Optional<WorkflowLease> currentLease(String flow, String key) {
+            return delegate.currentLease(flow, key);
         }
     }
 }

@@ -5,13 +5,11 @@ import java.util.Optional;
 
 /** Persistence extension point for workflow execution state. */
 public interface WorkflowExecutionStore {
-    void save(WorkflowExecution execution);
+    /** Optional process-local inspection hook. Implementations must not persist this mutable object. */
+    default void retainLocal(WorkflowExecution execution) { }
 
-    /**
-     * Optional durable projection hook. Implementations should persist this
-     * snapshot rather than retaining a mutable execution reference.
-     */
-    default void saveSnapshot(WorkflowExecutionSnapshot snapshot) { }
+    /** Persists the immutable, redacted execution projection. */
+    void saveSnapshot(WorkflowExecutionSnapshot snapshot);
     /** Optional read path for durable, redacted execution projections. */
     default Optional<WorkflowExecutionSnapshot> findSnapshot(String executionId) {
         return Optional.empty();

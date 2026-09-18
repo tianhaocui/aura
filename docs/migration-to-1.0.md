@@ -100,8 +100,10 @@ Workflow.<OrderContext>builder("order.fulfillment")
 ```
 
 Use `WorkflowRuntime` when execution status, persistence, bounded background execution, or
-cancellation is required. Supply a durable `WorkflowExecutionStore` before relying on restart
-recovery; the default in-memory store is for tests and single-process applications.
+cancellation is required. Supply a `DurableWorkflowExecutionStore` before relying on restart
+recovery. Durable adapters persist only `WorkflowExecutionSnapshot`; `retainLocal` is an optional
+process-local inspection hook and must never serialize the mutable execution. The default
+in-memory store is for tests and single-process applications.
 
 ## Verification checklist
 

@@ -21,6 +21,25 @@ public final class StepExecution {
         this.retryPolicy = retryPolicy;
     }
 
+    private StepExecution(String stepId, StepMode mode, RetryPolicy retryPolicy,
+                          Status status, int attempts, Object result, Throwable error,
+                          Instant startedAt, Instant finishedAt) {
+        this.stepId = stepId;
+        this.mode = mode;
+        this.retryPolicy = retryPolicy;
+        this.status = status;
+        this.attempts = attempts;
+        this.result = result;
+        this.error = error;
+        this.startedAt = startedAt;
+        this.finishedAt = finishedAt;
+    }
+
+    StepExecution copy() {
+        return new StepExecution(stepId, mode, retryPolicy, status, attempts, result,
+                error, startedAt, finishedAt);
+    }
+
     void start() { status = Status.RUNNING; startedAt = Instant.now(); }
     void success(Object value) { result = value; status = Status.SUCCEEDED; finishedAt = Instant.now(); }
     void fail(Throwable cause) { error = cause; status = Status.FAILED; finishedAt = Instant.now(); }

@@ -100,25 +100,22 @@ public final class WorkflowDefinition<C> implements AuraWorkflow<C> {
         try {
             cancellationToken.throwIfCancelled();
             execution.start();
-            observer.accept(execution);
+            observe(observer, execution);
             for (String stepId : order) {
                 cancellationToken.throwIfCancelled();
                 WorkflowStepSpec<C> spec = resolved.steps.get(stepId);
                 StepExecution state = execution.step(stepId);
                 currentStep = state;
                 state.start();
-                observer.accept(execution);
+                observe(observer, execution);
                 Throwable failure = null;
                 for (int attempt = 1; attempt <= spec.retryPolicy().maxAttempts(); attempt++) {
                     cancellationToken.throwIfCancelled();
                     state.attempt();
-                    observer.accept(execution);
+                    observe(observer, execution);
                     try {
                         value = spec.step().execute(context);
-                        state.success(value);
-                        observer.accept(execution);
                         failure = null;
-                        break;
                     } catch (java.util.concurrent.CancellationException cancelled) {
                         throw cancelled;
                     } catch (Exception error) {
@@ -126,18 +123,24 @@ public final class WorkflowDefinition<C> implements AuraWorkflow<C> {
                             throw new java.util.concurrent.CancellationException("Workflow cancelled");
                         }
                         failure = error;
-                        if (attempt >= spec.retryPolicy().maxAttempts() || !spec.retryPolicy().shouldRetry(error)) break;
-                        if (!spec.retryPolicy().delay().isZero()) {
-                            try {
-                                awaitRetryDelay(spec.retryPolicy().delay(), cancellationToken);
-                            } catch (InterruptedException interrupted) {
-                                Thread.currentThread().interrupt();
-                                if (cancellationToken.isCancelled()) {
-                                    throw new java.util.concurrent.CancellationException("Workflow cancelled");
-                                }
-                                failure = interrupted;
-                                break;
+                    }
+                    if (failure == null) {
+                        state.success(value);
+                        observe(observer, execution);
+                        break;
+                    }
+                    if (attempt >= spec.retryPolicy().maxAttempts()
+                            || !spec.retryPolicy().shouldRetry(failure)) break;
+                    if (!spec.retryPolicy().delay().isZero()) {
+                        try {
+                            awaitRetryDelay(spec.retryPolicy().delay(), cancellationToken);
+                        } catch (InterruptedException interrupted) {
+                            Thread.currentThread().interrupt();
+                            if (cancellationToken.isCancelled()) {
+                                throw new java.util.concurrent.CancellationException("Workflow cancelled");
                             }
+                            failure = interrupted;
+                            break;
                         }
                     }
                 }
@@ -145,14 +148,16 @@ public final class WorkflowDefinition<C> implements AuraWorkflow<C> {
                     state.fail(failure);
                     compensate(context, completed, execution);
                     execution.fail(failure);
-                    observer.accept(execution);
+                    observe(observer, execution);
                     return new WorkflowResult(execution, null);
                 }
                 completed.add(spec);
             }
             execution.success();
-            observer.accept(execution);
+            observe(observer, execution);
             return new WorkflowResult(execution, value);
+        } catch (ObserverFailure persistenceFailure) {
+            throw persistenceFailure.failure();
         } catch (java.util.concurrent.CancellationException cancelled) {
             if (currentStep != null && currentStep.status() == StepExecution.Status.RUNNING) {
                 currentStep.cancel(cancelled);
@@ -165,6 +170,26 @@ public final class WorkflowDefinition<C> implements AuraWorkflow<C> {
             observer.accept(execution);
             return new WorkflowResult(execution, null);
         }
+    }
+
+    private static void observe(Consumer<WorkflowExecution> observer,
+                                WorkflowExecution execution) {
+        try {
+            observer.accept(execution);
+        } catch (RuntimeException failure) {
+            throw new ObserverFailure(failure);
+        }
+    }
+
+    private static final class ObserverFailure extends RuntimeException {
+        private final RuntimeException failure;
+
+        private ObserverFailure(RuntimeException failure) {
+            super(null, null, false, false);
+            this.failure = failure;
+        }
+
+        private RuntimeException failure() { return failure; }
     }
 
     private static void awaitRetryDelay(java.time.Duration delay, CancellationToken cancellationToken)

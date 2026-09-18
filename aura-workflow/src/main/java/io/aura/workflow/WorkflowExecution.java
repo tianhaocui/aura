@@ -9,14 +9,14 @@ import java.util.UUID;
 public final class WorkflowExecution {
     public enum Status { PENDING, RUNNING, SUCCEEDED, FAILED, CANCELLED }
 
-    private final String executionId = UUID.randomUUID().toString();
+    private final String executionId;
     private final String workflowId;
     private final String variant;
     private final String idempotencyKey;
-    private final Map<String, StepExecution> steps = new LinkedHashMap<>();
-    private Status status = Status.PENDING;
+    private final Map<String, StepExecution> steps;
+    private Status status;
     private Throwable error;
-    private final Instant startedAt = Instant.now();
+    private final Instant startedAt;
     private Instant finishedAt;
 
     WorkflowExecution(String workflowId, String variant) {
@@ -24,9 +24,30 @@ public final class WorkflowExecution {
     }
 
     WorkflowExecution(String workflowId, String variant, String idempotencyKey) {
+        this(UUID.randomUUID().toString(), workflowId, variant, idempotencyKey,
+                new LinkedHashMap<>(), Status.PENDING, null, Instant.now(), null);
+    }
+
+    private WorkflowExecution(String executionId, String workflowId, String variant,
+                              String idempotencyKey, Map<String, StepExecution> steps,
+                              Status status, Throwable error, Instant startedAt,
+                              Instant finishedAt) {
+        this.executionId = executionId;
         this.workflowId = workflowId;
         this.variant = variant;
         this.idempotencyKey = idempotencyKey;
+        this.steps = steps;
+        this.status = status;
+        this.error = error;
+        this.startedAt = startedAt;
+        this.finishedAt = finishedAt;
+    }
+
+    WorkflowExecution copy() {
+        Map<String, StepExecution> copiedSteps = new LinkedHashMap<>();
+        steps.forEach((id, step) -> copiedSteps.put(id, step.copy()));
+        return new WorkflowExecution(executionId, workflowId, variant, idempotencyKey,
+                copiedSteps, status, error, startedAt, finishedAt);
     }
     void start() { status = Status.RUNNING; }
     void success() { status = Status.SUCCEEDED; finishedAt = Instant.now(); }

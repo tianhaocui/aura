@@ -16,6 +16,31 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class ContractTypesTest {
 
     @Test
+    void completedLinkedTokenCanDetachFromLongLivedParent() {
+        CancellationToken parent = new CancellationToken();
+        CancellationToken child = CancellationToken.linked(parent);
+        AtomicInteger notifications = new AtomicInteger();
+        child.onCancel(notifications::incrementAndGet);
+
+        child.detach();
+        parent.cancel();
+
+        assertThat(child.isCancelled()).isFalse();
+        assertThat(notifications).hasValue(0);
+    }
+
+    @Test
+    void detachingNeverRevivesAChildOfAnAlreadyCancelledParent() {
+        CancellationToken parent = new CancellationToken();
+        parent.cancel();
+        CancellationToken child = CancellationToken.linked(parent);
+
+        assertThat(child.isCancelled()).isTrue();
+        child.detach();
+        assertThat(child.isCancelled()).isTrue();
+    }
+
+    @Test
     void routeSecurityMetadataIsExplicitAndImmutable() {
         RouteContribution route = new RouteContribution("get", "/orders", new Object())
                 .permission("orders.read");
