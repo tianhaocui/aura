@@ -18,7 +18,10 @@ public final class AuraConfig {
     public static final long DEFAULT_MAX_BODY_SIZE = 10L * 1024 * 1024;
     public static final long DEFAULT_MAX_UPLOAD_SIZE = 1024L * 1024;
     public static final long DEFAULT_MAX_WEBSOCKET_MESSAGE_SIZE = 1024L * 1024;
+    public static final int DEFAULT_MAX_WEBSOCKET_CONNECTIONS = 10_000;
+    public static final int DEFAULT_WEBSOCKET_IDLE_TIMEOUT = 60;
     public static final int DEFAULT_RATE_LIMIT_MAX_KEYS = 65_536;
+    private static final String TLS_PASSWORD_PROPERTY = "aura.tls.keystore-password";
 
     /** Loads framework settings from a properties file before application creation. */
     public static AuraConfig fromProperties(Path path) throws IOException {
@@ -39,7 +42,8 @@ public final class AuraConfig {
         AuraConfig config = new AuraConfig();
         if (properties == null) return config;
         properties.forEach((key, value) -> {
-            if (key != null && key.toString().startsWith("aura.") && value != null) {
+            if (key != null && key.toString().startsWith("aura.")
+                    && !TLS_PASSWORD_PROPERTY.equals(key.toString()) && value != null) {
                 config.property(key.toString(), value.toString());
             }
         });
@@ -50,6 +54,8 @@ public final class AuraConfig {
         config.maxBodySize(parseLong(value(properties, "aura.max-body-size", "AURA_MAX_BODY_SIZE"), config.maxBodySize, "aura.max-body-size"));
         config.maxUploadSize(parseLong(value(properties, "aura.max-upload-size", "AURA_MAX_UPLOAD_SIZE"), config.maxUploadSize, "aura.max-upload-size"));
         config.maxWebSocketMessageSize(parseLong(value(properties, "aura.max-websocket-message-size", "AURA_MAX_WEBSOCKET_MESSAGE_SIZE"), config.maxWebSocketMessageSize, "aura.max-websocket-message-size"));
+        config.maxWebSocketConnections(parseInt(value(properties, "aura.max-websocket-connections", "AURA_MAX_WEBSOCKET_CONNECTIONS"), config.maxWebSocketConnections, "aura.max-websocket-connections"));
+        config.webSocketIdleTimeout(parseInt(value(properties, "aura.websocket-idle-timeout", "AURA_WEBSOCKET_IDLE_TIMEOUT"), config.webSocketIdleTimeout, "aura.websocket-idle-timeout"));
         config.shutdownTimeout(parseInt(value(properties, "aura.shutdown-timeout", "AURA_SHUTDOWN_TIMEOUT"), config.shutdownTimeout, "aura.shutdown-timeout"));
         config.requestTimeout(parseInt(value(properties, "aura.request-timeout", "AURA_REQUEST_TIMEOUT"), config.requestTimeout, "aura.request-timeout"));
         config.healthCheckTimeout(parseInt(value(properties, "aura.health-check-timeout", "AURA_HEALTH_CHECK_TIMEOUT"), config.healthCheckTimeout, "aura.health-check-timeout"));
@@ -122,6 +128,8 @@ public final class AuraConfig {
     private long maxBodySize = DEFAULT_MAX_BODY_SIZE;
     private long maxUploadSize = DEFAULT_MAX_UPLOAD_SIZE;
     private long maxWebSocketMessageSize = DEFAULT_MAX_WEBSOCKET_MESSAGE_SIZE;
+    private int maxWebSocketConnections = DEFAULT_MAX_WEBSOCKET_CONNECTIONS;
+    private int webSocketIdleTimeout = DEFAULT_WEBSOCKET_IDLE_TIMEOUT;
     private int shutdownTimeout = 30;
     private int requestTimeout;
     private int healthCheckTimeout = 1;
@@ -155,6 +163,8 @@ public final class AuraConfig {
     public AuraConfig maxBodySize(long value) { maxBodySize = value; return this; }
     public AuraConfig maxUploadSize(long value) { maxUploadSize = value; return this; }
     public AuraConfig maxWebSocketMessageSize(long value) { maxWebSocketMessageSize = value; return this; }
+    public AuraConfig maxWebSocketConnections(int value) { maxWebSocketConnections = value; return this; }
+    public AuraConfig webSocketIdleTimeout(int seconds) { webSocketIdleTimeout = seconds; return this; }
     public AuraConfig shutdownTimeout(int value) { shutdownTimeout = value; return this; }
     public AuraConfig requestTimeout(int value) { requestTimeout = value; return this; }
     public AuraConfig healthCheckTimeout(int value) { healthCheckTimeout = value; return this; }
@@ -224,6 +234,9 @@ public final class AuraConfig {
         if (key == null || !key.startsWith("aura.")) {
             throw new IllegalArgumentException("AuraConfig properties must use the aura.<module>.* namespace");
         }
+        if (TLS_PASSWORD_PROPERTY.equals(key)) {
+            throw new IllegalArgumentException("TLS password must be configured with tls(...) or deployment settings");
+        }
         if (value == null) properties.remove(key); else properties.put(key, value);
         return this;
     }
@@ -236,6 +249,8 @@ public final class AuraConfig {
     public long maxBodySize() { return maxBodySize; }
     public long maxUploadSize() { return maxUploadSize; }
     public long maxWebSocketMessageSize() { return maxWebSocketMessageSize; }
+    public int maxWebSocketConnections() { return maxWebSocketConnections; }
+    public int webSocketIdleTimeout() { return webSocketIdleTimeout; }
     public int shutdownTimeout() { return shutdownTimeout; }
     public int requestTimeout() { return requestTimeout; }
     public int healthCheckTimeout() { return healthCheckTimeout; }
@@ -275,6 +290,12 @@ public final class AuraConfig {
         if (maxUploadSize > maxBodySize) throw new IllegalArgumentException("maxUploadSize cannot exceed maxBodySize");
         if (maxWebSocketMessageSize < 1 || maxWebSocketMessageSize > 64L * 1024 * 1024) {
             throw new IllegalArgumentException("maxWebSocketMessageSize must be between 1 byte and 64 MiB");
+        }
+        if (maxWebSocketConnections < 1 || maxWebSocketConnections > 1_000_000) {
+            throw new IllegalArgumentException("maxWebSocketConnections must be between 1 and 1000000");
+        }
+        if (webSocketIdleTimeout < 1 || webSocketIdleTimeout > 86_400) {
+            throw new IllegalArgumentException("webSocketIdleTimeout must be between 1 and 86400 seconds");
         }
         if (shutdownTimeout < 0) throw new IllegalArgumentException("shutdownTimeout cannot be negative");
         if (requestTimeout < 0) throw new IllegalArgumentException("requestTimeout cannot be negative");

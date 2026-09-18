@@ -49,6 +49,7 @@ public class UndertowStarter implements AuraStarter {
     private ClassPathResourceManager resourceManager;
     private volatile List<CompiledRoute> compiledRoutes;
     private volatile List<CompiledWsRoute> compiledWsRoutes;
+    private WebSocketConnectionRegistry webSocketConnections;
     private FixedWindowRateLimiter rateLimiter = new FixedWindowRateLimiter();
     private final AtomicInteger inFlight = new AtomicInteger();
 
@@ -78,6 +79,8 @@ public class UndertowStarter implements AuraStarter {
             }
         }
 
+        webSocketConnections = new WebSocketConnectionRegistry(
+                app.maxWebSocketConnections(), app.webSocketIdleTimeout());
         compiledWsRoutes = compileWsRoutes(router);
 
         String staticPath = app.staticFilesPath();
@@ -153,6 +156,11 @@ public class UndertowStarter implements AuraStarter {
 
     @Override
     public void stop() {
+        if (webSocketConnections != null) {
+            long closeTimeout = Math.min(1_000L,
+                    Math.max(100L, app.shutdownTimeout() * 1_000L));
+            webSocketConnections.shutdown(closeTimeout);
+        }
         if (timeoutScheduler != null) {
             timeoutScheduler.shutdownNow();
         }
@@ -779,7 +787,8 @@ public class UndertowStarter implements AuraStarter {
         for (BaseRouter.WsRoute ws : router.wsRoutes) {
             String fullPath = prefix + ws.path();
             result.add(CompiledWsRoute.compile(
-                    fullPath, before, ws.handler(), app.maxWebSocketMessageSize()));
+                    fullPath, before, ws.handler(), app.maxWebSocketMessageSize(),
+                    webSocketConnections));
         }
         for (BaseRouter.Group group : router.groups) {
             result.addAll(compileWsRoutes(group.router(), prefix + group.prefix(), before));

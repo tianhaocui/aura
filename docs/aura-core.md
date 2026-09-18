@@ -86,6 +86,8 @@ Selected `AuraConfig` controls include:
 | `maxBodySize` | `10 MiB` | positive and bounded |
 | `maxUploadSize` | `1 MiB` | positive, not above body size |
 | `maxWebSocketMessageSize` | `1 MiB` | `1 byte..64 MiB` |
+| `maxWebSocketConnections` | `10000` | `1..1000000` |
+| `webSocketIdleTimeout` | `60` | `1..86400` seconds |
 | `requestTimeout` | `0` | non-negative seconds; `0` disables |
 | `healthCheckTimeout` | `1` | `1..300` seconds |
 | `pageSizeMax` | `500` | `1..100000` |
@@ -103,10 +105,11 @@ aura.tls.keystore-password=${injected-by-the-deployment}
 aura.trusted-proxies=10.0.0.0/8,fd00::/8
 ```
 
-The equivalent environment variables are `AURA_TLS_KEYSTORE_PATH`,
-`AURA_TLS_KEYSTORE_PASSWORD`, and `AURA_TRUSTED_PROXIES`. Trusted proxy entries
-must be numeric IP addresses or CIDRs; hostnames and malformed prefixes fail
-configuration validation.
+The equivalent environment variables include `AURA_TLS_KEYSTORE_PATH`,
+`AURA_TLS_KEYSTORE_PASSWORD`, `AURA_TRUSTED_PROXIES`,
+`AURA_MAX_WEBSOCKET_CONNECTIONS`, and `AURA_WEBSOCKET_IDLE_TIMEOUT`. Trusted
+proxy entries must be numeric IP addresses or CIDRs; hostnames and malformed
+prefixes fail configuration validation.
 
 ## Cancellation
 

@@ -12,7 +12,7 @@ import java.util.regex.Pattern;
 
 record CompiledWsRoute(String rawPath, Pattern pattern, List<String> paramNames,
                        List<BaseHandler> beforeHandlers, WsHandler wsHandler,
-                       long maxMessageBytes) {
+                       long maxMessageBytes, WebSocketConnectionRegistry connections) {
 
     Map<String, String> match(String path) {
         Matcher m = pattern.matcher(path);
@@ -28,7 +28,12 @@ record CompiledWsRoute(String rawPath, Pattern pattern, List<String> paramNames,
         Map<String, String> queryParams = parseQuery(exchange);
 
         WebSocketConnectionCallback callback = (WebSocketHttpExchange wsExchange, WebSocketChannel channel) -> {
-            UndertowWsConnection conn = new UndertowWsConnection(channel, pathParams, queryParams);
+            if (!connections.register(channel)) {
+                connections.reject(channel);
+                return;
+            }
+            UndertowWsConnection conn = new UndertowWsConnection(
+                    channel, pathParams, queryParams, () -> connections.touch(channel));
             conn.setErrorHandler(wsHandler.onError);
 
             if (wsHandler.onOpen != null) {
@@ -42,6 +47,11 @@ record CompiledWsRoute(String rawPath, Pattern pattern, List<String> paramNames,
             channel.getReceiveSetter().set(new AbstractReceiveListener() {
                 @Override protected long getMaxTextBufferSize() { return maxMessageBytes; }
                 @Override protected long getMaxBinaryBufferSize() { return maxMessageBytes; }
+
+                @Override public void handleEvent(WebSocketChannel ch) {
+                    connections.touch(ch);
+                    super.handleEvent(ch);
+                }
 
                 @Override
                 protected void onFullTextMessage(WebSocketChannel ch, BufferedTextMessage msg) {
@@ -96,7 +106,8 @@ record CompiledWsRoute(String rawPath, Pattern pattern, List<String> paramNames,
     }
 
     static CompiledWsRoute compile(String path, List<BaseHandler> beforeHandlers,
-                                   WsHandler handler, long maxMessageBytes) {
+                                   WsHandler handler, long maxMessageBytes,
+                                   WebSocketConnectionRegistry connections) {
         List<String> paramNames = new ArrayList<>();
         String regex = path
                 .replace(".", "\\.")
@@ -108,6 +119,6 @@ record CompiledWsRoute(String rawPath, Pattern pattern, List<String> paramNames,
             paramNames.add(m.group(1));
         }
         return new CompiledWsRoute(path, Pattern.compile("^" + regex + "$"),
-                paramNames, beforeHandlers, handler, maxMessageBytes);
+                paramNames, beforeHandlers, handler, maxMessageBytes, connections);
     }
 }

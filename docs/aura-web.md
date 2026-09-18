@@ -119,6 +119,8 @@ AuraConfig config = new AuraConfig()
         .maxBodySize(10 * 1024 * 1024L)
         .maxUploadSize(1024 * 1024L)
         .maxWebSocketMessageSize(1024 * 1024L)
+        .maxWebSocketConnections(10_000)
+        .webSocketIdleTimeout(60)
         .requestTimeout(30)
         .concurrencyLimit(200)
         .rateLimitPerSecond(100)
@@ -134,7 +136,10 @@ rejected. Dynamic Origin responses include `Vary: Origin`.
 
 Inbound WebSocket text and binary messages are buffered only up to
 `maxWebSocketMessageSize`; oversized messages are closed with status 1009 before
-the application message handler runs.
+the application message handler runs. `maxWebSocketConnections` is a global
+permit bound across every route. Idle connections close with status 1001 after
+`webSocketIdleTimeout`, and application shutdown sends 1001 to all active
+connections before the listener stops.
 
 ## Admission Policy
 

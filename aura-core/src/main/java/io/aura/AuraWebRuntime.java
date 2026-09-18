@@ -38,6 +38,8 @@ public interface AuraWebRuntime extends AuraMcpRuntime {
     long maxBodySize();
     long maxUploadSize();
     long maxWebSocketMessageSize();
+    default int maxWebSocketConnections() { return config().maxWebSocketConnections(); }
+    default int webSocketIdleTimeout() { return config().webSocketIdleTimeout(); }
     int shutdownTimeout();
     boolean accessLog();
     String accessLogFormat();

@@ -74,24 +74,39 @@ final class ModularRuntime implements AuraWebRuntime {
 
     private static javax.net.ssl.SSLContext createTlsContext(AuraConfig source) {
         if (!source.tlsEnabled()) return null;
+        char[] password = source.keyStorePassword().toCharArray();
         try {
             java.security.KeyStore keyStore = java.security.KeyStore.getInstance(java.security.KeyStore.getDefaultType());
             try (java.io.InputStream input = java.nio.file.Files.newInputStream(java.nio.file.Path.of(source.keyStorePath()))) {
-                keyStore.load(input, source.keyStorePassword().toCharArray());
+                keyStore.load(input, password);
+            }
+            boolean hasPrivateKey = false;
+            java.util.Enumeration<String> aliases = keyStore.aliases();
+            while (aliases.hasMoreElements()) {
+                String alias = aliases.nextElement();
+                java.security.cert.Certificate[] chain = keyStore.getCertificateChain(alias);
+                if (keyStore.entryInstanceOf(alias, java.security.KeyStore.PrivateKeyEntry.class)
+                        && chain != null && chain.length > 0) {
+                    hasPrivateKey = true;
+                    break;
+                }
+            }
+            if (!hasPrivateKey) {
+                throw new IllegalArgumentException(
+                        "TLS keystore must contain a PrivateKeyEntry with a certificate chain");
             }
             var keyManagerFactory = javax.net.ssl.KeyManagerFactory.getInstance(
                     javax.net.ssl.KeyManagerFactory.getDefaultAlgorithm());
-            char[] password = source.keyStorePassword().toCharArray();
-            try {
-                keyManagerFactory.init(keyStore, password);
-            } finally {
-                java.util.Arrays.fill(password, '\0');
-            }
+            keyManagerFactory.init(keyStore, password);
             var context = javax.net.ssl.SSLContext.getInstance("TLS");
             context.init(keyManagerFactory.getKeyManagers(), null, null);
             return context;
+        } catch (IllegalArgumentException error) {
+            throw error;
         } catch (Exception error) {
             throw new IllegalArgumentException("TLS keystore could not be initialized", error);
+        } finally {
+            java.util.Arrays.fill(password, '\0');
         }
     }
 
@@ -233,6 +248,8 @@ final class ModularRuntime implements AuraWebRuntime {
     @Override public long maxBodySize() { return config.maxBodySize(); }
     @Override public long maxUploadSize() { return config.maxUploadSize(); }
     @Override public long maxWebSocketMessageSize() { return config.maxWebSocketMessageSize(); }
+    @Override public int maxWebSocketConnections() { return config.maxWebSocketConnections(); }
+    @Override public int webSocketIdleTimeout() { return config.webSocketIdleTimeout(); }
     @Override public int shutdownTimeout() { return config.shutdownTimeout(); }
     @Override public boolean accessLog() { return config.accessLog(); }
     @Override public String accessLogFormat() { return config.accessLogFormat(); }

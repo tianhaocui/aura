@@ -14,6 +14,7 @@ import java.util.concurrent.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 
 import static org.assertj.core.api.Assertions.*;
@@ -38,6 +39,108 @@ class WebSocketTest {
                 configure.accept(context);
             }
         });
+    }
+
+    @Test
+    void connectionLimitRejectsExcessAndReleasesPermitOnClose() throws Exception {
+        int port = nextPort();
+        var opens = new AtomicInteger();
+        var app = app(new AuraConfig().port(port)
+                        .maxWebSocketConnections(1)
+                        .webSocketIdleTimeout(30),
+                context -> context.webSocket("/ws/limited", ws -> ws.onOpen(conn -> opens.incrementAndGet())));
+        app.start();
+        try {
+            var first = HttpClient.newHttpClient().newWebSocketBuilder()
+                    .buildAsync(URI.create("ws://localhost:" + port + "/ws/limited"), requestingListener())
+                    .join();
+            assertThat(opens).hasValue(1);
+
+            var rejectedCode = new CompletableFuture<Integer>();
+            var rejected = HttpClient.newHttpClient().newWebSocketBuilder()
+                    .buildAsync(URI.create("ws://localhost:" + port + "/ws/limited"),
+                            closeListener(rejectedCode)).join();
+            assertThat(rejectedCode.get(3, TimeUnit.SECONDS))
+                    .isEqualTo(WebSocketConnectionRegistry.LIMIT_CLOSE_CODE);
+            assertThat(opens).hasValue(1);
+
+            first.sendClose(WebSocket.NORMAL_CLOSURE, "done").join();
+            WebSocket replacement = null;
+            for (int attempt = 0; attempt < 20 && opens.get() < 2; attempt++) {
+                Thread.sleep(25);
+                replacement = HttpClient.newHttpClient().newWebSocketBuilder()
+                        .buildAsync(URI.create("ws://localhost:" + port + "/ws/limited"), requestingListener())
+                        .join();
+                if (opens.get() < 2) replacement.abort();
+            }
+            assertThat(opens).hasValue(2);
+            if (replacement != null) replacement.sendClose(WebSocket.NORMAL_CLOSURE, "done");
+            rejected.abort();
+        } finally {
+            app.stop();
+        }
+    }
+
+    @Test
+    void idleConnectionClosesWithGoingAway() throws Exception {
+        int port = nextPort();
+        var app = app(new AuraConfig().port(port)
+                        .maxWebSocketConnections(4)
+                        .webSocketIdleTimeout(1),
+                context -> context.webSocket("/ws/idle", ws -> { }));
+        app.start();
+        try {
+            var closeCode = new CompletableFuture<Integer>();
+            HttpClient.newHttpClient().newWebSocketBuilder()
+                    .buildAsync(URI.create("ws://localhost:" + port + "/ws/idle"),
+                            closeListener(closeCode)).join();
+
+            assertThat(closeCode.get(3, TimeUnit.SECONDS))
+                    .isEqualTo(WebSocketConnectionRegistry.GOING_AWAY_CLOSE_CODE);
+        } finally {
+            app.stop();
+        }
+    }
+
+    @Test
+    void shutdownClosesActiveConnectionWithGoingAway() throws Exception {
+        int port = nextPort();
+        var app = app(new AuraConfig().port(port)
+                        .maxWebSocketConnections(4)
+                        .webSocketIdleTimeout(30),
+                context -> context.webSocket("/ws/shutdown", ws -> { }));
+        app.start();
+        var closeCode = new CompletableFuture<Integer>();
+        try {
+            HttpClient.newHttpClient().newWebSocketBuilder()
+                    .buildAsync(URI.create("ws://localhost:" + port + "/ws/shutdown"),
+                            closeListener(closeCode)).join();
+
+            app.stop();
+
+            assertThat(closeCode.get(3, TimeUnit.SECONDS))
+                    .isEqualTo(WebSocketConnectionRegistry.GOING_AWAY_CLOSE_CODE);
+        } finally {
+            app.stop();
+        }
+    }
+
+    private static WebSocket.Listener requestingListener() {
+        return new WebSocket.Listener() {
+            @Override public void onOpen(WebSocket webSocket) { webSocket.request(1); }
+        };
+    }
+
+    private static WebSocket.Listener closeListener(CompletableFuture<Integer> closeCode) {
+        return new WebSocket.Listener() {
+            @Override public void onOpen(WebSocket webSocket) { webSocket.request(1); }
+
+            @Override public CompletionStage<?> onClose(
+                    WebSocket webSocket, int statusCode, String reason) {
+                closeCode.complete(statusCode);
+                return null;
+            }
+        };
     }
 
     @Test

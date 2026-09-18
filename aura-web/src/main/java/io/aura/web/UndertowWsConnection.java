@@ -17,13 +17,15 @@ final class UndertowWsConnection implements WsConnection {
     private final Map<String, String> pathParams;
     private final Map<String, String> queryParams;
     private final Map<String, Object> attrs = new ConcurrentHashMap<>();
+    private final Runnable activity;
     private volatile WsHandler.ErrorHandler errorHandler;
 
     UndertowWsConnection(WebSocketChannel channel, Map<String, String> pathParams,
-                          Map<String, String> queryParams) {
+                          Map<String, String> queryParams, Runnable activity) {
         this.channel = channel;
         this.pathParams = pathParams;
         this.queryParams = queryParams;
+        this.activity = activity;
     }
 
     void setErrorHandler(WsHandler.ErrorHandler handler) {
@@ -35,6 +37,7 @@ final class UndertowWsConnection implements WsConnection {
 
     @Override
     public void send(String message) {
+        activity.run();
         WebSockets.sendText(message, channel, new WebSocketCallback<Void>() {
             @Override
             public void complete(WebSocketChannel ch, Void context) {}

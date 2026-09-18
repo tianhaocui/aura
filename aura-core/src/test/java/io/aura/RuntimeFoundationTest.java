@@ -19,6 +19,10 @@ class RuntimeFoundationTest {
         assertThatThrownBy(() -> new AuraConfig().rateLimitMaxKeys(1_000_001).validate()).isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> new AuraConfig().maxWebSocketMessageSize(0).validate()).isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> new AuraConfig().maxWebSocketMessageSize(65L * 1024 * 1024).validate()).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> new AuraConfig().maxWebSocketConnections(0).validate()).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> new AuraConfig().maxWebSocketConnections(1_000_001).validate()).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> new AuraConfig().webSocketIdleTimeout(0).validate()).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> new AuraConfig().webSocketIdleTimeout(86_401).validate()).isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test void createAcceptsCentralConfig() {

@@ -18,7 +18,7 @@ class TlsConfigTest {
     Path tempDir;
 
     @Test
-    void loadsTlsPropertiesAndBuildsContextWithoutExposingPassword() throws Exception {
+    void rejectsEmptyTlsKeystoreBeforeStartupWithoutExposingPassword() throws Exception {
         String password = "changeit";
         Path keyStorePath = tempDir.resolve("server.p12");
         KeyStore keyStore = KeyStore.getInstance(KeyStore.getDefaultType());
@@ -30,13 +30,16 @@ class TlsConfigTest {
         properties.setProperty("aura.tls.keystore-path", keyStorePath.toString());
         properties.setProperty("aura.tls.keystore-password", password);
 
-        AuraApp app = AuraApp.create(properties);
+        AuraConfig config = AuraConfig.fromProperties(properties);
 
-        assertThat(app.config().tlsEnabled()).isTrue();
-        assertThat(app.config().keyStorePath()).isEqualTo(keyStorePath.toString());
-        assertThat(((AuraWebRuntime) app.runtimeView()).tlsContext()).isNotNull();
+        assertThat(config.tlsEnabled()).isTrue();
+        assertThat(config.keyStorePath()).isEqualTo(keyStorePath.toString());
+        assertThat(config.properties()).doesNotContainKey("aura.tls.keystore-password");
         assertThat(java.util.Arrays.stream(AuraConfigSnapshot.class.getMethods())
                 .map(java.lang.reflect.Method::getName)).doesNotContain("keyStorePassword");
+        assertThatThrownBy(() -> AuraApp.create(config))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("PrivateKeyEntry");
     }
 
     @Test
@@ -47,5 +50,9 @@ class TlsConfigTest {
         assertThatThrownBy(() -> AuraConfig.fromProperties(properties))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("keystore-path");
+        assertThatThrownBy(() -> new AuraConfig()
+                .property("aura.tls.keystore-password", "secret"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("tls(...)");
     }
 }

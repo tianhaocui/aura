@@ -16,6 +16,8 @@ class AuraConfigPropertiesTest {
         properties.setProperty("aura.max-body-size", "8192");
         properties.setProperty("aura.max-upload-size", "4096");
         properties.setProperty("aura.max-websocket-message-size", "2048");
+        properties.setProperty("aura.max-websocket-connections", "321");
+        properties.setProperty("aura.websocket-idle-timeout", "45");
         properties.setProperty("aura.rate-limit-max-keys", "1234");
         properties.setProperty("aura.allowed-hosts", "api.example, admin.example ");
         properties.setProperty("aura.trusted-proxies", "127.0.0.1, 10.0.0.0/8");
@@ -31,6 +33,8 @@ class AuraConfigPropertiesTest {
         assertThat(app.config().maxBodySize()).isEqualTo(8192);
         assertThat(app.config().maxUploadSize()).isEqualTo(4096);
         assertThat(app.config().maxWebSocketMessageSize()).isEqualTo(2048);
+        assertThat(app.config().maxWebSocketConnections()).isEqualTo(321);
+        assertThat(app.config().webSocketIdleTimeout()).isEqualTo(45);
         assertThat(app.config().rateLimitMaxKeys()).isEqualTo(1234);
         assertThat(app.config().allowedHosts()).containsExactlyInAnyOrder("api.example", "admin.example");
         assertThat(app.config().trustedProxies()).containsExactlyInAnyOrder("127.0.0.1", "10.0.0.0/8");
