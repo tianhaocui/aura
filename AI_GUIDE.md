@@ -293,6 +293,11 @@ leave the Aura-owned `DataSource` open. Custom engines implement
 `SchemaMigrator`; do not adapt them through `SqlMigrationSource`, which only
 feeds the lightweight Aura SQL migrator.
 
+The Flyway adapter includes database-type plugins for PostgreSQL, MySQL, and
+MariaDB. Applications still add their selected JDBC driver. Other databases
+require the matching Flyway database plugin explicitly; never assume
+`flyway-core` supports every production database.
+
 ## AI, MCP, and Workflows
 
 Install optional capabilities explicitly:

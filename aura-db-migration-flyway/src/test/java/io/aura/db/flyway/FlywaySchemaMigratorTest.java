@@ -7,6 +7,10 @@ import io.aura.db.Db;
 import io.aura.db.MigrationException;
 import io.aura.db.SchemaMigrationResult;
 import org.junit.jupiter.api.Test;
+import org.flywaydb.core.Flyway;
+
+import java.util.Set;
+import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -88,6 +92,21 @@ class FlywaySchemaMigratorTest {
         } finally {
             db.close();
         }
+    }
+
+    @Test
+    void bundlesCommonProductionDatabasePlugins() {
+        Set<String> databaseTypes = Flyway.configure().getPluginRegister()
+                .getPlugins(org.flywaydb.core.internal.database.DatabaseType.class)
+                .stream()
+                .map(type -> type.getClass().getName())
+                .collect(Collectors.toSet());
+
+        assertThat(databaseTypes)
+                .contains(
+                        "org.flywaydb.database.postgresql.PostgreSQLDatabaseType",
+                        "org.flywaydb.database.mysql.MySQLDatabaseType",
+                        "org.flywaydb.database.mysql.mariadb.MariaDBDatabaseType");
     }
 
     private static Db database(String name) {

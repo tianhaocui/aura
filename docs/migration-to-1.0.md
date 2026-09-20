@@ -150,6 +150,11 @@ and return a `SchemaMigrationResult`; they must not close the Aura-owned `Db` or
 `DataSource`. `SqlMigrationSource` is only an input to `SqlSchemaMigrator` and
 is no longer an external engine SPI.
 
+The Aura Flyway adapter includes PostgreSQL and MySQL/MariaDB database-type
+plugins; applications still provide their JDBC driver. Other databases require
+their matching Flyway plugin. Aura's Liquibase adapter uses the Apache-2.0
+licensed Liquibase 4.33 line.
+
 ## AI request transport
 
 Aura 1.0 removes `AiRequest.redactor()`. Redaction now runs once while building

@@ -428,6 +428,11 @@ the number of migrations or changesets applied by that run. Migration runs
 outside an Aura transaction so the selected engine owns locking, validation,
 transactions, baseline, and dialect semantics.
 
+`aura-db-migration-flyway` includes Flyway's PostgreSQL and MySQL/MariaDB
+database-type plugins. The application must still install its chosen JDBC
+driver. For Oracle, SQL Server, or another database, add the matching Flyway
+database plugin at the same version as `flyway-core`.
+
 Custom adapters implement `SchemaMigrator` and follow the same ownership rule;
 `DatabaseModule` closes the database during application shutdown.
 

@@ -81,6 +81,9 @@ public final class LiquibaseSchemaMigrator implements SchemaMigrator {
             throw new IllegalArgumentException("Liquibase changelog file must not be blank");
         }
         String normalized = value.trim().replace('\\', '/');
+        if (normalized.startsWith("classpath:")) {
+            normalized = normalized.substring("classpath:".length());
+        }
         while (normalized.startsWith("/")) {
             normalized = normalized.substring(1);
         }

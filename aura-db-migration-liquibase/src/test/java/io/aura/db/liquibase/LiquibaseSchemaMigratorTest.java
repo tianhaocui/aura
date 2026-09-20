@@ -57,7 +57,8 @@ class LiquibaseSchemaMigratorTest {
     void applicationStartupRunsLiquibaseThroughDatabaseModule() throws Exception {
         Db db = database("liquibase-app");
         AuraApp app = AuraApp.create().use(DatabaseModule.create(db)
-                .migrateWith(LiquibaseSchemaMigrator.classpath("/db/liquibase/changelog.xml")));
+                .migrateWith(LiquibaseSchemaMigrator.classpath(
+                        "classpath:/db/liquibase/changelog.xml")));
         try {
             app.start();
 
