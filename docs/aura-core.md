@@ -114,9 +114,11 @@ prefixes fail configuration validation.
 ## Cancellation
 
 `CancellationToken` is the shared cooperative cancellation contract. A request
-token is cancelled on timeout, client disconnect, and shutdown. Database,
-workflow, AI, and external HTTP APIs accept or link this token rather than
-starting untracked work.
+token is cancelled on timeout, transport-observed client disconnect, and
+shutdown. Silent network loss cannot be observed until the transport performs
+I/O, so streaming handlers should emit bounded heartbeats. Database, workflow,
+AI, and external HTTP APIs accept or link this token rather than starting
+untracked work.
 
 ```java
 request.cancellationToken().throwIfCancelled();

@@ -20,6 +20,8 @@ import java.util.function.Function;
  * facade implementation.</p>
  */
 public interface AuraWebRuntime extends AuraMcpRuntime {
+    /** Root cancellation signal shared by active HTTP requests during shutdown. */
+    default io.aura.contract.CancellationToken shutdownToken() { return null; }
     /** Returns the initialized TLS context without exposing keystore credentials. */
     default javax.net.ssl.SSLContext tlsContext() { return null; }
     int port();

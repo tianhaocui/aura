@@ -36,6 +36,7 @@ import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class UndertowStarter implements AuraStarter {
 
@@ -52,6 +53,9 @@ public class UndertowStarter implements AuraStarter {
     private WebSocketConnectionRegistry webSocketConnections;
     private FixedWindowRateLimiter rateLimiter = new FixedWindowRateLimiter();
     private final AtomicInteger inFlight = new AtomicInteger();
+    private final CancellationToken adapterShutdownCancellation = new CancellationToken();
+    private final ConcurrentHashMap<io.undertow.server.ServerConnection,
+            java.util.Set<CancellationToken>> connectionCancellations = new ConcurrentHashMap<>();
 
     @Override
     @SuppressWarnings("unchecked")
@@ -156,27 +160,38 @@ public class UndertowStarter implements AuraStarter {
 
     @Override
     public void stop() {
+        adapterShutdownCancellation.cancel();
+        long shutdownMillis = Math.max(0L, app.shutdownTimeout() * 1_000L);
+        long deadlineNanos = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(shutdownMillis);
+        if (shutdownHandler != null) shutdownHandler.shutdown();
         if (webSocketConnections != null) {
-            long closeTimeout = Math.min(1_000L,
-                    Math.max(100L, app.shutdownTimeout() * 1_000L));
+            long closeTimeout = Math.min(1_000L, remainingMillis(deadlineNanos));
             webSocketConnections.shutdown(closeTimeout);
         }
-        if (timeoutScheduler != null) {
-            timeoutScheduler.shutdownNow();
-        }
         if (shutdownHandler != null) {
-            shutdownHandler.shutdown();
             try {
-                shutdownHandler.awaitShutdown(app.shutdownTimeout() * 1000L);
+                shutdownHandler.awaitShutdown(remainingMillis(deadlineNanos));
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
             }
         }
+        if (timeoutScheduler != null) {
+            timeoutScheduler.shutdownNow();
+        }
+        connectionCancellations.values().forEach(tokens ->
+                tokens.forEach(CancellationToken::cancel));
         if (server != null) {
             server.stop();
             log.info("Aura stopped");
         }
+        connectionCancellations.clear();
         if (app != null) SnapshotRecorder.close(app);
+    }
+
+    private static long remainingMillis(long deadlineNanos) {
+        long remaining = deadlineNanos - System.nanoTime();
+        if (remaining <= 0) return 0L;
+        return Math.max(1L, TimeUnit.NANOSECONDS.toMillis(remaining));
     }
 
     @Override
@@ -202,6 +217,10 @@ public class UndertowStarter implements AuraStarter {
         String method = exchange.getRequestMethod().toString();
         String path = exchange.getRequestURI();
 
+        if (app.isShuttingDown()) {
+            reject(exchange, 503, "Service Unavailable");
+            return;
+        }
         if (!hostAllowed(exchange)) { app.emit(AuraEvent.of("request.rejected.host", java.util.Map.of("method", method))); reject(exchange, 421, "Misdirected Request"); return; }
         if (!admit(exchange, method, path)) return;
         if (app.admissionPolicy() == null && app.concurrencyLimit() > 0) {
@@ -294,7 +313,8 @@ public class UndertowStarter implements AuraStarter {
                 Map<String, String> params = wsRoute.match(path);
                 if (params == null) continue;
 
-                Context ctx = new Context(exchange, params, app, null);
+                Context ctx = new Context(exchange, params, app, null,
+                        requestCancellation(exchange));
                 try {
                     for (BaseHandler mw : wsRoute.beforeHandlers()) {
                         mw.handle(ctx);
@@ -323,9 +343,7 @@ public class UndertowStarter implements AuraStarter {
             exchange.getResponseHeaders().put(new HttpString("X-Request-Id"), reqId);
             MDC.put("requestId", reqId);
 
-            CancellationToken cancellationToken = new CancellationToken();
-            exchange.addExchangeCompleteListener((completed, next) -> { cancellationToken.cancel(); next.proceed(); });
-            if (exchange.getConnection() != null) exchange.getConnection().addCloseListener(connection -> cancellationToken.cancel());
+            CancellationToken cancellationToken = requestCancellation(exchange);
             Context ctx = new Context(exchange, params, app, reqId, cancellationToken);
             long start = System.currentTimeMillis();
             java.util.concurrent.ScheduledFuture<?> timeoutFuture = null;
@@ -418,7 +436,8 @@ public class UndertowStarter implements AuraStarter {
                 if (!"GET".equals(route.method())) continue;
                 Map<String, String> params = route.match(path);
                 if (params == null) continue;
-                Context ctx = new Context(exchange, params, app, null);
+                Context ctx = new Context(exchange, params, app, null,
+                        requestCancellation(exchange));
                 RouteExecutor.execute(route, ctx, (e, c) -> handleException(e, (Context) c));
                 exchange.endExchange();
                 return;
@@ -449,6 +468,50 @@ public class UndertowStarter implements AuraStarter {
         } else {
             exchange.getResponseSender().send("Not Found");
         }
+    }
+
+    private CancellationToken requestCancellation(HttpServerExchange exchange) {
+        CancellationToken runtimeShutdown = app.shutdownToken();
+        CancellationToken token = runtimeShutdown == null
+                ? CancellationToken.linked(adapterShutdownCancellation)
+                : CancellationToken.linked(runtimeShutdown, adapterShutdownCancellation);
+        registerConnectionCancellation(exchange, token);
+        exchange.addExchangeCompleteListener((completed, next) -> {
+            unregisterConnectionCancellation(completed, token);
+            token.cancel();
+            next.proceed();
+        });
+        return token;
+    }
+
+    private void registerConnectionCancellation(HttpServerExchange exchange,
+                                                CancellationToken token) {
+        io.undertow.server.ServerConnection connection = exchange.getConnection();
+        if (connection == null) return;
+        java.util.Set<CancellationToken> created = ConcurrentHashMap.newKeySet();
+        java.util.Set<CancellationToken> tokens = connectionCancellations.putIfAbsent(connection, created);
+        if (tokens == null) {
+            tokens = created;
+            connection.addCloseListener(closed -> {
+                java.util.Set<CancellationToken> active = connectionCancellations.remove(closed);
+                if (active != null) active.forEach(CancellationToken::cancel);
+            });
+        }
+        tokens.add(token);
+        if (!connection.isOpen()) {
+            java.util.Set<CancellationToken> active = connectionCancellations.remove(connection);
+            if (active != null) active.forEach(CancellationToken::cancel);
+            else token.cancel();
+        }
+    }
+
+    private void unregisterConnectionCancellation(HttpServerExchange exchange,
+                                                  CancellationToken token) {
+        io.undertow.server.ServerConnection connection = exchange.getConnection();
+        if (connection == null) return;
+        java.util.Set<CancellationToken> tokens = connectionCancellations.get(connection);
+        if (tokens == null) return;
+        tokens.remove(token);
     }
 
     private void serveSchema(HttpServerExchange exchange) {

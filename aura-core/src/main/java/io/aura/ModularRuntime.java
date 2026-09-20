@@ -46,6 +46,8 @@ final class ModularRuntime implements AuraWebRuntime {
     private final ModuleManager moduleManager = new ModuleManager();
     private final AtomicReference<RuntimeState> state = new AtomicReference<>(RuntimeState.NEW);
     private final AtomicBoolean shuttingDown = new AtomicBoolean();
+    private final io.aura.contract.CancellationToken shutdownCancellation =
+            new io.aura.contract.CancellationToken();
     private BiPredicate<String, String> permissionChecker;
     private Function<BaseContext, String> authFunction;
     private io.aura.contract.McpAuthenticator mcpAuthenticator;
@@ -71,6 +73,7 @@ final class ModularRuntime implements AuraWebRuntime {
     }
 
     @Override public javax.net.ssl.SSLContext tlsContext() { return tlsContext; }
+    @Override public io.aura.contract.CancellationToken shutdownToken() { return shutdownCancellation; }
 
     private static javax.net.ssl.SSLContext createTlsContext(AuraConfig source) {
         if (!source.tlsEnabled()) return null;
@@ -215,6 +218,7 @@ final class ModularRuntime implements AuraWebRuntime {
         if (current == RuntimeState.STOPPED || current == RuntimeState.STOPPING) return;
         if (!state.compareAndSet(current, RuntimeState.STOPPING)) return;
         shuttingDown.set(true);
+        shutdownCancellation.cancel();
         if (keepAliveThread != null) keepAliveThread.interrupt();
         if (mcpStarter != null) { try { mcpStarter.stop(); } catch (RuntimeException ignored) { } mcpStarter = null; }
         if (starter != null) { try { starter.stop(); } catch (RuntimeException ignored) { } starter = null; }
@@ -299,6 +303,8 @@ final class ModularRuntime implements AuraWebRuntime {
     @Override public SnapshotOptions snapshotOptions() { return config.snapshotOptions(); }
 
     private void failStart(Throwable failure) {
+        shuttingDown.set(true);
+        shutdownCancellation.cancel();
         if (keepAliveThread != null) keepAliveThread.interrupt();
         if (mcpStarter != null) { try { mcpStarter.stop(); } catch (RuntimeException ignored) { } mcpStarter = null; }
         if (starter != null) { try { starter.stop(); } catch (RuntimeException ignored) { } starter = null; }
