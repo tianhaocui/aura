@@ -36,6 +36,7 @@ class McpBridgeProtocolTest {
         assertThat(result.getString("protocolVersion")).isEqualTo("2025-03-26");
         assertThat(result.getJSONObject("capabilities")).containsKey("tools");
         assertThat(result.getJSONObject("serverInfo").getString("name")).isEqualTo("aura-mcp");
+        assertThat(result.getJSONObject("serverInfo").getString("version")).isEqualTo("1.0.0");
     }
 
     @Test

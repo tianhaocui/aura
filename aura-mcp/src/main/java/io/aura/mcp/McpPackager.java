@@ -54,7 +54,7 @@ public class McpPackager {
         }
 
         String binName = npmName.contains("/") ? npmName.substring(npmName.lastIndexOf('/') + 1) : npmName;
-        String version = "0.1.0";
+        String version = McpProtocolConstants.SERVER_VERSION;
 
         String appName = binName;
         if (router == null) {

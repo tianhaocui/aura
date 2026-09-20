@@ -2,6 +2,7 @@
 
 const http = require('http');
 const https = require('https');
+const packageMetadata = require('./package.json');
 
 const url = process.env.API_URL || process.argv[2];
 if (!url) {
@@ -84,7 +85,7 @@ function buildInputSchema(params) {
 
 function handleInitialize() {
   return { protocolVersion: '2025-03-26', capabilities: { tools: {}, resources: {}, prompts: {} },
-    serverInfo: { name: 'aura-mcp', version: '0.1.0' } };
+    serverInfo: { name: 'aura-mcp', version: packageMetadata.version } };
 }
 
 function handleToolsList() {

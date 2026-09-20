@@ -144,9 +144,11 @@ class McpSecurityTest {
             McpPackager.generate("http://localhost:8080", "@aura/test-mcp", output.toString(), router, true);
 
             assertThat(Files.readString(output.resolve("package.json")))
-                    .contains("\"name\":\"@aura/test-mcp\"");
+                    .contains("\"name\":\"@aura/test-mcp\"")
+                    .contains("\"version\":\"1.0.0\"");
             assertThat(Files.readString(output.resolve("index.js")))
                     .contains("return \"http://localhost:8080\"")
+                    .contains("version: packageMetadata.version")
                     .doesNotContain("__API_URL_PLACEHOLDER__");
             assertThatThrownBy(() -> McpPackager.generate(
                     "http://localhost:8080", "@aura/test-mcp", output.toString(), router, true))

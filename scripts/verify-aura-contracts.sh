@@ -21,6 +21,15 @@ while IFS= read -r module; do
   test "$parent_version" = "$root_version"
 done < <(sed -n 's:.*<module>\([^<]*\)</module>.*:\1:p' "$pom")
 
+npm_version="$(sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' \
+  "$repo_root/aura-mcp-npm/package.json" | head -1)"
+test "$npm_version" = "$root_version"
+rg -q "version: packageMetadata\.version" "$repo_root/aura-mcp-npm/index.js"
+rg -q "version: packageMetadata\.version" \
+  "$repo_root/aura-mcp/src/main/resources/mcp-bridge-template.js"
+rg -q "String version = McpProtocolConstants\.SERVER_VERSION" \
+  "$repo_root/aura-mcp/src/main/java/io/aura/mcp/McpPackager.java"
+
 test -f "$repo_root/aura-ai/src/main/java/io/aura/ai/AiClient.java"
 test -f "$repo_root/aura-workflow/src/main/java/io/aura/workflow/WorkflowModule.java"
 test -f "$repo_root/AI_GUIDE.md"
