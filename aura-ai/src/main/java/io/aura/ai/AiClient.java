@@ -96,6 +96,7 @@ public final class AiClient implements AutoCloseable {
                 AiResponse response = await(future, remaining, request.cancellationToken());
                 recordUsage(request, response);
                 enforceBudget(request, response);
+                validateStructuredOutput(request, response);
                 return response;
             } catch (TimeoutException | CancellationException | InterruptedException error) {
                 if (error instanceof TimeoutException) timedOutRequests.incrementAndGet();
@@ -126,6 +127,7 @@ public final class AiClient implements AutoCloseable {
         request.cancellationToken().throwIfCancelled();
         AtomicBoolean errorDelivered = new AtomicBoolean();
         AtomicReference<AiBudgetExceededException> budgetFailure = new AtomicReference<>();
+        AtomicReference<AiStructuredOutputException> structuredFailure = new AtomicReference<>();
         StringBuilder streamedContent = new StringBuilder();
         Future<Void> future = submit(() -> {
             handler.onStart();
@@ -155,6 +157,13 @@ public final class AiClient implements AutoCloseable {
                         request.cancellationToken().cancel();
                         throw exceeded;
                     }
+                    try {
+                        validateStreamingStructuredOutput(request, response, streamedContent);
+                    } catch (AiStructuredOutputException invalid) {
+                        structuredFailure.compareAndSet(null, invalid);
+                        request.cancellationToken().cancel();
+                        throw invalid;
+                    }
                     handler.onComplete(response);
                 }
                 @Override public void onError(Throwable error) {
@@ -170,12 +179,17 @@ public final class AiClient implements AutoCloseable {
                 if (errorDelivered.compareAndSet(false, true)) handler.onError(exceeded);
                 throw exceeded;
             }
+            if (structuredFailure.get() != null) {
+                AiStructuredOutputException invalid = structuredFailure.get();
+                if (errorDelivered.compareAndSet(false, true)) handler.onError(invalid);
+                throw invalid;
+            }
         } catch (TimeoutException | CancellationException | InterruptedException error) {
             if (error instanceof TimeoutException) timedOutRequests.incrementAndGet();
             request.cancellationToken().cancel();
             future.cancel(true);
             if (error instanceof InterruptedException) Thread.currentThread().interrupt();
-            Throwable terminal = budgetFailure.get() != null ? budgetFailure.get() : error;
+            Throwable terminal = terminalFailure(budgetFailure.get(), structuredFailure.get(), error);
             if (errorDelivered.compareAndSet(false, true)) handler.onError(terminal);
             if (terminal instanceof Exception exception) throw exception;
             throw error;
@@ -183,7 +197,7 @@ public final class AiClient implements AutoCloseable {
             request.cancellationToken().cancel();
             future.cancel(true);
             Throwable cause = unwrap(error);
-            Throwable terminal = budgetFailure.get() != null ? budgetFailure.get() : cause;
+            Throwable terminal = terminalFailure(budgetFailure.get(), structuredFailure.get(), cause);
             if (errorDelivered.compareAndSet(false, true)) handler.onError(terminal);
             if (terminal instanceof Exception exception) throw exception;
             if (terminal instanceof Error fatal) throw fatal;
@@ -220,6 +234,31 @@ public final class AiClient implements AutoCloseable {
         if (budget.maxCostMicros() > 0 && usage.costMicros() > budget.maxCostMicros()) {
             throw AiBudgetExceededException.exceeded("costMicros", budget.maxCostMicros(), usage.costMicros());
         }
+    }
+
+    private static void validateStructuredOutput(AiRequest request, AiResponse response) {
+        if (request.structuredOutput() != null) {
+            request.structuredOutput().validate(response.content());
+        }
+    }
+
+    private static void validateStreamingStructuredOutput(
+            AiRequest request, AiResponse response, StringBuilder streamedContent) {
+        if (request.structuredOutput() == null) return;
+        String delivered = streamedContent.toString();
+        if (!delivered.equals(response.content())) {
+            throw new AiStructuredOutputException(
+                    "AI streaming content differs from the completed response");
+        }
+        request.structuredOutput().validate(delivered);
+    }
+
+    private static Throwable terminalFailure(
+            AiBudgetExceededException budgetFailure,
+            AiStructuredOutputException structuredFailure,
+            Throwable fallback) {
+        if (budgetFailure != null) return budgetFailure;
+        return structuredFailure != null ? structuredFailure : fallback;
     }
 
     private void recordUsage(AiRequest request, AiResponse response) {

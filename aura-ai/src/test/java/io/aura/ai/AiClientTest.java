@@ -187,6 +187,108 @@ class AiClientTest {
     }
 
     @Test
+    void clientValidatesStructuredOutputForEveryProvider() throws Exception {
+        StructuredOutputSpec spec = StructuredOutputSpec.strict("answer", Map.of(
+                "type", "object",
+                "properties", Map.of("answer", Map.of("type", "string")),
+                "required", java.util.List.of("answer"),
+                "additionalProperties", false));
+        AiRequest request = AiRequest.builder().prompt("answer").structuredOutput(spec).build();
+        try (AiClient client = new AiClient(ignored -> AiResponse.text("{\"wrong\":true}"))) {
+            assertThatThrownBy(() -> client.chat(request))
+                    .isInstanceOf(AiStructuredOutputException.class)
+                    .extracting("code").isEqualTo(AiStructuredOutputException.CODE);
+        }
+    }
+
+    @Test
+    void streamingStructuredOutputFailsBeforeCompletionIsDelivered() throws Exception {
+        StructuredOutputSpec spec = StructuredOutputSpec.strict("answer", Map.of(
+                "type", "object",
+                "properties", Map.of("answer", Map.of("type", "string")),
+                "required", java.util.List.of("answer"),
+                "additionalProperties", false));
+        AiProvider provider = new AiProvider() {
+            @Override public AiResponse chat(AiRequest request) { return AiResponse.text("{}"); }
+            @Override public void stream(AiRequest request, AiStreamHandler handler) {
+                handler.onToken("{}");
+                handler.onComplete(AiResponse.text("{}"));
+            }
+        };
+        java.util.concurrent.atomic.AtomicBoolean completed = new java.util.concurrent.atomic.AtomicBoolean();
+        java.util.concurrent.atomic.AtomicReference<Throwable> failure =
+                new java.util.concurrent.atomic.AtomicReference<>();
+        try (AiClient client = new AiClient(provider)) {
+            assertThatThrownBy(() -> client.stream(
+                    AiRequest.builder().prompt("answer").structuredOutput(spec).build(),
+                    new AiStreamHandler() {
+                        @Override public void onToken(String token) { }
+                        @Override public void onComplete(AiResponse response) { completed.set(true); }
+                        @Override public void onError(Throwable error) { failure.set(error); }
+                    }))
+                    .isInstanceOf(AiStructuredOutputException.class);
+        }
+        assertThat(completed).isFalse();
+        assertThat(failure.get()).isInstanceOf(AiStructuredOutputException.class);
+    }
+
+    @Test
+    void streamingStructuredFailureSurvivesProviderThatSwallowsCallbackException() throws Exception {
+        StructuredOutputSpec spec = StructuredOutputSpec.strict("answer", Map.of(
+                "type", "object",
+                "properties", Map.of("answer", Map.of("type", "string")),
+                "required", java.util.List.of("answer"),
+                "additionalProperties", false));
+        AiProvider provider = new AiProvider() {
+            @Override public AiResponse chat(AiRequest request) { return AiResponse.text("{}"); }
+            @Override public void stream(AiRequest request, AiStreamHandler handler) {
+                handler.onToken("{\"wrong\":true}");
+                try {
+                    handler.onComplete(AiResponse.text("{\"answer\":\"ok\"}"));
+                } catch (RuntimeException ignored) { }
+            }
+        };
+        java.util.concurrent.atomic.AtomicReference<Throwable> failure =
+                new java.util.concurrent.atomic.AtomicReference<>();
+        try (AiClient client = new AiClient(provider)) {
+            assertThatThrownBy(() -> client.stream(
+                    AiRequest.builder().prompt("answer").structuredOutput(spec).build(),
+                    new AiStreamHandler() {
+                        @Override public void onToken(String token) { }
+                        @Override public void onError(Throwable error) { failure.set(error); }
+                    }))
+                    .isInstanceOf(AiStructuredOutputException.class)
+                    .hasMessageContaining("differs");
+        }
+        assertThat(failure.get()).isInstanceOf(AiStructuredOutputException.class);
+    }
+
+    @Test
+    void invalidStructuredOutputStillRecordsUsageAndChecksBudgetFirst() {
+        StructuredOutputSpec spec = StructuredOutputSpec.strict("answer", Map.of(
+                "type", "object",
+                "properties", Map.of("answer", Map.of("type", "string")),
+                "required", java.util.List.of("answer"),
+                "additionalProperties", false));
+        AiProvider provider = request -> new AiResponse("{\"wrong\":true}", "model",
+                Map.of("total_tokens", 3), null);
+        try (AiClient client = new AiClient(provider)) {
+            AiRequest invalid = AiRequest.builder().prompt("answer").structuredOutput(spec).build();
+            assertThatThrownBy(() -> client.chat(invalid))
+                    .isInstanceOf(AiStructuredOutputException.class);
+            assertThat(client.usageTotals().requests()).isEqualTo(1);
+            assertThat(client.usageTotals().totalTokens()).isEqualTo(3);
+
+            AiRequest overBudget = AiRequest.builder().prompt("answer")
+                    .structuredOutput(spec)
+                    .budget(AiBudget.builder().maxOutputCharacters(2).build())
+                    .build();
+            assertThatThrownBy(() -> client.chat(overBudget))
+                    .isInstanceOf(AiBudgetExceededException.class);
+        }
+    }
+
+    @Test
     void synchronousChatEnforcesOutputCharacterBudget() {
         AiProvider provider = request -> AiResponse.text("abcd");
         AiRequest request = AiRequest.builder()

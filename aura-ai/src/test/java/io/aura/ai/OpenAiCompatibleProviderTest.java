@@ -1,6 +1,7 @@
 package io.aura.ai;
 
 import com.alibaba.fastjson2.JSON;
+import com.alibaba.fastjson2.JSONObject;
 import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.Test;
 
@@ -47,6 +48,42 @@ class OpenAiCompatibleProviderTest {
             assertThat(requestBody.get()).contains("<redacted>").doesNotContain(
                     "password=hidden", "token=hidden", "parameter-secret",
                     "inside-list", "description-secret", "schema-secret");
+        } finally {
+            server.stop(0);
+        }
+    }
+
+    @Test
+    void mapsProviderNeutralStructuredOutputToOpenAiJsonSchema() throws Exception {
+        AtomicReference<String> requestBody = new AtomicReference<>();
+        HttpServer server = HttpServer.create(new InetSocketAddress(0), 0);
+        server.createContext("/structured", exchange -> {
+            requestBody.set(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
+            byte[] response = "{\"choices\":[{\"message\":{\"content\":\"{\\\"answer\\\":\\\"ok\\\"}\"}}]}"
+                    .getBytes(StandardCharsets.UTF_8);
+            exchange.sendResponseHeaders(200, response.length);
+            try (OutputStream output = exchange.getResponseBody()) { output.write(response); }
+        });
+        server.start();
+        try {
+            StructuredOutputSpec spec = StructuredOutputSpec.strict("answer", Map.of(
+                    "type", "object",
+                    "properties", Map.of("answer", Map.of("type", "string")),
+                    "required", List.of("answer"),
+                    "additionalProperties", false));
+            OpenAiCompatibleProvider provider = OpenAiCompatibleProvider.create(
+                    "http://localhost:" + server.getAddress().getPort() + "/structured", "", "default");
+            try (AiClient client = new AiClient(provider)) {
+                assertThat(client.chat(AiRequest.builder().prompt("answer")
+                        .structuredOutput(spec).build()).content()).contains("answer");
+            }
+            JSONObject payload = JSON.parseObject(requestBody.get());
+            assertThat(payload.getJSONObject("response_format").getString("type"))
+                    .isEqualTo("json_schema");
+            assertThat(payload.getJSONObject("response_format").getJSONObject("json_schema"))
+                    .containsEntry("name", "answer")
+                    .containsEntry("strict", true)
+                    .containsKey("schema");
         } finally {
             server.stop(0);
         }

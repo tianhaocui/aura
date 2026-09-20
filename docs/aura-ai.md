@@ -32,6 +32,28 @@ OrderSummary summary = StructuredOutput.parse(response, OrderSummary.class);
 AiUsageTotals window = client.usageTotals();
 ```
 
+Request provider-constrained JSON and enforce the same schema locally:
+
+```java
+StructuredOutputSpec output = StructuredOutputSpec.strict("order_summary", Map.of(
+        "type", "object",
+        "properties", Map.of("orderId", Map.of("type", "string")),
+        "required", List.of("orderId"),
+        "additionalProperties", false));
+AiResponse response = client.chat(AiRequest.builder()
+        .prompt("Summarize the order")
+        .structuredOutput(output)
+        .build());
+```
+
+OpenAI-compatible providers map this to `response_format.json_schema`.
+`AiClient` always validates the returned JSON locally for every provider and
+fails with `AI_STRUCTURED_OUTPUT_INVALID` on malformed or non-conforming output.
+Schema declarations are checked eagerly against Aura's supported JSON Schema
+subset. Non-recursive local `$defs`/`definitions` references must resolve;
+recursive references, unknown keywords, and incorrectly typed constraints fail
+at startup instead of drifting between provider and local validation semantics.
+
 When a provider reports token counts but not cost, supply explicit model pricing
 instead of relying on a hidden default:
 

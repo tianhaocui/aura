@@ -144,6 +144,15 @@ public final class OpenAiCompatibleProvider implements AiProvider {
         if (request.toolChoice() != null && !request.toolChoice().isBlank()) {
             payload.put("tool_choice", request.toolChoice());
         }
+        if (request.structuredOutput() != null) {
+            StructuredOutputSpec output = request.structuredOutput();
+            payload.put("response_format", Map.of(
+                    "type", "json_schema",
+                    "json_schema", Map.of(
+                            "name", output.name(),
+                            "strict", output.strict(),
+                            "schema", output.schema())));
+        }
         HttpRequest.Builder builder = HttpRequest.newBuilder(endpoint)
                 .header("Content-Type", "application/json")
                 .timeout(effectiveTimeout(request));

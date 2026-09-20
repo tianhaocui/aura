@@ -22,6 +22,7 @@ public final class AiRequest {
     private final String toolChoice;
     private final AiRetryPolicy retryPolicy;
     private final AiPricing pricing;
+    private final StructuredOutputSpec structuredOutput;
 
     public AiRequest(String prompt) {
         this(builder().prompt(prompt));
@@ -44,6 +45,7 @@ public final class AiRequest {
         this.toolChoice = builder.toolChoice;
         this.retryPolicy = Objects.requireNonNull(builder.retryPolicy, "retryPolicy");
         this.pricing = builder.pricing;
+        this.structuredOutput = builder.structuredOutput;
         if (budget.maxInputCharacters() > 0 && prompt.length() > budget.maxInputCharacters()) {
             throw new IllegalArgumentException("prompt exceeds configured AI input budget");
         }
@@ -68,6 +70,7 @@ public final class AiRequest {
     public String toolChoice() { return toolChoice; }
     public AiRetryPolicy retryPolicy() { return retryPolicy; }
     public AiPricing pricing() { return pricing; }
+    public StructuredOutputSpec structuredOutput() { return structuredOutput; }
 
     private static String requireText(String value, String name) {
         if (value == null || value.isBlank()) throw new IllegalArgumentException(name + " must not be blank");
@@ -93,6 +96,7 @@ public final class AiRequest {
         private String toolChoice;
         private AiRetryPolicy retryPolicy = AiRetryPolicy.none();
         private AiPricing pricing;
+        private StructuredOutputSpec structuredOutput;
 
         public Builder prompt(String value) { this.prompt = value; return this; }
         public Builder systemPrompt(String value) { this.systemPrompt = value; return this; }
@@ -116,6 +120,10 @@ public final class AiRequest {
         public Builder toolChoice(String value) { this.toolChoice = value; return this; }
         public Builder retry(AiRetryPolicy value) { this.retryPolicy = Objects.requireNonNull(value, "retryPolicy"); return this; }
         public Builder pricing(AiPricing value) { this.pricing = value; return this; }
+        public Builder structuredOutput(StructuredOutputSpec value) {
+            this.structuredOutput = Objects.requireNonNull(value, "structuredOutput");
+            return this;
+        }
         public AiRequest build() { return new AiRequest(this); }
     }
 }
