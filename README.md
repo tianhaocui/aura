@@ -123,7 +123,7 @@ inspect structured failures, and only then start the real server.
 | `aura-contract` | Dependency-light module, route, error, health, and cancellation contracts |
 | `aura-core` | Configuration, lifecycle, module graph, capability registry |
 | `aura-web` | Undertow adapter, routing, schema/OpenAPI, snapshots, `TestClient` |
-| `aura-db` | Lightweight SQL, transactions, pagination, migration SPI |
+| `aura-db` | Lightweight SQL, transactions, pagination, schema migrator SPI |
 | `aura-workflow` | Typed DAGs, variants, retries, compensation, cancellation |
 | `aura-ai` | Provider SPI, sync/SSE calls, tools, structured output, budgets |
 | `aura-mcp` | Tools/resources/prompts, authenticated HTTP/SSE/stdio transports |

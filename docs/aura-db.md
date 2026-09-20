@@ -390,3 +390,40 @@ All directives auto-skip when the parameter value is null or blank.
 - All operators whitelisted
 - Parameters always use `?` placeholders (never concatenated)
 - Transaction connections not leaked by try-with-resources
+
+---
+
+## Schema migration SPI
+
+`SchemaMigrator` is the single execution boundary. `DatabaseModule` invokes it
+once during module startup and aborts startup with outer code
+`AURA_MODULE_START_FAILED` plus `causeCode=DB_MIGRATION_FAILED` when it fails or
+returns no result:
+
+```java
+AuraApp.create()
+        .use(DatabaseModule.create(db)
+                .migrateWith(SqlSchemaMigrator.classpath("db/migration")))
+        .start();
+```
+
+A production adapter receives Aura-owned resources without taking ownership:
+
+```java
+SchemaMigrator migrator = context -> {
+    // Configure Flyway, Liquibase, or another engine with context.dataSource().
+    int applied = externalEngine.migrate(context.dataSource());
+    return new SchemaMigrationResult("external-engine", applied);
+};
+```
+
+The adapter must not close `context.dataSource()` or `context.db()`; the
+`DatabaseModule` closes the database during application shutdown. Migration
+runs outside an Aura transaction so an external engine can own locking,
+validation, transaction, baseline, and dialect semantics.
+
+`SqlSchemaMigrator` is a lightweight implementation for tests and simple
+single-process deployments. It maintains `_migrations`, validates checksums and
+uses Aura transactions, but its semicolon splitter is not a Flyway/Liquibase
+replacement: it does not implement vendor delimiters, stored-procedure parsing,
+distributed migration locks, repair, or baseline workflows.

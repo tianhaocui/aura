@@ -117,7 +117,7 @@ Map<String, Object> openApi = test.openApi();
 | `aura-contract` | 轻依赖的模块、路由、错误、健康和取消契约 |
 | `aura-core` | 配置、生命周期、模块图、能力注册表 |
 | `aura-web` | Undertow、路由、schema/OpenAPI、快照、`TestClient` |
-| `aura-db` | 轻量 SQL、事务、分页、migration SPI |
+| `aura-db` | 轻量 SQL、事务、分页、数据库 schema 迁移执行 SPI |
 | `aura-workflow` | 类型化 DAG、variant、重试、补偿、取消 |
 | `aura-ai` | Provider SPI、同步/SSE、工具调用、结构化输出、预算 |
 | `aura-mcp` | tools/resources/prompts、鉴权 HTTP/SSE/stdio transport |

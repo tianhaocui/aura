@@ -264,6 +264,18 @@ int changed = db.executeCancellable(
 Database calls validate identifiers, bound response work, and cancel JDBC
 statements cooperatively. The default page-size maximum is 500.
 
+Use one explicit schema migration executor during startup:
+
+```java
+DatabaseModule database = DatabaseModule.create(db)
+        .migrateWith(SqlSchemaMigrator.classpath("db/migration"));
+```
+
+`SchemaMigrator` is the extension SPI for Flyway/Liquibase adapters. Adapter
+code uses `MigrationContext.dataSource()` but must not close it. Do not adapt an
+external migration engine through `SqlMigrationSource`; that interface only feeds
+the lightweight Aura SQL migrator.
+
 ## AI, MCP, and Workflows
 
 Install optional capabilities explicitly:

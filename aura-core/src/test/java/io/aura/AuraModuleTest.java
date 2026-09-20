@@ -54,12 +54,23 @@ class AuraModuleTest {
             @Override public io.aura.contract.ModuleMetadata descriptor() { return io.aura.contract.ModuleMetadata.of("second", "1.0.0"); }
             @Override public void install(ModuleContext context) { }
             @Override public void start(ModuleContext context) { throw new IllegalStateException("boom"); }
+            @Override public void stop(ModuleContext context) {
+                events.add("stop:second");
+                throw new IllegalArgumentException("cleanup failed");
+            }
         };
 
         assertThatThrownBy(() -> AuraApp.create().use(first).use(second).start())
-                .isInstanceOf(ModuleException.class)
-                .extracting("code").isEqualTo("AURA_MODULE_START_FAILED");
-        assertThat(events).containsExactly("start:first", "stop:first");
+                .isInstanceOfSatisfying(ModuleException.class, error -> {
+                    assertThat(error.code()).isEqualTo("AURA_MODULE_START_FAILED");
+                    assertThat(error.getCause()).isInstanceOf(IllegalStateException.class);
+                    assertThat(error.causeCode()).isNull();
+                    assertThat(error.getCause().getSuppressed()).singleElement()
+                            .isInstanceOf(IllegalArgumentException.class)
+                            .satisfies(suppressed -> assertThat(suppressed.getMessage())
+                                    .isEqualTo("cleanup failed"));
+                });
+        assertThat(events).containsExactly("start:first", "stop:second", "stop:first");
     }
 
     @Test

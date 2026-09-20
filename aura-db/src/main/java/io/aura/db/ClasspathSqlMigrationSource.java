@@ -15,26 +15,28 @@ import java.util.Objects;
 import java.util.jar.JarEntry;
 
 /** Loads {@code *.sql} migrations from a classpath directory. */
-public final class ClasspathMigrationSource implements MigrationSource {
+public final class ClasspathSqlMigrationSource implements SqlMigrationSource {
     private final String location;
     private final ClassLoader classLoader;
 
-    public ClasspathMigrationSource(String location) {
+    public ClasspathSqlMigrationSource(String location) {
         this(location, Thread.currentThread().getContextClassLoader());
     }
 
-    public ClasspathMigrationSource(String location, ClassLoader classLoader) {
+    public ClasspathSqlMigrationSource(String location, ClassLoader classLoader) {
         Objects.requireNonNull(location, "location");
+        if (location.isBlank()) throw new IllegalArgumentException("location must not be blank");
         this.location = location.startsWith("classpath:") ? location.substring("classpath:".length()) : location;
-        this.classLoader = classLoader == null ? ClasspathMigrationSource.class.getClassLoader() : classLoader;
+        if (this.location.isBlank()) throw new IllegalArgumentException("location must not be blank");
+        this.classLoader = classLoader == null ? ClasspathSqlMigrationSource.class.getClassLoader() : classLoader;
     }
 
     @Override
-    public List<Migration> migrations() {
+    public List<SqlMigration> migrations() {
         String path = location.startsWith("/") ? location.substring(1) : location;
         try {
             Enumeration<URL> resources = classLoader.getResources(path);
-            List<Migration> result = new ArrayList<>();
+            List<SqlMigration> result = new ArrayList<>();
             boolean found = false;
             while (resources.hasMoreElements()) {
                 found = true;
@@ -70,14 +72,14 @@ public final class ClasspathMigrationSource implements MigrationSource {
         }
     }
 
-    private static Migration readMigration(String fileName, String sql) {
+    private static SqlMigration readMigration(String fileName, String sql) {
         int underscore = fileName.indexOf('_');
         if (underscore <= 0 || !fileName.endsWith(".sql")) {
             throw new MigrationException("Migration filename must be <version>_<name>.sql: " + fileName);
         }
         String version = fileName.substring(0, underscore);
         String name = fileName.substring(underscore + 1, fileName.length() - 4);
-        return new Migration(version, name, sql);
+        return new SqlMigration(version, name, sql);
     }
 
     private static String readFile(Path path) {

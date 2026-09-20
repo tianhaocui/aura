@@ -63,9 +63,15 @@ final class ModuleManager {
                 module.start(contexts.apply(module));
                 startedModules.add(module);
             } catch (Exception error) {
+                try {
+                    module.stop(contexts.apply(module));
+                } catch (Exception cleanupFailure) {
+                    error.addSuppressed(cleanupFailure);
+                }
                 stopStarted(contexts);
                 throw new ModuleException("AURA_MODULE_START_FAILED", module.descriptor().id(),
-                        "Failed to start module " + module.descriptor().id() + ": " + error.getMessage());
+                        "Failed to start module " + module.descriptor().id() + ": " + error.getMessage(),
+                        error);
             }
         }
         started = true;

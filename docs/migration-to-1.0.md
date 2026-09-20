@@ -53,6 +53,7 @@ TestClient.of(app).get("/orders").expect(200);
 | `Page.totalPages(): int` | `Page.totalPages(): OptionalInt` |
 | provider calls `AiRequest.redactor()` repeatedly | provider reads frozen `redactedPrompt()`, `redactedSystemPrompt()`, `redactedParameters()`, and `redactedTools()` |
 | `McpSessionManager.create(userId)` | `create(userId, protocolVersion)`, then `activate(...)` after `notifications/initialized` |
+| `db.migrate(source)` / `DatabaseModule.migrations(...)` | `DatabaseModule.create(db).migrateWith(SchemaMigrator)` |
 
 ## Module contract
 
@@ -129,6 +130,21 @@ Raw and dynamic SQL pass ordering separately with `PaginationOrder.by(...)`.
 fetches one additional row to compute `hasNext()`, returns
 `OptionalLong.empty()` from `total()`, and serializes the unknown total as JSON
 `null`. Do not substitute `0`; that means an exact empty result.
+
+## Database migrations
+
+Migration execution is now a module lifecycle concern, not a utility method on
+`Db`. For Aura's lightweight SQL implementation use:
+
+```java
+DatabaseModule.create(db)
+        .migrateWith(SqlSchemaMigrator.from(source));
+```
+
+Implement `SchemaMigrator` for Flyway, Liquibase, or another engine. The adapter
+receives a `MigrationContext` and returns a `SchemaMigrationResult`; it must not
+close the Aura-owned `Db` or `DataSource`. `SqlMigrationSource` is only an input to
+`SqlSchemaMigrator` and is no longer described as an external engine SPI.
 
 ## AI request transport
 

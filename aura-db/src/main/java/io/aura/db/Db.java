@@ -80,6 +80,11 @@ public class Db implements AutoCloseable {
         return name;
     }
 
+    /** Migration adapter view. The DataSource is owned and closed by this Db. */
+    MigrationContext migrationContext() {
+        return new MigrationContext(this, ds, name);
+    }
+
     /**
      * Generates IN-clause placeholders for raw SQL.
      * Usage: db.find("SELECT * FROM user WHERE id IN (" + Db.in(ids) + ")", ids.toArray())
@@ -662,14 +667,6 @@ public class Db implements AutoCloseable {
 
     public static void shutdownPool() {
         INDEPENDENT_TX_POOL.shutdownNow();
-    }
-
-    public MigrationResult migrate(String location) {
-        return new MigrationRunner(this).run(new ClasspathMigrationSource(location));
-    }
-
-    public MigrationResult migrate(MigrationSource source) {
-        return new MigrationRunner(this).run(source);
     }
 
     // --- internal ---

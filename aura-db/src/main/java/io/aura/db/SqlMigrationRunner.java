@@ -9,23 +9,23 @@ import java.util.Map;
 import java.util.Set;
 
 /** Applies ordered migrations while retaining applied checksums for drift detection. */
-public final class MigrationRunner {
+final class SqlMigrationRunner {
     private static final String TABLE = "_migrations";
     private final Db db;
 
-    public MigrationRunner(Db db) {
+    SqlMigrationRunner(Db db) {
         this.db = db;
     }
 
-    public MigrationResult run(MigrationSource source) {
-        if (source == null) throw new IllegalArgumentException("source must not be null");
+    SqlMigrationResult run(SqlMigrationSource source) {
+        if (source == null) throw new IllegalArgumentException("SQL migration source must not be null");
         if (db.currentTransactionContext() != null) {
             throw new IllegalStateException("Migrations must run outside an active transaction");
         }
-        List<Migration> supplied = source.migrations();
-        if (supplied == null) throw new MigrationException("Migration source returned null");
-        List<Migration> migrations = new ArrayList<>(supplied);
-        migrations.sort(MigrationRunner::compareVersions);
+        List<SqlMigration> supplied = source.migrations();
+        if (supplied == null) throw new MigrationException("SQL migration source returned null");
+        List<SqlMigration> migrations = new ArrayList<>(supplied);
+        migrations.sort(SqlMigrationRunner::compareVersions);
         ensureUniqueVersions(migrations);
         db.execute("CREATE TABLE IF NOT EXISTS " + TABLE +
                 " (version VARCHAR(255) PRIMARY KEY, name VARCHAR(255) NOT NULL, checksum VARCHAR(128) NOT NULL)");
@@ -36,7 +36,7 @@ public final class MigrationRunner {
         }
         List<String> appliedNow = new ArrayList<>();
         List<String> skipped = new ArrayList<>();
-        for (Migration migration : migrations) {
+        for (SqlMigration migration : migrations) {
             String appliedChecksum = applied.get(migration.version());
             if (appliedChecksum != null) {
                 if (!appliedChecksum.equals(migration.checksum())) {
@@ -59,7 +59,7 @@ public final class MigrationRunner {
                 throw new MigrationException("Failed migration " + migration.version() + " (" + migration.name() + ")", e);
             }
         }
-        return new MigrationResult(appliedNow, skipped);
+        return new SqlMigrationResult(appliedNow, skipped);
     }
 
     static List<String> splitStatements(String sql) {
@@ -90,7 +90,7 @@ public final class MigrationRunner {
         return statements;
     }
 
-    private static int compareVersions(Migration left, Migration right) {
+    private static int compareVersions(SqlMigration left, SqlMigration right) {
         String a = left.version(), b = right.version();
         if (a.chars().allMatch(Character::isDigit) && b.chars().allMatch(Character::isDigit)) {
             int numeric = new BigInteger(a).compareTo(new BigInteger(b));
@@ -105,9 +105,9 @@ public final class MigrationRunner {
         statement.setLength(0);
     }
 
-    private static void ensureUniqueVersions(List<Migration> migrations) {
+    private static void ensureUniqueVersions(List<SqlMigration> migrations) {
         Set<String> versions = new HashSet<>();
-        for (Migration migration : migrations) {
+        for (SqlMigration migration : migrations) {
             if (!versions.add(migration.version())) {
                 throw new MigrationException("Duplicate migration version: " + migration.version());
             }
