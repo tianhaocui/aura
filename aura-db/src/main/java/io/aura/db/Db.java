@@ -196,9 +196,11 @@ public class Db implements AutoCloseable {
         return find(p.sql(), p.params());
     }
 
-    public Page<Row> paginateDynamic(String template, Map<?, ?> data, int pageNum, int pageSize) {
+    public Page<Row> paginateDynamic(String template, Map<?, ?> data,
+                                     PaginationOrder order, int pageNum, int pageSize,
+                                     TotalStrategy totalStrategy) {
         SqlKit.Parsed p = SqlKit.parse(template, data);
-        return paginate(p.sql(), p.params(), pageNum, pageSize);
+        return paginate(p.sql(), p.params(), order, pageNum, pageSize, totalStrategy);
     }
 
     // null in data map means "skip this field", not "set to NULL". Use Row.update() for explicit nulls.
@@ -222,26 +224,69 @@ public class Db implements AutoCloseable {
 
     // --- pagination ---
 
-    public <T> Page<T> paginate(String sql, Object[] params, int pageNum, int pageSize,
-                                 RowMapper<T> mapper) {
+    /**
+     * Paginates an arbitrary query. The query is wrapped and the supplied order
+     * becomes the outer, final order; order fields must be projected by the query.
+     */
+    public <T> Page<T> paginate(String sql, Object[] params, PaginationOrder order,
+                                int pageNum, int pageSize, TotalStrategy totalStrategy,
+                                RowMapper<T> mapper) {
+        return paginateInternal(sql, params, order, pageNum, pageSize,
+                totalStrategy, mapper, true);
+    }
+
+    <T> Page<T> paginateBase(String sql, Object[] params, PaginationOrder order,
+                             int pageNum, int pageSize, TotalStrategy totalStrategy,
+                             RowMapper<T> mapper) {
+        return paginateInternal(sql, params, order, pageNum, pageSize,
+                totalStrategy, mapper, false);
+    }
+
+    private <T> Page<T> paginateInternal(
+            String sql, Object[] params, PaginationOrder order,
+            int pageNum, int pageSize, TotalStrategy totalStrategy,
+            RowMapper<T> mapper, boolean wrapBaseQuery) {
         requirePagination(pageNum, pageSize);
-        String countSql = "SELECT COUNT(*) FROM (" + sql + ") _t";
-        long total = queryOne(countSql, params, rs -> rs.getLong(1));
-        if (total == 0) return Page.empty(pageNum, pageSize);
+        if (sql == null || sql.isBlank()) throw new IllegalArgumentException("sql must not be blank");
+        params = params == null ? new Object[0] : params;
+        Objects.requireNonNull(order, "order");
+        Objects.requireNonNull(totalStrategy, "totalStrategy");
+        Objects.requireNonNull(mapper, "mapper");
+        if (wrapBaseQuery) order.requireProjectedColumns();
+
+        long total = -1;
+        if (totalStrategy == TotalStrategy.EXACT) {
+            String countSql = "SELECT COUNT(*) FROM (" + sql + ") _t";
+            total = queryOne(countSql, params, rs -> rs.getLong(1));
+            if (total == 0) return Page.empty(pageNum, pageSize);
+        }
 
         long offset = (long) (pageNum - 1) * pageSize;
-        String pageSql = sql + " LIMIT ? OFFSET ?";
+        int querySize = totalStrategy == TotalStrategy.NONE ? pageSize + 1 : pageSize;
+        String orderedSql = wrapBaseQuery ? "SELECT * FROM (" + sql + ") _page" : sql;
+        String pageSql = orderedSql + " ORDER BY " + order.clause() + " LIMIT ? OFFSET ?";
         Object[] pageParams = new Object[params.length + 2];
         System.arraycopy(params, 0, pageParams, 0, params.length);
-        pageParams[params.length] = pageSize;
+        pageParams[params.length] = querySize;
         pageParams[params.length + 1] = offset;
 
         List<T> list = query(pageSql, pageParams, mapper);
-        return new Page<>(list, pageNum, pageSize, total);
+        if (totalStrategy == TotalStrategy.NONE) {
+            boolean hasNext = list.size() > pageSize;
+            List<T> items = hasNext ? List.copyOf(list.subList(0, pageSize)) : list;
+            return Page.withoutTotal(items, pageNum, pageSize, hasNext);
+        }
+        return Page.exact(list, pageNum, pageSize, total);
     }
 
-    public Page<Row> paginate(String sql, Object[] params, int pageNum, int pageSize) {
-        return paginate(sql, params, pageNum, pageSize, Db::rsToRow);
+    public Page<Row> paginate(String sql, Object[] params, PaginationOrder order,
+                              int pageNum, int pageSize, TotalStrategy totalStrategy) {
+        return paginate(sql, params, order, pageNum, pageSize, totalStrategy, Db::rsToRow);
+    }
+
+    public Page<Row> paginate(String sql, Object[] params, PaginationOrder order,
+                              int pageNum, int pageSize) {
+        return paginate(sql, params, order, pageNum, pageSize, TotalStrategy.EXACT);
     }
 
     // --- execute ---

@@ -49,9 +49,10 @@ db.deleteById("user", id);
 
 ```java
 // Null/blank params auto-skipped — no if/else needed
-String sql = "SELECT * FROM user #where(name, '=', name) #and(age, '>', age) #orderBy(created)";
+String sql = "SELECT * FROM user #where(name, '=', name) #and(age, '>', age)";
 db.findDynamic(sql, filterMap);                        // List<Row>
-db.paginateDynamic(sql, filterMap, pageNum, pageSize); // Page<Row>
+db.paginateDynamic(sql, filterMap, PaginationOrder.by("created DESC", "id ASC"),
+        pageNum, pageSize, TotalStrategy.EXACT);       // Page<Row>
 
 // Directives: #where(field, op, paramKey) #and(...) #or(...) #orderBy(field1, field2)
 // filterMap = Map.of("name", "tom", "age", 18) → WHERE name = ? AND age > ?
@@ -106,9 +107,21 @@ db.updateDynamic("rides", Map.of("title", "New Title", "status", "published"), "
 int page     = ctx.pageNum();   // ?page= (default 1, min 1)
 int pageSize = ctx.pageSize();  // ?pageSize= (default 20, max 500)
 
-Page<Row> page = db.table("user").where("active", true).paginate(ctx.pageNum(), ctx.pageSize());
-// Use ctx.json(page) — serializes as {list, pageNum, pageSize, total, totalPages, hasNext}
+Page<Row> page = db.table("user")
+    .where("active", true)
+    .orderBy("created_at DESC", "id ASC") // unique tie-breaker is required
+    .paginate(ctx.pageNum(), ctx.pageSize(), TotalStrategy.EXACT);
+
+// Skip COUNT(*) on hot paths. Aura fetches one extra row to determine hasNext.
+Page<Row> fast = db.table("user")
+    .orderBy("id ASC")
+    .paginate(ctx.pageNum(), ctx.pageSize(), TotalStrategy.NONE);
+fast.total().isEmpty();       // total was intentionally not queried
+fast.totalPages().isEmpty();
 ```
+
+For raw joins, order by an unqualified projected alias. Example:
+`SELECT u.id AS user_id, ...` with `PaginationOrder.by("user_id ASC")`.
 
 ## Transactions
 
@@ -221,7 +234,7 @@ ctx.json(db.table("user").select("id, name, status").where("id", id).findOne());
 // Use Query.paginate() instead of manual LIMIT/OFFSET
 Page<Row> page = db.table("rides")
     .where("user_id", userId)
-    .orderBy("created_at DESC")
+    .orderBy("created_at DESC", "id ASC")
     .paginate(ctx.pageNum(), ctx.pageSize());
 
 // Use Query.delete() instead of raw SQL DELETE

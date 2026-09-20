@@ -4,7 +4,6 @@ import io.aura.contract.CancellationToken;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
-import java.util.StringJoiner;
 
 public class Query {
 
@@ -78,14 +77,7 @@ public class Query {
     }
 
     public Query orderBy(String... fields) {
-        StringJoiner sj = new StringJoiner(", ");
-        for (String f : fields) {
-            if (!f.matches("[a-zA-Z_][a-zA-Z0-9_]*(\\.[a-zA-Z_][a-zA-Z0-9_]*)?(\\s+(?i)(ASC|DESC))?")) {
-                throw new IllegalArgumentException("Invalid orderBy field: " + f);
-            }
-            sj.add(f);
-        }
-        this.orderBy = sj.toString();
+        this.orderBy = PaginationOrder.by(fields).clause();
         return this;
     }
 
@@ -122,7 +114,20 @@ public class Query {
     }
 
     public Page<Row> paginate(int pageNum, int pageSize) {
-        return db.paginate(buildSql(), params.toArray(), pageNum, pageSize);
+        return paginate(pageNum, pageSize, TotalStrategy.EXACT);
+    }
+
+    public Page<Row> paginate(int pageNum, int pageSize, TotalStrategy totalStrategy) {
+        if (orderBy == null || orderBy.isBlank()) {
+            throw new IllegalStateException(
+                    "paginate() requires explicit orderBy(...) with a unique tie-breaker");
+        }
+        if (limit != null || offset != null) {
+            throw new IllegalStateException("paginate() cannot be combined with limit() or offset()");
+        }
+        return db.paginateBase(buildBaseSql(), params.toArray(),
+                new PaginationOrder(orderBy), pageNum, pageSize, totalStrategy,
+                rs -> Db.rsToRow(rs, table));
     }
 
     public int count() {
@@ -182,12 +187,15 @@ public class Query {
     }
 
     private String buildSql() {
-        StringBuilder sb = new StringBuilder("SELECT ").append(select).append(" FROM ").append(table);
-        sb.append(buildWhere());
+        StringBuilder sb = new StringBuilder(buildBaseSql());
         if (orderBy != null && !orderBy.isEmpty()) sb.append(" ORDER BY ").append(orderBy);
         if (limit != null) sb.append(" LIMIT ").append(limit);
         if (offset != null) sb.append(" OFFSET ").append(offset);
         return sb.toString();
+    }
+
+    private String buildBaseSql() {
+        return "SELECT " + select + " FROM " + table + buildWhere();
     }
 
     private String buildWhere() {

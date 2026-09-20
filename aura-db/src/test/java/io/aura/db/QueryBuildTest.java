@@ -173,6 +173,14 @@ class QueryBuildTest {
     }
 
     @Test
+    void paginationOrderRejectsInjectionAndNormalizesFields() {
+        assertThat(PaginationOrder.by("created_at DESC", "id ASC").clause())
+                .isEqualTo("created_at DESC, id ASC");
+        assertThatThrownBy(() -> PaginationOrder.by("id; DROP TABLE users"))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
     void orderBy_spaceOnlyField_throws() throws Exception {
         Query q = newQuery("users");
         assertThatThrownBy(() -> q.orderBy("   "))

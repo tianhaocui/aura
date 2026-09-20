@@ -40,7 +40,7 @@ db.table("user")
 // Chain conditions (null values auto-skipped)
   .where("age", ">", 18)
   .where("status", "active")     // shorthand for .where("status", "=", "active")
-  .orderBy("name", "created DESC")
+  .orderBy("name", "id ASC")
   .limit(10)
   .offset(20)
 
@@ -92,11 +92,12 @@ db.findBy("user", "age > ? AND status = ?", 18, "active"); // List<Row>
 ```java
 // Directives: #where, #and, #or, #orderBy
 // Null/blank params auto-skipped
-String sql = "SELECT * FROM user #where(name, '=', name) #and(age, '>', age) #orderBy(created)";
+String sql = "SELECT * FROM user #where(name, '=', name) #and(age, '>', age)";
 
 Map<String, Object> filter = Map.of("name", "tom", "age", 18);
 db.find(sql, filter);                        // List<Row>
-db.paginate(sql, filter, 1, 20);            // Page<Row>
+db.paginateDynamic(sql, filter, PaginationOrder.by("created DESC", "id ASC"),
+        1, 20, TotalStrategy.EXACT);        // Page<Row>
 
 // If filter = Map.of("name", "tom") → WHERE name = ? (age skipped)
 // If filter = Map.of() → no WHERE clause at all
@@ -188,10 +189,24 @@ Object generatedId = db.insertAndReturnId(
 ### Pagination
 
 ```java
-Page<Row> page = db.table("user").where("status", "active").paginate(1, 20);
+Page<Row> page = db.table("user")
+        .where("status", "active")
+        .orderBy("created_at DESC", "id ASC")
+        .paginate(1, 20, TotalStrategy.EXACT);
 // Or with raw SQL:
-Page<Row> page = db.paginate("SELECT * FROM user", new Object[]{}, 1, 20);
+Page<Row> page = db.paginate("SELECT * FROM user", new Object[]{},
+        PaginationOrder.by("created_at DESC", "id ASC"),
+        1, 20, TotalStrategy.NONE);
 ```
+
+Pagination always requires an explicit order with a unique tie-breaker. `EXACT`
+runs a count query. `NONE` skips the count, leaves `total()` and `totalPages()`
+empty, and fetches one extra row to compute `hasNext()`.
+
+Raw and dynamic queries are wrapped before the final order is applied. Their
+`PaginationOrder` fields must therefore be unqualified projected column labels.
+For joins, project an explicit alias and order by it, for example
+`SELECT u.id AS user_id, ...` with `PaginationOrder.by("user_id ASC")`.
 
 ### Typed Queries
 
@@ -330,7 +345,8 @@ Fluent query builder returned by `db.table(name)`.
 ## Page
 
 ```java
-public record Page<T>(List<T> list, int pageNum, int pageSize, long total)
+public record Page<T>(List<T> list, int pageNum, int pageSize,
+                      OptionalLong total, boolean hasNext)
 ```
 
 | Method | Returns | Description |
@@ -338,8 +354,8 @@ public record Page<T>(List<T> list, int pageNum, int pageSize, long total)
 | `list()` | `List<T>` | Current page data |
 | `pageNum()` | int | Current page number |
 | `pageSize()` | int | Page size |
-| `total()` | long | Total record count |
-| `totalPages()` | int | Total pages |
+| `total()` | `OptionalLong` | Exact total, empty with `TotalStrategy.NONE` |
+| `totalPages()` | `OptionalInt` | Exact pages, empty with `TotalStrategy.NONE` |
 | `hasNext()` | boolean | Has next page |
 | `hasPrev()` | boolean | Has previous page |
 

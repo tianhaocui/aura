@@ -47,6 +47,10 @@ TestClient.of(app).get("/orders").expect(200);
 | ad-hoc API descriptions | shared `ApiRoute` / `ApiParameter` metadata |
 | external HTTP tests | `TestClient.of(app)` plus real Undertow smoke tests |
 | string-parsed errors | stable error `code`, field, reason, and remediation details |
+| unordered `Query.paginate(page, size)` | `.orderBy(..., uniqueTieBreaker).paginate(page, size, strategy)` |
+| raw `Db.paginate(sql, params, page, size)` | `Db.paginate(sql, params, PaginationOrder, page, size, TotalStrategy)` |
+| `Page.total(): long` | `Page.total(): OptionalLong` |
+| `Page.totalPages(): int` | `Page.totalPages(): OptionalInt` |
 
 ## Module contract
 
@@ -104,6 +108,25 @@ cancellation is required. Supply a `DurableWorkflowExecutionStore` before relyin
 recovery. Durable adapters persist only `WorkflowExecutionSnapshot`; `retainLocal` is an optional
 process-local inspection hook and must never serialize the mutable execution. The default
 in-memory store is for tests and single-process applications.
+
+## Database pagination
+
+Aura 1.0 refuses unordered pagination. Add an explicit stable order and finish
+with a unique tie-breaker so rows with equal business sort values cannot move
+between pages:
+
+```java
+Page<Row> page = db.table("orders")
+        .where("customer_id", customerId)
+        .orderBy("created_at DESC", "id ASC")
+        .paginate(pageNum, pageSize, TotalStrategy.EXACT);
+```
+
+Raw and dynamic SQL pass ordering separately with `PaginationOrder.by(...)`.
+`TotalStrategy.EXACT` executes a count query. `TotalStrategy.NONE` skips it,
+fetches one additional row to compute `hasNext()`, returns
+`OptionalLong.empty()` from `total()`, and serializes the unknown total as JSON
+`null`. Do not substitute `0`; that means an exact empty result.
 
 ## Verification checklist
 
