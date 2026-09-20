@@ -321,6 +321,10 @@ errors use stable JSON-RPC codes `-32700`, `-32600`, `-32601`, and `-32602`.
 Enable authenticated HTTP JSON-RPC explicitly with
 `McpModule.create(router).http()`; its sessions are identity-bound, capacity
 bounded, idle-expiring, and re-authenticated on every request.
+After `initialize`, send a standalone notification without an `id`:
+`notifications/initialized`. Business methods are admitted only after the
+session becomes `READY`. Send the negotiated `MCP-Protocol-Version` on later
+requests; an explicit mismatch fails with `-32008` before session TTL changes.
 
 Customer-specific processes use named workflow variants:
 

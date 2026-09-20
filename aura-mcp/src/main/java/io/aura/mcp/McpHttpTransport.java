@@ -13,6 +13,7 @@ import java.util.Map;
 /** Authenticated JSON-RPC over HTTP handler backed by one {@link McpRouter}. */
 final class McpHttpTransport {
     static final String SESSION_HEADER = "Mcp-Session-Id";
+    static final String PROTOCOL_VERSION_HEADER = "MCP-Protocol-Version";
     static final String PROTOCOL_VERSION = McpProtocolConstants.VERSION;
     static final int DEFAULT_MAX_RESPONSE_BYTES = 1024 * 1024;
 
@@ -53,8 +54,17 @@ final class McpHttpTransport {
             context.status(400).raw("Mcp-Session-Id is required");
             return;
         }
-        if (sessions.access(sessionId, userId).isEmpty()) {
+        java.util.Optional<McpSessionManager.Session> inspected = sessions.inspect(sessionId, userId);
+        if (inspected.isEmpty()) {
             context.status(404).raw("MCP session not found or expired");
+            return;
+        }
+        if (!protocolVersionAllowed(context, inspected.get().protocolVersion())) {
+            context.status(400).raw("Unsupported MCP protocol version");
+            return;
+        }
+        if (inspected.get().phase() != McpSessionManager.SessionPhase.READY) {
+            context.status(409).raw("MCP session is not ready");
             return;
         }
         if (sseHub == null) {
@@ -76,17 +86,24 @@ final class McpHttpTransport {
                 return;
             }
         }
-        try {
+        java.util.Optional<McpSessionManager.RequestLease> admitted = sessions.admitReady(sessionId, userId);
+        if (admitted.isEmpty()) {
+            context.status(404).raw("MCP session not found, closed, or expired");
+            return;
+        }
+        boolean attached = false;
+        try (McpSessionManager.RequestLease ignored = admitted.get()) {
             io.aura.web.SseEmitter emitter = context.sse();
             if (!sseHub.attach(sessionId, emitter, context.cancellationToken(), lastEventId)) {
                 context.status(409).raw("MCP session already has an SSE stream");
                 emitter.close();
                 return;
             }
+            attached = true;
             emitter.send("endpoint", httpPath);
             while (!context.isCancelled()) {
                 try {
-                    if (sessions.access(sessionId, userId).isEmpty()) break;
+                    if (!sessions.active(sessionId, userId)) break;
                     emitter.send("heartbeat", "");
                     Thread.sleep(1_000);
                 } catch (InterruptedException interrupted) {
@@ -95,11 +112,13 @@ final class McpHttpTransport {
                 }
             }
         } catch (Exception failure) {
-            sseHub.close(sessionId);
+            if (attached) sseHub.close(sessionId);
             if (!context.isResponseStarted()) context.status(500).raw("MCP SSE unavailable");
         } finally {
-            if (sessions.active(sessionId, userId)) sseHub.close(sessionId);
-            else sseHub.remove(sessionId);
+            if (attached) {
+                if (sessions.active(sessionId, userId)) sseHub.close(sessionId);
+                else sseHub.remove(sessionId);
+            }
         }
     }
 
@@ -153,7 +172,8 @@ final class McpHttpTransport {
         }
         Object rawParams = request.get("params");
         if (rawParams != null && !(rawParams instanceof JSONObject)) {
-            respondError(context, id, 400, -32602, "Invalid params");
+            if (hasId) respondError(context, id, 400, -32602, "Invalid params");
+            else context.status(202).raw("");
             return;
         }
 
@@ -168,20 +188,60 @@ final class McpHttpTransport {
             respondError(context, id, 400, -32002, "Mcp-Session-Id is required");
             return;
         }
-        if (sessions.access(sessionId, userId).isEmpty()) {
+        java.util.Optional<McpSessionManager.Session> inspected = sessions.inspect(sessionId, userId);
+        if (inspected.isEmpty()) {
             respondError(context, id, 404, -32002, "MCP session not found or expired");
             return;
         }
+        if (!protocolVersionAllowed(context, inspected.get().protocolVersion())) {
+            respondError(context, id, 400, -32008,
+                    "Unsupported MCP protocol version; expected " + inspected.get().protocolVersion());
+            return;
+        }
 
-        JSONObject params = request.getJSONObject("params");
+        if ("notifications/initialized".equals(method)) {
+            initialized(context, hasId, id, sessionId, userId);
+            return;
+        }
+
+        if (inspected.get().phase() == McpSessionManager.SessionPhase.NEGOTIATING) {
+            if (!"ping".equals(method)) {
+                respondError(context, id, 409, -32007,
+                        "MCP session is negotiating; send notifications/initialized first");
+                return;
+            }
+            if (sessions.access(sessionId, userId).isEmpty()) {
+                respondError(context, id, 404, -32002, "MCP session not found or expired");
+                return;
+            }
+            writeDispatch(context, runtime, userId, hasId, id, method,
+                    request.getJSONObject("params"));
+            return;
+        }
+
+        java.util.Optional<McpSessionManager.RequestLease> admitted = sessions.admitReady(sessionId, userId);
+        if (admitted.isEmpty()) {
+            respondError(context, id, 404, -32002, "MCP session not found, closed, or expired");
+            return;
+        }
+
+        try (McpSessionManager.RequestLease ignored = admitted.get()) {
+            writeDispatch(context, runtime, userId, hasId, id, method,
+                    request.getJSONObject("params"));
+        }
+    }
+
+    private void writeDispatch(BaseContext context, AuraMcpRuntime runtime, String userId,
+                               boolean hasId, Object id, String method, JSONObject rawParams) {
+        JSONObject params = rawParams == null ? new JSONObject() : rawParams;
         DispatchResult dispatched;
         try {
-            dispatched = dispatch(runtime, userId, method,
-                    params == null ? new JSONObject() : params);
+            dispatched = dispatch(runtime, userId, method, params);
         } catch (RuntimeException invalidParams) {
             org.slf4j.LoggerFactory.getLogger(McpHttpTransport.class)
                     .debug("MCP request parameter conversion failed for {}", method, invalidParams);
-            respondError(context, id, 400, -32602, "Invalid params");
+            if (hasId) respondError(context, id, 400, -32602, "Invalid params");
+            else context.status(202).raw("");
             return;
         }
         if (!hasId) {
@@ -199,12 +259,34 @@ final class McpHttpTransport {
         writeRpc(context, rpcResult(id, dispatched.result()));
     }
 
+    private void initialized(BaseContext context, boolean hasId, Object id,
+                             String sessionId, String userId) {
+        if (hasId) {
+            respondError(context, id, 400, -32600,
+                    "notifications/initialized must not include an id");
+            return;
+        }
+        McpSessionManager.TransitionResult result = sessions.activate(sessionId, userId);
+        if (result == McpSessionManager.TransitionResult.NOT_FOUND) {
+            context.status(404).raw("");
+        } else if (result == McpSessionManager.TransitionResult.INVALID_PHASE) {
+            context.status(409).raw("");
+        } else {
+            context.status(202).raw("");
+        }
+    }
+
     private static boolean hasJsonContentType(BaseContext context) {
         String contentType = context.header("Content-Type");
         if (contentType == null) return false;
         int separator = contentType.indexOf(';');
         String mediaType = separator >= 0 ? contentType.substring(0, separator) : contentType;
         return "application/json".equalsIgnoreCase(mediaType.trim());
+    }
+
+    private static boolean protocolVersionAllowed(BaseContext context, String negotiatedVersion) {
+        String declared = context.header(PROTOCOL_VERSION_HEADER);
+        return declared == null || negotiatedVersion.equals(declared.trim());
     }
 
     private void postBatch(BaseContext context, AuraMcpRuntime runtime,
@@ -218,56 +300,81 @@ final class McpHttpTransport {
             respondError(context, null, 400, -32002, "Mcp-Session-Id is required");
             return;
         }
-        if (sessions.access(sessionId, userId).isEmpty()) {
+        java.util.Optional<McpSessionManager.Session> inspected = sessions.inspect(sessionId, userId);
+        if (inspected.isEmpty()) {
             respondError(context, null, 404, -32002, "MCP session not found or expired");
             return;
         }
+        if (!protocolVersionAllowed(context, inspected.get().protocolVersion())) {
+            respondError(context, null, 400, -32008,
+                    "Unsupported MCP protocol version; expected " + inspected.get().protocolVersion());
+            return;
+        }
+        if (inspected.get().phase() != McpSessionManager.SessionPhase.READY) {
+            respondError(context, null, 409, -32007,
+                    "MCP session is negotiating; send notifications/initialized first");
+            return;
+        }
+        java.util.Optional<McpSessionManager.RequestLease> admitted = sessions.admitReady(sessionId, userId);
+        if (admitted.isEmpty()) {
+            respondError(context, null, 404, -32002, "MCP session not found, closed, or expired");
+            return;
+        }
         List<Map<String, Object>> responses = new java.util.ArrayList<>();
-        for (Object raw : batch) {
-            if (!(raw instanceof JSONObject request)) {
-                responses.add(rpcError(null, -32600, "Invalid Request"));
-                continue;
-            }
-            Object id = request.get("id");
-            boolean hasId = request.containsKey("id");
-            if (!"2.0".equals(request.getString("jsonrpc"))) {
-                responses.add(rpcError(hasId ? id : null, -32600, "Invalid Request"));
-                continue;
-            }
-            String method = request.getString("method");
-            if (method == null || method.isBlank()) {
-                responses.add(rpcError(hasId ? id : null, -32600, "Invalid Request: method is required"));
-                continue;
-            }
-            if ("initialize".equals(method)) {
-                responses.add(rpcError(hasId ? id : null, -32600,
-                        "initialize must be sent as a single request"));
-                continue;
-            }
-            if (id != null && !(id instanceof String) && !(id instanceof Number)) {
-                responses.add(rpcError(null, -32600, "Invalid Request: id must be a string, number, or null"));
-                continue;
-            }
-            Object rawParams = request.get("params");
-            if (rawParams != null && !(rawParams instanceof JSONObject)) {
-                responses.add(rpcError(hasId ? id : null, -32602, "Invalid params"));
-                continue;
-            }
-            DispatchResult dispatched;
-            try {
-                dispatched = dispatch(runtime, userId, method,
-                        request.getJSONObject("params") == null
-                                ? new JSONObject() : request.getJSONObject("params"));
-            } catch (RuntimeException invalid) {
-                dispatched = new DispatchResult(null, true);
-            }
-            if (!hasId) continue;
-            if (dispatched.invalidParams()) {
-                responses.add(rpcError(id, -32602, "Invalid params"));
-            } else if (dispatched.result() == null) {
-                responses.add(rpcError(id, -32601, "Method not found: " + method));
-            } else {
-                responses.add(rpcResult(id, dispatched.result()));
+        try (McpSessionManager.RequestLease ignored = admitted.get()) {
+            for (Object raw : batch) {
+                if (!(raw instanceof JSONObject request)) {
+                    responses.add(rpcError(null, -32600, "Invalid Request"));
+                    continue;
+                }
+                Object id = request.get("id");
+                boolean hasId = request.containsKey("id");
+                if (!"2.0".equals(request.getString("jsonrpc"))) {
+                    responses.add(rpcError(hasId ? id : null, -32600, "Invalid Request"));
+                    continue;
+                }
+                String method = request.getString("method");
+                if (method == null || method.isBlank()) {
+                    responses.add(rpcError(hasId ? id : null, -32600, "Invalid Request: method is required"));
+                    continue;
+                }
+                if ("initialize".equals(method)) {
+                    responses.add(rpcError(hasId ? id : null, -32600,
+                            "initialize must be sent as a single request"));
+                    continue;
+                }
+                if ("notifications/initialized".equals(method)) {
+                    if (hasId) {
+                        responses.add(rpcError(id, -32600,
+                                "notifications/initialized must be sent as a standalone notification"));
+                    }
+                    continue;
+                }
+                if (id != null && !(id instanceof String) && !(id instanceof Number)) {
+                    responses.add(rpcError(null, -32600, "Invalid Request: id must be a string, number, or null"));
+                    continue;
+                }
+                Object rawParams = request.get("params");
+                if (rawParams != null && !(rawParams instanceof JSONObject)) {
+                    if (hasId) responses.add(rpcError(id, -32602, "Invalid params"));
+                    continue;
+                }
+                DispatchResult dispatched;
+                try {
+                    dispatched = dispatch(runtime, userId, method,
+                            request.getJSONObject("params") == null
+                                    ? new JSONObject() : request.getJSONObject("params"));
+                } catch (RuntimeException invalid) {
+                    dispatched = new DispatchResult(null, true);
+                }
+                if (!hasId) continue;
+                if (dispatched.invalidParams()) {
+                    responses.add(rpcError(id, -32602, "Invalid params"));
+                } else if (dispatched.result() == null) {
+                    responses.add(rpcError(id, -32601, "Method not found: " + method));
+                } else {
+                    responses.add(rpcResult(id, dispatched.result()));
+                }
             }
         }
         if (responses.isEmpty()) {
@@ -289,6 +396,16 @@ final class McpHttpTransport {
             return;
         }
         String sessionId = context.header(SESSION_HEADER);
+        java.util.Optional<McpSessionManager.Session> inspected = sessions.inspect(sessionId, userId);
+        if (inspected.isEmpty()) {
+            respondError(context, null, 404, -32002, "MCP session not found or expired");
+            return;
+        }
+        if (!protocolVersionAllowed(context, inspected.get().protocolVersion())) {
+            respondError(context, null, 400, -32008,
+                    "Unsupported MCP protocol version; expected " + inspected.get().protocolVersion());
+            return;
+        }
         if (!sessions.close(sessionId, userId)) {
             respondError(context, null, 404, -32002, "MCP session not found or expired");
             return;
@@ -314,7 +431,7 @@ final class McpHttpTransport {
             return;
         }
         try {
-            McpSessionManager.Session session = sessions.create(userId);
+            McpSessionManager.Session session = sessions.create(userId, requestedVersion);
             context.header(SESSION_HEADER, session.id());
             writeRpc(context, rpcResult(id, Map.of(
                     "protocolVersion", PROTOCOL_VERSION,
@@ -328,7 +445,6 @@ final class McpHttpTransport {
     private DispatchResult dispatch(AuraMcpRuntime runtime, String userId, String method, JSONObject params) {
         Object result = switch (method) {
             case "ping" -> Map.of();
-            case "notifications/initialized" -> Map.of();
             case "tools/list" -> router.buildSchema();
             case "resources/list" -> router.listResources();
             case "resources/read" -> validText(params, "uri") ? router.readResource(params.getString("uri")) : INVALID;

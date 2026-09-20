@@ -52,6 +52,7 @@ TestClient.of(app).get("/orders").expect(200);
 | `Page.total(): long` | `Page.total(): OptionalLong` |
 | `Page.totalPages(): int` | `Page.totalPages(): OptionalInt` |
 | provider calls `AiRequest.redactor()` repeatedly | provider reads frozen `redactedPrompt()`, `redactedSystemPrompt()`, `redactedParameters()`, and `redactedTools()` |
+| `McpSessionManager.create(userId)` | `create(userId, protocolVersion)`, then `activate(...)` after `notifications/initialized` |
 
 ## Module contract
 
@@ -136,6 +137,15 @@ the immutable request so input-budget accounting and provider transport observe
 the same values. Custom providers must read the frozen `redacted*` accessors;
 they must not transform request inputs again. This is an intentional 1.0 source
 and binary break for pre-release provider implementations.
+
+## MCP HTTP sessions
+
+Aura 1.0 models the protocol handshake explicitly. An initialize response creates
+a `NEGOTIATING` session; clients must send a standalone, uncorrelated
+`notifications/initialized` before tools, resources, prompts, batch requests, or
+SSE are admitted. Adapter code that directly creates sessions must supply the
+negotiated version and perform the same activation transition. Session close is
+linearized with request admission, so no new business call starts after close.
 
 ## Verification checklist
 

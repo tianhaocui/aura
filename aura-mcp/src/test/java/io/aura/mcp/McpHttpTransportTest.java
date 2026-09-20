@@ -57,6 +57,98 @@ class McpHttpTransportTest {
     }
 
     @Test
+    void sessionMustFinishTheInitializedHandshakeBeforeBusinessRequests() {
+        TestClient.Response initialized = client.post("/mcp")
+                .header("Authorization", "Bearer alice")
+                .body(initialize(1)).expect(200);
+        String session = initialized.header(McpHttpTransport.SESSION_HEADER);
+        McpSessionManager.Session negotiating = module.sessions().inspect(session, "alice").orElseThrow();
+        assertThat(negotiating.protocolVersion()).isEqualTo(McpHttpTransport.PROTOCOL_VERSION);
+        assertThat(negotiating.phase()).isEqualTo(McpSessionManager.SessionPhase.NEGOTIATING);
+
+        request("Bearer alice", session, 2, "ping", Map.of()).expect(200);
+        TestClient.Response blocked = request(
+                "Bearer alice", session, 3, "tools/list", Map.of()).expect(409);
+        assertThat(errorCode(blocked)).isEqualTo(-32007);
+
+        TestClient.Response correlatedNotification = request(
+                "Bearer alice", session, 4, "notifications/initialized", Map.of()).expect(400);
+        assertThat(errorCode(correlatedNotification)).isEqualTo(-32600);
+        assertThat(module.sessions().inspect(session, "alice").orElseThrow().phase())
+                .isEqualTo(McpSessionManager.SessionPhase.NEGOTIATING);
+
+        client.post("/mcp")
+                .header("Authorization", "Bearer alice")
+                .header(McpHttpTransport.SESSION_HEADER, session)
+                .header(McpHttpTransport.PROTOCOL_VERSION_HEADER, McpHttpTransport.PROTOCOL_VERSION)
+                .body(Map.of("jsonrpc", "2.0", "method", "notifications/initialized",
+                        "params", Map.of()))
+                .expect(202);
+        assertThat(module.sessions().inspect(session, "alice").orElseThrow().phase())
+                .isEqualTo(McpSessionManager.SessionPhase.READY);
+
+        TestClient.Response duplicate = client.post("/mcp")
+                .header("Authorization", "Bearer alice")
+                .header(McpHttpTransport.SESSION_HEADER, session)
+                .header(McpHttpTransport.PROTOCOL_VERSION_HEADER, McpHttpTransport.PROTOCOL_VERSION)
+                .body(Map.of("jsonrpc", "2.0", "method", "notifications/initialized",
+                        "params", Map.of()))
+                .execute();
+        assertThat(duplicate.status()).isEqualTo(409);
+        assertThat(duplicate.body()).isEmpty();
+        request("Bearer alice", session, 5, "tools/list", Map.of()).expect(200);
+    }
+
+    @Test
+    void explicitProtocolVersionMismatchFailsBeforeSessionTouch() {
+        String session = initialize("Bearer alice", 1).header(McpHttpTransport.SESSION_HEADER);
+
+        client.post("/mcp")
+                .header("Authorization", "Bearer alice")
+                .header(McpHttpTransport.SESSION_HEADER, session)
+                .body(Map.of("jsonrpc", "2.0", "id", 2, "method", "ping", "params", Map.of()))
+                .expect(200);
+        McpSessionManager.Session before = module.sessions().inspect(session, "alice").orElseThrow();
+
+        TestClient.Response wrongPost = client.post("/mcp")
+                .header("Authorization", "Bearer alice")
+                .header(McpHttpTransport.SESSION_HEADER, session)
+                .header(McpHttpTransport.PROTOCOL_VERSION_HEADER, "1900-01-01")
+                .body(Map.of("jsonrpc", "2.0", "id", 3, "method", "ping", "params", Map.of()))
+                .expect(400);
+        assertThat(errorCode(wrongPost)).isEqualTo(-32008);
+        assertThat(module.sessions().inspect(session, "alice").orElseThrow().lastAccessedAt())
+                .isEqualTo(before.lastAccessedAt());
+
+        client.delete("/mcp")
+                .header("Authorization", "Bearer alice")
+                .header(McpHttpTransport.SESSION_HEADER, session)
+                .header(McpHttpTransport.PROTOCOL_VERSION_HEADER, "1900-01-01")
+                .expect(400);
+        assertThat(module.sessions().inspect(session, "alice")).isPresent();
+
+        McpModule sseModule = McpModule.create(new McpRouter()).http().sse();
+        TestClient sseClient = TestClient.of(AuraApp.create()
+                .mcpAuthenticate(metadata -> "alice")
+                .use(sseModule));
+        String sseSession = sseClient.post("/mcp")
+                .header("Authorization", "Bearer alice")
+                .body(initialize(10)).expect(200).header(McpHttpTransport.SESSION_HEADER);
+        sseClient.post("/mcp")
+                .header("Authorization", "Bearer alice")
+                .header(McpHttpTransport.SESSION_HEADER, sseSession)
+                .body(Map.of("jsonrpc", "2.0", "method", "notifications/initialized",
+                        "params", Map.of()))
+                .expect(202);
+        sseClient.get("/mcp")
+                .header("Authorization", "Bearer alice")
+                .header("Accept", "text/event-stream")
+                .header(McpHttpTransport.SESSION_HEADER, sseSession)
+                .header(McpHttpTransport.PROTOCOL_VERSION_HEADER, "1900-01-01")
+                .expect(400);
+    }
+
+    @Test
     void postRejectsUnsupportedAcceptAndMissingSessionUsesBadRequest() {
         TestClient.Response unsupported = client.post("/mcp")
                 .header("Authorization", "Bearer alice")
@@ -122,11 +214,16 @@ class McpHttpTransportTest {
             assertThat(initialized.statusCode()).isEqualTo(200);
             String session = initialized.headers()
                     .firstValue(McpHttpTransport.SESSION_HEADER).orElseThrow();
+            HttpResponse<String> ready = http.send(initializedNotification(endpoint, session),
+                    HttpResponse.BodyHandlers.ofString());
+            assertThat(ready.statusCode()).isEqualTo(202);
 
             HttpResponse<String> listed = http.send(
                     HttpRequest.newBuilder(endpoint)
                             .header("Authorization", "Bearer alice")
                             .header(McpHttpTransport.SESSION_HEADER, session)
+                            .header(McpHttpTransport.PROTOCOL_VERSION_HEADER,
+                                    McpHttpTransport.PROTOCOL_VERSION)
                             .header("Content-Type", "application/json")
                             .POST(HttpRequest.BodyPublishers.ofString(JSON.toJSONString(
                                     Map.of("jsonrpc", "2.0", "id", 2, "method", "tools/list",
@@ -168,17 +265,20 @@ class McpHttpTransportTest {
             assertThat(initialized.statusCode()).isEqualTo(200);
             String session = initialized.headers()
                     .firstValue(McpHttpTransport.SESSION_HEADER).orElseThrow();
+            HttpResponse<String> ready = http.send(initializedNotification(endpoint, session),
+                    HttpResponse.BodyHandlers.ofString());
+            assertThat(ready.statusCode()).isEqualTo(202);
 
             HttpResponse<String> batch = http.send(
                     HttpRequest.newBuilder(endpoint)
                             .header("Authorization", "Bearer alice")
                             .header("Accept", "application/json, text/event-stream")
                             .header(McpHttpTransport.SESSION_HEADER, session)
+                            .header(McpHttpTransport.PROTOCOL_VERSION_HEADER,
+                                    McpHttpTransport.PROTOCOL_VERSION)
                             .header("Content-Type", "application/json")
                             .POST(HttpRequest.BodyPublishers.ofString(JSON.toJSONString(java.util.List.of(
                                     Map.of("jsonrpc", "2.0", "id", 2, "method", "ping", "params", Map.of()),
-                                    Map.of("jsonrpc", "2.0", "method", "notifications/initialized",
-                                            "params", Map.of()),
                                     Map.of("jsonrpc", "2.0", "id", 3, "method", "tools/list",
                                             "params", Map.of())))))
                             .build(),
@@ -194,11 +294,13 @@ class McpHttpTransportTest {
                             .header("Authorization", "Bearer alice")
                             .header("Accept", "application/json, text/event-stream")
                             .header(McpHttpTransport.SESSION_HEADER, session)
+                            .header(McpHttpTransport.PROTOCOL_VERSION_HEADER,
+                                    McpHttpTransport.PROTOCOL_VERSION)
                             .header("Content-Type", "application/json")
                             .POST(HttpRequest.BodyPublishers.ofString(JSON.toJSONString(java.util.List.of(
-                                    Map.of("jsonrpc", "2.0", "method", "notifications/initialized",
+                                    Map.of("jsonrpc", "2.0", "method", "ping",
                                             "params", Map.of()),
-                                    Map.of("jsonrpc", "2.0", "method", "notifications/initialized",
+                                    Map.of("jsonrpc", "2.0", "method", "ping",
                                             "params", Map.of())))))
                             .build(),
                     HttpResponse.BodyHandlers.ofString());
@@ -235,12 +337,17 @@ class McpHttpTransportTest {
                             .build(), HttpResponse.BodyHandlers.ofString());
             String session = initialized.headers()
                     .firstValue(McpHttpTransport.SESSION_HEADER).orElseThrow();
+            HttpResponse<String> ready = http.send(initializedNotification(endpoint, session),
+                    HttpResponse.BodyHandlers.ofString());
+            assertThat(ready.statusCode()).isEqualTo(202);
 
             HttpResponse<java.io.InputStream> stream = http.send(
                     HttpRequest.newBuilder(endpoint)
                             .header("Authorization", "Bearer alice")
                             .header("Accept", "text/event-stream")
                             .header(McpHttpTransport.SESSION_HEADER, session)
+                            .header(McpHttpTransport.PROTOCOL_VERSION_HEADER,
+                                    McpHttpTransport.PROTOCOL_VERSION)
                             .GET().build(), HttpResponse.BodyHandlers.ofInputStream());
             assertThat(stream.statusCode()).isEqualTo(200);
             assertThat(stream.headers().firstValue("Content-Type").orElse(""))
@@ -357,6 +464,61 @@ class McpHttpTransportTest {
     }
 
     @Test
+    void deletePreventsNewDispatchWhileAnAdmittedRequestDrains() throws Exception {
+        java.util.concurrent.CountDownLatch started = new java.util.concurrent.CountDownLatch(1);
+        java.util.concurrent.CountDownLatch release = new java.util.concurrent.CountDownLatch(1);
+        McpRouter router = new McpRouter();
+        router.tool("block", "Block until released").handler(ctx -> {
+            started.countDown();
+            release.await();
+            return "done";
+        });
+        McpModule draining = McpModule.create(router).http();
+        TestClient local = TestClient.of(AuraApp.create()
+                .mcpAuthenticate(metadata -> "alice")
+                .use(draining));
+        String session = local.post("/mcp").header("Authorization", "Bearer alice")
+                .body(initialize(1)).expect(200).header(McpHttpTransport.SESSION_HEADER);
+        local.post("/mcp")
+                .header("Authorization", "Bearer alice")
+                .header(McpHttpTransport.SESSION_HEADER, session)
+                .header(McpHttpTransport.PROTOCOL_VERSION_HEADER, McpHttpTransport.PROTOCOL_VERSION)
+                .body(Map.of("jsonrpc", "2.0", "method", "notifications/initialized",
+                        "params", Map.of()))
+                .expect(202);
+
+        java.util.concurrent.atomic.AtomicReference<TestClient.Response> first =
+                new java.util.concurrent.atomic.AtomicReference<>();
+        Thread caller = new Thread(() -> first.set(local.post("/mcp")
+                .header("Authorization", "Bearer alice")
+                .header(McpHttpTransport.SESSION_HEADER, session)
+                .header(McpHttpTransport.PROTOCOL_VERSION_HEADER, McpHttpTransport.PROTOCOL_VERSION)
+                .body(Map.of("jsonrpc", "2.0", "id", 2, "method", "tools/call",
+                        "params", Map.of("name", "block", "arguments", Map.of())))
+                .execute()));
+        caller.start();
+        assertThat(started.await(1, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+
+        local.delete("/mcp")
+                .header("Authorization", "Bearer alice")
+                .header(McpHttpTransport.SESSION_HEADER, session)
+                .header(McpHttpTransport.PROTOCOL_VERSION_HEADER, McpHttpTransport.PROTOCOL_VERSION)
+                .expect(204);
+        assertThat(draining.sessions().size()).isEqualTo(1);
+        local.post("/mcp")
+                .header("Authorization", "Bearer alice")
+                .header(McpHttpTransport.SESSION_HEADER, session)
+                .body(Map.of("jsonrpc", "2.0", "id", 3, "method", "ping", "params", Map.of()))
+                .expect(404);
+
+        release.countDown();
+        caller.join(1_000);
+        assertThat(caller.isAlive()).isFalse();
+        assertThat(first.get().status()).isEqualTo(200);
+        assertThat(draining.sessions().size()).isZero();
+    }
+
+    @Test
     void malformedAndUnknownRequestsUseJsonRpcErrors() {
         assertThat(errorCode(client.post("/mcp").header("Authorization", "Bearer alice")
                 .body("not-json").expect(400))).isEqualTo(-32700);
@@ -394,9 +556,26 @@ class McpHttpTransportTest {
         TestClient.Response notification = client.post("/mcp")
                 .header("Authorization", "Bearer alice")
                 .header(McpHttpTransport.SESSION_HEADER, session)
-                .body(Map.of("jsonrpc", "2.0", "method", "notifications/initialized",
+                .body(Map.of("jsonrpc", "2.0", "method", "ping",
                         "params", Map.of())).expect(202);
         assertThat(notification.body()).isEmpty();
+
+        TestClient.Response invalidNotification = client.post("/mcp")
+                .header("Authorization", "Bearer alice")
+                .header(McpHttpTransport.SESSION_HEADER, session)
+                .body(Map.of("jsonrpc", "2.0", "method", "ping",
+                        "params", java.util.List.of("invalid"))).expect(202);
+        assertThat(invalidNotification.body()).isEmpty();
+
+        TestClient.Response invalidNotificationBatch = client.post("/mcp")
+                .header("Authorization", "Bearer alice")
+                .header(McpHttpTransport.SESSION_HEADER, session)
+                .body(java.util.List.of(
+                        Map.of("jsonrpc", "2.0", "method", "ping",
+                                "params", java.util.List.of("invalid")),
+                        Map.of("jsonrpc", "2.0", "method", "ping", "params", Map.of())))
+                .expect(202);
+        assertThat(invalidNotificationBatch.body()).isEmpty();
     }
 
     @Test
@@ -445,6 +624,13 @@ class McpHttpTransportTest {
         TestClient boundedClient = TestClient.of(app);
         String session = boundedClient.post("/mcp").header("Authorization", "Bearer anything")
                 .body(initialize(1)).expect(200).header(McpHttpTransport.SESSION_HEADER);
+        boundedClient.post("/mcp")
+                .header("Authorization", "Bearer anything")
+                .header(McpHttpTransport.SESSION_HEADER, session)
+                .header(McpHttpTransport.PROTOCOL_VERSION_HEADER, McpHttpTransport.PROTOCOL_VERSION)
+                .body(Map.of("jsonrpc", "2.0", "method", "notifications/initialized",
+                        "params", Map.of()))
+                .expect(202);
         TestClient.Response response = boundedClient.post("/mcp")
                 .header("Authorization", "Bearer anything")
                 .header(McpHttpTransport.SESSION_HEADER, session)
@@ -474,8 +660,17 @@ class McpHttpTransportTest {
     }
 
     private TestClient.Response initialize(String authorization, int id) {
-        return client.post("/mcp").header("Authorization", authorization)
+        TestClient.Response initialized = client.post("/mcp").header("Authorization", authorization)
                 .body(initialize(id)).expect(200);
+        String session = initialized.header(McpHttpTransport.SESSION_HEADER);
+        client.post("/mcp")
+                .header("Authorization", authorization)
+                .header(McpHttpTransport.SESSION_HEADER, session)
+                .header(McpHttpTransport.PROTOCOL_VERSION_HEADER, McpHttpTransport.PROTOCOL_VERSION)
+                .body(Map.of("jsonrpc", "2.0", "method", "notifications/initialized",
+                        "params", Map.of()))
+                .expect(202);
+        return initialized;
     }
 
     private TestClient.Request request(String authorization, String session, int id,
@@ -483,7 +678,20 @@ class McpHttpTransportTest {
         return client.post("/mcp")
                 .header("Authorization", authorization)
                 .header(McpHttpTransport.SESSION_HEADER, session)
+                .header(McpHttpTransport.PROTOCOL_VERSION_HEADER, McpHttpTransport.PROTOCOL_VERSION)
                 .body(Map.of("jsonrpc", "2.0", "id", id, "method", method, "params", params));
+    }
+
+    private static HttpRequest initializedNotification(URI endpoint, String session) {
+        return HttpRequest.newBuilder(endpoint)
+                .header("Authorization", "Bearer alice")
+                .header(McpHttpTransport.SESSION_HEADER, session)
+                .header(McpHttpTransport.PROTOCOL_VERSION_HEADER, McpHttpTransport.PROTOCOL_VERSION)
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(JSON.toJSONString(Map.of(
+                        "jsonrpc", "2.0", "method", "notifications/initialized",
+                        "params", Map.of()))))
+                .build();
     }
 
     private static Map<String, Object> initialize(int id) {

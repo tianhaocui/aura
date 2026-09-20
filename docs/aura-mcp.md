@@ -33,6 +33,13 @@ Streamable HTTP 客户端应在 POST 请求中发送
 `initialize` 外的请求必须携带 `Mcp-Session-Id`；缺失返回 `400/-32002`，过期或
 身份不匹配的 session 返回 `404/-32002`。
 
+`initialize` 只创建 `NEGOTIATING` session。客户端必须随后发送一条独立、无
+`id` 的 `notifications/initialized` notification，成功后 session 才进入 `READY`；
+协商期间只允许 `ping`，业务调用返回 `409/-32007`。带 `id`、重复或 batch 内的
+initialized notification 不会改变生命周期。后续 POST、GET 和 DELETE 可以省略
+`MCP-Protocol-Version` 以兼容旧客户端；一旦显式提供就必须等于协商版本，错误版本
+在刷新 TTL 或执行业务前返回 `400/-32008`。
+
 POST 也接受 JSON-RPC batch，但每批最多 32 条。响应只包含带 `id` 的 request；
 notification 不产生响应，整批都是 notification 时返回 `202` 空 body。`initialize`
 必须作为单独请求发送，不能混入 batch。
@@ -54,6 +61,7 @@ SSE GET 必须携带 `Accept: text/event-stream`、认证信息和
 `Mcp-Session-Id`。连接会发送 `endpoint` 和 `heartbeat` 事件；业务模块可通过
 `module.publish(sessionId, method, params)` 发送 server notification。每个 session
 最多一个 SSE 连接，事件大小受 HTTP response budget 限制，断开和 DELETE 会清理连接。
+服务器 heartbeat 不刷新 session idle TTL；只有经过认证的客户端请求会续租。
 事件带有 session 内单调递增 ID，并保留最多 128 条事件用于
 `Last-Event-ID` 重连重放。当前实现不把 POST response 自动转成 SSE；需要完整
 streamable HTTP 双向协商时仍应使用 POST JSON-RPC 契约并由客户端轮询响应。
