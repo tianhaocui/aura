@@ -156,6 +156,17 @@ class AiClientTest {
 
         AiRequest jsonRequest = new AiRequest("{\"password\":\"hidden\",\"token\":\"secret\"}");
         assertThat(jsonRequest.redactedPrompt()).isEqualTo("{\"password\":\"<redacted>\",\"token\":\"<redacted>\"}");
+
+        AiRedactor redactor = AiRedactor.defaultRedactor();
+        assertThat(redactor.redact("Authorization: Bearer abc.def-123"))
+                .isEqualTo("Authorization: <redacted>");
+        assertThat(redactor.redact("authorization=Basic dXNlcjpwYXNz"))
+                .isEqualTo("authorization=<redacted>");
+        assertThat(redactor.redactValue(Map.of(
+                "metadata", java.util.List.of(Map.of("access_token", "nested-secret")),
+                "safe", "visible"))).isEqualTo(Map.of(
+                "metadata", java.util.List.of(Map.of("access_token", "<redacted>")),
+                "safe", "visible"));
     }
 
     @Test

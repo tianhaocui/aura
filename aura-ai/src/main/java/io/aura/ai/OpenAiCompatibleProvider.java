@@ -123,7 +123,7 @@ public final class OpenAiCompatibleProvider implements AiProvider {
         payload.put("messages", messages);
         request.parameters().forEach((name, value) -> {
             if (!"model".equals(name) && !"messages".equals(name) && !"stream".equals(name)) {
-                payload.put(name, value);
+                payload.put(name, request.redactor().redactValue(value));
             }
         });
         if (stream) payload.put("stream", true);
@@ -134,8 +134,8 @@ public final class OpenAiCompatibleProvider implements AiProvider {
             payload.put("tools", request.tools().stream().map(tool -> Map.of(
                     "type", "function",
                     "function", Map.of("name", tool.name(), "description",
-                            tool.description() == null ? "" : tool.description(),
-                            "parameters", tool.inputSchema()))).toList());
+                            tool.description() == null ? "" : request.redactor().redact(tool.description()),
+                            "parameters", request.redactor().redactValue(tool.inputSchema())))).toList());
         }
         if (request.toolChoice() != null && !request.toolChoice().isBlank()) {
             payload.put("tool_choice", request.toolChoice());

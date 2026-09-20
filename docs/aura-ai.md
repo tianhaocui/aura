@@ -87,6 +87,9 @@ AuraApp.create()
 The adapter sends redacted prompts, applies request timeouts, caps response bytes, supports SSE
 `data:` chunks, and reports provider failures with `AiProviderException.code()`. Keep the endpoint
 and key in deployment configuration; they are never included in provider error messages.
+The default redactor covers Bearer/Basic authorization values and recursively
+redacts sensitive fields inside request parameters, tool descriptions, and tool
+schemas before provider serialization.
 
 Typed tool calling is available without provider-specific request maps:
 

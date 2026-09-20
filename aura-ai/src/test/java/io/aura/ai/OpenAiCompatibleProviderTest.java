@@ -34,11 +34,19 @@ class OpenAiCompatibleProviderTest {
             AiResponse response = provider.chat(AiRequest.builder()
                     .systemPrompt("system password=hidden")
                     .prompt("use token=hidden")
+                    .parameter("metadata", Map.of(
+                            "authorization", "Bearer parameter-secret",
+                            "nested", List.of("client_secret=inside-list")))
+                    .tool(new AiToolDefinition("safe_tool",
+                            "Authorization: Bearer description-secret",
+                            Map.of("type", "object", "default", "api_key=schema-secret")))
                     .timeout(Duration.ofSeconds(2)).build());
 
             assertThat(response.content()).isEqualTo("ok");
             assertThat(response.model()).isEqualTo("served");
-            assertThat(requestBody.get()).contains("<redacted>").doesNotContain("password=hidden", "token=hidden");
+            assertThat(requestBody.get()).contains("<redacted>").doesNotContain(
+                    "password=hidden", "token=hidden", "parameter-secret",
+                    "inside-list", "description-secret", "schema-secret");
         } finally {
             server.stop(0);
         }
