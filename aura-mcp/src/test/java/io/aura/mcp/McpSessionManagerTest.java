@@ -215,6 +215,54 @@ class McpSessionManagerTest {
         assertThat(manager.size()).isZero();
     }
 
+    @Test
+    void removalListenerRunsOnlyWhenSessionLeavesTheCapacityTable() {
+        McpSessionManager manager = new McpSessionManager(1, Duration.ofMinutes(5));
+        java.util.List<String> removed = new java.util.ArrayList<>();
+        manager.onSessionRemoved(removed::add);
+        String id = manager.create("alice", "2025-06-18").id();
+        manager.activate(id, "alice");
+        McpSessionManager.RequestLease lease = manager.admitReady(id, "alice").orElseThrow();
+
+        assertThat(manager.close(id, "alice")).isTrue();
+        assertThat(removed).isEmpty();
+        assertThat(manager.size()).isEqualTo(1);
+
+        lease.close();
+        assertThat(removed).containsExactly(id);
+        assertThat(manager.size()).isZero();
+    }
+
+    @Test
+    void removalListenerNeverRunsUnderTheSessionStateLock() throws Exception {
+        McpSessionManager manager = new McpSessionManager(1, Duration.ofMinutes(5));
+        java.util.concurrent.CountDownLatch listenerEntered = new java.util.concurrent.CountDownLatch(1);
+        java.util.concurrent.CountDownLatch releaseListener = new java.util.concurrent.CountDownLatch(1);
+        manager.onSessionRemoved(id -> {
+            listenerEntered.countDown();
+            try {
+                releaseListener.await();
+            } catch (InterruptedException error) {
+                Thread.currentThread().interrupt();
+            }
+        });
+        String id = manager.create("alice", "2025-06-18").id();
+        Thread closer = new Thread(() -> manager.close(id, "alice"));
+        closer.start();
+        assertThat(listenerEntered.await(1, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+
+        java.util.concurrent.ExecutorService executor = java.util.concurrent.Executors.newSingleThreadExecutor();
+        try {
+            assertThat(executor.submit(manager::size).get(1, java.util.concurrent.TimeUnit.SECONDS))
+                    .isZero();
+        } finally {
+            executor.shutdownNow();
+            releaseListener.countDown();
+            closer.join(1_000);
+        }
+        assertThat(closer.isAlive()).isFalse();
+    }
+
     private static final class MutableClock extends Clock {
         private Instant now = Instant.parse("2026-01-01T00:00:00Z");
         @Override public ZoneId getZone() { return ZoneId.of("UTC"); }

@@ -325,6 +325,10 @@ After `initialize`, send a standalone notification without an `id`:
 `notifications/initialized`. Business methods are admitted only after the
 session becomes `READY`. Send the negotiated `MCP-Protocol-Version` on later
 requests; an explicit mismatch fails with `-32008` before session TTL changes.
+SSE publishers enqueue into bounded per-session buffers and never write sockets
+directly. Queue overflow closes the slow connection after recording the event in
+bounded replay history; clients must reconnect with `Last-Event-ID` and treat a
+`replay-gap` event as a required full resynchronization.
 
 Customer-specific processes use named workflow variants:
 

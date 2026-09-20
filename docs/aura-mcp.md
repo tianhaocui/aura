@@ -49,7 +49,7 @@ notification 不产生响应，整批都是 notification 时返回 `202` 空 bod
 ```java
 McpModule module = McpModule.create(mcpRouter)
         .http("/mcp", 1024, Duration.ofMinutes(30), 1024 * 1024)
-        .sse();
+        .sse(32, 64 * 1024, 128, 256 * 1024);
 
 AuraApp.create()
         .mcpAuthenticate(metadata -> tokenService.userId(metadata.get("authorization")))
@@ -62,9 +62,17 @@ SSE GET 必须携带 `Accept: text/event-stream`、认证信息和
 `module.publish(sessionId, method, params)` 发送 server notification。每个 session
 最多一个 SSE 连接，事件大小受 HTTP response budget 限制，断开和 DELETE 会清理连接。
 服务器 heartbeat 不刷新 session idle TTL；只有经过认证的客户端请求会续租。
-事件带有 session 内单调递增 ID，并保留最多 128 条事件用于
-`Last-Event-ID` 重连重放。当前实现不把 POST response 自动转成 SSE；需要完整
+每个连接的待发送队列同时受事件数和 UTF-8 总字节限制，publish 不执行 socket
+写入。队列溢出时事件会先进入有界 replay history，然后当前慢连接被关闭；客户端
+使用 `Last-Event-ID` 重连。history 同样具有事件数和总字节双上限，session 删除时
+一起清理。请求的 ID 已早于保留窗口或超前时，服务端发送 `replay-gap` 事件并关闭，
+客户端必须重新同步状态，不能把缺口当作完整重放。`module.sseMetrics()` 提供 active/closing 连接数、
+history 数、排队事件/字节、overflow、gap 和写失败计数。当前实现不把 POST response 自动转成 SSE；需要完整
 streamable HTTP 双向协商时仍应使用 POST JSON-RPC 契约并由客户端轮询响应。
+
+默认 queue 为 32 条/64 KiB，history 为 128 条/256 KiB。单事件解析上限仍由
+HTTP response budget 控制；超过 retention byte limit 的事件会触发 overflow/gap，
+不会扩大常驻内存。只有确有大事件重放需求时才显式提高 `.sse(...)` 容量。
 
 ## McpRouter (Selective Tool Exposure)
 

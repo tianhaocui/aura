@@ -363,6 +363,27 @@ class McpHttpTransportTest {
                 message = readEvent(reader);
             }
             assertThat(message).contains("event: message").contains("notifications/test").contains("ready");
+            assertThat(sseModule.sseMetrics()).get()
+                    .extracting(McpSseMetrics::histories).isEqualTo(1L);
+
+            HttpResponse<String> deleted = http.send(
+                    HttpRequest.newBuilder(endpoint)
+                            .header("Authorization", "Bearer alice")
+                            .header(McpHttpTransport.SESSION_HEADER, session)
+                            .header(McpHttpTransport.PROTOCOL_VERSION_HEADER,
+                                    McpHttpTransport.PROTOCOL_VERSION)
+                            .DELETE().build(), HttpResponse.BodyHandlers.ofString());
+            assertThat(deleted.statusCode()).isEqualTo(204);
+            for (int i = 0; i < 100 && (sseModule.sessions().size() != 0
+                    || sseModule.sseMetrics().orElseThrow().histories() != 0); i++) {
+                Thread.sleep(10);
+            }
+            assertThat(sseModule.sessions().size()).isZero();
+            assertThat(sseModule.sseMetrics()).get().satisfies(metrics -> {
+                assertThat(metrics.activeConnections()).isZero();
+                assertThat(metrics.closingConnections()).isZero();
+                assertThat(metrics.histories()).isZero();
+            });
         } finally {
             if (reader != null) reader.close();
             app.stop();

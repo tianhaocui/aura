@@ -59,6 +59,17 @@ public final class McpModule implements AuraModule {
                 new McpSseHub(maxResponseBytes));
     }
 
+    /** Enables SSE with explicit per-connection queue and per-session replay bounds. */
+    public McpModule sse(int maxQueueEvents, int maxQueueBytes,
+                         int maxHistoryEvents, int maxHistoryBytes) {
+        if (sessions == null) {
+            return http().sse(maxQueueEvents, maxQueueBytes, maxHistoryEvents, maxHistoryBytes);
+        }
+        return new McpModule(router, httpPath, sessions, maxResponseBytes, true,
+                new McpSseHub(maxResponseBytes, maxQueueEvents, maxQueueBytes,
+                        maxHistoryEvents, maxHistoryBytes));
+    }
+
     @Override public ModuleMetadata descriptor() {
         ModuleMetadata metadata = ModuleMetadata.of("mcp", "1.0.0")
                 .provides("mcp.tools", "mcp.resources", "mcp.prompts");
@@ -76,6 +87,7 @@ public final class McpModule implements AuraModule {
         context.register("mcp", router);
         if (sessions != null) {
             context.register(sessions);
+            if (sseHub != null) sessions.onSessionRemoved(sseHub::sessionRemoved);
             McpHttpTransport transport = new McpHttpTransport(router, sessions, maxResponseBytes, sseHub, httpPath);
             context.route(new RouteContribution("POST", httpPath,
                     (BaseHandler) transport::post,
@@ -97,6 +109,10 @@ public final class McpModule implements AuraModule {
     public String httpPath() { return httpPath; }
     public McpSessionManager sessions() { return sessions; }
     public boolean sseEnabled() { return sseEnabled; }
+    public java.util.Optional<McpSseMetrics> sseMetrics() {
+        return sseHub == null ? java.util.Optional.empty()
+                : java.util.Optional.of(sseHub.metrics());
+    }
     public boolean publish(String sessionId, String method, Map<String, ?> params) {
         if (sseHub == null) return false;
         return sseHub.publish(sessionId, method, params);

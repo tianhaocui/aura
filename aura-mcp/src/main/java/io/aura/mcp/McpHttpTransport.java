@@ -92,32 +92,42 @@ final class McpHttpTransport {
             return;
         }
         boolean attached = false;
+        McpSseHub.ConnectionHandle connectionHandle = null;
         try (McpSessionManager.RequestLease ignored = admitted.get()) {
+            if (!sessions.active(sessionId, userId)) {
+                context.status(404).raw("MCP session not found, closed, or expired");
+                return;
+            }
             io.aura.web.SseEmitter emitter = context.sse();
-            if (!sseHub.attach(sessionId, emitter, context.cancellationToken(), lastEventId)) {
-                context.status(409).raw("MCP session already has an SSE stream");
+            McpSseHub.Attachment attachment = sseHub.attachWithHandle(
+                    sessionId, emitter, context.cancellationToken(), lastEventId);
+            if (attachment.result() != McpSseHub.AttachResult.ATTACHED) {
                 emitter.close();
                 return;
             }
+            connectionHandle = attachment.handle();
             attached = true;
+            if (!sessions.active(sessionId, userId)) return;
             emitter.send("endpoint", httpPath);
             while (!context.isCancelled()) {
                 try {
                     if (!sessions.active(sessionId, userId)) break;
-                    emitter.send("heartbeat", "");
-                    Thread.sleep(1_000);
+                    McpSseHub.WriteResult write = sseHub.writeNext(
+                            connectionHandle, java.time.Duration.ofSeconds(1));
+                    if (write == McpSseHub.WriteResult.CLOSED) break;
+                    if (write == McpSseHub.WriteResult.IDLE) emitter.send("heartbeat", "");
                 } catch (InterruptedException interrupted) {
                     Thread.currentThread().interrupt();
                     break;
                 }
             }
         } catch (Exception failure) {
-            if (attached) sseHub.close(sessionId);
+            if (attached) sseHub.close(connectionHandle);
             if (!context.isResponseStarted()) context.status(500).raw("MCP SSE unavailable");
         } finally {
             if (attached) {
-                if (sessions.active(sessionId, userId)) sseHub.close(sessionId);
-                else sseHub.remove(sessionId);
+                if (sessions.active(sessionId, userId)) sseHub.close(connectionHandle);
+                else sseHub.remove(connectionHandle);
             }
         }
     }
