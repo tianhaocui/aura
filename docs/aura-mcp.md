@@ -33,6 +33,16 @@ Streamable HTTP 客户端应在 POST 请求中发送
 `initialize` 外的请求必须携带 `Mcp-Session-Id`；缺失返回 `400/-32002`，过期或
 身份不匹配的 session 返回 `404/-32002`。
 
+JSON 与 SSE 的 Accept quality 相同时，Aura 使用 JSON 快路径。已经完成握手的单个 request
+可以用 `Accept: text/event-stream, application/json;q=0.5` 提高 SSE preference，
+或只接受 `text/event-stream`，以选择 request-scoped SSE；服务端发送一个
+`event: message`，其中 JSON-RPC `id` 与请求一致，随后关闭响应。该有限流不进入
+session replay history，也不能通过 `Last-Event-ID` 恢复。notification 仍返回
+`202` 空 body；`initialize` 和 batch 必须接受 `application/json`，SSE-only 返回
+`406/-32005`。
+认证、Content-Type 和 JSON parse 等尚未得到可靠 request `id` 的 transport error
+仍使用 JSON；一旦单个对象中存在显式 `id`，Invalid Request 也遵循上述 SSE preference。
+
 `initialize` 只创建 `NEGOTIATING` session。客户端必须随后发送一条独立、无
 `id` 的 `notifications/initialized` notification，成功后 session 才进入 `READY`；
 协商期间只允许 `ping`，业务调用返回 `409/-32007`。带 `id`、重复或 batch 内的
@@ -67,8 +77,8 @@ SSE GET 必须携带 `Accept: text/event-stream`、认证信息和
 使用 `Last-Event-ID` 重连。history 同样具有事件数和总字节双上限，session 删除时
 一起清理。请求的 ID 已早于保留窗口或超前时，服务端发送 `replay-gap` 事件并关闭，
 客户端必须重新同步状态，不能把缺口当作完整重放。`module.sseMetrics()` 提供 active/closing 连接数、
-history 数、排队事件/字节、overflow、gap 和写失败计数。当前实现不把 POST response 自动转成 SSE；需要完整
-streamable HTTP 双向协商时仍应使用 POST JSON-RPC 契约并由客户端轮询响应。
+history 数、排队事件/字节、overflow、gap 和写失败计数。独立 GET stream 用于
+server notification；POST SSE 只承载当前 request 的 correlated response，两者不共享重放归属。
 
 默认 queue 为 32 条/64 KiB，history 为 128 条/256 KiB。单事件解析上限仍由
 HTTP response budget 控制；超过 retention byte limit 的事件会触发 overflow/gap，

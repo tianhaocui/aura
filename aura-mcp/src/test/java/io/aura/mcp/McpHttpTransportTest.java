@@ -180,6 +180,104 @@ class McpHttpTransportTest {
     }
 
     @Test
+    void sseOnlySingleRequestsReturnFiniteCorrelatedResponses() {
+        String session = initialize("Bearer alice", 1).header(McpHttpTransport.SESSION_HEADER);
+
+        TestClient.Response success = client.post("/mcp")
+                .header("Authorization", "Bearer alice")
+                .header("Accept", "text/event-stream")
+                .header(McpHttpTransport.SESSION_HEADER, session)
+                .header(McpHttpTransport.PROTOCOL_VERSION_HEADER, McpHttpTransport.PROTOCOL_VERSION)
+                .body(Map.of("jsonrpc", "2.0", "id", 42, "method", "ping", "params", Map.of()))
+                .expect(200);
+        assertThat(success.body()).contains("event: message", "data: {", "\"id\":42", "\"result\"");
+
+        TestClient.Response missing = client.post("/mcp")
+                .header("Authorization", "Bearer alice")
+                .header("Accept", "text/event-stream")
+                .header(McpHttpTransport.SESSION_HEADER, session)
+                .body(Map.of("jsonrpc", "2.0", "id", "req-1",
+                        "method", "unknown/method", "params", Map.of()))
+                .expect(200);
+        assertThat(missing.body()).contains("event: message", "\"id\":\"req-1\"", "\"code\":-32601");
+
+        TestClient.Response explicitNull = client.post("/mcp")
+                .header("Authorization", "Bearer alice")
+                .header("Accept", "text/event-stream")
+                .header(McpHttpTransport.SESSION_HEADER, session)
+                .body("{\"jsonrpc\":\"2.0\",\"id\":null,\"method\":\"ping\",\"params\":{}}")
+                .expect(200);
+        assertThat(explicitNull.body()).contains("event: message", "\"id\":null", "\"result\"");
+
+        TestClient.Response missingMethod = client.post("/mcp")
+                .header("Authorization", "Bearer alice")
+                .header("Accept", "text/event-stream")
+                .body(Map.of("jsonrpc", "2.0", "id", 43, "params", Map.of()))
+                .expect(400);
+        assertThat(missingMethod.body()).contains(
+                "event: message", "\"id\":43", "\"code\":-32600");
+
+        TestClient.Response notification = client.post("/mcp")
+                .header("Authorization", "Bearer alice")
+                .header("Accept", "text/event-stream")
+                .header(McpHttpTransport.SESSION_HEADER, session)
+                .body(Map.of("jsonrpc", "2.0", "method", "ping", "params", Map.of()))
+                .expect(202);
+        assertThat(notification.body()).isEmpty();
+    }
+
+    @Test
+    void jsonRemainsTheFastPathAndSseOnlyRejectsInitializeAndBatch() {
+        TestClient.Response rejectedInitialize = client.post("/mcp")
+                .header("Authorization", "Bearer alice")
+                .header("Accept", "text/event-stream")
+                .body(initialize(1)).expect(406);
+        assertThat(errorCode(rejectedInitialize)).isEqualTo(-32005);
+
+        String session = initialize("Bearer alice", 2).header(McpHttpTransport.SESSION_HEADER);
+        TestClient.Response json = client.post("/mcp")
+                .header("Authorization", "Bearer alice")
+                .header("Accept", "application/json, text/event-stream")
+                .header(McpHttpTransport.SESSION_HEADER, session)
+                .body(Map.of("jsonrpc", "2.0", "id", 3, "method", "ping", "params", Map.of()))
+                .expect(200);
+        assertThat(json.body()).doesNotContain("event:").contains("\"id\":3", "\"result\"");
+
+        TestClient.Response rejectedBatch = client.post("/mcp")
+                .header("Authorization", "Bearer alice")
+                .header("Accept", "text/event-stream")
+                .header(McpHttpTransport.SESSION_HEADER, session)
+                .body(java.util.List.of(
+                        Map.of("jsonrpc", "2.0", "id", 4, "method", "ping", "params", Map.of())))
+                .expect(406);
+        assertThat(errorCode(rejectedBatch)).isEqualTo(-32005);
+
+        TestClient.Response qualitySelectedSse = client.post("/mcp")
+                .header("Authorization", "Bearer alice")
+                .header("Accept", "text/event-stream, application/json;q=0.5")
+                .header(McpHttpTransport.SESSION_HEADER, session)
+                .body(Map.of("jsonrpc", "2.0", "id", 5, "method", "ping", "params", Map.of()))
+                .expect(200);
+        assertThat(qualitySelectedSse.body()).contains("event: message");
+
+        TestClient.Response explicitJsonRejectionOverridesWildcard = client.post("/mcp")
+                .header("Authorization", "Bearer alice")
+                .header("Accept", "*/*, application/json;q=0, text/event-stream;q=0.5")
+                .header(McpHttpTransport.SESSION_HEADER, session)
+                .body(Map.of("jsonrpc", "2.0", "id", 6, "method", "ping", "params", Map.of()))
+                .expect(200);
+        assertThat(explicitJsonRejectionOverridesWildcard.body()).contains("event: message");
+
+        TestClient.Response qualitySelectedJson = client.post("/mcp")
+                .header("Authorization", "Bearer alice")
+                .header("Accept", "text/event-stream;q=0.5, application/json")
+                .header(McpHttpTransport.SESSION_HEADER, session)
+                .body(Map.of("jsonrpc", "2.0", "id", 7, "method", "ping", "params", Map.of()))
+                .expect(200);
+        assertThat(qualitySelectedJson.body()).doesNotContain("event:").contains("\"id\":7");
+    }
+
+    @Test
     void realUndertowSocketCarriesAuthenticatedMcpSession() throws Exception {
         int port;
         try (ServerSocket socket = new ServerSocket(0)) {
@@ -234,6 +332,25 @@ class McpHttpTransportTest {
             assertThat(JSON.parseObject(listed.body()).getJSONObject("result")
                     .getJSONArray("tools").getJSONObject(0).getString("name"))
                     .isEqualTo("ping_tool");
+
+            HttpResponse<String> streamed = http.send(
+                    HttpRequest.newBuilder(endpoint)
+                            .header("Authorization", "Bearer alice")
+                            .header("Accept", "text/event-stream")
+                            .header(McpHttpTransport.SESSION_HEADER, session)
+                            .header(McpHttpTransport.PROTOCOL_VERSION_HEADER,
+                                    McpHttpTransport.PROTOCOL_VERSION)
+                            .header("Content-Type", "application/json")
+                            .POST(HttpRequest.BodyPublishers.ofString(JSON.toJSONString(Map.of(
+                                    "jsonrpc", "2.0", "id", "stream-1",
+                                    "method", "ping", "params", Map.of()))))
+                            .build(),
+                    HttpResponse.BodyHandlers.ofString());
+            assertThat(streamed.statusCode()).isEqualTo(200);
+            assertThat(streamed.headers().firstValue("Content-Type").orElse(""))
+                    .contains("text/event-stream");
+            assertThat(streamed.body()).contains(
+                    "event: message", "data: {", "\"id\":\"stream-1\"", "\"result\"");
         } finally {
             app.stop();
         }
@@ -659,6 +776,18 @@ class McpHttpTransportTest {
                         "params", Map.of("name", "large", "arguments", Map.of())))
                 .expect(502);
         assertThat(response.body()).contains("MCP_RESPONSE_TOO_LARGE");
+
+        TestClient.Response streamed = boundedClient.post("/mcp")
+                .header("Authorization", "Bearer anything")
+                .header("Accept", "text/event-stream")
+                .header(McpHttpTransport.SESSION_HEADER, session)
+                .body(Map.of("jsonrpc", "2.0", "id", 3, "method", "tools/call",
+                        "params", Map.of("name", "large", "arguments", Map.of())))
+                .expect(502);
+        assertThat(streamed.body()).contains(
+                "event: message", "\"id\":3", "\"code\":-32009");
+        assertThat(streamed.body().getBytes(java.nio.charset.StandardCharsets.UTF_8).length)
+                .isLessThanOrEqualTo(512);
     }
 
     @Test

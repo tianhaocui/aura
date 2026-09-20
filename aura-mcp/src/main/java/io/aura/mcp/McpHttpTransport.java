@@ -16,6 +16,7 @@ final class McpHttpTransport {
     static final String PROTOCOL_VERSION_HEADER = "MCP-Protocol-Version";
     static final String PROTOCOL_VERSION = McpProtocolConstants.VERSION;
     static final int DEFAULT_MAX_RESPONSE_BYTES = 1024 * 1024;
+    private static final int SSE_MESSAGE_FRAME_BYTES = 23;
 
     private final McpRouter router;
     private final McpSessionManager sessions;
@@ -161,28 +162,42 @@ final class McpHttpTransport {
             return;
         }
         if (parsed instanceof JSONArray batch) {
+            if (!acceptsApplicationJson(context)) {
+                respondError(context, null, 406, -32005,
+                        "MCP batch responses require Accept: application/json");
+                return;
+            }
             postBatch(context, runtime, userId, batch);
             return;
         }
         JSONObject request = parsed instanceof JSONObject value ? value : null;
         Object id = request == null ? null : request.get("id");
         boolean hasId = request != null && request.containsKey("id");
+        boolean sseResponse = hasId && prefersSseResponse(context);
         if (request == null || !"2.0".equals(request.getString("jsonrpc"))) {
-            respondError(context, id, 400, -32600, "Invalid Request");
+            respondError(context, id, 400, -32600, "Invalid Request", sseResponse);
             return;
         }
         if (hasId && id != null && !(id instanceof String) && !(id instanceof Number)) {
-            respondError(context, null, 400, -32600, "Invalid Request: id must be a string, number, or null");
+            respondError(context, null, 400, -32600,
+                    "Invalid Request: id must be a string, number, or null", sseResponse);
             return;
         }
         String method = request.getString("method");
         if (method == null || method.isBlank()) {
-            respondError(context, id, 400, -32600, "Invalid Request: method is required");
+            respondError(context, id, 400, -32600,
+                    "Invalid Request: method is required", sseResponse);
+            return;
+        }
+        if ("initialize".equals(method)) sseResponse = false;
+        if ("initialize".equals(method) && !acceptsApplicationJson(context)) {
+            respondError(context, id, 406, -32005,
+                    "MCP initialize requires Accept: application/json");
             return;
         }
         Object rawParams = request.get("params");
         if (rawParams != null && !(rawParams instanceof JSONObject)) {
-            if (hasId) respondError(context, id, 400, -32602, "Invalid params");
+            if (hasId) respondError(context, id, 400, -32602, "Invalid params", sseResponse);
             else context.status(202).raw("");
             return;
         }
@@ -195,54 +210,60 @@ final class McpHttpTransport {
 
         String sessionId = context.header(SESSION_HEADER);
         if (sessionId == null || sessionId.isBlank()) {
-            respondError(context, id, 400, -32002, "Mcp-Session-Id is required");
+            respondError(context, id, 400, -32002, "Mcp-Session-Id is required", sseResponse);
             return;
         }
         java.util.Optional<McpSessionManager.Session> inspected = sessions.inspect(sessionId, userId);
         if (inspected.isEmpty()) {
-            respondError(context, id, 404, -32002, "MCP session not found or expired");
+            respondError(context, id, 404, -32002,
+                    "MCP session not found or expired", sseResponse);
             return;
         }
         if (!protocolVersionAllowed(context, inspected.get().protocolVersion())) {
             respondError(context, id, 400, -32008,
-                    "Unsupported MCP protocol version; expected " + inspected.get().protocolVersion());
+                    "Unsupported MCP protocol version; expected "
+                            + inspected.get().protocolVersion(), sseResponse);
             return;
         }
 
         if ("notifications/initialized".equals(method)) {
-            initialized(context, hasId, id, sessionId, userId);
+            initialized(context, hasId, id, sessionId, userId, sseResponse);
             return;
         }
 
         if (inspected.get().phase() == McpSessionManager.SessionPhase.NEGOTIATING) {
             if (!"ping".equals(method)) {
                 respondError(context, id, 409, -32007,
-                        "MCP session is negotiating; send notifications/initialized first");
+                        "MCP session is negotiating; send notifications/initialized first",
+                        sseResponse);
                 return;
             }
             if (sessions.access(sessionId, userId).isEmpty()) {
-                respondError(context, id, 404, -32002, "MCP session not found or expired");
+                respondError(context, id, 404, -32002,
+                        "MCP session not found or expired", sseResponse);
                 return;
             }
-            writeDispatch(context, runtime, userId, hasId, id, method,
+            writeDispatch(context, runtime, userId, hasId, id, method, sseResponse,
                     request.getJSONObject("params"));
             return;
         }
 
         java.util.Optional<McpSessionManager.RequestLease> admitted = sessions.admitReady(sessionId, userId);
         if (admitted.isEmpty()) {
-            respondError(context, id, 404, -32002, "MCP session not found, closed, or expired");
+            respondError(context, id, 404, -32002,
+                    "MCP session not found, closed, or expired", sseResponse);
             return;
         }
 
         try (McpSessionManager.RequestLease ignored = admitted.get()) {
-            writeDispatch(context, runtime, userId, hasId, id, method,
+            writeDispatch(context, runtime, userId, hasId, id, method, sseResponse,
                     request.getJSONObject("params"));
         }
     }
 
     private void writeDispatch(BaseContext context, AuraMcpRuntime runtime, String userId,
-                               boolean hasId, Object id, String method, JSONObject rawParams) {
+                               boolean hasId, Object id, String method, boolean sseResponse,
+                               JSONObject rawParams) {
         JSONObject params = rawParams == null ? new JSONObject() : rawParams;
         DispatchResult dispatched;
         try {
@@ -250,7 +271,7 @@ final class McpHttpTransport {
         } catch (RuntimeException invalidParams) {
             org.slf4j.LoggerFactory.getLogger(McpHttpTransport.class)
                     .debug("MCP request parameter conversion failed for {}", method, invalidParams);
-            if (hasId) respondError(context, id, 400, -32602, "Invalid params");
+            if (hasId) respondError(context, id, 400, -32602, "Invalid params", sseResponse);
             else context.status(202).raw("");
             return;
         }
@@ -259,21 +280,22 @@ final class McpHttpTransport {
             return;
         }
         if (dispatched.invalidParams()) {
-            respondError(context, id, 400, -32602, "Invalid params");
+            respondError(context, id, 400, -32602, "Invalid params", sseResponse);
             return;
         }
         if (dispatched.result() == null) {
-            respondError(context, id, 200, -32601, "Method not found: " + method);
+            respondError(context, id, 200, -32601,
+                    "Method not found: " + method, sseResponse);
             return;
         }
-        writeRpc(context, rpcResult(id, dispatched.result()));
+        writeRpcResponse(context, rpcResult(id, dispatched.result()), id, sseResponse);
     }
 
     private void initialized(BaseContext context, boolean hasId, Object id,
-                             String sessionId, String userId) {
+                             String sessionId, String userId, boolean sseResponse) {
         if (hasId) {
             respondError(context, id, 400, -32600,
-                    "notifications/initialized must not include an id");
+                    "notifications/initialized must not include an id", sseResponse);
             return;
         }
         McpSessionManager.TransitionResult result = sessions.activate(sessionId, userId);
@@ -531,15 +553,57 @@ final class McpHttpTransport {
     private static boolean acceptsJsonRpc(BaseContext context) {
         String accept = context.header("Accept");
         if (accept == null || accept.isBlank()) return true;
-        for (String value : accept.split(",")) {
-            String mediaType = value.split(";", 2)[0].trim();
-            if ("application/json".equalsIgnoreCase(mediaType)
-                    || "text/event-stream".equalsIgnoreCase(mediaType)
-                    || "*/*".equals(mediaType)) {
-                return true;
+        return acceptsMediaType(accept, "application/json")
+                || acceptsMediaType(accept, "text/event-stream");
+    }
+
+    private static boolean acceptsApplicationJson(BaseContext context) {
+        String accept = context.header("Accept");
+        return accept == null || accept.isBlank()
+                || acceptsMediaType(accept, "application/json");
+    }
+
+    private static boolean prefersSseResponse(BaseContext context) {
+        String accept = context.header("Accept");
+        return accept != null && qualityForMediaType(accept, "text/event-stream")
+                > qualityForMediaType(accept, "application/json");
+    }
+
+    private static boolean acceptsMediaType(String header, String expected) {
+        return qualityForMediaType(header, expected) > 0.0;
+    }
+
+    private static double qualityForMediaType(String header, String expected) {
+        String expectedType = expected.substring(0, expected.indexOf('/'));
+        int bestSpecificity = -1;
+        double best = 0.0;
+        for (String raw : header.split(",")) {
+            String[] parts = raw.trim().split(";");
+            String mediaType = parts[0].trim();
+            double quality = 1.0;
+            for (int index = 1; index < parts.length; index++) {
+                String parameter = parts[index].trim();
+                int equals = parameter.indexOf('=');
+                if (equals < 0 || !"q".equalsIgnoreCase(parameter.substring(0, equals).trim())) continue;
+                try {
+                    quality = Double.parseDouble(parameter.substring(equals + 1).trim());
+                } catch (NumberFormatException invalid) {
+                    quality = 0.0;
+                }
+            }
+            if (!Double.isFinite(quality) || quality < 0.0 || quality > 1.0) quality = 0.0;
+            int specificity = expected.equalsIgnoreCase(mediaType) ? 2
+                    : (expectedType + "/*").equalsIgnoreCase(mediaType) ? 1
+                    : "*/*".equals(mediaType) ? 0 : -1;
+            if (specificity < 0 || specificity < bestSpecificity) continue;
+            if (specificity > bestSpecificity) {
+                bestSpecificity = specificity;
+                best = quality;
+            } else {
+                best = Math.max(best, quality);
             }
         }
-        return false;
+        return best;
     }
 
     private static boolean validText(JSONObject params, String key) {
@@ -570,9 +634,14 @@ final class McpHttpTransport {
     }
 
     private void respondError(BaseContext context, Object id, int status, int code, String message) {
+        respondError(context, id, status, code, message, false);
+    }
+
+    private void respondError(BaseContext context, Object id, int status, int code,
+                              String message, boolean sseResponse) {
         Map<String, Object> error = rpcError(id, code, message);
         context.status(status);
-        writeRpc(context, error);
+        writeRpcResponse(context, error, id, sseResponse);
     }
 
     private static Map<String, Object> rpcError(Object id, int code, String message) {
@@ -592,6 +661,63 @@ final class McpHttpTransport {
             return;
         }
         context.jsonRaw(json);
+    }
+
+    private void writeRpcResponse(
+            BaseContext context, Object response, Object id, boolean sseResponse) {
+        if (!sseResponse) {
+            writeRpc(context, response);
+            return;
+        }
+        writeRpcSse(context, response, id);
+    }
+
+    private void writeRpcSse(BaseContext context, Object response, Object id) {
+        final String json;
+        int payloadBudget = maxResponseBytes - SSE_MESSAGE_FRAME_BYTES;
+        if (payloadBudget < 1) {
+            context.status(502).raw("");
+            return;
+        }
+        try {
+            json = BoundedJson.encode(response, payloadBudget);
+        } catch (BoundedJson.LimitExceededException tooLarge) {
+            writeOversizeSseError(context, id);
+            return;
+        }
+        io.aura.web.SseEmitter emitter = null;
+        try {
+            emitter = context.sse();
+            emitter.send("message", json);
+        } catch (Exception failure) {
+            org.slf4j.LoggerFactory.getLogger(McpHttpTransport.class)
+                    .debug("MCP request-scoped SSE response failed", failure);
+            if (!context.isResponseStarted()) context.status(500).raw("");
+        } finally {
+            if (emitter != null) emitter.close();
+        }
+    }
+
+    private void writeOversizeSseError(BaseContext context, Object id) {
+        context.status(502);
+        int payloadBudget = maxResponseBytes - SSE_MESSAGE_FRAME_BYTES;
+        if (payloadBudget < 1) {
+            context.raw("");
+            return;
+        }
+        try {
+            String fallback = BoundedJson.encode(
+                    rpcError(id, -32009, "MCP response exceeds the configured byte limit"),
+                    payloadBudget);
+            io.aura.web.SseEmitter emitter = context.sse();
+            try {
+                emitter.send("message", fallback);
+            } finally {
+                emitter.close();
+            }
+        } catch (Exception tooSmallOrDisconnected) {
+            if (!context.isResponseStarted()) context.raw("");
+        }
     }
 
     private void writeOversizeError(BaseContext context) {

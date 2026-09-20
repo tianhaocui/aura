@@ -329,6 +329,11 @@ SSE publishers enqueue into bounded per-session buffers and never write sockets
 directly. Queue overflow closes the slow connection after recording the event in
 bounded replay history; clients must reconnect with `Last-Event-ID` and treat a
 `replay-gap` event as a required full resynchronization.
+For one correlated POST response, prefer SSE with
+`Accept: text/event-stream, application/json;q=0.5`; Aura emits a finite SSE
+`message` containing the original JSON-RPC `id` and closes it. Equal quality
+keeps the JSON fast path. Initialize and batch calls
+must accept JSON, and notifications always return `202` without a response body.
 
 Customer-specific processes use named workflow variants:
 
