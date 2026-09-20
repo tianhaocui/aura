@@ -14,15 +14,39 @@ Aura 1.0 只有一种应用模型：能力模块与业务模块通过 `use(...)`
 ## 安装
 
 ```xml
-<dependency>
-  <groupId>io.github.tianhaocui</groupId>
-  <artifactId>aura-web</artifactId>
-  <version>1.0.0</version>
-</dependency>
+<dependencyManagement>
+  <dependencies>
+    <dependency>
+      <groupId>io.github.tianhaocui</groupId>
+      <artifactId>aura-bom</artifactId>
+      <version>1.0.0</version>
+      <type>pom</type>
+      <scope>import</scope>
+    </dependency>
+  </dependencies>
+</dependencyManagement>
+
+<dependencies>
+  <dependency>
+    <groupId>io.github.tianhaocui</groupId>
+    <artifactId>aura-starter</artifactId>
+  </dependency>
+</dependencies>
 ```
 
 只有在需要时才增加 `aura-db`、一个数据库迁移适配器、`aura-workflow`、`aura-ai`、
 `aura-mcp` 或 `aura-processor`。
+
+也可以通过 Maven 生成相同的最小可测试工程：
+
+```bash
+mvn archetype:generate -B \
+  -DarchetypeGroupId=io.github.tianhaocui \
+  -DarchetypeArtifactId=aura-archetype \
+  -DarchetypeVersion=1.0.0 \
+  -DgroupId=com.example -DartifactId=my-app \
+  -Dversion=1.0.0-SNAPSHOT -Dpackage=com.example
+```
 
 ## 创建应用
 
@@ -120,6 +144,9 @@ Map<String, Object> openApi = test.openApi();
 | `aura-db` | 轻量 SQL、事务、分页、数据库 schema 迁移执行 SPI |
 | `aura-db-migration-flyway` | 可选的生产级 Flyway 迁移适配器 |
 | `aura-db-migration-liquibase` | 可选的生产级 Liquibase 迁移适配器 |
+| `aura-bom` | 将所有 Aura 模块对齐到同一组已验证版本 |
+| `aura-starter` | 推荐的最小 HTTP 应用依赖 |
+| `aura-archetype` | 生成可编译、可测试、可执行的应用 |
 | `aura-workflow` | 类型化 DAG、variant、重试、补偿、取消 |
 | `aura-ai` | Provider SPI、同步/SSE、工具调用、结构化输出、预算 |
 | `aura-mcp` | tools/resources/prompts、鉴权 HTTP/SSE/stdio transport |

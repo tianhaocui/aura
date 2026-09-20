@@ -15,14 +15,28 @@ with it.
 ## Maven Setup
 
 ```xml
-<dependency>
-    <groupId>io.github.tianhaocui</groupId>
-    <artifactId>aura-web</artifactId>
-    <version>1.0.0</version>
-</dependency>
+<dependencyManagement>
+    <dependencies>
+        <dependency>
+            <groupId>io.github.tianhaocui</groupId>
+            <artifactId>aura-bom</artifactId>
+            <version>1.0.0</version>
+            <type>pom</type>
+            <scope>import</scope>
+        </dependency>
+    </dependencies>
+</dependencyManagement>
+
+<dependencies>
+    <dependency>
+        <groupId>io.github.tianhaocui</groupId>
+        <artifactId>aura-starter</artifactId>
+    </dependency>
+</dependencies>
 ```
 
-Add `aura-db`, `aura-ai`, `aura-mcp`, or `aura-workflow` only when needed.
+The BOM is the only recommended version declaration. Add `aura-db`, `aura-ai`,
+`aura-mcp`, or `aura-workflow` without individual versions only when needed.
 Every application module must compile with preserved Java parameter names:
 
 ```xml

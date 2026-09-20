@@ -3,6 +3,11 @@
 Aura 1.0 makes explicit module composition the recommended application model. The release allows
 breaking changes so that one capability has one discoverable API and one verification path.
 
+Import `aura-bom` once and replace a direct `aura-web` dependency with
+`aura-starter`. Optional Aura modules then omit individual versions. New
+projects can be generated from `aura-archetype`; its generated test uses
+`TestClient` before the real server is started.
+
 ## Entry point
 
 Use `AuraApp` for new applications:

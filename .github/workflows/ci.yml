@@ -32,6 +32,10 @@ jobs:
         if: matrix.java == 17
         run: bash scripts/verify-ai-evals.sh
 
+      - name: BOM, Starter, and Archetype Smoke
+        if: matrix.java == 17
+        run: bash scripts/verify-maven-archetype.sh
+
       - name: Upload Coverage Report
         if: always() && matrix.java == 17
         uses: actions/upload-artifact@v4

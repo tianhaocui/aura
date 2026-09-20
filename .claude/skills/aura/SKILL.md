@@ -19,6 +19,11 @@ framework code.
 
 ## Minimal Pattern
 
+Import `io.github.tianhaocui:aura-bom` in `dependencyManagement`, then depend on
+`io.github.tianhaocui:aura-starter` without a version. Optional Aura capability
+modules also omit versions. Do not generate independently versioned Aura
+dependencies.
+
 ```java
 public final class OrdersModule implements AuraModule {
     @Override public ModuleMetadata descriptor() {

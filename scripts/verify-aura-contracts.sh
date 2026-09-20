@@ -32,6 +32,23 @@ rg -q "String version = McpProtocolConstants\.SERVER_VERSION" \
 
 test -f "$repo_root/aura-ai/src/main/java/io/aura/ai/AiClient.java"
 test -f "$repo_root/aura-workflow/src/main/java/io/aura/workflow/WorkflowModule.java"
+test -f "$repo_root/aura-bom/pom.xml"
+test -f "$repo_root/aura-starter/pom.xml"
+test -f "$repo_root/aura-archetype/src/main/resources/META-INF/maven/archetype-metadata.xml"
+test -x "$repo_root/scripts/verify-maven-archetype.sh"
+for artifact in \
+  aura-contract aura-core aura-web aura-db aura-db-migration-flyway \
+  aura-db-migration-liquibase aura-workflow aura-ai aura-mcp aura-processor \
+  aura-starter; do
+  rg -q "<artifactId>$artifact</artifactId>" "$repo_root/aura-bom/pom.xml"
+done
+rg -q '<artifactId>aura-web</artifactId>' "$repo_root/aura-starter/pom.xml"
+rg -q '<artifactId>aura-bom</artifactId>' \
+  "$repo_root/aura-archetype/src/main/resources/archetype-resources/pom.xml"
+rg -q 'TestClient\.of\(app\)' \
+  "$repo_root/aura-archetype/src/main/resources/archetype-resources/src/test/java/AppTest.java"
+rg -q 'ServicesResourceTransformer' \
+  "$repo_root/aura-archetype/src/main/resources/archetype-resources/pom.xml"
 test -f "$repo_root/AI_GUIDE.md"
 test -f "$repo_root/docs/legacy-ai-guide-0.6.md"
 test -f "$repo_root/docs/aura-module.md"

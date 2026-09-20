@@ -13,12 +13,30 @@ smallest HTTP module; database, Flyway/Liquibase migration adapters, workflow,
 AI, MCP, and the annotation processor are optional Maven dependencies.
 
 ```xml
-<dependency>
-  <groupId>io.github.tianhaocui</groupId>
-  <artifactId>aura-web</artifactId>
-  <version>1.0.0</version>
-</dependency>
+<dependencyManagement>
+  <dependencies>
+    <dependency>
+      <groupId>io.github.tianhaocui</groupId>
+      <artifactId>aura-bom</artifactId>
+      <version>1.0.0</version>
+      <type>pom</type>
+      <scope>import</scope>
+    </dependency>
+  </dependencies>
+</dependencyManagement>
+
+<dependencies>
+  <dependency>
+    <groupId>io.github.tianhaocui</groupId>
+    <artifactId>aura-starter</artifactId>
+  </dependency>
+</dependencies>
 ```
+
+`aura-bom` is the single version declaration. Optional capability dependencies
+omit their versions, preventing mixed Aura releases in generated or hand-written
+projects. `aura-archetype` generates this layout together with a `TestClient`
+smoke test and an executable shaded JAR.
 
 ## Compose An Application
 

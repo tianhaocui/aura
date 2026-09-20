@@ -15,16 +15,40 @@ in-memory tests, Undertow, `/__schema__`, OpenAPI, generated bindings, and MCP.
 ## Install
 
 ```xml
-<dependency>
-  <groupId>io.github.tianhaocui</groupId>
-  <artifactId>aura-web</artifactId>
-  <version>1.0.0</version>
-</dependency>
+<dependencyManagement>
+  <dependencies>
+    <dependency>
+      <groupId>io.github.tianhaocui</groupId>
+      <artifactId>aura-bom</artifactId>
+      <version>1.0.0</version>
+      <type>pom</type>
+      <scope>import</scope>
+    </dependency>
+  </dependencies>
+</dependencyManagement>
+
+<dependencies>
+  <dependency>
+    <groupId>io.github.tianhaocui</groupId>
+    <artifactId>aura-starter</artifactId>
+  </dependency>
+</dependencies>
 ```
 
 Add `aura-db`, one database migration adapter, `aura-workflow`, `aura-ai`,
 `aura-mcp`, or `aura-processor` only when the application needs that
 capability.
+
+Generate the same minimal, tested structure with Maven:
+
+```bash
+mvn archetype:generate -B \
+  -DarchetypeGroupId=io.github.tianhaocui \
+  -DarchetypeArtifactId=aura-archetype \
+  -DarchetypeVersion=1.0.0 \
+  -DgroupId=com.example -DartifactId=my-app \
+  -Dversion=1.0.0-SNAPSHOT -Dpackage=com.example
+```
 
 ## Build An Application
 
@@ -127,6 +151,9 @@ inspect structured failures, and only then start the real server.
 | `aura-db` | Lightweight SQL, transactions, pagination, schema migrator SPI |
 | `aura-db-migration-flyway` | Optional Flyway adapter for production migrations |
 | `aura-db-migration-liquibase` | Optional Liquibase adapter for production migrations |
+| `aura-bom` | Aligns every Aura module to one tested release |
+| `aura-starter` | Recommended minimal HTTP application dependency |
+| `aura-archetype` | Generates a compilable, tested, executable application |
 | `aura-workflow` | Typed DAGs, variants, retries, compensation, cancellation |
 | `aura-ai` | Provider SPI, sync/SSE calls, tools, structured output, budgets |
 | `aura-mcp` | Tools/resources/prompts, authenticated HTTP/SSE/stdio transports |

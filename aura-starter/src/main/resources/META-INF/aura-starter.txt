@@ -1,0 +1,4 @@
+Aura starter dependency aggregator.
+
+This artifact intentionally exposes no Java API. Its POM adds the recommended
+minimal Aura HTTP runtime while aura-bom aligns optional capability versions.
