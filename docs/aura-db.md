@@ -407,20 +407,29 @@ AuraApp.create()
         .start();
 ```
 
-A production adapter receives Aura-owned resources without taking ownership:
+For Flyway, add `aura-db-migration-flyway` and use the same lifecycle boundary:
 
 ```java
-SchemaMigrator migrator = context -> {
-    // Configure Flyway, Liquibase, or another engine with context.dataSource().
-    int applied = externalEngine.migrate(context.dataSource());
-    return new SchemaMigrationResult("external-engine", applied);
-};
+DatabaseModule.create(db)
+        .migrateWith(FlywaySchemaMigrator.classpath("db/migration"));
 ```
 
-The adapter must not close `context.dataSource()` or `context.db()`; the
-`DatabaseModule` closes the database during application shutdown. Migration
-runs outside an Aura transaction so an external engine can own locking,
-validation, transaction, baseline, and dialect semantics.
+For Liquibase, add `aura-db-migration-liquibase`:
+
+```java
+DatabaseModule.create(db)
+        .migrateWith(LiquibaseSchemaMigrator.classpath("db/changelog.xml"));
+```
+
+Both adapters borrow connections from `MigrationContext.dataSource()` and
+return them after each run without closing the Aura-owned `DataSource` or `Db`.
+They fail startup when the configured classpath resource is missing and report
+the number of migrations or changesets applied by that run. Migration runs
+outside an Aura transaction so the selected engine owns locking, validation,
+transactions, baseline, and dialect semantics.
+
+Custom adapters implement `SchemaMigrator` and follow the same ownership rule;
+`DatabaseModule` closes the database during application shutdown.
 
 `SqlSchemaMigrator` is a lightweight implementation for tests and simple
 single-process deployments. It maintains `_migrations`, validates checksums and

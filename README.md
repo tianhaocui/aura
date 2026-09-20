@@ -22,8 +22,9 @@ in-memory tests, Undertow, `/__schema__`, OpenAPI, generated bindings, and MCP.
 </dependency>
 ```
 
-Add `aura-db`, `aura-workflow`, `aura-ai`, `aura-mcp`, or `aura-processor`
-only when the application needs that capability.
+Add `aura-db`, one database migration adapter, `aura-workflow`, `aura-ai`,
+`aura-mcp`, or `aura-processor` only when the application needs that
+capability.
 
 ## Build An Application
 
@@ -124,6 +125,8 @@ inspect structured failures, and only then start the real server.
 | `aura-core` | Configuration, lifecycle, module graph, capability registry |
 | `aura-web` | Undertow adapter, routing, schema/OpenAPI, snapshots, `TestClient` |
 | `aura-db` | Lightweight SQL, transactions, pagination, schema migrator SPI |
+| `aura-db-migration-flyway` | Optional Flyway adapter for production migrations |
+| `aura-db-migration-liquibase` | Optional Liquibase adapter for production migrations |
 | `aura-workflow` | Typed DAGs, variants, retries, compensation, cancellation |
 | `aura-ai` | Provider SPI, sync/SSE calls, tools, structured output, budgets |
 | `aura-mcp` | Tools/resources/prompts, authenticated HTTP/SSE/stdio transports |

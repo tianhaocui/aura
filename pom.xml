@@ -40,6 +40,8 @@
         <module>aura-processor</module>
         <module>aura-web</module>
         <module>aura-db</module>
+        <module>aura-db-migration-flyway</module>
+        <module>aura-db-migration-liquibase</module>
         <module>aura-mcp</module>
         <module>aura-ai</module>
         <module>aura-workflow</module>
@@ -56,6 +58,11 @@
         <undertow.version>2.3.21.Final</undertow.version>
         <fastjson2.version>2.0.47</fastjson2.version>
         <hikaricp.version>5.1.0</hikaricp.version>
+        <flyway.version>13.7.0</flyway.version>
+        <liquibase.version>5.0.4</liquibase.version>
+        <commons-lang3.version>3.20.0</commons-lang3.version>
+        <commons-collections4.version>4.6.0</commons-collections4.version>
+        <commons-text.version>1.15.0</commons-text.version>
         <slf4j.version>2.0.12</slf4j.version>
         <jboss-logging.version>3.6.1.Final</jboss-logging.version>
     </properties>
@@ -84,6 +91,26 @@
             </dependency>
             <dependency>
                 <groupId>io.github.tianhaocui</groupId>
+                <artifactId>aura-db</artifactId>
+                <version>${aura.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.github.tianhaocui</groupId>
+                <artifactId>aura-db-migration-flyway</artifactId>
+                <version>${aura.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.github.tianhaocui</groupId>
+                <artifactId>aura-db-migration-liquibase</artifactId>
+                <version>${aura.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.github.tianhaocui</groupId>
+                <artifactId>aura-mcp</artifactId>
+                <version>${aura.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.github.tianhaocui</groupId>
                 <artifactId>aura-ai</artifactId>
                 <version>${aura.version}</version>
             </dependency>
@@ -106,6 +133,31 @@
                 <groupId>com.zaxxer</groupId>
                 <artifactId>HikariCP</artifactId>
                 <version>${hikaricp.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.flywaydb</groupId>
+                <artifactId>flyway-core</artifactId>
+                <version>${flyway.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.liquibase</groupId>
+                <artifactId>liquibase-core</artifactId>
+                <version>${liquibase.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.commons</groupId>
+                <artifactId>commons-lang3</artifactId>
+                <version>${commons-lang3.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.commons</groupId>
+                <artifactId>commons-collections4</artifactId>
+                <version>${commons-collections4.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.commons</groupId>
+                <artifactId>commons-text</artifactId>
+                <version>${commons-text.version}</version>
             </dependency>
             <dependency>
                 <groupId>org.slf4j</groupId>

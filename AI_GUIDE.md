@@ -271,10 +271,27 @@ DatabaseModule database = DatabaseModule.create(db)
         .migrateWith(SqlSchemaMigrator.classpath("db/migration"));
 ```
 
-`SchemaMigrator` is the extension SPI for Flyway/Liquibase adapters. Adapter
-code uses `MigrationContext.dataSource()` but must not close it. Do not adapt an
-external migration engine through `SqlMigrationSource`; that interface only feeds
-the lightweight Aura SQL migrator.
+For production, install exactly one adapter and replace only the migrator:
+
+```xml
+<dependency>
+  <groupId>io.github.tianhaocui</groupId>
+  <artifactId>aura-db-migration-flyway</artifactId>
+  <version>1.0.0</version>
+</dependency>
+```
+
+```java
+DatabaseModule database = DatabaseModule.create(db)
+        .migrateWith(FlywaySchemaMigrator.classpath("db/migration"));
+```
+
+Liquibase users select `aura-db-migration-liquibase` and call
+`LiquibaseSchemaMigrator.classpath("db/changelog.xml")`. Both adapters fail
+startup for missing resources, return an exact applied migration count, and
+leave the Aura-owned `DataSource` open. Custom engines implement
+`SchemaMigrator`; do not adapt them through `SqlMigrationSource`, which only
+feeds the lightweight Aura SQL migrator.
 
 ## AI, MCP, and Workflows
 

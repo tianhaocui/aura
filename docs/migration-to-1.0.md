@@ -141,10 +141,14 @@ DatabaseModule.create(db)
         .migrateWith(SqlSchemaMigrator.from(source));
 ```
 
-Implement `SchemaMigrator` for Flyway, Liquibase, or another engine. The adapter
-receives a `MigrationContext` and returns a `SchemaMigrationResult`; it must not
-close the Aura-owned `Db` or `DataSource`. `SqlMigrationSource` is only an input to
-`SqlSchemaMigrator` and is no longer described as an external engine SPI.
+Production applications can install `aura-db-migration-flyway` and use
+`FlywaySchemaMigrator.classpath("db/migration")`, or install
+`aura-db-migration-liquibase` and use
+`LiquibaseSchemaMigrator.classpath("db/changelog.xml")`. Implement
+`SchemaMigrator` only for another engine. Adapters receive a `MigrationContext`
+and return a `SchemaMigrationResult`; they must not close the Aura-owned `Db` or
+`DataSource`. `SqlMigrationSource` is only an input to `SqlSchemaMigrator` and
+is no longer an external engine SPI.
 
 ## AI request transport
 

@@ -21,8 +21,8 @@ Aura 1.0 只有一种应用模型：能力模块与业务模块通过 `use(...)`
 </dependency>
 ```
 
-只有在需要时才增加 `aura-db`、`aura-workflow`、`aura-ai`、`aura-mcp` 或
-`aura-processor`。
+只有在需要时才增加 `aura-db`、一个数据库迁移适配器、`aura-workflow`、`aura-ai`、
+`aura-mcp` 或 `aura-processor`。
 
 ## 创建应用
 
@@ -118,6 +118,8 @@ Map<String, Object> openApi = test.openApi();
 | `aura-core` | 配置、生命周期、模块图、能力注册表 |
 | `aura-web` | Undertow、路由、schema/OpenAPI、快照、`TestClient` |
 | `aura-db` | 轻量 SQL、事务、分页、数据库 schema 迁移执行 SPI |
+| `aura-db-migration-flyway` | 可选的生产级 Flyway 迁移适配器 |
+| `aura-db-migration-liquibase` | 可选的生产级 Liquibase 迁移适配器 |
 | `aura-workflow` | 类型化 DAG、variant、重试、补偿、取消 |
 | `aura-ai` | Provider SPI、同步/SSE、工具调用、结构化输出、预算 |
 | `aura-mcp` | tools/resources/prompts、鉴权 HTTP/SSE/stdio transport |

@@ -9,8 +9,8 @@ real HTTP.
 ## Install
 
 Add only the capability modules the application uses. `aura-web` is the
-smallest HTTP module; database, workflow, AI, MCP, and the annotation processor
-are optional Maven dependencies.
+smallest HTTP module; database, Flyway/Liquibase migration adapters, workflow,
+AI, MCP, and the annotation processor are optional Maven dependencies.
 
 ```xml
 <dependency>
