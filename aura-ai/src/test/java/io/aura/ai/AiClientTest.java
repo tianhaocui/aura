@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import io.aura.contract.CancellationToken;
+import java.io.IOException;
 import java.time.Duration;
 import java.util.Map;
 import java.util.concurrent.ArrayBlockingQueue;
@@ -16,6 +17,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
 
 class AiClientTest {
@@ -48,9 +50,18 @@ class AiClientTest {
             assertThatThrownBy(() -> client.chat(new AiRequest("overflow")))
                     .isInstanceOf(RejectedExecutionException.class)
                     .hasMessageContaining("saturated or shut down");
+            AtomicBoolean streamStarted = new AtomicBoolean();
+            AtomicReference<Throwable> streamFailure = new AtomicReference<>();
+            assertThatThrownBy(() -> client.stream(new AiRequest("overflow"), new AiStreamHandler() {
+                @Override public void onStart() { streamStarted.set(true); }
+                @Override public void onToken(String token) { }
+                @Override public void onError(Throwable error) { streamFailure.set(error); }
+            })).isInstanceOf(RejectedExecutionException.class);
+            assertThat(streamStarted).isFalse();
+            assertThat(streamFailure.get()).isInstanceOf(RejectedExecutionException.class);
             assertThat(client.executorMetrics().observable()).isTrue();
             assertThat(client.executorMetrics().queueCapacity()).isEqualTo(1);
-            assertThat(client.executorMetrics().rejected()).isEqualTo(1);
+            assertThat(client.executorMetrics().rejected()).isEqualTo(2);
         } finally {
             release.countDown();
             executor.shutdownNow();
@@ -184,6 +195,346 @@ class AiClientTest {
             client.stream(new AiRequest("letters"), output::append);
             assertThat(output).hasToString("ab");
         }
+    }
+
+    @Test
+    void streamingRetriesRetryableFailureBeforeFirstTokenOnly() throws Exception {
+        AtomicInteger calls = new AtomicInteger();
+        AiProvider provider = new AiProvider() {
+            @Override public AiResponse chat(AiRequest request) { return AiResponse.text("unused"); }
+            @Override public void stream(AiRequest request, AiStreamHandler handler) throws Exception {
+                if (calls.incrementAndGet() == 1) {
+                    handler.onError(new AiProviderException("TRANSIENT", 503, "retry"));
+                    return;
+                }
+                handler.onToken("ok");
+                handler.onComplete(AiResponse.text("ok"));
+            }
+        };
+        AtomicInteger starts = new AtomicInteger();
+        AtomicInteger completions = new AtomicInteger();
+        AtomicInteger failures = new AtomicInteger();
+        StringBuilder output = new StringBuilder();
+        AiRequest request = AiRequest.builder().prompt("retry")
+                .retry(AiRetryPolicy.fixed(2, Duration.ZERO)).build();
+
+        try (AiClient client = new AiClient(provider)) {
+            client.stream(request, new AiStreamHandler() {
+                @Override public void onStart() { starts.incrementAndGet(); }
+                @Override public void onToken(String token) { output.append(token); }
+                @Override public void onComplete(AiResponse response) { completions.incrementAndGet(); }
+                @Override public void onError(Throwable error) { failures.incrementAndGet(); }
+            });
+            assertThat(client.usageTotals().requests()).isEqualTo(1);
+        }
+        assertThat(calls).hasValue(2);
+        assertThat(starts).hasValue(1);
+        assertThat(completions).hasValue(1);
+        assertThat(failures).hasValue(0);
+        assertThat(output).hasToString("ok");
+    }
+
+    @Test
+    void cancellationStopsStreamingRetryBackoff() throws Exception {
+        CancellationToken token = new CancellationToken();
+        AtomicInteger calls = new AtomicInteger();
+        AtomicReference<Throwable> callFailure = new AtomicReference<>();
+        AtomicReference<Throwable> callbackFailure = new AtomicReference<>();
+        AiProvider provider = new AiProvider() {
+            @Override public AiResponse chat(AiRequest request) { return AiResponse.text("unused"); }
+            @Override public void stream(AiRequest request, AiStreamHandler handler) {
+                calls.incrementAndGet();
+                handler.onError(new AiProviderException("TRANSIENT", 503, "retry"));
+            }
+        };
+        AiRequest request = AiRequest.builder().prompt("retry")
+                .cancellationToken(token)
+                .retry(AiRetryPolicy.fixed(2, Duration.ofSeconds(5)))
+                .timeout(Duration.ofSeconds(10)).build();
+
+        try (AiClient client = new AiClient(provider)) {
+            Thread caller = new Thread(() -> {
+                try {
+                    client.stream(request, new AiStreamHandler() {
+                        @Override public void onToken(String value) { }
+                        @Override public void onError(Throwable error) { callbackFailure.set(error); }
+                    });
+                } catch (Throwable error) {
+                    callFailure.set(error);
+                }
+            });
+            caller.start();
+            for (int index = 0; index < 100 && calls.get() == 0; index++) Thread.sleep(5);
+            assertThat(calls).hasValue(1);
+            token.cancel();
+            caller.join(1_000);
+            assertThat(caller.isAlive()).isFalse();
+        }
+        assertThat(callFailure.get()).isInstanceOf(CancellationException.class);
+        assertThat(callbackFailure.get()).isSameAs(callFailure.get());
+        assertThat(calls).hasValue(1);
+    }
+
+    @Test
+    void retryBackoffNeverExceedsTheSharedDeadline() {
+        CancellationToken token = new CancellationToken();
+        AiProvider provider = request -> {
+            Thread.sleep(250);
+            throw new AiProviderException("TRANSIENT", 503, "retry");
+        };
+        AiRequest request = AiRequest.builder().prompt("deadline")
+                .cancellationToken(token)
+                .timeout(Duration.ofMillis(300))
+                .retry(AiRetryPolicy.fixed(2, Duration.ofMillis(250))).build();
+        long started = System.nanoTime();
+        try (AiClient client = new AiClient(provider)) {
+            assertThatThrownBy(() -> client.chat(request)).isInstanceOf(TimeoutException.class);
+            assertThat(client.executorMetrics().timedOut()).isEqualTo(1);
+        }
+        assertThat(Duration.ofNanos(System.nanoTime() - started)).isLessThan(Duration.ofMillis(450));
+        assertThat(token.isCancelled()).isTrue();
+    }
+
+    @Test
+    void streamingRetryBackoffNeverExceedsTheSharedDeadline() {
+        AiProvider provider = new AiProvider() {
+            @Override public AiResponse chat(AiRequest request) { return AiResponse.text("unused"); }
+            @Override public void stream(AiRequest request, AiStreamHandler handler) throws Exception {
+                Thread.sleep(250);
+                handler.onError(new AiProviderException("TRANSIENT", 503, "retry"));
+            }
+        };
+        AiRequest request = AiRequest.builder().prompt("deadline")
+                .timeout(Duration.ofMillis(300))
+                .retry(AiRetryPolicy.fixed(2, Duration.ofMillis(250))).build();
+        long started = System.nanoTime();
+        try (AiClient client = new AiClient(provider)) {
+            assertThatThrownBy(() -> client.stream(request, token -> { }))
+                    .isInstanceOf(TimeoutException.class);
+        }
+        assertThat(Duration.ofNanos(System.nanoTime() - started)).isLessThan(Duration.ofMillis(450));
+    }
+
+    @Test
+    void streamingNeverRetriesAfterAVisibleToken() {
+        AtomicInteger calls = new AtomicInteger();
+        AiProvider provider = new AiProvider() {
+            @Override public AiResponse chat(AiRequest request) { return AiResponse.text("unused"); }
+            @Override public void stream(AiRequest request, AiStreamHandler handler) throws Exception {
+                calls.incrementAndGet();
+                handler.onToken("partial");
+                throw new AiProviderException("TRANSIENT", 503, "failed after token");
+            }
+        };
+        StringBuilder output = new StringBuilder();
+        AtomicInteger failures = new AtomicInteger();
+        try (AiClient client = new AiClient(provider)) {
+            assertThatThrownBy(() -> client.stream(AiRequest.builder().prompt("retry")
+                            .retry(AiRetryPolicy.fixed(3, Duration.ZERO)).build(),
+                    new AiStreamHandler() {
+                        @Override public void onToken(String token) { output.append(token); }
+                        @Override public void onError(Throwable error) { failures.incrementAndGet(); }
+                    }))
+                    .isInstanceOf(AiProviderException.class);
+        }
+        assertThat(calls).hasValue(1);
+        assertThat(failures).hasValue(1);
+        assertThat(output).hasToString("partial");
+    }
+
+    @Test
+    void streamingRetryWaitsForThePreviousAttemptToReturn() throws Exception {
+        AtomicInteger calls = new AtomicInteger();
+        AtomicInteger active = new AtomicInteger();
+        AtomicInteger maxActive = new AtomicInteger();
+        AiProvider provider = new AiProvider() {
+            @Override public AiResponse chat(AiRequest request) { return AiResponse.text("unused"); }
+            @Override public void stream(AiRequest request, AiStreamHandler handler) {
+                int current = active.incrementAndGet();
+                maxActive.accumulateAndGet(current, Math::max);
+                try {
+                    if (calls.incrementAndGet() == 1) {
+                        handler.onError(new AiProviderException("TRANSIENT", 503, "retry"));
+                        sleepIgnoringInterrupt(200);
+                        return;
+                    }
+                    handler.onToken("ok");
+                    handler.onComplete(AiResponse.text("ok"));
+                } finally {
+                    active.decrementAndGet();
+                }
+            }
+        };
+        try (AiClient client = new AiClient(provider)) {
+            client.stream(AiRequest.builder().prompt("retry")
+                    .retry(AiRetryPolicy.fixed(2, Duration.ZERO)).build(), token -> { });
+        }
+        assertThat(calls).hasValue(2);
+        assertThat(maxActive).hasValue(1);
+    }
+
+    @Test
+    void providerOnErrorTerminatesTheCallAndIsDeliveredOnce() {
+        IOException providerFailure = new IOException("provider failed");
+        AiProvider provider = new AiProvider() {
+            @Override public AiResponse chat(AiRequest request) { return AiResponse.text("unused"); }
+            @Override public void stream(AiRequest request, AiStreamHandler handler) {
+                handler.onError(providerFailure);
+            }
+        };
+        AtomicReference<Throwable> callbackFailure = new AtomicReference<>();
+        try (AiClient client = new AiClient(provider)) {
+            assertThatThrownBy(() -> client.stream(new AiRequest("stream"), new AiStreamHandler() {
+                @Override public void onToken(String token) { }
+                @Override public void onError(Throwable error) { callbackFailure.set(error); }
+            })).isSameAs(providerFailure);
+        }
+        assertThat(callbackFailure.get()).isSameAs(providerFailure);
+    }
+
+    @Test
+    void throwingErrorCallbackDoesNotReplaceTheProviderFailure() {
+        IOException providerFailure = new IOException("provider failed");
+        IllegalStateException callbackFailure = new IllegalStateException("callback failed");
+        AiProvider provider = new AiProvider() {
+            @Override public AiResponse chat(AiRequest request) { return AiResponse.text("unused"); }
+            @Override public void stream(AiRequest request, AiStreamHandler handler) {
+                handler.onError(providerFailure);
+            }
+        };
+        try (AiClient client = new AiClient(provider)) {
+            assertThatThrownBy(() -> client.stream(new AiRequest("stream"), new AiStreamHandler() {
+                @Override public void onToken(String token) { }
+                @Override public void onError(Throwable error) { throw callbackFailure; }
+            }))
+                    .isSameAs(providerFailure)
+                    .satisfies(error -> assertThat(error.getSuppressed()).containsExactly(callbackFailure));
+        }
+    }
+
+    @Test
+    void swallowedTokenCallbackFailureRemainsTheTerminalCause() {
+        IllegalStateException callbackFailure = new IllegalStateException("token callback failed");
+        AtomicReference<Throwable> delivered = new AtomicReference<>();
+        AiProvider provider = new AiProvider() {
+            @Override public AiResponse chat(AiRequest request) { return AiResponse.text("unused"); }
+            @Override public void stream(AiRequest request, AiStreamHandler handler) {
+                try { handler.onToken("token"); } catch (RuntimeException ignored) { }
+                sleepIgnoringInterrupt(200);
+            }
+        };
+        try (AiClient client = new AiClient(provider)) {
+            assertThatThrownBy(() -> client.stream(
+                    AiRequest.builder().prompt("stream").timeout(Duration.ofSeconds(1)).build(),
+                    new AiStreamHandler() {
+                        @Override public void onToken(String token) { throw callbackFailure; }
+                        @Override public void onError(Throwable error) { delivered.set(error); }
+                    })).isSameAs(callbackFailure);
+        }
+        assertThat(delivered.get()).isSameAs(callbackFailure);
+    }
+
+    @Test
+    void swallowedContractFailureIsNotMaskedByTimeout() {
+        AtomicReference<Throwable> delivered = new AtomicReference<>();
+        AiProvider provider = new AiProvider() {
+            @Override public AiResponse chat(AiRequest request) { return AiResponse.text("unused"); }
+            @Override public void stream(AiRequest request, AiStreamHandler handler) {
+                handler.onComplete(AiResponse.text("ok"));
+                try { handler.onComplete(AiResponse.text("duplicate")); }
+                catch (RuntimeException ignored) { }
+                sleepIgnoringInterrupt(200);
+            }
+        };
+        try (AiClient client = new AiClient(provider)) {
+            assertThatThrownBy(() -> client.stream(
+                    AiRequest.builder().prompt("stream").timeout(Duration.ofSeconds(1)).build(),
+                    new AiStreamHandler() {
+                        @Override public void onToken(String token) { }
+                        @Override public void onError(Throwable error) { delivered.set(error); }
+                    }))
+                    .isInstanceOf(AiProviderContractException.class);
+        }
+        assertThat(delivered.get()).isInstanceOf(AiProviderContractException.class);
+    }
+
+    @Test
+    void timeoutSerializesErrorAfterAnInFlightTokenCallback() {
+        AtomicBoolean tokenActive = new AtomicBoolean();
+        AtomicBoolean concurrentTerminal = new AtomicBoolean();
+        CountDownLatch terminalDelivered = new CountDownLatch(1);
+        AiProvider provider = new AiProvider() {
+            @Override public AiResponse chat(AiRequest request) { return AiResponse.text("unused"); }
+            @Override public void stream(AiRequest request, AiStreamHandler handler) {
+                handler.onToken("slow");
+                handler.onComplete(AiResponse.text("slow"));
+            }
+        };
+        long started = System.nanoTime();
+        try (AiClient client = new AiClient(provider)) {
+            assertThatThrownBy(() -> client.stream(
+                    AiRequest.builder().prompt("stream").timeout(Duration.ofMillis(50)).build(),
+                    new AiStreamHandler() {
+                        @Override public void onToken(String token) {
+                            tokenActive.set(true);
+                            sleepIgnoringInterrupt(200);
+                            tokenActive.set(false);
+                        }
+                        @Override public void onError(Throwable error) {
+                            concurrentTerminal.set(tokenActive.get());
+                            terminalDelivered.countDown();
+                        }
+                    }))
+                    .isInstanceOf(TimeoutException.class);
+        }
+        assertThat(Duration.ofNanos(System.nanoTime() - started)).isLessThan(Duration.ofMillis(150));
+        try {
+            assertThat(terminalDelivered.await(1, TimeUnit.SECONDS)).isTrue();
+        } catch (InterruptedException error) {
+            Thread.currentThread().interrupt();
+            throw new AssertionError(error);
+        }
+        assertThat(concurrentTerminal).isFalse();
+        assertThat(tokenActive).isFalse();
+    }
+
+    @Test
+    void providerMustEmitExactlyOneTerminalCallback() {
+        assertProviderContractViolation(handler -> { });
+        assertProviderContractViolation(handler -> {
+            handler.onComplete(AiResponse.text("ok"));
+            handler.onComplete(AiResponse.text("again"));
+        });
+        assertProviderContractViolation(handler -> {
+            handler.onError(new IOException("failed"));
+            handler.onComplete(AiResponse.text("late"));
+        });
+        assertProviderContractViolation(handler -> {
+            handler.onComplete(AiResponse.text("ok"));
+            handler.onToken("late");
+        });
+    }
+
+    @Test
+    void providerThrowAfterCompletionDoesNotLeakAFalseSuccess() {
+        AtomicInteger completions = new AtomicInteger();
+        AtomicInteger failures = new AtomicInteger();
+        AiProvider provider = new AiProvider() {
+            @Override public AiResponse chat(AiRequest request) { return AiResponse.text("unused"); }
+            @Override public void stream(AiRequest request, AiStreamHandler handler) throws Exception {
+                handler.onComplete(AiResponse.text("ok"));
+                throw new IOException("late failure");
+            }
+        };
+        try (AiClient client = new AiClient(provider)) {
+            assertThatThrownBy(() -> client.stream(new AiRequest("stream"), new AiStreamHandler() {
+                @Override public void onToken(String token) { }
+                @Override public void onComplete(AiResponse response) { completions.incrementAndGet(); }
+                @Override public void onError(Throwable error) { failures.incrementAndGet(); }
+            })).isInstanceOf(AiProviderContractException.class);
+        }
+        assertThat(completions).hasValue(0);
+        assertThat(failures).hasValue(1);
     }
 
     @Test
@@ -505,6 +856,45 @@ class AiClientTest {
         assertThat(error.dimension()).isEqualTo(dimension);
         assertThat(error.limit()).isEqualTo(limit);
         assertThat(error.actual()).isEqualTo(actual);
+    }
+
+    private static void assertProviderContractViolation(
+            ThrowingStreamProvider streamProvider) {
+        AtomicInteger completions = new AtomicInteger();
+        AtomicInteger failures = new AtomicInteger();
+        AiProvider provider = new AiProvider() {
+            @Override public AiResponse chat(AiRequest request) { return AiResponse.text("unused"); }
+            @Override public void stream(AiRequest request, AiStreamHandler handler) throws Exception {
+                streamProvider.stream(handler);
+            }
+        };
+        try (AiClient client = new AiClient(provider)) {
+            assertThatThrownBy(() -> client.stream(new AiRequest("stream"), new AiStreamHandler() {
+                @Override public void onToken(String token) { }
+                @Override public void onComplete(AiResponse response) { completions.incrementAndGet(); }
+                @Override public void onError(Throwable error) { failures.incrementAndGet(); }
+            }))
+                    .isInstanceOf(AiProviderContractException.class)
+                    .extracting("code").isEqualTo(AiProviderContractException.CODE);
+        } catch (Exception error) {
+            throw new AssertionError(error);
+        }
+        assertThat(completions).hasValue(0);
+        assertThat(failures).hasValue(1);
+    }
+
+    @FunctionalInterface
+    private interface ThrowingStreamProvider {
+        void stream(AiStreamHandler handler) throws Exception;
+    }
+
+    private static void sleepIgnoringInterrupt(long millis) {
+        long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(millis);
+        while (System.nanoTime() < deadline) {
+            java.util.concurrent.locks.LockSupport.parkNanos(
+                    Math.min(TimeUnit.MILLISECONDS.toNanos(10), deadline - System.nanoTime()));
+            Thread.interrupted();
+        }
     }
 
 }

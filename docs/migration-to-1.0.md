@@ -51,6 +51,7 @@ TestClient.of(app).get("/orders").expect(200);
 | raw `Db.paginate(sql, params, page, size)` | `Db.paginate(sql, params, PaginationOrder, page, size, TotalStrategy)` |
 | `Page.total(): long` | `Page.total(): OptionalLong` |
 | `Page.totalPages(): int` | `Page.totalPages(): OptionalInt` |
+| provider calls `AiRequest.redactor()` repeatedly | provider reads frozen `redactedPrompt()`, `redactedSystemPrompt()`, `redactedParameters()`, and `redactedTools()` |
 
 ## Module contract
 
@@ -127,6 +128,14 @@ Raw and dynamic SQL pass ordering separately with `PaginationOrder.by(...)`.
 fetches one additional row to compute `hasNext()`, returns
 `OptionalLong.empty()` from `total()`, and serializes the unknown total as JSON
 `null`. Do not substitute `0`; that means an exact empty result.
+
+## AI request transport
+
+Aura 1.0 removes `AiRequest.redactor()`. Redaction now runs once while building
+the immutable request so input-budget accounting and provider transport observe
+the same values. Custom providers must read the frozen `redacted*` accessors;
+they must not transform request inputs again. This is an intentional 1.0 source
+and binary break for pre-release provider implementations.
 
 ## Verification checklist
 

@@ -32,6 +32,13 @@ OrderSummary summary = StructuredOutput.parse(response, OrderSummary.class);
 AiUsageTotals window = client.usageTotals();
 ```
 
+`maxInputCharacters` is a preflight limit over the complete provider-neutral
+request: user and system prompts, model/tool choice, parameter JSON, tool names,
+descriptions and schemas, plus the structured-output schema. For redacted fields,
+Aura freezes both the raw and redacted representations, takes the larger size, then
+rejects overages before invoking the provider. Provider-specific JSON envelope
+overhead is not included.
+
 Request provider-constrained JSON and enforce the same schema locally:
 
 ```java
@@ -146,8 +153,21 @@ AiRequest request = AiRequest.builder()
         .build();
 ```
 
-Only HTTP 429/5xx and I/O failures are retried. Streaming calls are not retried automatically,
-because replaying partial tokens would produce ambiguous output.
+Only HTTP 429/5xx and I/O failures are retried. A streaming failure is retried
+only before the provider emits any token callback; after the first callback,
+Aura fails without replaying visible output. The timeout is shared by every
+attempt and cancellation-aware backoff.
+
+Streaming providers must return only after calling exactly one of `onComplete`
+or `onError`. Duplicate terminals, tokens after a terminal, completion followed
+by a thrown failure, and returning without a terminal fail with
+`AI_PROVIDER_STREAM_CONTRACT`. Aura emits `onStart` once and exactly one terminal
+callback to application code across all attempts after startup succeeds. If the
+bounded executor rejects startup, Aura reports only `onError`.
+Callbacks are serialized. A timeout returns without waiting for an application
+callback that ignores interruption; the pending `onError` is delivered after
+that callback returns. A callback that never returns cannot receive a later
+terminal callback, so handlers must keep callback work bounded.
 
 `AiClient.executorMetrics()` reports worker limit, active/queued work, queue
 capacity, completed tasks, rejections, and timeouts for the default bounded

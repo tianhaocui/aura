@@ -1,7 +1,5 @@
 package io.aura.ai;
 
-import java.util.Collections;
-import java.util.LinkedHashMap;
 import java.util.Map;
 
 /** Provider-neutral function tool definition sent to a model. */
@@ -11,7 +9,7 @@ public record AiToolDefinition(String name, String description, Map<String, Obje
         name = name.trim();
         inputSchema = inputSchema == null
                 ? Map.of("type", "object")
-                : Collections.unmodifiableMap(new LinkedHashMap<>(inputSchema));
+                : AiJson.immutableMap(inputSchema, "tool input schema");
     }
 
     public AiToolDefinition(String name, String description) {

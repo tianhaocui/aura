@@ -125,21 +125,21 @@ public final class OpenAiCompatibleProvider implements AiProvider {
         messages.add(Map.of("role", "user", "content", request.redactedPrompt()));
         payload.put("model", model(request));
         payload.put("messages", messages);
-        request.parameters().forEach((name, value) -> {
+        request.redactedParameters().forEach((name, value) -> {
             if (!"model".equals(name) && !"messages".equals(name) && !"stream".equals(name)) {
-                payload.put(name, request.redactor().redactValue(value));
+                payload.put(name, value);
             }
         });
         if (stream) payload.put("stream", true);
         if (stream && request.budget().requiresUsage()) {
             payload.put("stream_options", Map.of("include_usage", true));
         }
-        if (!request.tools().isEmpty()) {
-            payload.put("tools", request.tools().stream().map(tool -> Map.of(
+        if (!request.redactedTools().isEmpty()) {
+            payload.put("tools", request.redactedTools().stream().map(tool -> Map.of(
                     "type", "function",
                     "function", Map.of("name", tool.name(), "description",
-                            tool.description() == null ? "" : request.redactor().redact(tool.description()),
-                            "parameters", request.redactor().redactValue(tool.inputSchema())))).toList());
+                            tool.description() == null ? "" : tool.description(),
+                            "parameters", tool.inputSchema()))).toList());
         }
         if (request.toolChoice() != null && !request.toolChoice().isBlank()) {
             payload.put("tool_choice", request.toolChoice());

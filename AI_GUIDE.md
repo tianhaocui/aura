@@ -300,6 +300,11 @@ When token or cost limits are configured, a provider must report usage. Missing
 usage fails closed with `AI_BUDGET_USAGE_MISSING`; an exceeded limit produces
 `AI_BUDGET_EXCEEDED` with a stable dimension, limit, and actual value. Streaming
 providers receive cooperative cancellation as soon as the character limit is exceeded.
+The input-character limit covers the full immutable raw and redacted request snapshots, including
+the system prompt, parameters, tools, and structured-output schema, and fails
+before a provider call. Streaming retries are allowed only before any token is
+visible; provider callback lifecycle violations fail with
+`AI_PROVIDER_STREAM_CONTRACT`.
 
 MCP tools are explicitly selected and can declare permissions:
 

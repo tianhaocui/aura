@@ -2,7 +2,7 @@ package io.aura.ai;
 
 import java.time.Duration;
 
-/** Bounded retry policy for provider calls; streaming calls are intentionally not retried. */
+/** Bounded retry policy for provider calls and streaming failures before the first token. */
 public record AiRetryPolicy(int maxAttempts, Duration backoff) {
     public AiRetryPolicy {
         if (maxAttempts < 1) throw new IllegalArgumentException("maxAttempts must be positive");

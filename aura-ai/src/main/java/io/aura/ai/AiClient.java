@@ -83,126 +83,334 @@ public final class AiClient implements AutoCloseable {
 
     public AiResponse chat(AiRequest request) throws Exception {
         Objects.requireNonNull(request, "request");
+        request.enforceInputBudget();
         request.cancellationToken().throwIfCancelled();
         long deadline = request.timeout() == null || request.timeout().isZero()
                 ? Long.MAX_VALUE : System.nanoTime() + request.timeout().toNanos();
-        for (int attempt = 1; ; attempt++) {
-            Duration remaining = remaining(request.timeout(), deadline);
-            Future<AiResponse> future = submit(() -> {
-                request.cancellationToken().throwIfCancelled();
-                return provider.chat(request);
-            });
-            try {
-                AiResponse response = await(future, remaining, request.cancellationToken());
-                recordUsage(request, response);
-                enforceBudget(request, response);
-                validateStructuredOutput(request, response);
-                return response;
-            } catch (TimeoutException | CancellationException | InterruptedException error) {
-                if (error instanceof TimeoutException) timedOutRequests.incrementAndGet();
-                request.cancellationToken().cancel();
-                future.cancel(true);
-                if (error instanceof InterruptedException) Thread.currentThread().interrupt();
-                throw error;
-            } catch (ExecutionException error) {
-                future.cancel(true);
-                Throwable cause = unwrap(error);
-                if (cause instanceof AiBudgetExceededException budgetFailure) {
-                    throw budgetFailure;
+        try {
+            for (int attempt = 1; ; attempt++) {
+                Duration remaining = remaining(request.timeout(), deadline);
+                Future<AiResponse> future = submit(() -> {
+                    request.cancellationToken().throwIfCancelled();
+                    return provider.chat(request);
+                });
+                try {
+                    AiResponse response = await(future, remaining, request.cancellationToken());
+                    recordUsage(request, response);
+                    enforceBudget(request, response);
+                    validateStructuredOutput(request, response);
+                    return response;
+                } catch (TimeoutException error) {
+                    future.cancel(true);
+                    throw error;
+                } catch (CancellationException | InterruptedException error) {
+                    request.cancellationToken().cancel();
+                    future.cancel(true);
+                    if (error instanceof InterruptedException) Thread.currentThread().interrupt();
+                    throw error;
+                } catch (ExecutionException error) {
+                    future.cancel(true);
+                    Throwable cause = unwrap(error);
+                    if (cause instanceof AiBudgetExceededException budgetFailure) {
+                        throw budgetFailure;
+                    }
+                    if (attempt >= request.retryPolicy().maxAttempts()
+                            || !request.retryPolicy().shouldRetry(cause)) {
+                        if (cause instanceof Exception exception) throw exception;
+                        if (cause instanceof Error fatal) throw fatal;
+                        throw new RuntimeException(cause);
+                    }
+                    sleepBackoff(request, deadline);
                 }
-                if (attempt >= request.retryPolicy().maxAttempts()
-                        || !request.retryPolicy().shouldRetry(cause)) {
-                    if (cause instanceof Exception exception) throw exception;
-                    if (cause instanceof Error fatal) throw fatal;
-                    throw new RuntimeException(cause);
-                }
-                sleepBackoff(request, remaining, deadline);
             }
+        } catch (TimeoutException error) {
+            timedOutRequests.incrementAndGet();
+            request.cancellationToken().cancel();
+            throw error;
         }
     }
 
     public void stream(AiRequest request, AiStreamHandler handler) throws Exception {
         Objects.requireNonNull(request, "request");
         Objects.requireNonNull(handler, "handler");
+        request.enforceInputBudget();
         request.cancellationToken().throwIfCancelled();
-        AtomicBoolean errorDelivered = new AtomicBoolean();
-        AtomicReference<AiBudgetExceededException> budgetFailure = new AtomicReference<>();
-        AtomicReference<AiStructuredOutputException> structuredFailure = new AtomicReference<>();
-        StringBuilder streamedContent = new StringBuilder();
-        Future<Void> future = submit(() -> {
-            handler.onStart();
-            request.cancellationToken().throwIfCancelled();
-            provider.stream(request, new AiStreamHandler() {
-                @Override public void onToken(String token) {
-                    request.cancellationToken().throwIfCancelled();
-                    if (token != null) {
-                        streamedContent.append(token);
-                        try {
-                            enforceOutputCharacters(request, streamedContent.length());
-                        } catch (AiBudgetExceededException exceeded) {
-                            budgetFailure.compareAndSet(null, exceeded);
-                            request.cancellationToken().cancel();
-                            throw exceeded;
-                        }
-                    }
-                    handler.onToken(token);
-                }
-                @Override public void onComplete(AiResponse response) {
-                    request.cancellationToken().throwIfCancelled();
-                    recordUsage(request, response);
-                    try {
-                        enforceBudget(request, response);
-                    } catch (AiBudgetExceededException exceeded) {
-                        budgetFailure.compareAndSet(null, exceeded);
-                        request.cancellationToken().cancel();
-                        throw exceeded;
-                    }
-                    try {
-                        validateStreamingStructuredOutput(request, response, streamedContent);
-                    } catch (AiStructuredOutputException invalid) {
-                        structuredFailure.compareAndSet(null, invalid);
-                        request.cancellationToken().cancel();
-                        throw invalid;
-                    }
-                    handler.onComplete(response);
-                }
-                @Override public void onError(Throwable error) {
-                    if (errorDelivered.compareAndSet(false, true)) handler.onError(error);
-                }
-            });
-            return null;
-        });
+        StreamCallbacks callbacks = new StreamCallbacks(handler);
+        long deadline = request.timeout() == null || request.timeout().isZero()
+                ? Long.MAX_VALUE : System.nanoTime() + request.timeout().toNanos();
+        Future<Void> startFuture;
         try {
-            await(future, request.timeout(), request.cancellationToken());
-            if (budgetFailure.get() != null) {
-                AiBudgetExceededException exceeded = budgetFailure.get();
-                if (errorDelivered.compareAndSet(false, true)) handler.onError(exceeded);
-                throw exceeded;
-            }
-            if (structuredFailure.get() != null) {
-                AiStructuredOutputException invalid = structuredFailure.get();
-                if (errorDelivered.compareAndSet(false, true)) handler.onError(invalid);
-                throw invalid;
-            }
+            startFuture = submit(() -> {
+                callbacks.start();
+                return null;
+            });
+        } catch (RuntimeException error) {
+            callbacks.error(error);
+            throw error;
+        }
+        try {
+            await(startFuture, remaining(request.timeout(), deadline), request.cancellationToken());
         } catch (TimeoutException | CancellationException | InterruptedException error) {
             if (error instanceof TimeoutException) timedOutRequests.incrementAndGet();
             request.cancellationToken().cancel();
-            future.cancel(true);
+            startFuture.cancel(true);
             if (error instanceof InterruptedException) Thread.currentThread().interrupt();
-            Throwable terminal = terminalFailure(budgetFailure.get(), structuredFailure.get(), error);
-            if (errorDelivered.compareAndSet(false, true)) handler.onError(terminal);
-            if (terminal instanceof Exception exception) throw exception;
+            callbacks.error(error);
             throw error;
         } catch (ExecutionException error) {
             request.cancellationToken().cancel();
-            future.cancel(true);
+            startFuture.cancel(true);
             Throwable cause = unwrap(error);
-            Throwable terminal = terminalFailure(budgetFailure.get(), structuredFailure.get(), cause);
-            if (errorDelivered.compareAndSet(false, true)) handler.onError(terminal);
-            if (terminal instanceof Exception exception) throw exception;
-            if (terminal instanceof Error fatal) throw fatal;
-            throw new RuntimeException(terminal);
+            callbacks.error(cause);
+            throwFailure(cause);
         }
+        for (int attempt = 1; ; attempt++) {
+            StreamAttempt state = new StreamAttempt(request, callbacks);
+            Duration remaining;
+            try {
+                remaining = remaining(request.timeout(), deadline);
+            } catch (TimeoutException error) {
+                timedOutRequests.incrementAndGet();
+                request.cancellationToken().cancel();
+                callbacks.error(error);
+                throw error;
+            }
+            Future<AiResponse> future;
+            try {
+                future = submit(() -> executeStreamAttempt(request, state));
+            } catch (RuntimeException error) {
+                callbacks.error(error);
+                throw error;
+            }
+            try {
+                AiResponse response = awaitStream(
+                        future, remaining, request.cancellationToken(), state);
+                recordUsage(request, response);
+                enforceBudget(request, response);
+                validateStreamingStructuredOutput(request, response, state.content());
+                callbacks.complete(response);
+                return;
+            } catch (TimeoutException | CancellationException | InterruptedException error) {
+                if (error instanceof TimeoutException) timedOutRequests.incrementAndGet();
+                request.cancellationToken().cancel();
+                future.cancel(true);
+                if (error instanceof InterruptedException) Thread.currentThread().interrupt();
+                callbacks.error(error);
+                throw error;
+            } catch (ExecutionException error) {
+                future.cancel(true);
+                Throwable cause = unwrap(error);
+                if (!state.tokenDelivered()
+                        && attempt < request.retryPolicy().maxAttempts()
+                        && request.retryPolicy().shouldRetry(cause)) {
+                    try {
+                        sleepBackoff(request, deadline);
+                    } catch (Exception backoffFailure) {
+                        if (backoffFailure instanceof TimeoutException) timedOutRequests.incrementAndGet();
+                        request.cancellationToken().cancel();
+                        callbacks.error(backoffFailure);
+                        throw backoffFailure;
+                    }
+                    continue;
+                }
+                request.cancellationToken().cancel();
+                callbacks.error(cause);
+                throwFailure(cause);
+                return;
+            } catch (RuntimeException error) {
+                request.cancellationToken().cancel();
+                future.cancel(true);
+                callbacks.error(error);
+                throw error;
+            }
+        }
+    }
+
+    private AiResponse executeStreamAttempt(AiRequest request, StreamAttempt state) throws Exception {
+        try {
+            request.cancellationToken().throwIfCancelled();
+            provider.stream(request, state);
+        } catch (Throwable error) {
+            Throwable callbackFailure = state.callbackFailure();
+            if (callbackFailure != null) return throwFailure(callbackFailure);
+            AiProviderContractException contractFailure = state.contractFailure();
+            if (contractFailure != null) throw contractFailure;
+            if (state.terminal()) {
+                throw new AiProviderContractException(
+                        "AI provider threw after a terminal stream callback", error);
+            }
+            return throwFailure(error);
+        }
+        Throwable callbackFailure = state.callbackFailure();
+        if (callbackFailure != null) return throwFailure(callbackFailure);
+        AiProviderContractException contractFailure = state.contractFailure();
+        if (contractFailure != null) throw contractFailure;
+        if (!state.terminal()) {
+            throw new AiProviderContractException(
+                    "AI provider returned without a terminal stream callback");
+        }
+        if (state.failure() != null) return throwFailure(state.failure());
+        return state.response();
+    }
+
+    private static final class StreamCallbacks {
+        private final AiStreamHandler handler;
+        private final java.util.concurrent.locks.ReentrantLock lock =
+                new java.util.concurrent.locks.ReentrantLock();
+        private final AtomicReference<StreamTerminal> terminal = new AtomicReference<>();
+        private boolean delivered;
+
+        private StreamCallbacks(AiStreamHandler handler) { this.handler = handler; }
+
+        private void start() {
+            lock.lock();
+            try {
+                if (terminal.get() != null) {
+                    deliverTerminal();
+                    return;
+                }
+                handler.onStart();
+                deliverTerminal();
+            } finally {
+                lock.unlock();
+            }
+        }
+
+        private void token(String token) {
+            lock.lock();
+            try {
+                if (terminal.get() != null) {
+                    deliverTerminal();
+                    throw new CancellationException("AI stream is already terminal");
+                }
+                try {
+                    handler.onToken(token);
+                } finally {
+                    deliverTerminal();
+                }
+            } finally {
+                lock.unlock();
+            }
+        }
+
+        private void complete(AiResponse response) {
+            terminal.compareAndSet(null, new StreamTerminal(response, null));
+            tryDeliverTerminal();
+        }
+
+        private void error(Throwable error) {
+            terminal.compareAndSet(null, new StreamTerminal(null, error));
+            tryDeliverTerminal();
+        }
+
+        private void tryDeliverTerminal() {
+            if (!lock.tryLock()) return;
+            try {
+                deliverTerminal();
+            } finally {
+                lock.unlock();
+            }
+        }
+
+        private void deliverTerminal() {
+            StreamTerminal value = terminal.get();
+            if (value == null || delivered) return;
+            delivered = true;
+            if (value.error() == null) {
+                handler.onComplete(value.response());
+                return;
+            }
+            try {
+                handler.onError(value.error());
+            } catch (Throwable callbackError) {
+                if (callbackError != value.error()) value.error().addSuppressed(callbackError);
+            }
+        }
+    }
+
+    private record StreamTerminal(AiResponse response, Throwable error) { }
+
+    private static final class StreamAttempt implements AiStreamHandler {
+        private static final int OPEN = 0;
+        private static final int COMPLETE = 1;
+        private static final int ERROR = 2;
+
+        private final AiRequest request;
+        private final StreamCallbacks downstream;
+        private final StringBuilder content = new StringBuilder();
+        private final AtomicInteger terminal = new AtomicInteger(OPEN);
+        private final AtomicBoolean tokenDelivered = new AtomicBoolean();
+        private final AtomicReference<AiResponse> response = new AtomicReference<>();
+        private final AtomicReference<Throwable> failure = new AtomicReference<>();
+        private final AtomicReference<Throwable> callbackFailure = new AtomicReference<>();
+        private final AtomicReference<AiProviderContractException> contractFailure =
+                new AtomicReference<>();
+
+        private StreamAttempt(AiRequest request, StreamCallbacks downstream) {
+            this.request = request;
+            this.downstream = downstream;
+        }
+
+        @Override public synchronized void onToken(String token) {
+            request.cancellationToken().throwIfCancelled();
+            if (terminal.get() != OPEN) {
+                failContract("AI provider emitted a token after a terminal stream callback");
+            }
+            if (token != null) {
+                content.append(token);
+                try {
+                    enforceOutputCharacters(request, content.length());
+                } catch (RuntimeException error) {
+                    callbackFailure.compareAndSet(null, error);
+                    request.cancellationToken().cancel();
+                    throw error;
+                }
+            }
+            tokenDelivered.set(true);
+            try {
+                downstream.token(token);
+            } catch (Throwable error) {
+                callbackFailure.compareAndSet(null, error);
+                request.cancellationToken().cancel();
+                throwUnchecked(error);
+            }
+        }
+
+        @Override public synchronized void onComplete(AiResponse value) {
+            if (value == null) failContract("AI provider completed a stream with a null response");
+            if (!terminal.compareAndSet(OPEN, COMPLETE)) {
+                failContract("AI provider emitted more than one terminal stream callback");
+            }
+            response.set(value);
+        }
+
+        @Override public synchronized void onError(Throwable error) {
+            if (error == null) failContract("AI provider failed a stream with a null error");
+            if (!terminal.compareAndSet(OPEN, ERROR)) {
+                failContract("AI provider emitted more than one terminal stream callback");
+            }
+            failure.set(error);
+        }
+
+        private void failContract(String message) {
+            AiProviderContractException error = new AiProviderContractException(message);
+            contractFailure.compareAndSet(null, error);
+            throw error;
+        }
+
+        private Throwable knownFailure() {
+            Throwable known = callbackFailure.get();
+            if (known != null) return known;
+            return contractFailure.get();
+        }
+
+        private boolean terminal() { return terminal.get() != OPEN; }
+        private boolean tokenDelivered() { return tokenDelivered.get(); }
+        private StringBuilder content() { return content; }
+        private AiResponse response() { return response.get(); }
+        private Throwable failure() { return failure.get(); }
+        private Throwable callbackFailure() { return callbackFailure.get(); }
+        private AiProviderContractException contractFailure() { return contractFailure.get(); }
     }
 
     private static void enforceBudget(AiRequest request, AiResponse response) {
@@ -253,14 +461,6 @@ public final class AiClient implements AutoCloseable {
         request.structuredOutput().validate(delivered);
     }
 
-    private static Throwable terminalFailure(
-            AiBudgetExceededException budgetFailure,
-            AiStructuredOutputException structuredFailure,
-            Throwable fallback) {
-        if (budgetFailure != null) return budgetFailure;
-        return structuredFailure != null ? structuredFailure : fallback;
-    }
-
     private void recordUsage(AiRequest request, AiResponse response) {
         requests.incrementAndGet();
         final AiUsage usage;
@@ -303,11 +503,16 @@ public final class AiClient implements AutoCloseable {
         }
     }
 
-    private static <T> T throwCause(ExecutionException error) throws Exception {
-        Throwable cause = unwrap(error);
-        if (cause instanceof Exception exception) throw exception;
-        if (cause instanceof Error fatal) throw fatal;
-        throw new RuntimeException(cause);
+    private static <T> T throwFailure(Throwable error) throws Exception {
+        if (error instanceof Exception exception) throw exception;
+        if (error instanceof Error fatal) throw fatal;
+        throw new RuntimeException(error);
+    }
+
+    private static void throwUnchecked(Throwable error) {
+        if (error instanceof RuntimeException runtime) throw runtime;
+        if (error instanceof Error fatal) throw fatal;
+        throw new RuntimeException(error);
     }
 
     private static Duration remaining(Duration configured, long deadline) throws TimeoutException {
@@ -317,16 +522,20 @@ public final class AiClient implements AutoCloseable {
         return Duration.ofNanos(nanos);
     }
 
-    private static void sleepBackoff(AiRequest request, Duration remaining, long deadline) throws Exception {
+    private static void sleepBackoff(AiRequest request, long deadline) throws Exception {
         Duration backoff = request.retryPolicy().backoff();
         if (backoff.isZero()) return;
-        if (remaining != null && !remaining.isZero() && backoff.compareTo(remaining) >= 0) {
-            throw new TimeoutException("AI request timed out during retry backoff");
-        }
         long remainingNanos = backoff.toNanos();
         while (remainingNanos > 0) {
             request.cancellationToken().throwIfCancelled();
             long slice = Math.min(remainingNanos, TimeUnit.MILLISECONDS.toNanos(50));
+            if (deadline != Long.MAX_VALUE) {
+                long deadlineNanos = deadline - System.nanoTime();
+                if (deadlineNanos <= 0) {
+                    throw new TimeoutException("AI request timed out during retry backoff");
+                }
+                slice = Math.min(slice, deadlineNanos);
+            }
             long millis = TimeUnit.NANOSECONDS.toMillis(slice);
             int nanos = (int) (slice - TimeUnit.MILLISECONDS.toNanos(millis));
             try {
@@ -340,6 +549,52 @@ public final class AiClient implements AutoCloseable {
         request.cancellationToken().throwIfCancelled();
         if (deadline != Long.MAX_VALUE && deadline <= System.nanoTime()) {
             throw new TimeoutException("AI request timed out during retry backoff");
+        }
+    }
+
+    private static <T> T awaitStream(
+            Future<T> future, Duration timeout, CancellationToken token, StreamAttempt state)
+            throws Exception {
+        long deadline = timeout == null || timeout.isZero()
+                ? Long.MAX_VALUE : System.nanoTime() + timeout.toNanos();
+        while (true) {
+            Throwable known = state.knownFailure();
+            if (known != null) {
+                future.cancel(true);
+                throw new ExecutionException(known);
+            }
+            try {
+                token.throwIfCancelled();
+            } catch (CancellationException cancelled) {
+                known = state.knownFailure();
+                if (known != null) {
+                    future.cancel(true);
+                    throw new ExecutionException(known);
+                }
+                throw cancelled;
+            }
+            long slice = TimeUnit.MILLISECONDS.toNanos(10);
+            if (deadline != Long.MAX_VALUE) {
+                long remaining = deadline - System.nanoTime();
+                if (remaining <= 0) {
+                    known = state.knownFailure();
+                    if (known != null) {
+                        future.cancel(true);
+                        throw new ExecutionException(known);
+                    }
+                    throw new TimeoutException("AI request timed out after " + timeout);
+                }
+                slice = Math.min(slice, remaining);
+            }
+            try {
+                return future.get(slice, TimeUnit.NANOSECONDS);
+            } catch (TimeoutException poll) {
+                // Recheck provider callback state, cancellation, and the absolute deadline.
+            } catch (ExecutionException | CancellationException terminal) {
+                Throwable terminalCause = state.knownFailure();
+                if (terminalCause != null) throw new ExecutionException(terminalCause);
+                throw terminal;
+            }
         }
     }
 
