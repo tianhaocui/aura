@@ -113,6 +113,11 @@ final class McpHttpTransport {
                     "MCP POST requires Accept: application/json or text/event-stream");
             return;
         }
+        if (!hasJsonContentType(context)) {
+            respondError(context, null, 415, -32006,
+                    "MCP POST requires Content-Type: application/json");
+            return;
+        }
         AuraMcpRuntime runtime = runtime(context);
         String userId = authenticate(runtime, context);
         if (userId == null) {
@@ -192,6 +197,14 @@ final class McpHttpTransport {
             return;
         }
         writeRpc(context, rpcResult(id, dispatched.result()));
+    }
+
+    private static boolean hasJsonContentType(BaseContext context) {
+        String contentType = context.header("Content-Type");
+        if (contentType == null) return false;
+        int separator = contentType.indexOf(';');
+        String mediaType = separator >= 0 ? contentType.substring(0, separator) : contentType;
+        return "application/json".equalsIgnoreCase(mediaType.trim());
     }
 
     private void postBatch(BaseContext context, AuraMcpRuntime runtime,

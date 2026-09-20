@@ -73,6 +73,21 @@ class McpHttpTransportTest {
     }
 
     @Test
+    void postRequiresJsonContentTypeAndAllowsCharset() {
+        TestClient.Response text = client.post("/mcp")
+                .header("Authorization", "Bearer alice")
+                .header("Content-Type", "text/plain")
+                .body(JSON.toJSONString(initialize(1))).expect(415);
+        assertThat(errorCode(text)).isEqualTo(-32006);
+
+        TestClient.Response json = client.post("/mcp")
+                .header("Authorization", "Bearer alice")
+                .header("Content-Type", "application/json; charset=utf-8")
+                .body(initialize(2)).expect(200);
+        assertThat(json.header(McpHttpTransport.SESSION_HEADER)).isNotBlank();
+    }
+
+    @Test
     void realUndertowSocketCarriesAuthenticatedMcpSession() throws Exception {
         int port;
         try (ServerSocket socket = new ServerSocket(0)) {
@@ -87,6 +102,16 @@ class McpHttpTransportTest {
         URI endpoint = URI.create("http://127.0.0.1:" + port + "/mcp");
         try {
             app.start();
+            HttpResponse<String> missingContentType = http.send(
+                    HttpRequest.newBuilder(endpoint)
+                            .header("Authorization", "Bearer alice")
+                            .POST(HttpRequest.BodyPublishers.ofString(JSON.toJSONString(initialize(0))))
+                            .build(),
+                    HttpResponse.BodyHandlers.ofString());
+            assertThat(missingContentType.statusCode()).isEqualTo(415);
+            assertThat(JSON.parseObject(missingContentType.body()).getJSONObject("error")
+                    .getInteger("code")).isEqualTo(-32006);
+
             HttpResponse<String> initialized = http.send(
                     HttpRequest.newBuilder(endpoint)
                             .header("Authorization", "Bearer alice")

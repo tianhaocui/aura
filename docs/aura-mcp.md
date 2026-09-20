@@ -388,6 +388,10 @@ starter.startStdio(app);
 ## Protocol
 
 Aura MCP implements [Model Context Protocol](https://modelcontextprotocol.io/) version `2025-03-26`.
+HTTP JSON-RPC POST requests require `Content-Type: application/json` (an optional
+charset parameter is allowed) and an `Accept` value containing
+`application/json` or `text/event-stream`. Other request media types fail with
+HTTP 415 before authentication or JSON parsing.
 
 ### Initialize response
 
