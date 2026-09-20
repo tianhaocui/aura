@@ -90,6 +90,73 @@ class OpenAiCompatibleProviderTest {
     }
 
     @Test
+    void streamsAndAggregatesMultipleToolCallsAcrossSseChunks() throws Exception {
+        HttpServer server = HttpServer.create(new InetSocketAddress(0), 0);
+        server.createContext("/stream-tools", exchange -> {
+            Map<String, Object> first = Map.of("choices", List.of(Map.of("delta", Map.of(
+                    "tool_calls", List.of(
+                            Map.of("index", 0, "id", "call-1", "function",
+                                    Map.of("name", "look")),
+                            Map.of("index", 1, "id", "call-2", "function",
+                                    Map.of("name", "notify")))))));
+            Map<String, Object> second = Map.of("choices", List.of(Map.of("delta", Map.of(
+                    "tool_calls", List.of(
+                            Map.of("index", 0, "function", Map.of("name", "up",
+                                    "arguments", JSON.toJSONString(Map.of("id", 42)))),
+                            Map.of("index", 1, "function", Map.of("arguments",
+                                    JSON.toJSONString(Map.of("text", "hello")))))))));
+            byte[] response = ("data: " + JSON.toJSONString(first) + "\n\n"
+                    + "data: " + JSON.toJSONString(second) + "\n\n"
+                    + "data: [DONE]\n\n").getBytes(StandardCharsets.UTF_8);
+            exchange.getResponseHeaders().add("Content-Type", "text/event-stream");
+            exchange.sendResponseHeaders(200, response.length);
+            try (OutputStream output = exchange.getResponseBody()) { output.write(response); }
+        });
+        server.start();
+        try {
+            OpenAiCompatibleProvider provider = OpenAiCompatibleProvider.create(
+                    "http://localhost:" + server.getAddress().getPort() + "/stream-tools", "", "default");
+            AtomicReference<AiResponse> completed = new AtomicReference<>();
+            provider.stream(new AiRequest("call tools"), new AiStreamHandler() {
+                @Override public void onToken(String token) { }
+                @Override public void onComplete(AiResponse response) { completed.set(response); }
+            });
+            assertThat(completed.get().content()).isEmpty();
+            assertThat(completed.get().toolCalls()).extracting(AiToolCall::name)
+                    .containsExactly("lookup", "notify");
+            assertThat(completed.get().toolCalls().get(0).arguments()).containsEntry("id", 42);
+            assertThat(completed.get().toolCalls().get(1).arguments()).containsEntry("text", "hello");
+        } finally {
+            server.stop(0);
+        }
+    }
+
+    @Test
+    void malformedStreamingToolArgumentsFailWithStableCode() throws Exception {
+        HttpServer server = HttpServer.create(new InetSocketAddress(0), 0);
+        server.createContext("/invalid-stream-tool", exchange -> {
+            Map<String, Object> event = Map.of("choices", List.of(Map.of("delta", Map.of(
+                    "tool_calls", List.of(Map.of("index", 0, "id", "call-invalid",
+                            "function", Map.of("name", "lookup", "arguments", "{bad")))))));
+            byte[] response = ("data: " + JSON.toJSONString(event) + "\n\n"
+                    + "data: [DONE]\n\n").getBytes(StandardCharsets.UTF_8);
+            exchange.sendResponseHeaders(200, response.length);
+            try (OutputStream output = exchange.getResponseBody()) { output.write(response); }
+        });
+        server.start();
+        try {
+            OpenAiCompatibleProvider provider = OpenAiCompatibleProvider.create(
+                    "http://localhost:" + server.getAddress().getPort() + "/invalid-stream-tool",
+                    "", "default");
+            assertThatThrownBy(() -> provider.stream(new AiRequest("call tool"), token -> { }))
+                    .isInstanceOf(AiProviderException.class)
+                    .extracting("code").isEqualTo("AI_TOOL_CALL_INVALID");
+        } finally {
+            server.stop(0);
+        }
+    }
+
+    @Test
     void streamingBudgetRequestsAndParsesUsage() throws Exception {
         AtomicReference<String> requestBody = new AtomicReference<>();
         HttpServer server = HttpServer.create(new InetSocketAddress(0), 0);

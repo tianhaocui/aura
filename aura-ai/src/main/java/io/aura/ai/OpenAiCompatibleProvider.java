@@ -17,6 +17,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.TreeMap;
 
 /**
  * Provider for APIs implementing the OpenAI chat-completions wire format.
@@ -83,6 +84,7 @@ public final class OpenAiCompatibleProvider implements AiProvider {
         handler.onStart();
         StringBuilder content = new StringBuilder();
         Map<String, Object> usage = new LinkedHashMap<>();
+        Map<Integer, StreamingToolCall> streamingToolCalls = new TreeMap<>();
         long[] bytes = {0L};
         try (InputStream body = response.body();
              BufferedReader reader = new BufferedReader(new InputStreamReader(body, StandardCharsets.UTF_8))) {
@@ -101,6 +103,7 @@ public final class OpenAiCompatibleProvider implements AiProvider {
                 if (event.get("usage") instanceof Map<?, ?> reportedUsage) {
                     reportedUsage.forEach((key, value) -> usage.put(String.valueOf(key), value));
                 }
+                mergeStreamingToolCalls(event, streamingToolCalls);
                 String token = decodeDelta(event);
                 if (token != null && !token.isEmpty()) {
                     content.append(token);
@@ -109,7 +112,8 @@ public final class OpenAiCompatibleProvider implements AiProvider {
             }
         }
         request.cancellationToken().throwIfCancelled();
-        handler.onComplete(new AiResponse(content.toString(), model(request), usage, null));
+        handler.onComplete(new AiResponse(content.toString(), model(request), usage, null,
+                finishStreamingToolCalls(streamingToolCalls)));
     }
 
     private HttpRequest request(AiRequest request, boolean stream) {
@@ -210,6 +214,81 @@ public final class OpenAiCompatibleProvider implements AiProvider {
         } catch (RuntimeException error) {
             throw new AiProviderException("AI_STREAM_INVALID", 200, "AI provider returned invalid stream data");
         }
+    }
+
+    @SuppressWarnings("unchecked")
+    private static void mergeStreamingToolCalls(Map<String, Object> root,
+                                                Map<Integer, StreamingToolCall> calls)
+            throws AiProviderException {
+        try {
+            List<Map<String, Object>> choices = (List<Map<String, Object>>) root.get("choices");
+            if (choices == null || choices.isEmpty()) return;
+            Map<String, Object> delta = (Map<String, Object>) choices.get(0).get("delta");
+            if (delta == null || !(delta.get("tool_calls") instanceof List<?> rawCalls)) return;
+            for (Object raw : rawCalls) {
+                if (!(raw instanceof Map<?, ?> call)) continue;
+                Object rawIndex = call.get("index");
+                if (!(rawIndex instanceof Number index)) {
+                    throw new IllegalArgumentException("streaming tool call index is missing");
+                }
+                long longPosition = index.longValue();
+                if (longPosition < 0 || longPosition > Integer.MAX_VALUE
+                        || index.doubleValue() != (double) longPosition) {
+                    throw new IllegalArgumentException("streaming tool call index is invalid");
+                }
+                int position = (int) longPosition;
+                StreamingToolCall partial = calls.computeIfAbsent(position,
+                        ignored -> new StreamingToolCall());
+                if (call.get("id") != null) {
+                    String id = call.get("id").toString();
+                    if (partial.id != null && !partial.id.equals(id)) {
+                        throw new IllegalArgumentException("streaming tool call id changed");
+                    }
+                    partial.id = id;
+                }
+                Map<String, Object> function = call.get("function") instanceof Map<?, ?> map
+                        ? (Map<String, Object>) map : Map.of();
+                if (function.get("name") != null) {
+                    if (!(function.get("name") instanceof String name)) {
+                        throw new IllegalArgumentException("streaming tool call name is invalid");
+                    }
+                    partial.name.append(name);
+                }
+                if (function.get("arguments") != null) {
+                    if (!(function.get("arguments") instanceof String arguments)) {
+                        throw new IllegalArgumentException("streaming tool call arguments are invalid");
+                    }
+                    partial.arguments.append(arguments);
+                }
+            }
+        } catch (RuntimeException error) {
+            throw new AiProviderException("AI_TOOL_CALL_INVALID", 200,
+                    "AI provider returned invalid streaming tool call");
+        }
+    }
+
+    private static List<AiToolCall> finishStreamingToolCalls(
+            Map<Integer, StreamingToolCall> calls) throws AiProviderException {
+        if (calls.isEmpty()) return List.of();
+        try {
+            List<AiToolCall> result = new ArrayList<>();
+            for (StreamingToolCall partial : calls.values()) {
+                if (partial.name.isEmpty()) throw new IllegalArgumentException("tool name is missing");
+                Map<String, Object> arguments = partial.arguments.isEmpty()
+                        ? Map.of() : JSON.parseObject(partial.arguments.toString(), Map.class);
+                result.add(new AiToolCall(partial.id, partial.name.toString(), arguments));
+            }
+            return List.copyOf(result);
+        } catch (RuntimeException error) {
+            throw new AiProviderException("AI_TOOL_CALL_INVALID", 200,
+                    "AI provider returned invalid streaming tool call arguments");
+        }
+    }
+
+    private static final class StreamingToolCall {
+        private String id;
+        private final StringBuilder name = new StringBuilder();
+        private final StringBuilder arguments = new StringBuilder();
     }
 
     @SuppressWarnings("unchecked")

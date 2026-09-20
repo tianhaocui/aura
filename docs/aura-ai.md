@@ -90,6 +90,10 @@ and key in deployment configuration; they are never included in provider error m
 The default redactor covers Bearer/Basic authorization values and recursively
 redacts sensitive fields inside request parameters, tool descriptions, and tool
 schemas before provider serialization.
+OpenAI-compatible streaming aggregates incremental `tool_calls` by index; names
+and JSON arguments may span multiple SSE chunks. The completed `AiResponse`
+contains the same typed `AiToolCall` model as synchronous calls. Malformed
+arguments fail with `AI_TOOL_CALL_INVALID` rather than producing a partial call.
 
 Typed tool calling is available without provider-specific request maps:
 
