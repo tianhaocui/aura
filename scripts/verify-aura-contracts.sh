@@ -42,6 +42,7 @@ test -x "$repo_root/scripts/verify-sbom.sh"
 test -x "$repo_root/scripts/verify-public-api.sh"
 test -x "$repo_root/scripts/verify-docs-code.sh"
 test -x "$repo_root/scripts/verify-mcp-npm.mjs"
+test -x "$repo_root/scripts/verify-deployment.sh"
 test -f "$repo_root/aura-db-migration-flyway/src/test/java/io/aura/db/flyway/FlywayExternalDatabaseTest.java"
 test -f "$repo_root/aura-db-migration-liquibase/src/test/java/io/aura/db/liquibase/LiquibaseExternalDatabaseTest.java"
 test -f "$repo_root/api/aura-1.0.public-api.txt"
@@ -67,6 +68,8 @@ test -f "$repo_root/aura-archetype/src/main/resources/archetype-resources/Docker
 test -f "$repo_root/aura-archetype/src/main/resources/archetype-resources/k8s/aura.yaml"
 rg -q 'readOnlyRootFilesystem: true' \
   "$repo_root/aura-archetype/src/main/resources/archetype-resources/k8s/aura.yaml"
+rg -q 'type=secret,id=maven_settings' \
+  "$repo_root/aura-archetype/src/main/resources/archetype-resources/Dockerfile"
 rg -q 'deploymentName' \
   "$repo_root/aura-archetype/src/main/resources/META-INF/maven/archetype-metadata.xml"
 rg -q 'validationRegex' \

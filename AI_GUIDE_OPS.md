@@ -184,6 +184,18 @@ The standard archetype configures Shade with both the executable manifest and
 discovery. Deployment values come from environment/JVM overrides or an explicit
 file passed to `AuraApp.create(Path)`, not implicit classpath profile discovery.
 
+The repository's canonical deployment verification is:
+
+```bash
+bash scripts/verify-deployment.sh
+```
+
+It requires Docker, kind, kubectl, Java, Maven, Python 3, curl, ripgrep, and
+unzip. The script generates a fresh archetype project, builds and runs its
+non-root read-only image, performs a Kubernetes server-side dry-run, deploys the
+same image to kind, waits for the readiness probe, and checks `/hello`. CI runs
+this command; do not replace it with text-only Dockerfile or YAML assertions.
+
 Add this profile to pom.xml:
 
 ```xml

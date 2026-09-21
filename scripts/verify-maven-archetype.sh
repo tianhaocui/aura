@@ -2,17 +2,40 @@
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-work_dir="$(mktemp -d "${TMPDIR:-/tmp}/aura-archetype.XXXXXX")"
+preserve_work_dir=false
+if test -n "${AURA_ARCHETYPE_WORK_DIR:-}"; then
+  work_dir="$AURA_ARCHETYPE_WORK_DIR"
+  mkdir "$work_dir"
+  preserve_work_dir=true
+else
+  work_dir="$(mktemp -d "${TMPDIR:-/tmp}/aura-archetype.XXXXXX")"
+fi
 app_pid=""
 root_version="$(sed -n 's:.*<version>\([^<]*\)</version>.*:\1:p' "$repo_root/pom.xml" | head -1)"
 local_repo="$work_dir/m2"
 
+terminate_process() {
+  local pid="$1"
+  if ! kill -0 "$pid" 2>/dev/null; then return; fi
+  kill -TERM "$pid" 2>/dev/null || true
+  for _ in {1..40}; do
+    if ! kill -0 "$pid" 2>/dev/null; then
+      wait "$pid" 2>/dev/null || true
+      return
+    fi
+    sleep 0.25
+  done
+  kill -KILL "$pid" 2>/dev/null || true
+  wait "$pid" 2>/dev/null || true
+}
+
 cleanup() {
   if test -n "$app_pid" && kill -0 "$app_pid" 2>/dev/null; then
-    kill -TERM "$app_pid" 2>/dev/null || true
-    wait "$app_pid" 2>/dev/null || true
+    terminate_process "$app_pid"
   fi
-  rm -rf -- "$work_dir"
+  if test "$preserve_work_dir" != true; then
+    rm -rf -- "$work_dir"
+  fi
 }
 trap cleanup EXIT
 
@@ -136,6 +159,7 @@ rg -q 'path: /health/live' "$generated/k8s/aura.yaml"
 rg -q 'path: /health/ready' "$generated/k8s/aura.yaml"
 rg -q 'terminationGracePeriodSeconds: 40' "$generated/k8s/aura.yaml"
 rg -q '^USER 10001:10001$' "$generated/Dockerfile"
+rg -q 'type=secret,id=maven_settings' "$generated/Dockerfile"
 "${maven[@]}" -q -f "$generated/pom.xml" verify
 
 jar_file="$generated/target/Aura_Smoke-1.0.0-SNAPSHOT.jar"
@@ -193,3 +217,6 @@ wait "$app_pid" 2>/dev/null || true
 app_pid=""
 
 echo "Aura BOM, starter, and generated archetype project passed"
+if test "$preserve_work_dir" = true; then
+  echo "Preserved archetype smoke workspace: $work_dir"
+fi
