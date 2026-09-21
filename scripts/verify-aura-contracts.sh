@@ -37,6 +37,7 @@ test -f "$repo_root/aura-starter/pom.xml"
 test -f "$repo_root/aura-archetype/src/main/resources/META-INF/maven/archetype-metadata.xml"
 test -x "$repo_root/scripts/verify-maven-archetype.sh"
 test -x "$repo_root/scripts/verify-release-artifacts.sh"
+test -x "$repo_root/scripts/verify-sbom.sh"
 for artifact in \
   aura-contract aura-core aura-web aura-db aura-db-migration-flyway \
   aura-db-migration-liquibase aura-workflow aura-ai aura-mcp aura-processor \

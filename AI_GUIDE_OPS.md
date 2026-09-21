@@ -134,6 +134,19 @@ StandardAdmissionPolicy policy = StandardAdmissionPolicy.builder()
         .build();
 ```
 
+## Release Gates
+
+Generate the aggregate CycloneDX SBOM before publishing:
+
+```bash
+bash scripts/verify-sbom.sh
+```
+
+The gate writes `target/aura-sbom.json` with the reactor's runtime and compile
+components, versions, licenses, and dependency relationships. CI also runs
+GitHub Dependency Review on pull requests; a release must pass both the SBOM
+shape check and the dependency vulnerability policy before Central publishing.
+
 ## Packaging (Fat Jar)
 
 ```xml

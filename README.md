@@ -173,6 +173,7 @@ inspect structured failures, and only then start the real server.
 - [1.0 documentation](docs/DOCUMENTATION.md)
 - [Module development](docs/aura-module.md)
 - [Migration from pre-1.0](docs/migration-to-1.0.md)
+- [Operations and release gates](AI_GUIDE_OPS.md)
 - [Runnable composed example](examples/aura-composed)
 - [Runnable generated-route example](examples/aura-generated)
 
