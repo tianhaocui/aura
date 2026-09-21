@@ -36,6 +36,10 @@ jobs:
         if: matrix.java == 17
         run: bash scripts/verify-maven-archetype.sh
 
+      - name: Release Artifact Shape
+        if: matrix.java == 17
+        run: bash scripts/verify-release-artifacts.sh
+
       - name: Upload Coverage Report
         if: always() && matrix.java == 17
         uses: actions/upload-artifact@v4
@@ -55,3 +59,26 @@ jobs:
         uses: actions/dependency-review-action@v4
         with:
           fail-on-severity: high
+
+  minimum-maven:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Install Maven 3.8.6
+        run: |
+          curl --fail --silent --show-error --location \
+            https://archive.apache.org/dist/maven/maven-3/3.8.6/binaries/apache-maven-3.8.6-bin.tar.gz \
+            --output "$RUNNER_TEMP/apache-maven.tar.gz"
+          echo 'f790857f3b1f90ae8d16281f902c689e4f136ebe584aba45e4b1fa66c80cba826d3e0e52fdd04ed44b4c66f6d3fe3584a057c26dfcac544a60b301e6d0f91c26  '"$RUNNER_TEMP/apache-maven.tar.gz" | sha512sum --check
+          tar -xzf "$RUNNER_TEMP/apache-maven.tar.gz" -C "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/apache-maven-3.8.6/bin" >> "$GITHUB_PATH"
+      - name: Verify minimum Maven toolchain
+        run: |
+          mvn --version
+          mvn --batch-mode --fail-at-end -q \
+            -pl aura-bom,aura-starter,aura-archetype -am \
+            -DskipTests package

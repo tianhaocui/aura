@@ -47,8 +47,16 @@ mvn archetype:generate -B \
   -DarchetypeArtifactId=aura-archetype \
   -DarchetypeVersion=1.0.0 \
   -DgroupId=com.example -DartifactId=my-app \
-  -Dversion=1.0.0-SNAPSHOT -Dpackage=com.example
+  -Dversion=1.0.0-SNAPSHOT -Dpackage=com.example \
+  -DdeploymentName=my-app
 ```
+
+The generated project includes a multi-stage non-root Dockerfile and a
+Kubernetes manifest with resource limits, rolling updates, graceful termination,
+and startup/liveness/readiness probes. Replace the example public origin, host,
+and image before deployment. Kubernetes resource names use the separate
+lowercase `deploymentName` property, so a Maven artifactId may retain its own
+valid Maven naming.
 
 ## Build An Application
 

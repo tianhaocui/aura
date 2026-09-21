@@ -36,6 +36,7 @@ test -f "$repo_root/aura-bom/pom.xml"
 test -f "$repo_root/aura-starter/pom.xml"
 test -f "$repo_root/aura-archetype/src/main/resources/META-INF/maven/archetype-metadata.xml"
 test -x "$repo_root/scripts/verify-maven-archetype.sh"
+test -x "$repo_root/scripts/verify-release-artifacts.sh"
 for artifact in \
   aura-contract aura-core aura-web aura-db aura-db-migration-flyway \
   aura-db-migration-liquibase aura-workflow aura-ai aura-mcp aura-processor \
@@ -49,6 +50,22 @@ rg -q 'TestClient\.of\(app\)' \
   "$repo_root/aura-archetype/src/main/resources/archetype-resources/src/test/java/AppTest.java"
 rg -q 'ServicesResourceTransformer' \
   "$repo_root/aura-archetype/src/main/resources/archetype-resources/pom.xml"
+rg -q 'HealthModule\.create\(\)' \
+  "$repo_root/aura-archetype/src/main/resources/archetype-resources/src/main/java/App.java"
+test -f "$repo_root/aura-archetype/src/main/resources/archetype-resources/Dockerfile"
+test -f "$repo_root/aura-archetype/src/main/resources/archetype-resources/k8s/aura.yaml"
+rg -q 'readOnlyRootFilesystem: true' \
+  "$repo_root/aura-archetype/src/main/resources/archetype-resources/k8s/aura.yaml"
+rg -q 'deploymentName' \
+  "$repo_root/aura-archetype/src/main/resources/META-INF/maven/archetype-metadata.xml"
+rg -q 'validationRegex' \
+  "$repo_root/aura-archetype/src/main/resources/META-INF/maven/archetype-metadata.xml"
+rg -q 'AURA_PORT' \
+  "$repo_root/aura-archetype/src/main/resources/archetype-resources/k8s/aura.yaml"
+rg -q '<maven.deploy.skip>true</maven.deploy.skip>' \
+  "$repo_root/examples/aura-composed/pom.xml"
+rg -q '<maven.deploy.skip>true</maven.deploy.skip>' \
+  "$repo_root/examples/aura-generated/pom.xml"
 test -f "$repo_root/AI_GUIDE.md"
 test -f "$repo_root/docs/legacy-ai-guide-0.6.md"
 test -f "$repo_root/docs/aura-module.md"

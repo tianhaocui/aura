@@ -45,8 +45,14 @@ mvn archetype:generate -B \
   -DarchetypeArtifactId=aura-archetype \
   -DarchetypeVersion=1.0.0 \
   -DgroupId=com.example -DartifactId=my-app \
-  -Dversion=1.0.0-SNAPSHOT -Dpackage=com.example
+  -Dversion=1.0.0-SNAPSHOT -Dpackage=com.example \
+  -DdeploymentName=my-app
 ```
+
+生成工程包含多阶段非 root Dockerfile，以及带资源限制、滚动升级、优雅停机和
+startup/liveness/readiness 探针的 Kubernetes manifest。部署前必须替换示例公网域名、
+Host 和镜像地址。Kubernetes 资源名称使用单独的小写 `deploymentName` 属性，因此 Maven
+artifactId 可以继续使用合法但不同的 Maven 命名。
 
 ## 创建应用
 

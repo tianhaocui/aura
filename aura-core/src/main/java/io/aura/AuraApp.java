@@ -14,7 +14,10 @@ public final class AuraApp implements AutoCloseable {
         this.runtime = new ModularRuntime(config == null ? new AuraConfig() : config);
     }
 
-    public static AuraApp create() { return new AuraApp(new AuraConfig()); }
+    /** Creates an application from validated environment and JVM deployment overrides. */
+    public static AuraApp create() {
+        return new AuraApp(AuraConfig.fromProperties(new Properties()));
+    }
     public static AuraApp create(AuraConfig config) { return new AuraApp(config); }
 
     /** Creates an application from a deployment properties file before runtime freezing. */

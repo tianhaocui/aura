@@ -90,12 +90,15 @@ Properties resolution priority (highest to lowest):
 3. The `Properties`/file passed to `AuraApp.create(...)`
 4. Explicit `AuraConfig` defaults
 
-Aura does not search classpath profiles implicitly. Supply the deployment file
-explicitly with `AuraApp.create(Path.of("/etc/aura.properties"))`. Startup args
-support `--dev`, `--mcp-stdio`, and module properties such as
+`AuraApp.create()` reads environment variables and JVM system properties before
+freezing configuration. To add file values, use
+`AuraApp.create(Path.of("/etc/aura.properties"))`; environment and JVM values
+still take precedence. Aura does not search classpath profiles implicitly.
+Startup args support `--dev`, `--mcp-stdio`, and module properties such as
 `--orders.timeout=5`; runtime settings are frozen at application creation.
 
-Framework keys in `aura.properties`:
+Framework keys in `aura.properties` (the same keys can be provided by the
+matching `AURA_*` environment variables):
 ```properties
 aura.port=8080
 aura.env=dev
@@ -145,7 +148,10 @@ java -jar target/your-app-1.0.jar
 java -jar target/your-app-1.0.jar --mcp-stdio
 ```
 
-Fat jar properties loading: `aura.properties` and `aura-{env}.properties` are loaded from classpath root (`src/main/resources/`). In fat jar, maven-shade merges all classpath resources — if a dependency also ships `aura.properties`, use `ServicesResourceTransformer` and ensure your file is in `src/main/resources/` (not a nested path). Env vars and `--args` always take precedence regardless of packaging.
+The standard archetype configures Shade with both the executable manifest and
+`ServicesResourceTransformer`; removing the latter breaks runtime adapter
+discovery. Deployment values come from environment/JVM overrides or an explicit
+file passed to `AuraApp.create(Path)`, not implicit classpath profile discovery.
 
 Add this profile to pom.xml:
 

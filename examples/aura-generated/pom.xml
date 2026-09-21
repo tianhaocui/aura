@@ -11,6 +11,9 @@
     </parent>
     <artifactId>aura-example-generated</artifactId>
     <name>aura-example-generated</name>
+    <properties>
+        <maven.deploy.skip>true</maven.deploy.skip>
+    </properties>
     <dependencies>
         <dependency>
             <groupId>io.github.tianhaocui</groupId>

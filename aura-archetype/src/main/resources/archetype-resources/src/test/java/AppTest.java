@@ -15,6 +15,7 @@ class AppTest {
                     .expect(200);
 
             assertEquals("hello", response.body());
+            TestClient.of(app).get("/health/live").expect(200);
         }
     }
 }

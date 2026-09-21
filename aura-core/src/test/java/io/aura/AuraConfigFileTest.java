@@ -58,4 +58,27 @@ class AuraConfigFileTest {
         assertThatThrownBy(() -> AuraApp.create(tempDir.resolve("missing.properties")))
                 .isInstanceOf(IOException.class);
     }
+
+    @Test
+    void defaultApplicationReadsJvmDeploymentOverrides() {
+        String previousPort = System.getProperty("aura.port");
+        String previousEnv = System.getProperty("aura.env");
+        try {
+            System.setProperty("aura.port", "9197");
+            System.setProperty("aura.env", "production");
+
+            AuraConfigSnapshot config = AuraApp.create().config();
+
+            assertThat(config.port()).isEqualTo(9197);
+            assertThat(config.env()).isEqualTo("production");
+        } finally {
+            restoreProperty("aura.port", previousPort);
+            restoreProperty("aura.env", previousEnv);
+        }
+    }
+
+    private static void restoreProperty(String key, String value) {
+        if (value == null) System.clearProperty(key);
+        else System.setProperty(key, value);
+    }
 }

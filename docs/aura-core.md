@@ -19,8 +19,9 @@ app.start();
 
 Configuration is validated and frozen when `AuraApp` is created. Use
 `AuraApp.create(Path)` or `AuraApp.create(Properties)` for deployment values.
-Environment and JVM system properties override values from the supplied
-properties object or file.
+The no-argument `AuraApp.create()` reads environment and JVM system properties.
+Those sources also override values from a supplied properties object or file;
+passing an explicit `AuraConfig` remains the programmatic, self-contained path.
 
 The public lifecycle is:
 

@@ -6,10 +6,14 @@
         name="aura-app">
     <requiredProperties>
         <requiredProperty key="auraVersion">
-            <defaultValue>1.0.0</defaultValue>
+            <defaultValue>${project.version}</defaultValue>
         </requiredProperty>
         <requiredProperty key="javaVersion">
             <defaultValue>17</defaultValue>
+        </requiredProperty>
+        <requiredProperty key="deploymentName">
+            <defaultValue>aura-app</defaultValue>
+            <validationRegex>^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$</validationRegex>
         </requiredProperty>
     </requiredProperties>
     <fileSets>
@@ -17,6 +21,8 @@
             <directory></directory>
             <includes>
                 <include>pom.xml</include>
+                <include>Dockerfile</include>
+                <include>.dockerignore</include>
             </includes>
         </fileSet>
         <fileSet filtered="true" packaged="true" encoding="UTF-8">
@@ -29,6 +35,12 @@
             <directory>src/test/java</directory>
             <includes>
                 <include>**/*.java</include>
+            </includes>
+        </fileSet>
+        <fileSet filtered="true" encoding="UTF-8">
+            <directory>k8s</directory>
+            <includes>
+                <include>**/*.yaml</include>
             </includes>
         </fileSet>
     </fileSets>

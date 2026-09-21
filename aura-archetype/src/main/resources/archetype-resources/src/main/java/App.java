@@ -2,6 +2,7 @@ package ${package};
 
 import io.aura.AuraApp;
 import io.aura.AuraModule;
+import io.aura.HealthModule;
 import io.aura.ModuleContext;
 import io.aura.contract.ModuleMetadata;
 import io.aura.contract.RouteContribution;
@@ -11,7 +12,9 @@ public final class App {
     private App() { }
 
     public static AuraApp create() {
-        return AuraApp.create().use(new AppModule());
+        return AuraApp.create()
+                .use(HealthModule.create())
+                .use(new AppModule());
     }
 
     public static void main(String[] args) {
