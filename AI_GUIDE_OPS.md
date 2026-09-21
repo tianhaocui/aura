@@ -160,6 +160,11 @@ An intentional public API change must update `api/aura-1.0.public-api.txt` in
 the same review with `AURA_API_UPDATE=true`; do not silently regenerate it in
 CI.
 
+AI accounting is also an optional SPI. Use `AiUsageSink` for durable usage,
+budget, pricing, or audit integration; keep the sink bounded and failure-isolated
+so an accounting outage cannot turn a completed provider response into a request
+failure.
+
 ## Packaging (Fat Jar)
 
 ```xml

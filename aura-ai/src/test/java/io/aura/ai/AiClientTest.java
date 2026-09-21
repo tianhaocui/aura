@@ -10,17 +10,47 @@ import java.util.Map;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 
 class AiClientTest {
+    @Test
+    void usageSinkReceivesCompletedUsageWithoutChangingResponse() throws Exception {
+        AtomicReference<AiUsageSink.UsageEvent> event = new AtomicReference<>();
+        AiClient client = new AiClient(
+                request -> new AiResponse("ok", Map.of(
+                        "input_tokens", 2, "output_tokens", 3, "total_tokens", 5)),
+                Executors.newSingleThreadExecutor(), event::set);
+        try {
+            assertThat(client.chat(AiRequest.builder().model("test-model").prompt("hello").build()).content())
+                    .isEqualTo("ok");
+            assertThat(event.get()).isNotNull();
+            assertThat(event.get().model()).isEqualTo("test-model");
+            assertThat(event.get().usage()).isEqualTo(new AiUsage(2, 3, 5, -1));
+            assertThat(event.get().usageKnown()).isTrue();
+        } finally {
+            client.close();
+        }
+    }
+
+    @Test
+    void usageSinkFailureDoesNotFailProviderResponse() throws Exception {
+        AiClient client = new AiClient(request -> AiResponse.text("ok"),
+                Executors.newSingleThreadExecutor(), event -> { throw new IllegalStateException("sink down"); });
+        try {
+            assertThat(client.chat(new AiRequest("hello")).content()).isEqualTo("ok");
+        } finally {
+            client.close();
+        }
+    }
     @Test
     void defaultExecutorUsesFixedDaemonWorkersAndBoundedQueue() throws Exception {
         ThreadPoolExecutor executor = AiClient.createDefaultExecutor();

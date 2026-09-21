@@ -32,6 +32,20 @@ OrderSummary summary = StructuredOutput.parse(response, OrderSummary.class);
 AiUsageTotals window = client.usageTotals();
 ```
 
+For cross-process accounting, pass an optional `AiUsageSink`; the sink can write
+to a database, queue, or metrics service without making any of those systems a
+core dependency:
+
+```java
+AiClient client = new AiClient(provider, executor, event ->
+        accountingStore.append(event.completedAt(), event.model(), event.usage()));
+```
+
+Sink failures are isolated from completed provider responses. The event is
+emitted after provider usage has been normalized or conservatively priced, and
+includes the request model, input-character count, usage values, and whether
+the provider reported usable accounting data.
+
 `maxInputCharacters` is a preflight limit over the complete provider-neutral
 request: user and system prompts, model/tool choice, parameter JSON, tool names,
 descriptions and schemas, plus the structured-output schema. For redacted fields,

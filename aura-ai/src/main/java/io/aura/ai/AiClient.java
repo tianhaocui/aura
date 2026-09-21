@@ -2,6 +2,7 @@ package io.aura.ai;
 
 import io.aura.contract.CancellationToken;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.Objects;
 import java.util.ServiceLoader;
 import java.util.concurrent.ArrayBlockingQueue;
@@ -29,6 +30,7 @@ public final class AiClient implements AutoCloseable {
     private final AiProvider provider;
     private final ExecutorService executor;
     private final boolean ownsExecutor;
+    private final AiUsageSink usageSink;
     private final AtomicLong requests = new AtomicLong();
     private final AtomicLong inputTokens = new AtomicLong();
     private final AtomicLong outputTokens = new AtomicLong();
@@ -39,17 +41,24 @@ public final class AiClient implements AutoCloseable {
     private final AtomicLong timedOutRequests = new AtomicLong();
 
     public AiClient(AiProvider provider) {
-        this(provider, createDefaultExecutor(), true);
+        this(provider, createDefaultExecutor(), true, AiUsageSink.NOOP);
     }
 
     public AiClient(AiProvider provider, ExecutorService executor) {
-        this(provider, executor, false);
+        this(provider, executor, false, AiUsageSink.NOOP);
     }
 
-    private AiClient(AiProvider provider, ExecutorService executor, boolean ownsExecutor) {
+    /** Creates a client with an optional sink for durable accounting or audit. */
+    public AiClient(AiProvider provider, ExecutorService executor, AiUsageSink usageSink) {
+        this(provider, executor, false, usageSink);
+    }
+
+    private AiClient(AiProvider provider, ExecutorService executor, boolean ownsExecutor,
+                     AiUsageSink usageSink) {
         this.provider = Objects.requireNonNull(provider, "provider");
         this.executor = Objects.requireNonNull(executor, "executor");
         this.ownsExecutor = ownsExecutor;
+        this.usageSink = usageSink == null ? AiUsageSink.NOOP : usageSink;
     }
 
     public AiProvider provider() { return provider; }
@@ -478,6 +487,13 @@ public final class AiClient implements AutoCloseable {
         addKnown(totalTokens, usage.totalTokens());
         addKnown(costMicros, usage.costMicros());
         if (!usage.hasTokenUsage() && !usage.hasCost()) unknownUsage.incrementAndGet();
+        try {
+            usageSink.record(new AiUsageSink.UsageEvent(
+                    Instant.now(), request.model(), request.inputCharacters(), usage,
+                    usage.hasTokenUsage() || usage.hasCost()));
+        } catch (RuntimeException ignored) {
+            // Accounting must not turn a completed provider response into an application failure.
+        }
     }
 
     private static AiUsage usageFor(AiRequest request, AiResponse response) {
