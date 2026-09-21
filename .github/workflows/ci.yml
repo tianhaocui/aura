@@ -5,6 +5,8 @@ on:
     branches: [master]
   push:
     branches: [master]
+  schedule:
+    - cron: '17 3 * * 1'
 
 jobs:
   test:
@@ -86,3 +88,19 @@ jobs:
           mvn --batch-mode --fail-at-end -q \
             -pl aura-bom,aura-starter,aura-archetype -am \
             -DskipTests package
+
+  osv-full-scan:
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Full OSV dependency scan
+        uses: google/osv-scanner-action/osv-scanner-action@v2.0.2
+        with:
+          scan-args: |-
+            --recursive
+            ./

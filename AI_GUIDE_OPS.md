@@ -146,6 +146,9 @@ The gate writes `target/aura-sbom.json` with the reactor's runtime and compile
 components, versions, licenses, and dependency relationships. CI also runs
 GitHub Dependency Review on pull requests; a release must pass both the SBOM
 shape check and the dependency vulnerability policy before Central publishing.
+The CI workflow additionally runs a full OSV-Scanner scan on every push and on
+the weekly schedule, so newly disclosed vulnerabilities are not dependent on a
+new pull request.
 
 ## Packaging (Fat Jar)
 
