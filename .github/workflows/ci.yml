@@ -63,6 +63,15 @@ jobs:
         if: matrix.java == 17
         run: bash scripts/verify-public-api.sh
 
+      - name: Archive Public API Change Report
+        if: always() && matrix.java == 17
+        uses: actions/upload-artifact@v4
+        with:
+          name: aura-1.0-public-api-report
+          path: target/aura-public-api-report.json
+          if-no-files-found: ignore
+          retention-days: 90
+
       - name: Canonical Documentation Code
         if: matrix.java == 17
         run: bash scripts/verify-docs-code.sh

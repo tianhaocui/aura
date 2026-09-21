@@ -41,6 +41,9 @@ test -x "$repo_root/scripts/verify-release-artifacts.sh"
 test -x "$repo_root/scripts/verify-release-signatures.sh"
 test -x "$repo_root/scripts/verify-sbom.sh"
 test -x "$repo_root/scripts/verify-public-api.sh"
+test -x "$repo_root/scripts/verify-public-api-classifier.sh"
+test -f "$repo_root/scripts/public-api-symbols.awk"
+test -f "$repo_root/scripts/public-api-visible-types.awk"
 test -x "$repo_root/scripts/verify-docs-code.sh"
 test -x "$repo_root/scripts/verify-mcp-npm.mjs"
 test -x "$repo_root/scripts/verify-deployment.sh"
@@ -60,6 +63,10 @@ if rg -n '(^|[[:space:]])deploy([[:space:]]|$)' \
 fi
 rg -q 'path: target/aura-sbom\.json' \
   "$repo_root/.github/workflows/ci.yml"
+rg -q 'path: target/aura-public-api-report\.json' \
+  "$repo_root/.github/workflows/ci.yml"
+rg -q 'breakingChanges' "$repo_root/scripts/verify-public-api.sh"
+bash "$repo_root/scripts/verify-public-api-classifier.sh"
 rg -q 'cron: .17 3 \* \* 1.' "$repo_root/.github/workflows/ci.yml"
 for artifact in \
   aura-contract aura-core aura-web aura-db aura-db-migration-flyway \
