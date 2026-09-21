@@ -1,0 +1,3037 @@
+### aura-contract:io.aura.contract.ApiParameter
+public final class io.aura.contract.ApiParameter extends java.lang.Record {
+  public io.aura.contract.ApiParameter(java.lang.String, java.lang.String, java.lang.String, boolean, java.lang.String);
+  public io.aura.contract.ApiParameter(java.lang.String, java.lang.String, java.lang.String, boolean, java.lang.String, java.util.Map<java.lang.String, java.lang.Object>);
+  public final java.lang.String toString();
+  public final int hashCode();
+  public final boolean equals(java.lang.Object);
+  public java.lang.String name();
+  public java.lang.String type();
+  public java.lang.String source();
+  public boolean required();
+  public java.lang.String description();
+  public java.util.Map<java.lang.String, java.lang.Object> schema();
+}
+### aura-contract:io.aura.contract.ApiRoute
+public final class io.aura.contract.ApiRoute extends java.lang.Record {
+  public io.aura.contract.ApiRoute(java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.util.List<io.aura.contract.ApiParameter>, java.lang.String);
+  public io.aura.contract.ApiRoute(java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.util.List<io.aura.contract.ApiParameter>, java.lang.String, java.util.Map<java.lang.String, java.lang.Object>);
+  public io.aura.contract.ApiRoute(java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.util.List<io.aura.contract.ApiParameter>, java.lang.String, java.util.Map<java.lang.String, java.lang.Object>, boolean, java.lang.String);
+  public final java.lang.String toString();
+  public final int hashCode();
+  public final boolean equals(java.lang.Object);
+  public java.lang.String method();
+  public java.lang.String path();
+  public java.lang.String description();
+  public java.lang.String returnType();
+  public java.util.List<io.aura.contract.ApiParameter> params();
+  public java.lang.String example();
+  public java.util.Map<java.lang.String, java.lang.Object> responseSchema();
+  public boolean authenticated();
+  public java.lang.String permission();
+}
+### aura-contract:io.aura.contract.CancellationToken$Registration
+public interface io.aura.contract.CancellationToken$Registration extends java.lang.AutoCloseable {
+  public abstract void close();
+}
+### aura-contract:io.aura.contract.CancellationToken
+public final class io.aura.contract.CancellationToken {
+  public io.aura.contract.CancellationToken();
+  public io.aura.contract.CancellationToken child();
+  public static io.aura.contract.CancellationToken linked(io.aura.contract.CancellationToken...);
+  public boolean isCancelled();
+  public boolean cancel();
+  public void detach();
+  public io.aura.contract.CancellationToken$Registration onCancel(java.lang.Runnable);
+  public void throwIfCancelled();
+}
+### aura-contract:io.aura.contract.CapabilityLookup
+public interface io.aura.contract.CapabilityLookup {
+  public abstract <T> java.util.Optional<T> find(java.lang.Class<T>);
+  public default <T> java.util.Optional<T> find(java.lang.String, java.lang.Class<T>);
+  public default <T> T require(java.lang.Class<T>);
+  public default <T> java.util.Optional<T> lookup(java.lang.Class<T>);
+  public default <T> T require(java.lang.String, java.lang.Class<T>);
+}
+### aura-contract:io.aura.contract.CodedFailure
+public interface io.aura.contract.CodedFailure {
+  public abstract java.lang.String code();
+}
+### aura-contract:io.aura.contract.ContractException
+public class io.aura.contract.ContractException extends java.lang.RuntimeException {
+  public io.aura.contract.ContractException(io.aura.contract.StructuredError);
+  public io.aura.contract.ContractException(java.lang.String, java.lang.String);
+  public io.aura.contract.StructuredError error();
+}
+### aura-contract:io.aura.contract.ExecutorMetrics
+public final class io.aura.contract.ExecutorMetrics extends java.lang.Record {
+  public io.aura.contract.ExecutorMetrics(java.lang.String, boolean, int, int, int, int, long, long, long);
+  public static io.aura.contract.ExecutorMetrics opaque(java.lang.String, long, long);
+  public final java.lang.String toString();
+  public final int hashCode();
+  public final boolean equals(java.lang.Object);
+  public java.lang.String name();
+  public boolean observable();
+  public int workerLimit();
+  public int active();
+  public int queued();
+  public int queueCapacity();
+  public long completed();
+  public long rejected();
+  public long timedOut();
+}
+### aura-contract:io.aura.contract.HealthCheck
+public interface io.aura.contract.HealthCheck {
+  public abstract io.aura.contract.HealthStatus check() throws java.lang.Exception;
+}
+### aura-contract:io.aura.contract.HealthStatus
+public final class io.aura.contract.HealthStatus extends java.lang.Enum<io.aura.contract.HealthStatus> {
+  public static final io.aura.contract.HealthStatus UP;
+  public static final io.aura.contract.HealthStatus DOWN;
+  public static final io.aura.contract.HealthStatus UNKNOWN;
+  public static io.aura.contract.HealthStatus[] values();
+  public static io.aura.contract.HealthStatus valueOf(java.lang.String);
+}
+### aura-contract:io.aura.contract.McpAuthenticator
+public interface io.aura.contract.McpAuthenticator {
+  public abstract java.lang.String authenticate(java.util.Map<java.lang.String, java.lang.String>);
+}
+### aura-contract:io.aura.contract.McpAuthorizer
+public interface io.aura.contract.McpAuthorizer {
+  public abstract boolean authorize(java.lang.String, java.lang.String);
+}
+### aura-contract:io.aura.contract.McpRouterSpec
+public interface io.aura.contract.McpRouterSpec {
+}
+### aura-contract:io.aura.contract.ModuleMetadata
+public final class io.aura.contract.ModuleMetadata extends java.lang.Record {
+  public io.aura.contract.ModuleMetadata(java.lang.String, java.lang.String, java.util.Set<io.aura.contract.ModuleRequirement>, java.util.Set<java.lang.String>);
+  public io.aura.contract.ModuleMetadata(java.lang.String, java.lang.String);
+  public static io.aura.contract.ModuleMetadata of(java.lang.String, java.lang.String);
+  public io.aura.contract.ModuleMetadata requires(io.aura.contract.ModuleRequirement...);
+  public io.aura.contract.ModuleMetadata requires(java.lang.String...);
+  public io.aura.contract.ModuleMetadata requires(java.lang.String, java.lang.String);
+  public io.aura.contract.ModuleMetadata capabilities(java.lang.String...);
+  public io.aura.contract.ModuleMetadata provides(java.lang.String...);
+  public final java.lang.String toString();
+  public final int hashCode();
+  public final boolean equals(java.lang.Object);
+  public java.lang.String id();
+  public java.lang.String version();
+  public java.util.Set<io.aura.contract.ModuleRequirement> requires();
+  public java.util.Set<java.lang.String> capabilities();
+}
+### aura-contract:io.aura.contract.ModuleRequirement
+public final class io.aura.contract.ModuleRequirement extends java.lang.Record {
+  public io.aura.contract.ModuleRequirement(java.lang.String, java.lang.String);
+  public static io.aura.contract.ModuleRequirement of(java.lang.String);
+  public final java.lang.String toString();
+  public final int hashCode();
+  public final boolean equals(java.lang.Object);
+  public java.lang.String id();
+  public java.lang.String versionRange();
+}
+### aura-contract:io.aura.contract.Permission
+public final class io.aura.contract.Permission extends java.lang.Record {
+  public io.aura.contract.Permission(java.lang.String, java.lang.String);
+  public final java.lang.String toString();
+  public final int hashCode();
+  public final boolean equals(java.lang.Object);
+  public java.lang.String id();
+  public java.lang.String description();
+}
+### aura-contract:io.aura.contract.PermissionRegistry
+public final class io.aura.contract.PermissionRegistry {
+  public io.aura.contract.PermissionRegistry();
+  public io.aura.contract.PermissionRegistry register(java.lang.String, java.lang.String);
+  public boolean contains(java.lang.String);
+  public java.util.List<io.aura.contract.Permission> list();
+  public java.util.Map<java.lang.String, io.aura.contract.Permission> snapshot();
+}
+### aura-contract:io.aura.contract.RouteContribution
+public final class io.aura.contract.RouteContribution extends java.lang.Record {
+  public static final java.lang.String AUTHENTICATED;
+  public static final java.lang.String PERMISSION;
+  public io.aura.contract.RouteContribution(java.lang.String, java.lang.String, java.lang.Object, java.util.Map<java.lang.String, java.lang.Object>);
+  public io.aura.contract.RouteContribution(java.lang.String, java.lang.String);
+  public io.aura.contract.RouteContribution(java.lang.String, java.lang.String, java.lang.Object);
+  public java.lang.String description();
+  public java.lang.String returnType();
+  public io.aura.contract.RouteContribution authenticated();
+  public io.aura.contract.RouteContribution permission(java.lang.String);
+  public java.util.Map<java.lang.String, java.lang.Object> responseSchema();
+  public java.util.List<io.aura.contract.ApiParameter> parameters();
+  public final java.lang.String toString();
+  public final int hashCode();
+  public final boolean equals(java.lang.Object);
+  public java.lang.String method();
+  public java.lang.String path();
+  public java.lang.Object handler();
+  public java.util.Map<java.lang.String, java.lang.Object> metadata();
+}
+### aura-contract:io.aura.contract.RouteContributor
+public interface io.aura.contract.RouteContributor {
+  public abstract java.util.Collection<io.aura.contract.RouteContribution> routes();
+}
+### aura-contract:io.aura.contract.RuntimeState
+public final class io.aura.contract.RuntimeState extends java.lang.Enum<io.aura.contract.RuntimeState> {
+  public static final io.aura.contract.RuntimeState NEW;
+  public static final io.aura.contract.RuntimeState STARTING;
+  public static final io.aura.contract.RuntimeState RUNNING;
+  public static final io.aura.contract.RuntimeState STOPPING;
+  public static final io.aura.contract.RuntimeState STOPPED;
+  public static io.aura.contract.RuntimeState[] values();
+  public static io.aura.contract.RuntimeState valueOf(java.lang.String);
+}
+### aura-contract:io.aura.contract.StructuredError
+public final class io.aura.contract.StructuredError extends java.lang.Record {
+  public io.aura.contract.StructuredError(java.lang.String, java.lang.String, java.util.Map<java.lang.String, java.lang.Object>);
+  public io.aura.contract.StructuredError(java.lang.String, java.lang.String);
+  public final java.lang.String toString();
+  public final int hashCode();
+  public final boolean equals(java.lang.Object);
+  public java.lang.String code();
+  public java.lang.String message();
+  public java.util.Map<java.lang.String, java.lang.Object> details();
+}
+### aura-core:io.aura.AuraApp
+public final class io.aura.AuraApp implements java.lang.AutoCloseable {
+  public static io.aura.AuraApp create();
+  public static io.aura.AuraApp create(io.aura.AuraConfig);
+  public static io.aura.AuraApp create(java.nio.file.Path) throws java.io.IOException;
+  public static io.aura.AuraApp create(java.util.Properties);
+  public io.aura.AuraApp use(io.aura.AuraModule);
+  public io.aura.AuraApp observe(io.aura.AuraEventListener);
+  public io.aura.AuraApp healthCheck(io.aura.contract.HealthCheck);
+  public io.aura.AuraApp authorize(java.util.function.BiPredicate<java.lang.String, java.lang.String>);
+  public io.aura.AuraApp mcpAuthenticate(io.aura.contract.McpAuthenticator);
+  public io.aura.AuraApp mcpAuthorize(io.aura.contract.McpAuthorizer);
+  public io.aura.AuraApp authenticate(java.util.function.Function<io.aura.web.BaseContext, java.lang.String>);
+  public io.aura.AuraApp property(java.lang.String, java.lang.String);
+  public io.aura.AuraApp start();
+  public io.aura.AuraApp start(java.lang.String...);
+  public io.aura.AuraApp prepare();
+  public void stop();
+  public void close();
+  public io.aura.contract.RuntimeState state();
+  public io.aura.AuraRuntime runtimeView();
+  public boolean isRunning();
+  public io.aura.AuraConfigSnapshot config();
+  public io.aura.contract.PermissionRegistry permissions();
+  public java.util.List<io.aura.contract.ModuleMetadata> modules();
+  public <T> java.util.Optional<T> find(java.lang.Class<T>);
+  public <T> java.util.Optional<T> find(java.lang.String, java.lang.Class<T>);
+  public <T> T require(java.lang.Class<T>);
+  public <T> T require(java.lang.String, java.lang.Class<T>);
+}
+### aura-core:io.aura.AuraConfig
+public final class io.aura.AuraConfig {
+  public static final long DEFAULT_MAX_BODY_SIZE;
+  public static final long DEFAULT_MAX_UPLOAD_SIZE;
+  public static final long DEFAULT_MAX_WEBSOCKET_MESSAGE_SIZE;
+  public static final int DEFAULT_MAX_WEBSOCKET_CONNECTIONS;
+  public static final int DEFAULT_WEBSOCKET_IDLE_TIMEOUT;
+  public static final int DEFAULT_RATE_LIMIT_MAX_KEYS;
+  public io.aura.AuraConfig();
+  public static io.aura.AuraConfig fromProperties(java.nio.file.Path) throws java.io.IOException;
+  public static io.aura.AuraConfig fromProperties(java.util.Properties);
+  public io.aura.AuraConfig port(int);
+  public io.aura.AuraConfig env(java.lang.String);
+  public io.aura.AuraConfig workers(int);
+  public io.aura.AuraConfig maxBodySize(long);
+  public io.aura.AuraConfig maxUploadSize(long);
+  public io.aura.AuraConfig maxWebSocketMessageSize(long);
+  public io.aura.AuraConfig maxWebSocketConnections(int);
+  public io.aura.AuraConfig webSocketIdleTimeout(int);
+  public io.aura.AuraConfig shutdownTimeout(int);
+  public io.aura.AuraConfig requestTimeout(int);
+  public io.aura.AuraConfig healthCheckTimeout(int);
+  public io.aura.AuraConfig pageSizeMax(int);
+  public io.aura.AuraConfig concurrencyLimit(int);
+  public io.aura.AuraConfig rateLimitPerSecond(int);
+  public io.aura.AuraConfig rateLimitMaxKeys(int);
+  public io.aura.AuraConfig publicOrigin(java.lang.String);
+  public io.aura.AuraConfig allowedHosts(java.lang.String...);
+  public io.aura.AuraConfig trustedProxies(java.lang.String...);
+  public io.aura.AuraConfig securityHeaders(boolean);
+  public io.aura.AuraConfig openApi(boolean);
+  public io.aura.AuraConfig devMode(boolean);
+  public io.aura.AuraConfig tls(java.lang.String, java.lang.String);
+  public io.aura.AuraConfig staticFiles(java.lang.String);
+  public io.aura.AuraConfig spa(boolean);
+  public io.aura.AuraConfig cors(boolean);
+  public io.aura.AuraConfig cors(java.lang.String);
+  public io.aura.AuraConfig cors(java.util.function.Consumer<io.aura.CorsConfig>);
+  public io.aura.AuraConfig accessLog(boolean);
+  public io.aura.AuraConfig accessLog(java.lang.String);
+  public io.aura.AuraConfig gzip(boolean);
+  public io.aura.AuraConfig gzipMinSize(int);
+  public io.aura.AuraConfig jsonConfig(java.util.function.Consumer<io.aura.JsonConfig>);
+  public io.aura.AuraConfig snapshot(java.util.function.Consumer<io.aura.snapshot.SnapshotOptions>);
+  public io.aura.AuraConfig property(java.lang.String, java.lang.String);
+  public int port();
+  public java.lang.String env();
+  public int workers();
+  public long maxBodySize();
+  public long maxUploadSize();
+  public long maxWebSocketMessageSize();
+  public int maxWebSocketConnections();
+  public int webSocketIdleTimeout();
+  public int shutdownTimeout();
+  public int requestTimeout();
+  public int healthCheckTimeout();
+  public int pageSizeMax();
+  public int concurrencyLimit();
+  public int rateLimitPerSecond();
+  public int rateLimitMaxKeys();
+  public java.lang.String publicOrigin();
+  public java.util.Set<java.lang.String> allowedHosts();
+  public java.util.Set<java.lang.String> trustedProxies();
+  public boolean securityHeaders();
+  public boolean openApiEnabled();
+  public boolean devMode();
+  public boolean tlsEnabled();
+  public java.lang.String keyStorePath();
+  public java.lang.String staticFilesPath();
+  public boolean spa();
+  public java.lang.String corsOrigin();
+  public io.aura.CorsConfig corsConfig();
+  public boolean accessLog();
+  public java.lang.String accessLogFormat();
+  public boolean gzip();
+  public int gzipMinSize();
+  public io.aura.JsonConfig jsonConfig();
+  public io.aura.snapshot.SnapshotOptions snapshotOptions();
+  public io.aura.AuraConfigSnapshot snapshotView();
+  public io.aura.AuraConfig validate();
+}
+### aura-core:io.aura.AuraConfigSnapshot
+public final class io.aura.AuraConfigSnapshot {
+  public static io.aura.AuraConfigSnapshot from(io.aura.AuraConfig);
+  public int port();
+  public java.lang.String env();
+  public int workers();
+  public long maxBodySize();
+  public long maxUploadSize();
+  public long maxWebSocketMessageSize();
+  public int maxWebSocketConnections();
+  public int webSocketIdleTimeout();
+  public int shutdownTimeout();
+  public int requestTimeout();
+  public int healthCheckTimeout();
+  public int pageSizeMax();
+  public int concurrencyLimit();
+  public int rateLimitPerSecond();
+  public int rateLimitMaxKeys();
+  public java.lang.String publicOrigin();
+  public java.util.Set<java.lang.String> allowedHosts();
+  public java.util.Set<java.lang.String> trustedProxies();
+  public boolean securityHeaders();
+  public boolean openApiEnabled();
+  public boolean devMode();
+  public boolean tlsEnabled();
+  public java.lang.String keyStorePath();
+  public java.lang.String staticFilesPath();
+  public boolean spa();
+  public java.lang.String corsOrigin();
+  public io.aura.CorsConfig corsConfig();
+  public boolean accessLog();
+  public java.lang.String accessLogFormat();
+  public boolean gzip();
+  public int gzipMinSize();
+  public io.aura.JsonConfig jsonConfig();
+  public io.aura.snapshot.SnapshotOptions snapshotOptions();
+}
+### aura-core:io.aura.AuraEvent
+public final class io.aura.AuraEvent extends java.lang.Record {
+  public io.aura.AuraEvent(java.lang.String, java.time.Instant, java.util.Map<java.lang.String, java.lang.Object>);
+  public static io.aura.AuraEvent of(java.lang.String, java.util.Map<java.lang.String, ?>);
+  public final java.lang.String toString();
+  public final int hashCode();
+  public final boolean equals(java.lang.Object);
+  public java.lang.String type();
+  public java.time.Instant timestamp();
+  public java.util.Map<java.lang.String, java.lang.Object> attributes();
+}
+### aura-core:io.aura.AuraEventListener
+public interface io.aura.AuraEventListener {
+  public abstract void onEvent(io.aura.AuraEvent);
+}
+### aura-core:io.aura.AuraMcpRuntime
+public interface io.aura.AuraMcpRuntime extends io.aura.AuraRuntime {
+  public abstract int port();
+  public abstract int mcpPort();
+  public abstract java.io.PrintStream mcpStdout();
+  public abstract io.aura.contract.McpRouterSpec mcpRouter();
+  public default io.aura.contract.McpAuthenticator mcpAuthenticator();
+  public default io.aura.contract.McpAuthorizer mcpAuthorizer();
+}
+### aura-core:io.aura.AuraModule
+public interface io.aura.AuraModule {
+  public abstract io.aura.contract.ModuleMetadata descriptor();
+  public abstract void install(io.aura.ModuleContext);
+  public default void start(io.aura.ModuleContext) throws java.lang.Exception;
+  public default void stop(io.aura.ModuleContext) throws java.lang.Exception;
+}
+### aura-core:io.aura.AuraRuntime
+public interface io.aura.AuraRuntime extends java.lang.AutoCloseable,io.aura.contract.CapabilityLookup {
+  public abstract io.aura.contract.RuntimeState state();
+  public abstract io.aura.AuraConfigSnapshot config();
+  public abstract io.aura.AuraRuntime use(io.aura.AuraModule);
+  public abstract io.aura.AuraRuntime observe(io.aura.AuraEventListener);
+  public abstract io.aura.AuraRuntime healthCheck(io.aura.contract.HealthCheck);
+  public abstract io.aura.AuraRuntime authorize(java.util.function.BiPredicate<java.lang.String, java.lang.String>);
+  public abstract io.aura.AuraRuntime authenticate(java.util.function.Function<io.aura.web.BaseContext, java.lang.String>);
+  public default io.aura.AuraRuntime mcpAuthenticate(io.aura.contract.McpAuthenticator);
+  public default io.aura.AuraRuntime mcpAuthorize(io.aura.contract.McpAuthorizer);
+  public abstract io.aura.AuraRuntime property(java.lang.String, java.lang.String);
+  public abstract void prepareModules();
+  public abstract void start();
+  public abstract void start(java.lang.String[]);
+  public abstract void stop();
+  public abstract java.util.List<io.aura.contract.ModuleMetadata> moduleDescriptors();
+  public abstract io.aura.contract.PermissionRegistry permissions();
+  public abstract <T> java.util.Optional<T> find(java.lang.Class<T>);
+  public default boolean isRunning();
+  public default <T> T require(java.lang.Class<T>);
+  public default void close();
+}
+### aura-core:io.aura.AuraStarter
+public interface io.aura.AuraStarter {
+  public abstract void start(io.aura.AuraWebRuntime);
+  public abstract void stop();
+  public default void reloadRoutes(io.aura.AuraWebRuntime);
+}
+### aura-core:io.aura.AuraWebRuntime
+public interface io.aura.AuraWebRuntime extends io.aura.AuraMcpRuntime {
+  public default io.aura.contract.CancellationToken shutdownToken();
+  public default javax.net.ssl.SSLContext tlsContext();
+  public abstract int port();
+  public abstract java.lang.String env();
+  public abstract int workers();
+  public abstract java.util.function.Consumer<?> routeConfig();
+  public abstract java.util.List<java.lang.Object> services();
+  public abstract java.util.List<io.aura.RouteEntry> directRoutes();
+  public abstract java.util.List<io.aura.WebSocketContribution> webSocketContributions();
+  public abstract java.util.List<java.lang.String> scanPackages();
+  public abstract java.util.List<java.lang.Class<?>> serviceClasses();
+  public abstract java.lang.String staticFilesPath();
+  public abstract boolean spa();
+  public abstract java.lang.String corsOrigin();
+  public abstract io.aura.CorsConfig corsConfig();
+  public abstract long maxBodySize();
+  public abstract long maxUploadSize();
+  public abstract long maxWebSocketMessageSize();
+  public default int maxWebSocketConnections();
+  public default int webSocketIdleTimeout();
+  public abstract int shutdownTimeout();
+  public abstract boolean accessLog();
+  public abstract java.lang.String accessLogFormat();
+  public abstract int requestTimeout();
+  public abstract boolean gzip();
+  public abstract int gzipMinSize();
+  public abstract io.aura.JsonConfig jsonConfig();
+  public abstract java.util.Set<java.lang.String> allowedHosts();
+  public abstract java.util.Set<java.lang.String> trustedProxies();
+  public abstract boolean securityHeaders();
+  public abstract boolean openApiEnabled();
+  public abstract boolean devMode();
+  public abstract int concurrencyLimit();
+  public abstract int rateLimitPerSecond();
+  public abstract int rateLimitMaxKeys();
+  public abstract java.lang.String publicOrigin();
+  public abstract boolean isShuttingDown();
+  public abstract java.util.List<io.aura.contract.HealthCheck> healthChecks();
+  public abstract io.aura.contract.HealthStatus healthStatus();
+  public abstract void emit(io.aura.AuraEvent);
+  public abstract java.lang.String prop(java.lang.String);
+  public abstract <T> T getBean(java.lang.Class<T>);
+  public abstract java.util.function.Function<io.aura.web.BaseContext, java.lang.String> authFunction();
+  public abstract java.util.function.BiPredicate<java.lang.String, java.lang.String> permissionChecker();
+  public abstract java.util.Map<java.lang.Class<? extends java.lang.Exception>, io.aura.web.BaseExceptionHandler<?>> exceptionHandlers();
+  public abstract java.util.List<io.aura.web.BaseHandler> beforeHandlers();
+  public abstract java.util.List<io.aura.web.BaseHandler> afterHandlers();
+  public abstract java.util.function.Function<java.lang.Object, java.lang.Object> resultWrapper();
+  public abstract io.aura.web.AdmissionPolicy admissionPolicy();
+  public abstract io.aura.snapshot.SnapshotOptions snapshotOptions();
+}
+### aura-core:io.aura.BeanValidator$Quantifier
+final class io.aura.BeanValidator$Quantifier extends java.lang.Record {
+  public final java.lang.String toString();
+  public final int hashCode();
+  public final boolean equals(java.lang.Object);
+  public int end();
+  public boolean variable();
+}
+### aura-core:io.aura.BeanValidator
+public final class io.aura.BeanValidator {
+  public static void validate(java.lang.Object);
+}
+### aura-core:io.aura.ConfigBinder
+class io.aura.ConfigBinder {
+}
+### aura-core:io.aura.CorsConfig
+public class io.aura.CorsConfig {
+  public io.aura.CorsConfig();
+  public io.aura.CorsConfig origins(java.lang.String...);
+  public io.aura.CorsConfig headers(java.lang.String...);
+  public io.aura.CorsConfig credentials(boolean);
+  public java.util.List<java.lang.String> origins();
+  public java.lang.String headers();
+  public boolean credentials();
+  public java.lang.String resolveOrigin(java.lang.String);
+  public boolean hasWildcardOrigin();
+}
+### aura-core:io.aura.HealthModule
+public final class io.aura.HealthModule implements io.aura.AuraModule {
+  public static io.aura.HealthModule create();
+  public io.aura.contract.ModuleMetadata descriptor();
+  public void install(io.aura.ModuleContext);
+}
+### aura-core:io.aura.HealthProbe
+final class io.aura.HealthProbe {
+}
+### aura-core:io.aura.JsonConfig
+public class io.aura.JsonConfig {
+  public io.aura.JsonConfig();
+  public io.aura.JsonConfig dateFormat(java.lang.String);
+  public io.aura.JsonConfig writeNulls(boolean);
+  public java.lang.String dateFormat();
+  public boolean writeNulls();
+}
+### aura-core:io.aura.JwtSupport
+public final class io.aura.JwtSupport {
+  public io.aura.JwtSupport(java.lang.String, long);
+  public java.lang.String sign(long);
+  public java.lang.String sign(java.lang.String);
+  public java.lang.String verify(java.lang.String);
+}
+### aura-core:io.aura.McpStarter
+public interface io.aura.McpStarter {
+  public abstract void start(io.aura.AuraMcpRuntime);
+  public abstract void startStdio(io.aura.AuraMcpRuntime);
+  public abstract void stop();
+}
+### aura-core:io.aura.ModularRuntime$ModuleContextImpl
+final class io.aura.ModularRuntime$ModuleContextImpl implements io.aura.ModuleContext {
+  public io.aura.contract.ModuleMetadata currentModule();
+  public <T> T require(java.lang.Class<T>);
+  public <T> java.util.Optional<T> find(java.lang.Class<T>);
+  public <T> java.util.Optional<T> find(java.lang.String, java.lang.Class<T>);
+  public void register(java.lang.Object);
+  public void register(java.lang.String, java.lang.Object);
+  public void service(java.lang.Object);
+  public void route(io.aura.contract.RouteContribution);
+  public void webSocket(java.lang.String, java.util.function.Consumer<io.aura.web.WsHandler>);
+  public void before(io.aura.web.BaseHandler);
+  public void after(io.aura.web.BaseHandler);
+  public <T extends java.lang.Exception> void exception(java.lang.Class<T>, io.aura.web.BaseExceptionHandler<T>);
+  public void resultWrapper(java.util.function.Function<java.lang.Object, java.lang.Object>);
+  public void admissionPolicy(io.aura.web.AdmissionPolicy);
+  public void healthCheck(io.aura.contract.HealthCheck);
+  public io.aura.contract.PermissionRegistry permissions();
+  public java.lang.String property(java.lang.String);
+  public <T> T config(java.lang.Class<T>);
+}
+### aura-core:io.aura.ModularRuntime
+final class io.aura.ModularRuntime implements io.aura.AuraWebRuntime {
+  public javax.net.ssl.SSLContext tlsContext();
+  public io.aura.contract.CancellationToken shutdownToken();
+  public io.aura.contract.RuntimeState state();
+  public io.aura.AuraConfigSnapshot config();
+  public io.aura.AuraRuntime use(io.aura.AuraModule);
+  public io.aura.AuraRuntime observe(io.aura.AuraEventListener);
+  public io.aura.AuraRuntime healthCheck(io.aura.contract.HealthCheck);
+  public io.aura.AuraRuntime authorize(java.util.function.BiPredicate<java.lang.String, java.lang.String>);
+  public io.aura.AuraRuntime authenticate(java.util.function.Function<io.aura.web.BaseContext, java.lang.String>);
+  public io.aura.AuraRuntime mcpAuthenticate(io.aura.contract.McpAuthenticator);
+  public io.aura.AuraRuntime mcpAuthorize(io.aura.contract.McpAuthorizer);
+  public io.aura.AuraRuntime property(java.lang.String, java.lang.String);
+  public void prepareModules();
+  public void start(java.lang.String[]);
+  public void start();
+  public void stop();
+  public java.util.List<io.aura.contract.ModuleMetadata> moduleDescriptors();
+  public io.aura.contract.PermissionRegistry permissions();
+  public <T> java.util.Optional<T> find(java.lang.Class<T>);
+  public <T> java.util.Optional<T> find(java.lang.String, java.lang.Class<T>);
+  public int port();
+  public java.lang.String env();
+  public int workers();
+  public java.util.function.Consumer<?> routeConfig();
+  public java.util.List<java.lang.Object> services();
+  public java.util.List<io.aura.RouteEntry> directRoutes();
+  public java.util.List<io.aura.WebSocketContribution> webSocketContributions();
+  public java.util.List<java.lang.String> scanPackages();
+  public java.util.List<java.lang.Class<?>> serviceClasses();
+  public java.lang.String staticFilesPath();
+  public boolean spa();
+  public java.lang.String corsOrigin();
+  public io.aura.CorsConfig corsConfig();
+  public long maxBodySize();
+  public long maxUploadSize();
+  public long maxWebSocketMessageSize();
+  public int maxWebSocketConnections();
+  public int webSocketIdleTimeout();
+  public int shutdownTimeout();
+  public boolean accessLog();
+  public java.lang.String accessLogFormat();
+  public int requestTimeout();
+  public boolean gzip();
+  public int gzipMinSize();
+  public io.aura.JsonConfig jsonConfig();
+  public int mcpPort();
+  public java.io.PrintStream mcpStdout();
+  public io.aura.contract.McpRouterSpec mcpRouter();
+  public java.util.Set<java.lang.String> allowedHosts();
+  public java.util.Set<java.lang.String> trustedProxies();
+  public boolean securityHeaders();
+  public boolean openApiEnabled();
+  public boolean devMode();
+  public int concurrencyLimit();
+  public int rateLimitPerSecond();
+  public int rateLimitMaxKeys();
+  public java.lang.String publicOrigin();
+  public boolean isShuttingDown();
+  public java.util.List<io.aura.contract.HealthCheck> healthChecks();
+  public io.aura.contract.HealthStatus healthStatus();
+  public void emit(io.aura.AuraEvent);
+  public java.lang.String prop(java.lang.String);
+  public <T> T getBean(java.lang.Class<T>);
+  public java.util.function.Function<io.aura.web.BaseContext, java.lang.String> authFunction();
+  public java.util.function.BiPredicate<java.lang.String, java.lang.String> permissionChecker();
+  public io.aura.contract.McpAuthenticator mcpAuthenticator();
+  public io.aura.contract.McpAuthorizer mcpAuthorizer();
+  public java.util.Map<java.lang.Class<? extends java.lang.Exception>, io.aura.web.BaseExceptionHandler<?>> exceptionHandlers();
+  public java.util.List<io.aura.web.BaseHandler> beforeHandlers();
+  public java.util.List<io.aura.web.BaseHandler> afterHandlers();
+  public java.util.function.Function<java.lang.Object, java.lang.Object> resultWrapper();
+  public io.aura.web.AdmissionPolicy admissionPolicy();
+  public io.aura.snapshot.SnapshotOptions snapshotOptions();
+}
+### aura-core:io.aura.ModuleContext
+public interface io.aura.ModuleContext extends io.aura.contract.CapabilityLookup {
+  public abstract io.aura.contract.ModuleMetadata currentModule();
+  public abstract <T> T require(java.lang.Class<T>);
+  public abstract <T> java.util.Optional<T> find(java.lang.Class<T>);
+  public abstract void register(java.lang.Object);
+  public abstract void register(java.lang.String, java.lang.Object);
+  public abstract void service(java.lang.Object);
+  public default void routes(io.aura.contract.RouteContributor);
+  public abstract void route(io.aura.contract.RouteContribution);
+  public abstract void webSocket(java.lang.String, java.util.function.Consumer<io.aura.web.WsHandler>);
+  public abstract void before(io.aura.web.BaseHandler);
+  public abstract void after(io.aura.web.BaseHandler);
+  public abstract <T extends java.lang.Exception> void exception(java.lang.Class<T>, io.aura.web.BaseExceptionHandler<T>);
+  public abstract void resultWrapper(java.util.function.Function<java.lang.Object, java.lang.Object>);
+  public abstract void admissionPolicy(io.aura.web.AdmissionPolicy);
+  public abstract void healthCheck(io.aura.contract.HealthCheck);
+  public abstract io.aura.contract.PermissionRegistry permissions();
+  public abstract java.lang.String property(java.lang.String);
+  public abstract <T> T config(java.lang.Class<T>);
+}
+### aura-core:io.aura.ModuleException
+public class io.aura.ModuleException extends java.lang.IllegalStateException implements io.aura.contract.CodedFailure {
+  public io.aura.ModuleException(java.lang.String, java.lang.String, java.lang.String);
+  public io.aura.ModuleException(java.lang.String, java.lang.String, java.lang.String, java.lang.Throwable);
+  public java.lang.String code();
+  public java.lang.String module();
+  public java.lang.String causeCode();
+}
+### aura-core:io.aura.ModuleGraph$SemVer
+final class io.aura.ModuleGraph$SemVer implements java.lang.Comparable<io.aura.ModuleGraph$SemVer> {
+  public int compareTo(io.aura.ModuleGraph$SemVer);
+  public int compareTo(java.lang.Object);
+}
+### aura-core:io.aura.ModuleGraph
+final class io.aura.ModuleGraph {
+}
+### aura-core:io.aura.ModuleManager
+final class io.aura.ModuleManager {
+}
+### aura-core:io.aura.Result
+public final class io.aura.Result<T> extends java.lang.Record {
+  public io.aura.Result(int, java.lang.String, T);
+  public static <T> io.aura.Result<T> ok(T);
+  public static <T> io.aura.Result<T> ok(java.lang.String, T);
+  public static io.aura.Result<?> fail(int, java.lang.String);
+  public final java.lang.String toString();
+  public final int hashCode();
+  public final boolean equals(java.lang.Object);
+  public int code();
+  public java.lang.String message();
+  public T data();
+}
+### aura-core:io.aura.RouteEntry
+public final class io.aura.RouteEntry extends java.lang.Record {
+  public io.aura.RouteEntry(java.lang.String, java.lang.String, java.lang.Object, java.lang.String, java.util.Map<java.lang.String, java.lang.Object>);
+  public io.aura.RouteEntry(java.lang.String, java.lang.String, java.lang.Object, java.lang.String);
+  public java.util.Map<java.lang.String, java.lang.Object> responseSchema();
+  public final java.lang.String toString();
+  public final int hashCode();
+  public final boolean equals(java.lang.Object);
+  public java.lang.String method();
+  public java.lang.String path();
+  public java.lang.Object handler();
+  public java.lang.String description();
+  public java.util.Map<java.lang.String, java.lang.Object> metadata();
+}
+### aura-core:io.aura.ServiceResolver
+class io.aura.ServiceResolver {
+}
+### aura-core:io.aura.StartupCheck
+class io.aura.StartupCheck {
+}
+### aura-core:io.aura.Validatable
+public interface io.aura.Validatable {
+  public abstract void validate();
+}
+### aura-core:io.aura.Validate$FieldError
+public final class io.aura.Validate$FieldError extends java.lang.Record {
+  public io.aura.Validate$FieldError(java.lang.String, java.lang.String);
+  public final java.lang.String toString();
+  public final int hashCode();
+  public final boolean equals(java.lang.Object);
+  public java.lang.String field();
+  public java.lang.String message();
+}
+### aura-core:io.aura.Validate$ValidationException
+public class io.aura.Validate$ValidationException extends java.lang.RuntimeException {
+  public io.aura.Validate$ValidationException(java.lang.String);
+  public io.aura.Validate$ValidationException(java.util.List<io.aura.Validate$FieldError>);
+  public java.util.List<io.aura.Validate$FieldError> errors();
+}
+### aura-core:io.aura.Validate
+public final class io.aura.Validate {
+  public static void notNull(java.lang.Object, java.lang.String);
+  public static void notBlank(java.lang.String, java.lang.String);
+  public static void range(int, int, int, java.lang.String);
+  public static void range(long, long, long, java.lang.String);
+  public static void minLength(java.lang.String, int, java.lang.String);
+  public static void maxLength(java.lang.String, int, java.lang.String);
+  public static void matches(java.lang.String, java.lang.String, java.lang.String);
+  public static void isTrue(boolean, java.lang.String);
+}
+### aura-core:io.aura.WebSocketContribution
+public final class io.aura.WebSocketContribution extends java.lang.Record {
+  public io.aura.WebSocketContribution(java.lang.String, java.util.function.Consumer<io.aura.web.WsHandler>);
+  public final java.lang.String toString();
+  public final int hashCode();
+  public final boolean equals(java.lang.Object);
+  public java.lang.String path();
+  public java.util.function.Consumer<io.aura.web.WsHandler> configure();
+}
+### aura-core:io.aura.annotation.Delete
+public interface io.aura.annotation.Delete extends java.lang.annotation.Annotation {
+  public abstract java.lang.String value();
+}
+### aura-core:io.aura.annotation.Desc
+public interface io.aura.annotation.Desc extends java.lang.annotation.Annotation {
+  public abstract java.lang.String value();
+}
+### aura-core:io.aura.annotation.Get
+public interface io.aura.annotation.Get extends java.lang.annotation.Annotation {
+  public abstract java.lang.String value();
+}
+### aura-core:io.aura.annotation.Head
+public interface io.aura.annotation.Head extends java.lang.annotation.Annotation {
+  public abstract java.lang.String value();
+}
+### aura-core:io.aura.annotation.Max
+public interface io.aura.annotation.Max extends java.lang.annotation.Annotation {
+  public abstract long value();
+  public abstract java.lang.String message();
+}
+### aura-core:io.aura.annotation.Min
+public interface io.aura.annotation.Min extends java.lang.annotation.Annotation {
+  public abstract long value();
+  public abstract java.lang.String message();
+}
+### aura-core:io.aura.annotation.NotBlank
+public interface io.aura.annotation.NotBlank extends java.lang.annotation.Annotation {
+  public abstract java.lang.String message();
+}
+### aura-core:io.aura.annotation.NotNull
+public interface io.aura.annotation.NotNull extends java.lang.annotation.Annotation {
+  public abstract java.lang.String message();
+}
+### aura-core:io.aura.annotation.Options
+public interface io.aura.annotation.Options extends java.lang.annotation.Annotation {
+  public abstract java.lang.String value();
+}
+### aura-core:io.aura.annotation.Patch
+public interface io.aura.annotation.Patch extends java.lang.annotation.Annotation {
+  public abstract java.lang.String value();
+}
+### aura-core:io.aura.annotation.Path
+public interface io.aura.annotation.Path extends java.lang.annotation.Annotation {
+  public abstract java.lang.String value();
+}
+### aura-core:io.aura.annotation.Pattern
+public interface io.aura.annotation.Pattern extends java.lang.annotation.Annotation {
+  public abstract java.lang.String value();
+  public abstract java.lang.String message();
+}
+### aura-core:io.aura.annotation.Post
+public interface io.aura.annotation.Post extends java.lang.annotation.Annotation {
+  public abstract java.lang.String value();
+}
+### aura-core:io.aura.annotation.Put
+public interface io.aura.annotation.Put extends java.lang.annotation.Annotation {
+  public abstract java.lang.String value();
+}
+### aura-core:io.aura.annotation.Size
+public interface io.aura.annotation.Size extends java.lang.annotation.Annotation {
+  public abstract int min();
+  public abstract int max();
+  public abstract java.lang.String message();
+}
+### aura-core:io.aura.snapshot.ExceptionSnapshot$EnvSnapshot
+public final class io.aura.snapshot.ExceptionSnapshot$EnvSnapshot extends java.lang.Record {
+  public io.aura.snapshot.ExceptionSnapshot$EnvSnapshot(java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.util.Map<java.lang.String, java.lang.String>, java.util.Map<java.lang.String, java.lang.String>);
+  public final java.lang.String toString();
+  public final int hashCode();
+  public final boolean equals(java.lang.Object);
+  public java.lang.String auraVersion();
+  public java.lang.String auraEnv();
+  public java.lang.String javaVersion();
+  public java.lang.String osName();
+  public java.lang.String timezone();
+  public java.lang.String locale();
+  public java.util.Map<java.lang.String, java.lang.String> properties();
+  public java.util.Map<java.lang.String, java.lang.String> env();
+}
+### aura-core:io.aura.snapshot.ExceptionSnapshot$ExceptionInfo
+public final class io.aura.snapshot.ExceptionSnapshot$ExceptionInfo extends java.lang.Record {
+  public io.aura.snapshot.ExceptionSnapshot$ExceptionInfo(java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.Integer, java.lang.String, java.lang.String, java.lang.String);
+  public final java.lang.String toString();
+  public final int hashCode();
+  public final boolean equals(java.lang.Object);
+  public java.lang.String type();
+  public java.lang.String message();
+  public java.lang.String code();
+  public java.lang.String field();
+  public java.lang.Integer status();
+  public java.lang.String rootCauseType();
+  public java.lang.String rootCauseMessage();
+  public java.lang.String stackTrace();
+}
+### aura-core:io.aura.snapshot.ExceptionSnapshot$ExternalCallSnapshot
+public final class io.aura.snapshot.ExceptionSnapshot$ExternalCallSnapshot extends java.lang.Record {
+  public io.aura.snapshot.ExceptionSnapshot$ExternalCallSnapshot(java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.util.Map<java.lang.String, java.lang.String>, java.lang.Object, int, java.util.Map<java.lang.String, java.lang.String>, java.lang.Object, long, java.lang.String);
+  public final java.lang.String toString();
+  public final int hashCode();
+  public final boolean equals(java.lang.Object);
+  public java.lang.String id();
+  public java.lang.String name();
+  public java.lang.String protocol();
+  public java.lang.String method();
+  public java.lang.String url();
+  public java.util.Map<java.lang.String, java.lang.String> requestHeaders();
+  public java.lang.Object requestBody();
+  public int responseStatus();
+  public java.util.Map<java.lang.String, java.lang.String> responseHeaders();
+  public java.lang.Object responseBody();
+  public long durationMs();
+  public java.lang.String startedAt();
+}
+### aura-core:io.aura.snapshot.ExceptionSnapshot$RequestSnapshot
+public final class io.aura.snapshot.ExceptionSnapshot$RequestSnapshot extends java.lang.Record {
+  public io.aura.snapshot.ExceptionSnapshot$RequestSnapshot(java.lang.String, java.lang.String, java.util.Map<java.lang.String, java.lang.String>, java.util.Map<java.lang.String, java.lang.String>, java.lang.Object, java.lang.String, java.lang.String);
+  public final java.lang.String toString();
+  public final int hashCode();
+  public final boolean equals(java.lang.Object);
+  public java.lang.String method();
+  public java.lang.String path();
+  public java.util.Map<java.lang.String, java.lang.String> query();
+  public java.util.Map<java.lang.String, java.lang.String> headers();
+  public java.lang.Object body();
+  public java.lang.String ip();
+  public java.lang.String requestId();
+}
+### aura-core:io.aura.snapshot.ExceptionSnapshot$ResponseSnapshot
+public final class io.aura.snapshot.ExceptionSnapshot$ResponseSnapshot extends java.lang.Record {
+  public io.aura.snapshot.ExceptionSnapshot$ResponseSnapshot(int, java.util.Map<java.lang.String, java.lang.String>, java.lang.String, java.lang.Object);
+  public final java.lang.String toString();
+  public final int hashCode();
+  public final boolean equals(java.lang.Object);
+  public int status();
+  public java.util.Map<java.lang.String, java.lang.String> headers();
+  public java.lang.String contentType();
+  public java.lang.Object body();
+}
+### aura-core:io.aura.snapshot.ExceptionSnapshot$RouteSnapshot
+public final class io.aura.snapshot.ExceptionSnapshot$RouteSnapshot extends java.lang.Record {
+  public io.aura.snapshot.ExceptionSnapshot$RouteSnapshot(java.lang.String, java.lang.String, java.util.Map<java.lang.String, java.lang.String>, java.lang.String);
+  public final java.lang.String toString();
+  public final int hashCode();
+  public final boolean equals(java.lang.Object);
+  public java.lang.String method();
+  public java.lang.String pathPattern();
+  public java.util.Map<java.lang.String, java.lang.String> pathParams();
+  public java.lang.String handler();
+}
+### aura-core:io.aura.snapshot.ExceptionSnapshot
+public final class io.aura.snapshot.ExceptionSnapshot extends java.lang.Record {
+  public io.aura.snapshot.ExceptionSnapshot(int, java.lang.String, java.lang.String, io.aura.snapshot.ExceptionSnapshot$RequestSnapshot, io.aura.snapshot.ExceptionSnapshot$RouteSnapshot, io.aura.snapshot.ExceptionSnapshot$ExceptionInfo, io.aura.snapshot.ExceptionSnapshot$ResponseSnapshot, io.aura.snapshot.ExceptionSnapshot$EnvSnapshot, java.util.List<io.aura.snapshot.ExceptionSnapshot$ExternalCallSnapshot>, java.util.Map<java.lang.String, java.lang.Object>);
+  public final java.lang.String toString();
+  public final int hashCode();
+  public final boolean equals(java.lang.Object);
+  public int schemaVersion();
+  public java.lang.String snapshotId();
+  public java.lang.String createdAt();
+  public io.aura.snapshot.ExceptionSnapshot$RequestSnapshot request();
+  public io.aura.snapshot.ExceptionSnapshot$RouteSnapshot route();
+  public io.aura.snapshot.ExceptionSnapshot$ExceptionInfo exception();
+  public io.aura.snapshot.ExceptionSnapshot$ResponseSnapshot response();
+  public io.aura.snapshot.ExceptionSnapshot$EnvSnapshot environment();
+  public java.util.List<io.aura.snapshot.ExceptionSnapshot$ExternalCallSnapshot> externalCalls();
+  public java.util.Map<java.lang.String, java.lang.Object> artifacts();
+}
+### aura-core:io.aura.snapshot.Snapshot
+public final class io.aura.snapshot.Snapshot {
+  public static java.util.Optional<io.aura.snapshot.SnapshotScope> current();
+  public static io.aura.snapshot.SnapshotScope currentOrNull();
+  public static void bind(io.aura.snapshot.SnapshotScope);
+  public static void clear();
+  public static void put(java.lang.String, java.lang.Object);
+  public static void response(int, java.lang.String, java.lang.Object);
+  public static void externalCall(io.aura.snapshot.ExceptionSnapshot$ExternalCallSnapshot);
+  public static <T> T withScope(io.aura.snapshot.SnapshotScope, java.util.concurrent.Callable<T>) throws java.lang.Exception;
+}
+### aura-core:io.aura.snapshot.SnapshotOptions$BodyMode
+public final class io.aura.snapshot.SnapshotOptions$BodyMode extends java.lang.Enum<io.aura.snapshot.SnapshotOptions$BodyMode> {
+  public static final io.aura.snapshot.SnapshotOptions$BodyMode NONE;
+  public static final io.aura.snapshot.SnapshotOptions$BodyMode CACHED_ONLY;
+  public static io.aura.snapshot.SnapshotOptions$BodyMode[] values();
+  public static io.aura.snapshot.SnapshotOptions$BodyMode valueOf(java.lang.String);
+}
+### aura-core:io.aura.snapshot.SnapshotOptions
+public class io.aura.snapshot.SnapshotOptions {
+  public io.aura.snapshot.SnapshotOptions();
+  public boolean enabled();
+  public java.nio.file.Path dir();
+  public boolean async();
+  public int queueSize();
+  public io.aura.snapshot.SnapshotOptions$BodyMode bodyMode();
+  public int maxBodySize();
+  public int maxExternalBodySize();
+  public int maxStackTraceSize();
+  public int maxSnapshotFileSize();
+  public long maxStorageSize();
+  public int maxSnapshots();
+  public java.time.Duration retentionTtl();
+  public double sampleRate();
+  public java.util.Set<java.lang.String> redactHeaders();
+  public java.util.Set<java.lang.String> redactFields();
+  public java.util.Set<java.lang.String> envAllowlist();
+  public java.util.function.Consumer<java.lang.String> dropCallback();
+  public java.util.function.Consumer<java.lang.Exception> writeFailureCallback();
+  public io.aura.snapshot.SnapshotOptions enabled(boolean);
+  public io.aura.snapshot.SnapshotOptions dir(java.lang.String);
+  public io.aura.snapshot.SnapshotOptions dir(java.nio.file.Path);
+  public io.aura.snapshot.SnapshotOptions async(boolean);
+  public io.aura.snapshot.SnapshotOptions queueSize(int);
+  public io.aura.snapshot.SnapshotOptions bodyMode(io.aura.snapshot.SnapshotOptions$BodyMode);
+  public io.aura.snapshot.SnapshotOptions maxBodySize(int);
+  public io.aura.snapshot.SnapshotOptions maxExternalBodySize(int);
+  public io.aura.snapshot.SnapshotOptions maxStackTraceSize(int);
+  public io.aura.snapshot.SnapshotOptions maxSnapshotFileSize(int);
+  public io.aura.snapshot.SnapshotOptions maxStorageSize(long);
+  public io.aura.snapshot.SnapshotOptions maxSnapshots(int);
+  public io.aura.snapshot.SnapshotOptions retentionTtl(java.time.Duration);
+  public io.aura.snapshot.SnapshotOptions onDrop(java.util.function.Consumer<java.lang.String>);
+  public io.aura.snapshot.SnapshotOptions onWriteFailure(java.util.function.Consumer<java.lang.Exception>);
+  public io.aura.snapshot.SnapshotOptions sampleRate(double);
+  public io.aura.snapshot.SnapshotOptions redactHeader(java.lang.String);
+  public io.aura.snapshot.SnapshotOptions redactField(java.lang.String);
+  public io.aura.snapshot.SnapshotOptions envAllowlist(java.lang.String...);
+  public io.aura.snapshot.SnapshotOptions copy();
+}
+### aura-core:io.aura.snapshot.SnapshotScope$Mode
+public final class io.aura.snapshot.SnapshotScope$Mode extends java.lang.Enum<io.aura.snapshot.SnapshotScope$Mode> {
+  public static final io.aura.snapshot.SnapshotScope$Mode CAPTURE;
+  public static final io.aura.snapshot.SnapshotScope$Mode REPLAY;
+  public static io.aura.snapshot.SnapshotScope$Mode[] values();
+  public static io.aura.snapshot.SnapshotScope$Mode valueOf(java.lang.String);
+}
+### aura-core:io.aura.snapshot.SnapshotScope
+public class io.aura.snapshot.SnapshotScope {
+  public static io.aura.snapshot.SnapshotScope capture();
+  public static io.aura.snapshot.SnapshotScope replay(io.aura.snapshot.ExceptionSnapshot);
+  public io.aura.snapshot.SnapshotScope$Mode mode();
+  public boolean replaying();
+  public java.util.Map<java.lang.String, java.lang.Object> artifacts();
+  public java.util.List<io.aura.snapshot.ExceptionSnapshot$ExternalCallSnapshot> externalCalls();
+  public io.aura.snapshot.ExceptionSnapshot$ResponseSnapshot response();
+  public io.aura.snapshot.ExceptionSnapshot replaySnapshot();
+  public void put(java.lang.String, java.lang.Object);
+  public void externalCall(io.aura.snapshot.ExceptionSnapshot$ExternalCallSnapshot);
+  public void response(int, java.lang.String, java.lang.Object);
+  public io.aura.snapshot.ExceptionSnapshot$ExternalCallSnapshot nextReplayExternalCall(java.lang.String, java.lang.String, java.lang.String);
+}
+### aura-core:io.aura.web.AdmissionDecision
+public final class io.aura.web.AdmissionDecision implements java.lang.AutoCloseable {
+  public static io.aura.web.AdmissionDecision allow();
+  public static io.aura.web.AdmissionDecision allow(java.lang.Runnable);
+  public static io.aura.web.AdmissionDecision reject(int, java.lang.String, int);
+  public boolean allowed();
+  public int status();
+  public java.lang.String code();
+  public int retryAfterSeconds();
+  public void close();
+}
+### aura-core:io.aura.web.AdmissionPolicy
+public interface io.aura.web.AdmissionPolicy {
+  public abstract io.aura.web.AdmissionDecision admit(io.aura.web.AdmissionRequest);
+}
+### aura-core:io.aura.web.AdmissionRequest
+public final class io.aura.web.AdmissionRequest extends java.lang.Record {
+  public io.aura.web.AdmissionRequest(java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String);
+  public final java.lang.String toString();
+  public final int hashCode();
+  public final boolean equals(java.lang.Object);
+  public java.lang.String method();
+  public java.lang.String path();
+  public java.lang.String routePattern();
+  public java.lang.String clientIp();
+  public java.lang.String apiKey();
+}
+### aura-core:io.aura.web.BaseContext
+public interface io.aura.web.BaseContext {
+  public abstract java.lang.String path(java.lang.String);
+  public abstract java.lang.String query(java.lang.String);
+  public abstract java.lang.String query(java.lang.String, java.lang.String);
+  public abstract java.lang.String header(java.lang.String);
+  public abstract java.lang.String cookie(java.lang.String);
+  public default java.lang.String bodyText() throws java.lang.Exception;
+  public abstract <T> T body(java.lang.Class<T>) throws java.lang.Exception;
+  public default <T> T body(java.lang.reflect.Type) throws java.lang.Exception;
+  public abstract java.lang.String method();
+  public abstract java.lang.String url();
+  public abstract int statusCode();
+  public default boolean isResponseStarted();
+  public default io.aura.AuraWebRuntime app();
+  public abstract io.aura.web.BaseContext status(int);
+  public abstract void json(java.lang.Object);
+  public abstract void jsonRaw(java.lang.String);
+  public abstract void text(java.lang.String);
+  public abstract void html(java.lang.String);
+  public abstract void raw(java.lang.String);
+  public abstract void redirect(java.lang.String);
+  public abstract io.aura.web.BaseContext header(java.lang.String, java.lang.String);
+  public abstract io.aura.web.BaseContext cookie(java.lang.String, java.lang.String, int);
+  public abstract <T> void set(T);
+  public abstract <T> T get(java.lang.Class<T>);
+  public abstract void set(java.lang.String, java.lang.Object);
+  public abstract <T> T get(java.lang.String, java.lang.Class<T>);
+  public default <T> T bodyOrThrow(java.lang.Class<T>) throws java.lang.Exception;
+  public default <T> T bodyOrThrow(java.lang.reflect.Type) throws java.lang.Exception;
+  public default java.lang.String queryRequired(java.lang.String);
+  public default int pathInt(java.lang.String);
+  public default long pathLong(java.lang.String);
+  public default int queryInt(java.lang.String, int);
+  public default long queryLong(java.lang.String, long);
+  public default boolean queryBool(java.lang.String, boolean);
+  public default int pageNum();
+  public default int pageSize();
+  public default io.aura.web.UploadedFile file(java.lang.String) throws java.lang.Exception;
+  public default java.lang.String formField(java.lang.String) throws java.lang.Exception;
+  public default void sendFile(java.lang.String, byte[]) throws java.lang.Exception;
+  public default void sendFile(java.lang.String, byte[], java.lang.String) throws java.lang.Exception;
+  public default java.lang.String userId();
+  public default io.aura.web.SseEmitter sse() throws java.lang.Exception;
+  public abstract void abort();
+  public abstract boolean isAborted();
+  public default java.lang.String requestId();
+  public default java.lang.String ip();
+  public default io.aura.contract.CancellationToken cancellationToken();
+  public default boolean isCancelled();
+}
+### aura-core:io.aura.web.BaseExceptionHandler
+public interface io.aura.web.BaseExceptionHandler<T extends java.lang.Exception> {
+  public abstract void handle(T, io.aura.web.BaseContext);
+}
+### aura-core:io.aura.web.BaseHandler
+public interface io.aura.web.BaseHandler {
+  public abstract void handle(io.aura.web.BaseContext) throws java.lang.Exception;
+}
+### aura-core:io.aura.web.BaseRouteBuilder
+public class io.aura.web.BaseRouteBuilder {
+  public final io.aura.web.BaseRouter$Route route;
+  public java.lang.String description;
+  public java.lang.String returnType;
+  public java.util.Map<java.lang.String, java.lang.Object> responseSchema;
+  public boolean streaming;
+  public boolean authenticated;
+  public java.lang.String permission;
+  public final java.util.Map<java.lang.String, java.lang.String> paramDescriptions;
+  public io.aura.web.BaseRouteBuilder(io.aura.web.BaseRouter$Route);
+  public io.aura.web.BaseRouteBuilder describe(java.lang.String);
+  public io.aura.web.BaseRouteBuilder streaming();
+  public io.aura.web.BaseRouteBuilder param(java.lang.String, java.lang.String);
+  public io.aura.web.BaseRouteBuilder param(java.lang.String, java.lang.String, java.lang.String, boolean, java.lang.String);
+  public io.aura.web.BaseRouteBuilder param(io.aura.contract.ApiParameter);
+  public java.util.List<io.aura.contract.ApiParameter> parameters();
+}
+### aura-core:io.aura.web.BaseRouter$Group
+public final class io.aura.web.BaseRouter$Group extends java.lang.Record {
+  public io.aura.web.BaseRouter$Group(java.lang.String, io.aura.web.BaseRouter);
+  public final java.lang.String toString();
+  public final int hashCode();
+  public final boolean equals(java.lang.Object);
+  public java.lang.String prefix();
+  public io.aura.web.BaseRouter router();
+}
+### aura-core:io.aura.web.BaseRouter$Route
+public final class io.aura.web.BaseRouter$Route extends java.lang.Record {
+  public io.aura.web.BaseRouter$Route(java.lang.String, java.lang.String, io.aura.web.BaseHandler);
+  public final java.lang.String toString();
+  public final int hashCode();
+  public final boolean equals(java.lang.Object);
+  public java.lang.String method();
+  public java.lang.String path();
+  public io.aura.web.BaseHandler handler();
+}
+### aura-core:io.aura.web.BaseRouter$WsRoute
+public final class io.aura.web.BaseRouter$WsRoute extends java.lang.Record {
+  public io.aura.web.BaseRouter$WsRoute(java.lang.String, io.aura.web.WsHandler);
+  public final java.lang.String toString();
+  public final int hashCode();
+  public final boolean equals(java.lang.Object);
+  public java.lang.String path();
+  public io.aura.web.WsHandler handler();
+}
+### aura-core:io.aura.web.BaseRouter
+public class io.aura.web.BaseRouter {
+  public final java.util.List<io.aura.web.BaseRouteBuilder> routeBuilders;
+  public final java.util.List<io.aura.web.BaseHandler> beforeHandlers;
+  public final java.util.List<io.aura.web.BaseHandler> afterHandlers;
+  public final java.util.List<io.aura.web.BaseRouter$Group> groups;
+  public final java.util.List<io.aura.web.BaseRouter$WsRoute> wsRoutes;
+  public io.aura.web.BaseRouter();
+  public io.aura.web.BaseRouteBuilder get(java.lang.String, io.aura.web.BaseHandler);
+  public io.aura.web.BaseRouteBuilder get(java.lang.String, java.lang.Object, java.lang.String);
+  public io.aura.web.BaseRouteBuilder post(java.lang.String, io.aura.web.BaseHandler);
+  public io.aura.web.BaseRouteBuilder post(java.lang.String, java.lang.Object, java.lang.String);
+  public io.aura.web.BaseRouteBuilder put(java.lang.String, io.aura.web.BaseHandler);
+  public io.aura.web.BaseRouteBuilder put(java.lang.String, java.lang.Object, java.lang.String);
+  public io.aura.web.BaseRouteBuilder delete(java.lang.String, io.aura.web.BaseHandler);
+  public io.aura.web.BaseRouteBuilder delete(java.lang.String, java.lang.Object, java.lang.String);
+  public io.aura.web.BaseRouteBuilder patch(java.lang.String, io.aura.web.BaseHandler);
+  public io.aura.web.BaseRouteBuilder patch(java.lang.String, java.lang.Object, java.lang.String);
+  public io.aura.web.BaseRouteBuilder head(java.lang.String, io.aura.web.BaseHandler);
+  public io.aura.web.BaseRouteBuilder head(java.lang.String, java.lang.Object, java.lang.String);
+  public io.aura.web.BaseRouteBuilder options(java.lang.String, io.aura.web.BaseHandler);
+  public io.aura.web.BaseRouteBuilder options(java.lang.String, java.lang.Object, java.lang.String);
+  public io.aura.web.BaseRouter crud(java.lang.String, java.lang.Object);
+  public io.aura.web.BaseRouter crud(java.lang.String, java.lang.Object, java.lang.String...);
+  public io.aura.web.BaseRouter before(io.aura.web.BaseHandler);
+  public io.aura.web.BaseRouter after(io.aura.web.BaseHandler);
+  public io.aura.web.BaseRouter group(java.lang.String, java.util.function.Consumer<io.aura.web.BaseRouter>);
+  public io.aura.web.BaseRouter ws(java.lang.String, java.util.function.Consumer<io.aura.web.WsHandler>);
+  public io.aura.web.BaseRouteBuilder addRoute(java.lang.String, java.lang.String, io.aura.web.BaseHandler);
+}
+### aura-core:io.aura.web.RequestType$Parameterized
+final class io.aura.web.RequestType$Parameterized implements java.lang.reflect.ParameterizedType {
+  public java.lang.reflect.Type[] getActualTypeArguments();
+  public java.lang.reflect.Type getRawType();
+  public java.lang.reflect.Type getOwnerType();
+  public java.lang.String getTypeName();
+  public boolean equals(java.lang.Object);
+  public int hashCode();
+}
+### aura-core:io.aura.web.RequestType
+public final class io.aura.web.RequestType {
+  public static java.lang.reflect.Type parameterized(java.lang.Class<?>, java.lang.reflect.Type...);
+}
+### aura-core:io.aura.web.RouteResponse
+public final class io.aura.web.RouteResponse {
+  public static void write(io.aura.web.BaseContext, java.lang.Object);
+}
+### aura-core:io.aura.web.SseEmitter
+public interface io.aura.web.SseEmitter extends java.io.Closeable {
+  public abstract void send(java.lang.String) throws java.lang.Exception;
+  public abstract void send(java.lang.String, java.lang.String) throws java.lang.Exception;
+  public abstract void send(java.lang.String, java.lang.String, java.lang.String) throws java.lang.Exception;
+  public abstract void close();
+}
+### aura-core:io.aura.web.UploadedFile
+public final class io.aura.web.UploadedFile extends java.lang.Record {
+  public io.aura.web.UploadedFile(java.lang.String, byte[], java.lang.String);
+  public java.lang.String name();
+  public long size();
+  public final java.lang.String toString();
+  public final int hashCode();
+  public final boolean equals(java.lang.Object);
+  public java.lang.String fileName();
+  public byte[] data();
+  public java.lang.String contentType();
+}
+### aura-core:io.aura.web.WsConnection
+public interface io.aura.web.WsConnection {
+  public abstract void send(java.lang.String);
+  public abstract boolean isOpen();
+  public abstract void close();
+  public abstract void close(int, java.lang.String);
+  public abstract java.lang.String path(java.lang.String);
+  public abstract java.lang.String query(java.lang.String);
+  public abstract void set(java.lang.String, java.lang.Object);
+  public abstract <T> T get(java.lang.String, java.lang.Class<T>);
+}
+### aura-core:io.aura.web.WsHandler$CloseHandler
+public interface io.aura.web.WsHandler$CloseHandler {
+  public abstract void handle(io.aura.web.WsConnection, int, java.lang.String);
+}
+### aura-core:io.aura.web.WsHandler$ErrorHandler
+public interface io.aura.web.WsHandler$ErrorHandler {
+  public abstract void handle(io.aura.web.WsConnection, java.lang.Throwable);
+}
+### aura-core:io.aura.web.WsHandler
+public class io.aura.web.WsHandler {
+  public io.aura.web.WsHandler();
+  public io.aura.web.WsHandler onOpen(java.util.function.Consumer<io.aura.web.WsConnection>);
+  public io.aura.web.WsHandler onMessage(java.util.function.BiConsumer<io.aura.web.WsConnection, java.lang.String>);
+  public io.aura.web.WsHandler onClose(io.aura.web.WsHandler$CloseHandler);
+  public io.aura.web.WsHandler onError(io.aura.web.WsHandler$ErrorHandler);
+}
+### aura-processor:io.aura.processor.AuraRouteProcessor$Route
+final class io.aura.processor.AuraRouteProcessor$Route extends java.lang.Record {
+  public final java.lang.String toString();
+  public final int hashCode();
+  public final boolean equals(java.lang.Object);
+  public java.lang.String method();
+  public java.lang.String path();
+}
+### aura-processor:io.aura.processor.AuraRouteProcessor
+public final class io.aura.processor.AuraRouteProcessor extends javax.annotation.processing.AbstractProcessor {
+  public io.aura.processor.AuraRouteProcessor();
+  public boolean process(java.util.Set<? extends javax.lang.model.element.TypeElement>, javax.annotation.processing.RoundEnvironment);
+}
+### aura-web:io.aura.web.ApiError
+public final class io.aura.web.ApiError extends java.lang.Record {
+  public io.aura.web.ApiError(java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String);
+  public static io.aura.web.ApiError of(java.lang.String, java.lang.String);
+  public static io.aura.web.ApiError of(java.lang.String, java.lang.String, java.lang.String);
+  public static io.aura.web.ApiError of(java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String);
+  public final java.lang.String toString();
+  public final int hashCode();
+  public final boolean equals(java.lang.Object);
+  public java.lang.String error();
+  public java.lang.String code();
+  public java.lang.String field();
+  public java.lang.String reason();
+  public java.lang.String hint();
+}
+### aura-web:io.aura.web.ApiException
+public class io.aura.web.ApiException extends java.lang.RuntimeException implements io.aura.web.CodedException {
+  public io.aura.web.ApiException(java.lang.String, java.lang.String);
+  public io.aura.web.ApiException(java.lang.String, java.lang.String, java.lang.String);
+  public io.aura.web.ApiException(int, java.lang.String, java.lang.String);
+  public io.aura.web.ApiException(int, java.lang.String, java.lang.String, java.lang.String);
+  public io.aura.web.ApiException(int, java.lang.String, java.lang.String, java.lang.String, java.lang.Throwable);
+  public int status();
+  public java.lang.String code();
+  public java.lang.String field();
+}
+### aura-web:io.aura.web.ApiRouteCatalog
+public final class io.aura.web.ApiRouteCatalog {
+  public static io.aura.contract.ApiRoute describe(io.aura.web.CompiledRoute, java.lang.String);
+}
+### aura-web:io.aura.web.CodedException
+public interface io.aura.web.CodedException {
+  public abstract java.lang.String code();
+  public default int status();
+  public default java.lang.String field();
+}
+### aura-web:io.aura.web.CompiledRoute$RouteMeta
+public final class io.aura.web.CompiledRoute$RouteMeta extends java.lang.Record {
+  public io.aura.web.CompiledRoute$RouteMeta(java.lang.String, java.lang.String, java.util.Map<java.lang.String, java.lang.String>, java.util.List<io.aura.contract.ApiParameter>);
+  public io.aura.web.CompiledRoute$RouteMeta(java.lang.String, java.lang.String, java.util.Map<java.lang.String, java.lang.String>);
+  public io.aura.web.CompiledRoute$RouteMeta(java.lang.String, java.lang.String, java.util.Map<java.lang.String, java.lang.String>, java.util.List<io.aura.contract.ApiParameter>, java.util.Map<java.lang.String, java.lang.Object>);
+  public io.aura.web.CompiledRoute$RouteMeta(java.lang.String, java.lang.String, java.util.Map<java.lang.String, java.lang.String>, java.util.List<io.aura.contract.ApiParameter>, java.util.Map<java.lang.String, java.lang.Object>, boolean, boolean, java.lang.String);
+  public final java.lang.String toString();
+  public final int hashCode();
+  public final boolean equals(java.lang.Object);
+  public java.lang.String description();
+  public java.lang.String returnType();
+  public java.util.Map<java.lang.String, java.lang.String> params();
+  public java.util.List<io.aura.contract.ApiParameter> parameters();
+  public java.util.Map<java.lang.String, java.lang.Object> responseSchema();
+  public boolean streaming();
+  public boolean authenticated();
+  public java.lang.String permission();
+}
+### aura-web:io.aura.web.CompiledRoute
+public final class io.aura.web.CompiledRoute extends java.lang.Record {
+  public io.aura.web.CompiledRoute(java.lang.String, java.lang.String, java.util.regex.Pattern, java.util.List<java.lang.String>, java.util.List<io.aura.web.BaseHandler>, io.aura.web.BaseHandler, java.util.List<io.aura.web.BaseHandler>, io.aura.web.CompiledRoute$RouteMeta);
+  public final java.lang.String toString();
+  public final int hashCode();
+  public final boolean equals(java.lang.Object);
+  public java.lang.String method();
+  public java.lang.String rawPath();
+  public java.util.regex.Pattern pattern();
+  public java.util.List<java.lang.String> paramNames();
+  public java.util.List<io.aura.web.BaseHandler> beforeHandlers();
+  public io.aura.web.BaseHandler handler();
+  public java.util.List<io.aura.web.BaseHandler> afterHandlers();
+  public io.aura.web.CompiledRoute$RouteMeta meta();
+}
+### aura-web:io.aura.web.CompiledWsRoute$1
+class io.aura.web.CompiledWsRoute$1 extends io.undertow.websockets.core.AbstractReceiveListener {
+  public void handleEvent(io.undertow.websockets.core.WebSocketChannel);
+  public void handleEvent(java.nio.channels.Channel);
+}
+### aura-web:io.aura.web.CompiledWsRoute
+final class io.aura.web.CompiledWsRoute extends java.lang.Record {
+  public final java.lang.String toString();
+  public final int hashCode();
+  public final boolean equals(java.lang.Object);
+  public java.lang.String rawPath();
+  public java.util.regex.Pattern pattern();
+  public java.util.List<java.lang.String> paramNames();
+  public java.util.List<io.aura.web.BaseHandler> beforeHandlers();
+  public io.aura.web.WsHandler wsHandler();
+  public long maxMessageBytes();
+  public io.aura.web.WebSocketConnectionRegistry connections();
+}
+### aura-web:io.aura.web.Context$1
+class io.aura.web.Context$1 implements io.aura.web.SseEmitter {
+  public void send(java.lang.String) throws java.lang.Exception;
+  public void send(java.lang.String, java.lang.String) throws java.lang.Exception;
+  public void send(java.lang.String, java.lang.String, java.lang.String) throws java.lang.Exception;
+  public void close();
+}
+### aura-web:io.aura.web.Context
+public class io.aura.web.Context implements io.aura.web.BaseContext {
+  public io.aura.AuraWebRuntime app();
+  public boolean isResponseStarted();
+  public java.lang.String requestId();
+  public io.aura.contract.CancellationToken cancellationToken();
+  public io.aura.web.UploadedFile file(java.lang.String) throws java.lang.Exception;
+  public java.lang.String formField(java.lang.String) throws java.lang.Exception;
+  public java.lang.String path(java.lang.String);
+  public java.lang.String query(java.lang.String);
+  public java.lang.String query(java.lang.String, java.lang.String);
+  public java.lang.String header(java.lang.String);
+  public java.lang.String cookie(java.lang.String);
+  public <T> T body(java.lang.Class<T>) throws java.io.IOException;
+  public java.lang.String bodyText() throws java.io.IOException;
+  public <T> T body(java.lang.reflect.Type) throws java.io.IOException;
+  public java.lang.String method();
+  public java.lang.String url();
+  public int statusCode();
+  public io.aura.web.Context status(int);
+  public void json(java.lang.Object);
+  public void jsonRaw(java.lang.String);
+  public void text(java.lang.String);
+  public void html(java.lang.String);
+  public void raw(java.lang.String);
+  public void redirect(java.lang.String);
+  public io.aura.web.Context header(java.lang.String, java.lang.String);
+  public io.aura.web.Context cookie(java.lang.String, java.lang.String, int);
+  public <T> void set(T);
+  public <T> T get(java.lang.Class<T>);
+  public void set(java.lang.String, java.lang.Object);
+  public <T> T get(java.lang.String, java.lang.Class<T>);
+  public io.aura.web.SseEmitter sse();
+  public void sendFile(java.lang.String, byte[], java.lang.String);
+  public void abort();
+  public boolean isAborted();
+  public java.lang.String ip();
+  public io.aura.web.BaseContext cookie(java.lang.String, java.lang.String, int);
+  public io.aura.web.BaseContext header(java.lang.String, java.lang.String);
+  public io.aura.web.BaseContext status(int);
+}
+### aura-web:io.aura.web.ExceptionResolver$ExceptionResponse
+final class io.aura.web.ExceptionResolver$ExceptionResponse extends java.lang.Record {
+  public final java.lang.String toString();
+  public final int hashCode();
+  public final boolean equals(java.lang.Object);
+  public int status();
+  public java.lang.Object body();
+}
+### aura-web:io.aura.web.ExceptionResolver
+class io.aura.web.ExceptionResolver {
+}
+### aura-web:io.aura.web.FixedWindowRateLimiter$WindowCounter
+final class io.aura.web.FixedWindowRateLimiter$WindowCounter {
+}
+### aura-web:io.aura.web.FixedWindowRateLimiter
+final class io.aura.web.FixedWindowRateLimiter {
+}
+### aura-web:io.aura.web.LambdaHandler
+public final class io.aura.web.LambdaHandler implements io.aura.web.BaseHandler {
+  public io.aura.web.LambdaHandler(java.lang.Object);
+  public void handle(io.aura.web.BaseContext) throws java.lang.Exception;
+}
+### aura-web:io.aura.web.MethodRefHandler
+public final class io.aura.web.MethodRefHandler implements io.aura.web.BaseHandler {
+  public void handle(io.aura.web.BaseContext) throws java.lang.Exception;
+  public java.lang.reflect.Method resolvedMethod();
+  public java.lang.Object invokeWithArgs(java.util.Map<java.lang.String, java.lang.Object>) throws java.lang.Exception;
+}
+### aura-web:io.aura.web.MockContext$1
+class io.aura.web.MockContext$1 implements io.aura.web.SseEmitter {
+  public void send(java.lang.String);
+  public void send(java.lang.String, java.lang.String);
+  public void send(java.lang.String, java.lang.String, java.lang.String);
+  public void close();
+}
+### aura-web:io.aura.web.MockContext
+public class io.aura.web.MockContext extends io.aura.web.Context {
+  public io.aura.web.MockContext(java.util.Map<java.lang.String, java.lang.String>, java.util.Map<java.lang.String, java.lang.String>, java.util.Map<java.lang.String, java.lang.String>, java.lang.String, io.aura.AuraWebRuntime);
+  public io.aura.web.MockContext(java.util.Map<java.lang.String, java.lang.String>, java.util.Map<java.lang.String, java.lang.String>, java.util.Map<java.lang.String, java.lang.String>, java.lang.String, io.aura.AuraWebRuntime, java.lang.String);
+  public java.lang.String path(java.lang.String);
+  public java.lang.String query(java.lang.String);
+  public java.lang.String query(java.lang.String, java.lang.String);
+  public java.lang.String header(java.lang.String);
+  public java.lang.String cookie(java.lang.String);
+  public java.lang.String bodyText();
+  public <T> T body(java.lang.Class<T>);
+  public <T> T body(java.lang.reflect.Type);
+  public java.lang.String method();
+  public java.lang.String url();
+  public int statusCode();
+  public io.aura.web.Context status(int);
+  public void json(java.lang.Object);
+  public void jsonRaw(java.lang.String);
+  public void text(java.lang.String);
+  public void html(java.lang.String);
+  public void raw(java.lang.String);
+  public void redirect(java.lang.String);
+  public io.aura.web.Context header(java.lang.String, java.lang.String);
+  public io.aura.web.Context cookie(java.lang.String, java.lang.String, int);
+  public boolean isResponseStarted();
+  public void sendFile(java.lang.String, byte[], java.lang.String);
+  public <T> void set(T);
+  public <T> T get(java.lang.Class<T>);
+  public void set(java.lang.String, java.lang.Object);
+  public <T> T get(java.lang.String, java.lang.Class<T>);
+  public io.aura.AuraWebRuntime app();
+  public java.lang.String ip();
+  public io.aura.web.SseEmitter sse();
+  public io.aura.web.BaseContext cookie(java.lang.String, java.lang.String, int);
+  public io.aura.web.BaseContext header(java.lang.String, java.lang.String);
+  public io.aura.web.BaseContext status(int);
+}
+### aura-web:io.aura.web.OpenApiGenerator
+public final class io.aura.web.OpenApiGenerator {
+  public static java.util.Map<java.lang.String, java.lang.Object> generate(java.lang.String, java.lang.String, java.util.List<io.aura.contract.ApiRoute>);
+}
+### aura-web:io.aura.web.PackageScanner
+final class io.aura.web.PackageScanner {
+}
+### aura-web:io.aura.web.ParamResolver$Binder
+public interface io.aura.web.ParamResolver$Binder {
+  public abstract java.lang.Object resolve(io.aura.web.BaseContext) throws java.lang.Exception;
+}
+### aura-web:io.aura.web.ParamResolver
+public final class io.aura.web.ParamResolver {
+  public static io.aura.web.ParamResolver$Binder create(java.lang.reflect.Parameter);
+  public static java.lang.String resolveString(io.aura.web.BaseContext, java.lang.String);
+  public static int parseInt(java.lang.String);
+  public static java.lang.Integer parseIntBoxed(java.lang.String);
+  public static long parseLong(java.lang.String);
+  public static java.lang.Long parseLongBoxed(java.lang.String);
+  public static boolean parseBool(java.lang.String);
+  public static java.lang.Boolean parseBoolBoxed(java.lang.String);
+  public static double parseDouble(java.lang.String);
+  public static java.lang.Double parseDoubleBoxed(java.lang.String);
+  public static float parseFloat(java.lang.String);
+  public static java.lang.Float parseFloatBoxed(java.lang.String);
+  public static short parseShort(java.lang.String);
+  public static java.lang.Short parseShortBoxed(java.lang.String);
+  public static byte parseByte(java.lang.String);
+  public static java.lang.Byte parseByteBoxed(java.lang.String);
+  public static char parseChar(java.lang.String);
+  public static java.lang.Character parseCharBoxed(java.lang.String);
+}
+### aura-web:io.aura.web.RouteAssembler
+final class io.aura.web.RouteAssembler {
+}
+### aura-web:io.aura.web.RouteContract
+final class io.aura.web.RouteContract {
+}
+### aura-web:io.aura.web.RouteExecutor$ExceptionHandler
+interface io.aura.web.RouteExecutor$ExceptionHandler {
+  public abstract void handle(java.lang.Exception, io.aura.web.BaseContext);
+}
+### aura-web:io.aura.web.RouteExecutor
+class io.aura.web.RouteExecutor {
+}
+### aura-web:io.aura.web.Router
+public class io.aura.web.Router extends io.aura.web.BaseRouter {
+  public io.aura.web.Router();
+  public io.aura.web.BaseRouter group(java.lang.String, java.util.function.Consumer<io.aura.web.BaseRouter>);
+  public io.aura.web.BaseRouteBuilder get(java.lang.String, java.lang.Object, java.lang.String);
+  public io.aura.web.BaseRouteBuilder post(java.lang.String, java.lang.Object, java.lang.String);
+  public io.aura.web.BaseRouteBuilder put(java.lang.String, java.lang.Object, java.lang.String);
+  public io.aura.web.BaseRouteBuilder delete(java.lang.String, java.lang.Object, java.lang.String);
+  public io.aura.web.BaseRouteBuilder patch(java.lang.String, java.lang.Object, java.lang.String);
+  public io.aura.web.BaseRouteBuilder head(java.lang.String, java.lang.Object, java.lang.String);
+  public io.aura.web.BaseRouteBuilder options(java.lang.String, java.lang.Object, java.lang.String);
+  public io.aura.web.BaseRouter crud(java.lang.String, java.lang.Object);
+  public io.aura.web.BaseRouter crud(java.lang.String, java.lang.Object, java.lang.String...);
+}
+### aura-web:io.aura.web.ServiceRegistrar$RouteInfo
+final class io.aura.web.ServiceRegistrar$RouteInfo extends java.lang.Record {
+  public final java.lang.String toString();
+  public final int hashCode();
+  public final boolean equals(java.lang.Object);
+  public java.lang.String httpMethod();
+  public java.lang.String path();
+}
+### aura-web:io.aura.web.ServiceRegistrar
+final class io.aura.web.ServiceRegistrar {
+}
+### aura-web:io.aura.web.SnapshotHttpClient$DaemonThreadFactory
+final class io.aura.web.SnapshotHttpClient$DaemonThreadFactory implements java.util.concurrent.ThreadFactory {
+  public java.lang.Thread newThread(java.lang.Runnable);
+}
+### aura-web:io.aura.web.SnapshotHttpClient$ResponseTooLargeException
+final class io.aura.web.SnapshotHttpClient$ResponseTooLargeException extends java.io.IOException {
+}
+### aura-web:io.aura.web.SnapshotHttpClient
+public class io.aura.web.SnapshotHttpClient {
+  public io.aura.web.SnapshotHttpClient(java.lang.String, java.lang.String);
+  public io.aura.web.SnapshotHttpClient(java.lang.String, java.net.URI, java.net.http.HttpClient);
+  public io.aura.web.SnapshotHttpClient(java.lang.String, java.net.URI, java.net.http.HttpClient, java.time.Duration);
+  public io.aura.web.SnapshotHttpClient(java.lang.String, java.net.URI, java.net.http.HttpClient, java.time.Duration, int);
+  public <T> T get(java.lang.String, java.lang.Class<T>);
+  public <T> T get(java.lang.String, java.lang.Class<T>, io.aura.contract.CancellationToken);
+  public <T> T post(java.lang.String, java.lang.Object, java.lang.Class<T>);
+  public <T> T post(java.lang.String, java.lang.Object, java.lang.Class<T>, io.aura.contract.CancellationToken);
+  public <T> T send(java.lang.String, java.lang.String, java.lang.Object, java.util.Map<java.lang.String, java.lang.String>, java.lang.Class<T>);
+  public <T> T send(java.lang.String, java.lang.String, java.lang.Object, java.util.Map<java.lang.String, java.lang.String>, java.lang.Class<T>, io.aura.contract.CancellationToken);
+}
+### aura-web:io.aura.web.SnapshotMetrics
+public final class io.aura.web.SnapshotMetrics extends java.lang.Record {
+  public io.aura.web.SnapshotMetrics(long, int, int, boolean, boolean);
+  public static io.aura.web.SnapshotMetrics of(io.aura.AuraApp);
+  public final java.lang.String toString();
+  public final int hashCode();
+  public final boolean equals(java.lang.Object);
+  public long dropped();
+  public int queued();
+  public int queueCapacity();
+  public boolean asynchronous();
+  public boolean writerAlive();
+}
+### aura-web:io.aura.web.SnapshotRecorder
+class io.aura.web.SnapshotRecorder {
+}
+### aura-web:io.aura.web.SnapshotRedactor
+class io.aura.web.SnapshotRedactor {
+}
+### aura-web:io.aura.web.SnapshotReplayer$ReplayResult
+public final class io.aura.web.SnapshotReplayer$ReplayResult extends java.lang.Record {
+  public io.aura.web.SnapshotReplayer$ReplayResult(io.aura.snapshot.ExceptionSnapshot, io.aura.web.TestClient$Response, java.util.Map<java.lang.String, java.lang.String>);
+  public io.aura.web.SnapshotReplayer$ReplayResult expectStatus(int);
+  public io.aura.web.SnapshotReplayer$ReplayResult expectSameStatus();
+  public io.aura.web.SnapshotReplayer$ReplayResult expectCode(java.lang.String);
+  public io.aura.web.SnapshotReplayer$ReplayResult expectSameCode();
+  public io.aura.web.SnapshotReplayer$ReplayResult expectNoEnvDiff();
+  public final java.lang.String toString();
+  public final int hashCode();
+  public final boolean equals(java.lang.Object);
+  public io.aura.snapshot.ExceptionSnapshot snapshot();
+  public io.aura.web.TestClient$Response response();
+  public java.util.Map<java.lang.String, java.lang.String> envDiff();
+}
+### aura-web:io.aura.web.SnapshotReplayer
+public class io.aura.web.SnapshotReplayer {
+  public static io.aura.web.SnapshotReplayer of(io.aura.AuraApp);
+  public io.aura.web.SnapshotReplayer load(java.lang.String);
+  public io.aura.web.SnapshotReplayer load(java.nio.file.Path);
+  public io.aura.web.SnapshotReplayer$ReplayResult replay();
+}
+### aura-web:io.aura.web.StandardAdmissionPolicy$Builder
+public final class io.aura.web.StandardAdmissionPolicy$Builder {
+  public io.aura.web.StandardAdmissionPolicy$Builder();
+  public io.aura.web.StandardAdmissionPolicy$Builder perIp(int, int);
+  public io.aura.web.StandardAdmissionPolicy$Builder perApiKey(int, int);
+  public io.aura.web.StandardAdmissionPolicy$Builder routeRate(java.lang.String, int);
+  public io.aura.web.StandardAdmissionPolicy$Builder globalConcurrency(int);
+  public io.aura.web.StandardAdmissionPolicy$Builder routeConcurrency(java.lang.String, int);
+  public io.aura.web.StandardAdmissionPolicy build();
+}
+### aura-web:io.aura.web.StandardAdmissionPolicy$BulkheadRule
+final class io.aura.web.StandardAdmissionPolicy$BulkheadRule {
+}
+### aura-web:io.aura.web.StandardAdmissionPolicy$RateRule
+final class io.aura.web.StandardAdmissionPolicy$RateRule extends java.lang.Record {
+  public final java.lang.String toString();
+  public final int hashCode();
+  public final boolean equals(java.lang.Object);
+  public java.lang.String id();
+  public java.util.function.Predicate<io.aura.web.AdmissionRequest> matches();
+  public java.util.function.Function<io.aura.web.AdmissionRequest, java.lang.String> key();
+  public int permitsPerSecond();
+  public io.aura.web.FixedWindowRateLimiter limiter();
+}
+### aura-web:io.aura.web.StandardAdmissionPolicy
+public final class io.aura.web.StandardAdmissionPolicy implements io.aura.web.AdmissionPolicy {
+  public static final java.lang.String RATE_LIMITED;
+  public static final java.lang.String CONCURRENCY_LIMITED;
+  public static io.aura.web.StandardAdmissionPolicy$Builder builder();
+  public io.aura.web.AdmissionDecision admit(io.aura.web.AdmissionRequest);
+  public long rateRejections();
+  public long concurrencyRejections();
+  public int trackedRateKeys();
+  public int inFlight();
+}
+### aura-web:io.aura.web.TestClient$Request
+public class io.aura.web.TestClient$Request {
+  public io.aura.web.TestClient$Request header(java.lang.String, java.lang.String);
+  public io.aura.web.TestClient$Request query(java.lang.String, java.lang.String);
+  public io.aura.web.TestClient$Request body(java.lang.Object);
+  public io.aura.web.TestClient$Response execute();
+  public io.aura.web.TestClient$Response expect(int);
+}
+### aura-web:io.aura.web.TestClient$Response
+public class io.aura.web.TestClient$Response {
+  public int status();
+  public java.lang.String body();
+  public java.lang.String header(java.lang.String);
+  public <T> T json(java.lang.Class<T>);
+  public <T> java.util.List<T> jsonList(java.lang.Class<T>);
+  public io.aura.web.TestClient$Response expect(int);
+  public io.aura.web.TestClient$Response expectHeader(java.lang.String, java.lang.String);
+  public io.aura.web.TestClient$Response bodyContains(java.lang.String);
+  public io.aura.web.TestClient$Response expectJson(java.lang.String, java.lang.Object);
+}
+### aura-web:io.aura.web.TestClient$TestSession
+public class io.aura.web.TestClient$TestSession {
+  public io.aura.web.TestClient$TestSession header(java.lang.String, java.lang.String);
+  public io.aura.web.TestClient$TestSession login(io.aura.web.TestClient$Response);
+  public io.aura.web.TestClient$Request get(java.lang.String);
+  public io.aura.web.TestClient$Request post(java.lang.String);
+  public io.aura.web.TestClient$Request put(java.lang.String);
+  public io.aura.web.TestClient$Request delete(java.lang.String);
+  public io.aura.web.TestClient$Request patch(java.lang.String);
+  public io.aura.web.TestClient$Request head(java.lang.String);
+  public io.aura.web.TestClient$Request options(java.lang.String);
+}
+### aura-web:io.aura.web.TestClient
+public class io.aura.web.TestClient {
+  public static io.aura.web.TestClient of(io.aura.AuraRuntime);
+  public static io.aura.web.TestClient of(io.aura.AuraApp);
+  public io.aura.web.TestClient$Request get(java.lang.String);
+  public io.aura.web.TestClient$Request post(java.lang.String);
+  public io.aura.web.TestClient$Request put(java.lang.String);
+  public io.aura.web.TestClient$Request delete(java.lang.String);
+  public io.aura.web.TestClient$Request patch(java.lang.String);
+  public io.aura.web.TestClient$Request head(java.lang.String);
+  public io.aura.web.TestClient$Request options(java.lang.String);
+  public java.util.Map<java.lang.String, java.lang.Object> schema();
+  public java.util.Map<java.lang.String, java.lang.Object> openApi();
+  public io.aura.web.TestClient$TestSession session();
+  public io.aura.web.TestClient$TestSession session(java.lang.String);
+}
+### aura-web:io.aura.web.TypeSchema
+final class io.aura.web.TypeSchema {
+}
+### aura-web:io.aura.web.TypeUtil
+public final class io.aura.web.TypeUtil {
+  public static boolean isPojo(java.lang.Class<?>);
+}
+### aura-web:io.aura.web.UndertowStarter
+public class io.aura.web.UndertowStarter implements io.aura.AuraStarter {
+  public io.aura.web.UndertowStarter();
+  public void start(io.aura.AuraWebRuntime);
+  public void stop();
+  public void reloadRoutes(io.aura.AuraWebRuntime);
+}
+### aura-web:io.aura.web.UndertowWsConnection$1
+class io.aura.web.UndertowWsConnection$1 implements io.undertow.websockets.core.WebSocketCallback<java.lang.Void> {
+  public void complete(io.undertow.websockets.core.WebSocketChannel, java.lang.Void);
+  public void onError(io.undertow.websockets.core.WebSocketChannel, java.lang.Void, java.lang.Throwable);
+  public void onError(io.undertow.websockets.core.WebSocketChannel, java.lang.Object, java.lang.Throwable);
+  public void complete(io.undertow.websockets.core.WebSocketChannel, java.lang.Object);
+}
+### aura-web:io.aura.web.UndertowWsConnection
+final class io.aura.web.UndertowWsConnection implements io.aura.web.WsConnection {
+  public boolean isOpen();
+  public void send(java.lang.String);
+  public void close();
+  public void close(int, java.lang.String);
+  public java.lang.String path(java.lang.String);
+  public java.lang.String query(java.lang.String);
+  public void set(java.lang.String, java.lang.Object);
+  public <T> T get(java.lang.String, java.lang.Class<T>);
+}
+### aura-web:io.aura.web.WebSocketConnectionRegistry$1
+class io.aura.web.WebSocketConnectionRegistry$1 implements io.undertow.websockets.core.WebSocketCallback<java.lang.Void> {
+  public void complete(io.undertow.websockets.core.WebSocketChannel, java.lang.Void);
+  public void onError(io.undertow.websockets.core.WebSocketChannel, java.lang.Void, java.lang.Throwable);
+  public void onError(io.undertow.websockets.core.WebSocketChannel, java.lang.Object, java.lang.Throwable);
+  public void complete(io.undertow.websockets.core.WebSocketChannel, java.lang.Object);
+}
+### aura-web:io.aura.web.WebSocketConnectionRegistry$ConnectionState
+final class io.aura.web.WebSocketConnectionRegistry$ConnectionState {
+}
+### aura-web:io.aura.web.WebSocketConnectionRegistry
+final class io.aura.web.WebSocketConnectionRegistry {
+}
+### aura-db:io.aura.db.ClasspathSqlMigrationSource
+public final class io.aura.db.ClasspathSqlMigrationSource implements io.aura.db.SqlMigrationSource {
+  public io.aura.db.ClasspathSqlMigrationSource(java.lang.String);
+  public io.aura.db.ClasspathSqlMigrationSource(java.lang.String, java.lang.ClassLoader);
+  public java.util.List<io.aura.db.SqlMigration> migrations();
+}
+### aura-db:io.aura.db.DatabaseModule
+public final class io.aura.db.DatabaseModule implements io.aura.AuraModule {
+  public static io.aura.db.DatabaseModule create(io.aura.db.Db);
+  public io.aura.db.DatabaseModule migrateWith(io.aura.db.SchemaMigrator);
+  public io.aura.contract.ModuleMetadata descriptor();
+  public void install(io.aura.ModuleContext);
+  public void start(io.aura.ModuleContext);
+  public void stop(io.aura.ModuleContext);
+  public java.util.Optional<io.aura.db.SchemaMigrationResult> migrationResult();
+}
+### aura-db:io.aura.db.Db$DbException
+public class io.aura.db.Db$DbException extends java.lang.RuntimeException {
+  public io.aura.db.Db$DbException(java.lang.Throwable);
+  public io.aura.db.Db$DbException(java.lang.String);
+  public io.aura.db.Db$DbException(java.lang.String, java.lang.Throwable);
+}
+### aura-db:io.aura.db.Db$RowMapper
+public interface io.aura.db.Db$RowMapper<T> {
+  public abstract T map(java.sql.ResultSet) throws java.sql.SQLException;
+}
+### aura-db:io.aura.db.Db$Transaction
+public class io.aura.db.Db$Transaction implements io.aura.db.TransactionHandle {
+  public io.aura.db.TransactionContext context();
+  public boolean isActive();
+  public void commit();
+  public void rollback();
+  public void close();
+}
+### aura-db:io.aura.db.Db
+public class io.aura.db.Db implements java.lang.AutoCloseable {
+  public static io.aura.db.Db create(java.lang.String, java.lang.String, java.lang.String);
+  public static io.aura.db.Db create(java.lang.String, java.lang.String, java.lang.String, java.lang.String);
+  public static io.aura.db.Db create(javax.sql.DataSource);
+  public static io.aura.db.Db create(java.lang.String, javax.sql.DataSource);
+  public java.lang.String name();
+  public static java.lang.String in(java.util.Collection<?>);
+  public io.aura.db.Query table(java.lang.String);
+  public <T> java.util.List<T> query(java.lang.String, java.lang.Object[], io.aura.db.Db$RowMapper<T>);
+  public <T> java.util.List<T> query(java.lang.String, java.lang.Object[], io.aura.db.Db$RowMapper<T>, io.aura.contract.CancellationToken);
+  public <T> T queryOne(java.lang.String, java.lang.Object[], io.aura.db.Db$RowMapper<T>);
+  public <T> T queryOne(java.lang.String, java.lang.Object[], io.aura.db.Db$RowMapper<T>, io.aura.contract.CancellationToken);
+  public java.util.List<io.aura.db.Row> find(java.lang.String, java.lang.Object...);
+  public java.util.List<io.aura.db.Row> findCancellable(java.lang.String, io.aura.contract.CancellationToken, java.lang.Object...);
+  public io.aura.db.Row findOne(java.lang.String, java.lang.Object...);
+  public io.aura.db.Row findOneCancellable(java.lang.String, io.aura.contract.CancellationToken, java.lang.Object...);
+  public io.aura.db.Row findById(java.lang.String, java.lang.Object);
+  public io.aura.db.Row findById(java.lang.String, java.lang.String, java.lang.Object);
+  public java.util.List<io.aura.db.Row> findWhere(java.lang.String, java.lang.String, java.lang.Object...);
+  public int deleteById(java.lang.String, java.lang.Object);
+  public java.util.List<io.aura.db.Row> findDynamic(java.lang.String, java.util.Map<?, ?>);
+  public io.aura.db.Page<io.aura.db.Row> paginateDynamic(java.lang.String, java.util.Map<?, ?>, io.aura.db.PaginationOrder, int, int, io.aura.db.TotalStrategy);
+  public int updateDynamic(java.lang.String, java.util.Map<java.lang.String, java.lang.Object>, java.lang.String, java.lang.Object);
+  public <T> io.aura.db.Page<T> paginate(java.lang.String, java.lang.Object[], io.aura.db.PaginationOrder, int, int, io.aura.db.TotalStrategy, io.aura.db.Db$RowMapper<T>);
+  public io.aura.db.Page<io.aura.db.Row> paginate(java.lang.String, java.lang.Object[], io.aura.db.PaginationOrder, int, int, io.aura.db.TotalStrategy);
+  public io.aura.db.Page<io.aura.db.Row> paginate(java.lang.String, java.lang.Object[], io.aura.db.PaginationOrder, int, int);
+  public int execute(java.lang.String, java.lang.Object...);
+  public int executeCancellable(java.lang.String, io.aura.contract.CancellationToken, java.lang.Object...);
+  public java.lang.Object insertAndReturnId(java.lang.String, java.lang.Object...);
+  public int batchInsert(java.lang.String, java.util.List<io.aura.db.Row>);
+  public int[] batch(java.lang.String, java.util.List<java.lang.Object[]>);
+  public void transaction(java.lang.Runnable);
+  public <T> T transaction(java.util.function.Supplier<T>);
+  public <T> T transaction(java.util.function.Function<io.aura.db.TransactionContext, T>);
+  public <T> T transactionContext(java.util.function.Function<io.aura.db.TransactionContext, T>);
+  public io.aura.db.TransactionContext currentTransactionContext();
+  public void transactionThrows(io.aura.db.ThrowingRunnable) throws java.lang.Exception;
+  public <T> T transactionThrows(io.aura.db.ThrowingSupplier<T>) throws java.lang.Exception;
+  public <T> T transactionContextThrows(io.aura.db.ThrowingTransactionFunction<T>) throws java.lang.Exception;
+  public void transactionIndependent(java.lang.Runnable);
+  public <T> T transactionIndependent(java.util.function.Supplier<T>);
+  public <T> T transactionIndependent(java.time.Duration, io.aura.contract.CancellationToken, java.util.function.Function<io.aura.contract.CancellationToken, T>);
+  public static io.aura.contract.ExecutorMetrics independentTransactionMetrics();
+  public io.aura.db.Db$Transaction beginTransaction();
+  public io.aura.db.TransactionHandle beginTransactionHandle();
+  public void close();
+  public static void shutdownPool();
+}
+### aura-db:io.aura.db.MigrationChecksums
+final class io.aura.db.MigrationChecksums {
+}
+### aura-db:io.aura.db.MigrationContext
+public final class io.aura.db.MigrationContext extends java.lang.Record {
+  public io.aura.db.MigrationContext(io.aura.db.Db, javax.sql.DataSource, java.lang.String);
+  public final java.lang.String toString();
+  public final int hashCode();
+  public final boolean equals(java.lang.Object);
+  public io.aura.db.Db db();
+  public javax.sql.DataSource dataSource();
+  public java.lang.String databaseName();
+}
+### aura-db:io.aura.db.MigrationException
+public class io.aura.db.MigrationException extends java.lang.RuntimeException implements io.aura.contract.CodedFailure {
+  public static final java.lang.String CODE;
+  public io.aura.db.MigrationException(java.lang.String);
+  public io.aura.db.MigrationException(java.lang.String, java.lang.Throwable);
+  public java.lang.String code();
+}
+### aura-db:io.aura.db.Page
+public final class io.aura.db.Page<T> extends java.lang.Record {
+  public static final int MAX_PAGE_SIZE;
+  public io.aura.db.Page(java.util.List<T>, int, int, java.util.OptionalLong, boolean);
+  public static <T> io.aura.db.Page<T> exact(java.util.List<T>, int, int, long);
+  public static <T> io.aura.db.Page<T> withoutTotal(java.util.List<T>, int, int, boolean);
+  public java.util.OptionalInt totalPages();
+  public boolean hasPrev();
+  public final java.lang.String toString();
+  public final int hashCode();
+  public final boolean equals(java.lang.Object);
+  public java.util.List<T> list();
+  public int pageNum();
+  public int pageSize();
+  public java.util.OptionalLong total();
+  public boolean hasNext();
+}
+### aura-db:io.aura.db.PaginationOrder
+public final class io.aura.db.PaginationOrder extends java.lang.Record {
+  public io.aura.db.PaginationOrder(java.lang.String);
+  public static io.aura.db.PaginationOrder by(java.lang.String...);
+  public final java.lang.String toString();
+  public final int hashCode();
+  public final boolean equals(java.lang.Object);
+  public java.lang.String clause();
+}
+### aura-db:io.aura.db.Query
+public class io.aura.db.Query {
+  public static final int MAX_LIMIT;
+  public static final int MAX_OFFSET;
+  public io.aura.db.Query select(java.lang.String);
+  public io.aura.db.Query where(java.lang.String, java.lang.String, java.lang.Object);
+  public io.aura.db.Query where(java.lang.String, java.lang.Object);
+  public io.aura.db.Query whereIf(boolean, java.lang.String, java.lang.Object);
+  public io.aura.db.Query whereIf(boolean, java.lang.String, java.lang.String, java.lang.Object);
+  public io.aura.db.Query whereNull(java.lang.String);
+  public io.aura.db.Query whereNotNull(java.lang.String);
+  public io.aura.db.Query orderBy(java.lang.String...);
+  public io.aura.db.Query limit(int);
+  public io.aura.db.Query offset(int);
+  public java.util.List<io.aura.db.Row> find();
+  public java.util.List<io.aura.db.Row> find(io.aura.contract.CancellationToken);
+  public io.aura.db.Row findOne();
+  public io.aura.db.Row findOne(io.aura.contract.CancellationToken);
+  public io.aura.db.Page<io.aura.db.Row> paginate(int, int);
+  public io.aura.db.Page<io.aura.db.Row> paginate(int, int, io.aura.db.TotalStrategy);
+  public int count();
+  public int count(io.aura.contract.CancellationToken);
+  public boolean exists();
+  public boolean exists(io.aura.contract.CancellationToken);
+  public int update(io.aura.db.Row);
+  public int update(io.aura.db.Row, io.aura.contract.CancellationToken);
+  public int delete();
+  public int delete(io.aura.contract.CancellationToken);
+}
+### aura-db:io.aura.db.Row
+public class io.aura.db.Row extends java.util.LinkedHashMap<java.lang.String, java.lang.Object> {
+  public static io.aura.db.Row of(java.lang.String);
+  public static io.aura.db.Row of(java.lang.String, java.lang.String);
+  public io.aura.db.Row exclude(java.lang.String...);
+  public io.aura.db.Row set(java.lang.String, java.lang.Object);
+  public java.lang.Object get(java.lang.Object);
+  public io.aura.db.Row id(java.lang.Object);
+  public <T> T id();
+  public java.lang.String getStr(java.lang.String);
+  public java.lang.String getStr(java.lang.String, java.lang.String);
+  public java.lang.Integer getInt(java.lang.String);
+  public int getInt(java.lang.String, int);
+  public java.lang.Long getLong(java.lang.String);
+  public long getLong(java.lang.String, long);
+  public java.lang.Double getDouble(java.lang.String);
+  public double getDouble(java.lang.String, double);
+  public java.lang.Boolean getBool(java.lang.String);
+  public boolean getBool(java.lang.String, boolean);
+  public java.lang.String table();
+  public java.lang.String primaryKey();
+  public static int batchInsert(io.aura.db.Db, java.util.List<io.aura.db.Row>);
+  public io.aura.db.Row insert(io.aura.db.Db);
+  public io.aura.db.Row insertFull(io.aura.db.Db);
+  public boolean update(io.aura.db.Db);
+  public boolean delete(io.aura.db.Db);
+}
+### aura-db:io.aura.db.SchemaMigrationResult
+public final class io.aura.db.SchemaMigrationResult extends java.lang.Record {
+  public io.aura.db.SchemaMigrationResult(java.lang.String, int);
+  public final java.lang.String toString();
+  public final int hashCode();
+  public final boolean equals(java.lang.Object);
+  public java.lang.String migrator();
+  public int appliedCount();
+}
+### aura-db:io.aura.db.SchemaMigrator
+public interface io.aura.db.SchemaMigrator {
+  public abstract io.aura.db.SchemaMigrationResult migrate(io.aura.db.MigrationContext) throws java.lang.Exception;
+}
+### aura-db:io.aura.db.SqlKit$Parsed
+public final class io.aura.db.SqlKit$Parsed extends java.lang.Record {
+  public io.aura.db.SqlKit$Parsed(java.lang.String, java.lang.Object[]);
+  public final java.lang.String toString();
+  public final int hashCode();
+  public final boolean equals(java.lang.Object);
+  public java.lang.String sql();
+  public java.lang.Object[] params();
+}
+### aura-db:io.aura.db.SqlKit
+public final class io.aura.db.SqlKit {
+  public static io.aura.db.SqlKit$Parsed parse(java.lang.String, java.util.Map<?, ?>);
+}
+### aura-db:io.aura.db.SqlMigration
+public final class io.aura.db.SqlMigration extends java.lang.Record {
+  public io.aura.db.SqlMigration(java.lang.String, java.lang.String, java.lang.String, java.lang.String);
+  public io.aura.db.SqlMigration(java.lang.String, java.lang.String, java.lang.String);
+  public final java.lang.String toString();
+  public final int hashCode();
+  public final boolean equals(java.lang.Object);
+  public java.lang.String version();
+  public java.lang.String name();
+  public java.lang.String sql();
+  public java.lang.String checksum();
+}
+### aura-db:io.aura.db.SqlMigrationResult
+final class io.aura.db.SqlMigrationResult extends java.lang.Record {
+  public final java.lang.String toString();
+  public final int hashCode();
+  public final boolean equals(java.lang.Object);
+  public java.util.List<java.lang.String> applied();
+  public java.util.List<java.lang.String> skipped();
+}
+### aura-db:io.aura.db.SqlMigrationRunner
+final class io.aura.db.SqlMigrationRunner {
+}
+### aura-db:io.aura.db.SqlMigrationSource
+public interface io.aura.db.SqlMigrationSource {
+  public abstract java.util.List<io.aura.db.SqlMigration> migrations();
+}
+### aura-db:io.aura.db.SqlSafe$WhereParser
+final class io.aura.db.SqlSafe$WhereParser {
+}
+### aura-db:io.aura.db.SqlSafe
+final class io.aura.db.SqlSafe {
+}
+### aura-db:io.aura.db.SqlSchemaMigrator
+public final class io.aura.db.SqlSchemaMigrator implements io.aura.db.SchemaMigrator {
+  public static final java.lang.String ID;
+  public static io.aura.db.SqlSchemaMigrator from(io.aura.db.SqlMigrationSource);
+  public static io.aura.db.SqlSchemaMigrator classpath(java.lang.String);
+  public io.aura.db.SchemaMigrationResult migrate(io.aura.db.MigrationContext);
+}
+### aura-db:io.aura.db.ThrowingRunnable
+public interface io.aura.db.ThrowingRunnable {
+  public abstract void run() throws java.lang.Exception;
+}
+### aura-db:io.aura.db.ThrowingSupplier
+public interface io.aura.db.ThrowingSupplier<T> {
+  public abstract T get() throws java.lang.Exception;
+}
+### aura-db:io.aura.db.ThrowingTransactionFunction
+public interface io.aura.db.ThrowingTransactionFunction<T> {
+  public abstract T apply(io.aura.db.TransactionContext) throws java.lang.Exception;
+}
+### aura-db:io.aura.db.TotalStrategy
+public final class io.aura.db.TotalStrategy extends java.lang.Enum<io.aura.db.TotalStrategy> {
+  public static final io.aura.db.TotalStrategy EXACT;
+  public static final io.aura.db.TotalStrategy NONE;
+  public static io.aura.db.TotalStrategy[] values();
+  public static io.aura.db.TotalStrategy valueOf(java.lang.String);
+}
+### aura-db:io.aura.db.TransactionContext
+public final class io.aura.db.TransactionContext {
+  public io.aura.db.Db db();
+  public java.sql.Connection connection();
+}
+### aura-db:io.aura.db.TransactionHandle
+public interface io.aura.db.TransactionHandle extends java.lang.AutoCloseable {
+  public abstract io.aura.db.TransactionContext context();
+  public abstract boolean isActive();
+  public abstract void commit();
+  public abstract void rollback();
+  public abstract void close();
+}
+### aura-db-migration-flyway:io.aura.db.flyway.FlywaySchemaMigrator
+public final class io.aura.db.flyway.FlywaySchemaMigrator implements io.aura.db.SchemaMigrator {
+  public static final java.lang.String ID;
+  public static io.aura.db.flyway.FlywaySchemaMigrator classpath(java.lang.String...);
+  public io.aura.db.SchemaMigrationResult migrate(io.aura.db.MigrationContext);
+}
+### aura-db-migration-liquibase:io.aura.db.liquibase.LiquibaseSchemaMigrator
+public final class io.aura.db.liquibase.LiquibaseSchemaMigrator implements io.aura.db.SchemaMigrator {
+  public static final java.lang.String ID;
+  public static io.aura.db.liquibase.LiquibaseSchemaMigrator classpath(java.lang.String);
+  public static io.aura.db.liquibase.LiquibaseSchemaMigrator classpath(java.lang.String, java.lang.ClassLoader);
+  public io.aura.db.SchemaMigrationResult migrate(io.aura.db.MigrationContext) throws java.lang.Exception;
+}
+### aura-mcp:io.aura.mcp.AuraMcpStarter
+public class io.aura.mcp.AuraMcpStarter implements io.aura.McpStarter {
+  public io.aura.mcp.AuraMcpStarter();
+  public void start(io.aura.AuraMcpRuntime);
+  public void startStdio(io.aura.AuraMcpRuntime);
+  public void stop();
+}
+### aura-mcp:io.aura.mcp.BoundedJson$IoRunnable
+interface io.aura.mcp.BoundedJson$IoRunnable {
+  public abstract void run() throws java.io.IOException;
+}
+### aura-mcp:io.aura.mcp.BoundedJson$LimitExceededException
+final class io.aura.mcp.BoundedJson$LimitExceededException extends java.lang.RuntimeException {
+}
+### aura-mcp:io.aura.mcp.BoundedJson$LimitedOutputStream
+final class io.aura.mcp.BoundedJson$LimitedOutputStream extends java.io.OutputStream {
+  public void write(int);
+  public void write(byte[], int, int);
+}
+### aura-mcp:io.aura.mcp.BoundedJson
+final class io.aura.mcp.BoundedJson {
+}
+### aura-mcp:io.aura.mcp.McpBridge
+public class io.aura.mcp.McpBridge {
+  public io.aura.mcp.McpBridge(java.lang.String);
+  public io.aura.mcp.McpBridge(java.lang.String, java.io.PrintStream);
+  public io.aura.mcp.McpBridge(java.lang.String, java.io.PrintStream, java.lang.String);
+  public io.aura.mcp.McpBridge(java.lang.String, java.io.PrintStream, java.lang.String, boolean);
+  public void run() throws java.lang.Exception;
+  public static void main(java.lang.String[]) throws java.lang.Exception;
+}
+### aura-mcp:io.aura.mcp.McpContent
+final class io.aura.mcp.McpContent {
+}
+### aura-mcp:io.aura.mcp.McpContext
+public class io.aura.mcp.McpContext {
+  public java.lang.String userId();
+  public java.lang.Object get(java.lang.String);
+  public java.lang.String getString(java.lang.String);
+  public int getInt(java.lang.String);
+  public long getLong(java.lang.String);
+  public <E extends java.lang.Enum<E>> E getEnum(java.lang.String, java.lang.Class<E>);
+}
+### aura-mcp:io.aura.mcp.McpEnumValue
+public final class io.aura.mcp.McpEnumValue extends java.lang.Record {
+  public io.aura.mcp.McpEnumValue(java.lang.String, java.lang.Object);
+  public final java.lang.String toString();
+  public final int hashCode();
+  public final boolean equals(java.lang.Object);
+  public java.lang.String label();
+  public java.lang.Object code();
+}
+### aura-mcp:io.aura.mcp.McpHandler
+public interface io.aura.mcp.McpHandler {
+  public abstract java.lang.Object handle(io.aura.mcp.McpContext) throws java.lang.Exception;
+}
+### aura-mcp:io.aura.mcp.McpHttpTransport$DispatchResult
+final class io.aura.mcp.McpHttpTransport$DispatchResult extends java.lang.Record {
+  public final java.lang.String toString();
+  public final int hashCode();
+  public final boolean equals(java.lang.Object);
+  public java.lang.Object result();
+  public boolean invalidParams();
+}
+### aura-mcp:io.aura.mcp.McpHttpTransport
+final class io.aura.mcp.McpHttpTransport {
+}
+### aura-mcp:io.aura.mcp.McpImage
+public final class io.aura.mcp.McpImage extends java.lang.Record implements io.aura.mcp.McpOutput {
+  public io.aura.mcp.McpImage(java.lang.String, java.lang.String);
+  public final java.lang.String toString();
+  public final int hashCode();
+  public final boolean equals(java.lang.Object);
+  public java.lang.String data();
+  public java.lang.String mimeType();
+}
+### aura-mcp:io.aura.mcp.McpModule
+public final class io.aura.mcp.McpModule implements io.aura.AuraModule {
+  public static io.aura.mcp.McpModule create();
+  public static io.aura.mcp.McpModule create(io.aura.mcp.McpRouter);
+  public io.aura.mcp.McpModule http();
+  public io.aura.mcp.McpModule http(java.lang.String, int, java.time.Duration);
+  public io.aura.mcp.McpModule http(java.lang.String, int, java.time.Duration, int);
+  public io.aura.mcp.McpModule sse();
+  public io.aura.mcp.McpModule sse(int, int, int, int);
+  public io.aura.contract.ModuleMetadata descriptor();
+  public void stop(io.aura.ModuleContext);
+  public void install(io.aura.ModuleContext);
+  public io.aura.mcp.McpRouter router();
+  public boolean httpEnabled();
+  public java.lang.String httpPath();
+  public io.aura.mcp.McpSessionManager sessions();
+  public boolean sseEnabled();
+  public java.util.Optional<io.aura.mcp.McpSseMetrics> sseMetrics();
+  public boolean publish(java.lang.String, java.lang.String, java.util.Map<java.lang.String, ?>);
+}
+### aura-mcp:io.aura.mcp.McpOutput
+public interface io.aura.mcp.McpOutput {
+}
+### aura-mcp:io.aura.mcp.McpPackager
+public class io.aura.mcp.McpPackager {
+  public static final java.lang.String ALLOW_PRIVATE_URL_PROPERTY;
+  public static final java.lang.String ALLOW_PRIVATE_URL_ENV;
+  public io.aura.mcp.McpPackager();
+  public static void generate(java.lang.String, java.lang.String, java.lang.String) throws java.lang.Exception;
+  public static void generate(java.lang.String, java.lang.String, java.lang.String, boolean) throws java.lang.Exception;
+  public static void generate(java.lang.String, java.lang.String, java.lang.String, io.aura.mcp.McpRouter) throws java.lang.Exception;
+  public static void generate(java.lang.String, java.lang.String, java.lang.String, io.aura.mcp.McpRouter, boolean) throws java.lang.Exception;
+  public static java.net.URI validateAppUrl(java.lang.String) throws java.lang.Exception;
+  public static java.net.URI validateAppUrl(java.lang.String, boolean) throws java.lang.Exception;
+  public static void main(java.lang.String[]) throws java.lang.Exception;
+}
+### aura-mcp:io.aura.mcp.McpParam
+public final class io.aura.mcp.McpParam {
+  public io.aura.mcp.McpParam(java.lang.String, java.lang.String, java.lang.String, java.util.List<io.aura.mcp.McpEnumValue>);
+  public io.aura.mcp.McpParam(java.lang.String, java.lang.String, java.lang.String, java.util.List<io.aura.mcp.McpEnumValue>, boolean);
+  public io.aura.mcp.McpParam(io.aura.contract.ApiParameter, java.util.List<io.aura.mcp.McpEnumValue>);
+  public io.aura.contract.ApiParameter contract();
+  public java.lang.String name();
+  public java.lang.String type();
+  public java.lang.String description();
+  public boolean required();
+  public java.util.List<io.aura.mcp.McpEnumValue> enumValues();
+  public boolean isEnum();
+}
+### aura-mcp:io.aura.mcp.McpPrompt
+public final class io.aura.mcp.McpPrompt extends java.lang.Record {
+  public io.aura.mcp.McpPrompt(java.lang.String, java.lang.String, java.lang.String, java.util.List<java.lang.String>);
+  public final java.lang.String toString();
+  public final int hashCode();
+  public final boolean equals(java.lang.Object);
+  public java.lang.String name();
+  public java.lang.String description();
+  public java.lang.String template();
+  public java.util.List<java.lang.String> arguments();
+}
+### aura-mcp:io.aura.mcp.McpProtocol$RequestHandler
+public interface io.aura.mcp.McpProtocol$RequestHandler {
+  public abstract java.lang.Object handle(java.lang.String, com.alibaba.fastjson2.JSONObject);
+}
+### aura-mcp:io.aura.mcp.McpProtocol
+public final class io.aura.mcp.McpProtocol {
+  public io.aura.mcp.McpProtocol(java.io.PrintStream, java.lang.String, io.aura.mcp.McpProtocol$RequestHandler);
+  public void runStdio() throws java.lang.Exception;
+}
+### aura-mcp:io.aura.mcp.McpProtocolConstants
+final class io.aura.mcp.McpProtocolConstants {
+}
+### aura-mcp:io.aura.mcp.McpResource
+public final class io.aura.mcp.McpResource extends java.lang.Record {
+  public io.aura.mcp.McpResource(java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String);
+  public final java.lang.String toString();
+  public final int hashCode();
+  public final boolean equals(java.lang.Object);
+  public java.lang.String uri();
+  public java.lang.String name();
+  public java.lang.String description();
+  public java.lang.String mimeType();
+  public java.lang.String text();
+}
+### aura-mcp:io.aura.mcp.McpResourceLink
+public final class io.aura.mcp.McpResourceLink extends java.lang.Record implements io.aura.mcp.McpOutput {
+  public io.aura.mcp.McpResourceLink(java.lang.String, java.lang.String, java.lang.String);
+  public final java.lang.String toString();
+  public final int hashCode();
+  public final boolean equals(java.lang.Object);
+  public java.lang.String uri();
+  public java.lang.String mimeType();
+  public java.lang.String text();
+}
+### aura-mcp:io.aura.mcp.McpRouter
+public class io.aura.mcp.McpRouter implements io.aura.contract.McpRouterSpec {
+  public io.aura.mcp.McpRouter();
+  public io.aura.mcp.McpToolBuilder tool(java.lang.String, java.lang.String);
+  public io.aura.mcp.McpRouter tool(io.aura.contract.ApiRoute, io.aura.mcp.McpHandler);
+  public io.aura.mcp.McpRouter tool(java.lang.String, java.lang.Object, java.lang.String, java.lang.String);
+  public java.util.List<io.aura.mcp.McpTool> tools();
+  public io.aura.mcp.McpRouter resource(java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String);
+  public io.aura.mcp.McpRouter prompt(java.lang.String, java.lang.String, java.lang.String, java.lang.String...);
+  public java.util.Map<java.lang.String, java.lang.Object> listResources();
+  public java.util.Map<java.lang.String, java.lang.Object> readResource(java.lang.String);
+  public java.util.Map<java.lang.String, java.lang.Object> listPrompts();
+  public java.util.Map<java.lang.String, java.lang.Object> getPrompt(java.lang.String, java.util.Map<java.lang.String, java.lang.Object>);
+  public java.util.Map<java.lang.String, java.lang.Object> buildSchema();
+  public java.lang.Object invoke(java.lang.String, java.util.Map<java.lang.String, java.lang.Object>) throws java.lang.Exception;
+  public java.lang.Object invoke(java.lang.String, java.util.Map<java.lang.String, java.lang.Object>, java.lang.String, java.util.function.BiPredicate<java.lang.String, java.lang.String>) throws java.lang.Exception;
+}
+### aura-mcp:io.aura.mcp.McpSessionManager$RequestLease
+public final class io.aura.mcp.McpSessionManager$RequestLease implements java.lang.AutoCloseable {
+  public io.aura.mcp.McpSessionManager$Session session();
+  public void close();
+}
+### aura-mcp:io.aura.mcp.McpSessionManager$Session
+public final class io.aura.mcp.McpSessionManager$Session extends java.lang.Record {
+  public io.aura.mcp.McpSessionManager$Session(java.lang.String, java.lang.String, java.lang.String, io.aura.mcp.McpSessionManager$SessionPhase, java.time.Instant, java.time.Instant, int);
+  public final java.lang.String toString();
+  public final int hashCode();
+  public final boolean equals(java.lang.Object);
+  public java.lang.String id();
+  public java.lang.String userId();
+  public java.lang.String protocolVersion();
+  public io.aura.mcp.McpSessionManager$SessionPhase phase();
+  public java.time.Instant createdAt();
+  public java.time.Instant lastAccessedAt();
+  public int inFlight();
+}
+### aura-mcp:io.aura.mcp.McpSessionManager$SessionLimitException
+public final class io.aura.mcp.McpSessionManager$SessionLimitException extends java.lang.IllegalStateException {
+}
+### aura-mcp:io.aura.mcp.McpSessionManager$SessionPhase
+public final class io.aura.mcp.McpSessionManager$SessionPhase extends java.lang.Enum<io.aura.mcp.McpSessionManager$SessionPhase> {
+  public static final io.aura.mcp.McpSessionManager$SessionPhase NEGOTIATING;
+  public static final io.aura.mcp.McpSessionManager$SessionPhase READY;
+  public static final io.aura.mcp.McpSessionManager$SessionPhase CLOSED;
+  public static io.aura.mcp.McpSessionManager$SessionPhase[] values();
+  public static io.aura.mcp.McpSessionManager$SessionPhase valueOf(java.lang.String);
+}
+### aura-mcp:io.aura.mcp.McpSessionManager$SessionState
+final class io.aura.mcp.McpSessionManager$SessionState {
+}
+### aura-mcp:io.aura.mcp.McpSessionManager$TransitionResult
+public final class io.aura.mcp.McpSessionManager$TransitionResult extends java.lang.Enum<io.aura.mcp.McpSessionManager$TransitionResult> {
+  public static final io.aura.mcp.McpSessionManager$TransitionResult SUCCESS;
+  public static final io.aura.mcp.McpSessionManager$TransitionResult NOT_FOUND;
+  public static final io.aura.mcp.McpSessionManager$TransitionResult INVALID_PHASE;
+  public static io.aura.mcp.McpSessionManager$TransitionResult[] values();
+  public static io.aura.mcp.McpSessionManager$TransitionResult valueOf(java.lang.String);
+}
+### aura-mcp:io.aura.mcp.McpSessionManager
+public final class io.aura.mcp.McpSessionManager implements java.lang.AutoCloseable {
+  public static final int DEFAULT_MAX_SESSIONS;
+  public static final java.time.Duration DEFAULT_IDLE_TTL;
+  public io.aura.mcp.McpSessionManager();
+  public io.aura.mcp.McpSessionManager(int, java.time.Duration);
+  public io.aura.mcp.McpSessionManager$Session create(java.lang.String, java.lang.String);
+  public java.util.Optional<io.aura.mcp.McpSessionManager$Session> inspect(java.lang.String, java.lang.String);
+  public java.util.Optional<io.aura.mcp.McpSessionManager$Session> access(java.lang.String, java.lang.String);
+  public io.aura.mcp.McpSessionManager$TransitionResult activate(java.lang.String, java.lang.String);
+  public java.util.Optional<io.aura.mcp.McpSessionManager$RequestLease> admitReady(java.lang.String, java.lang.String);
+  public boolean active(java.lang.String, java.lang.String);
+  public boolean close(java.lang.String, java.lang.String);
+  public int size();
+  public int maxSessions();
+  public int maxSessionsPerIdentity();
+  public java.time.Duration idleTtl();
+  public java.util.List<io.aura.mcp.McpSessionManager$Session> sessions();
+  public int evictExpired();
+  public void close();
+}
+### aura-mcp:io.aura.mcp.McpSseHub$AttachResult
+final class io.aura.mcp.McpSseHub$AttachResult extends java.lang.Enum<io.aura.mcp.McpSseHub$AttachResult> {
+  public static final io.aura.mcp.McpSseHub$AttachResult ATTACHED;
+  public static final io.aura.mcp.McpSseHub$AttachResult ALREADY_CONNECTED;
+  public static final io.aura.mcp.McpSseHub$AttachResult REPLAY_GAP;
+  public static final io.aura.mcp.McpSseHub$AttachResult WRITE_FAILED;
+  public static io.aura.mcp.McpSseHub$AttachResult[] values();
+  public static io.aura.mcp.McpSseHub$AttachResult valueOf(java.lang.String);
+}
+### aura-mcp:io.aura.mcp.McpSseHub$Attachment
+final class io.aura.mcp.McpSseHub$Attachment extends java.lang.Record {
+  public final java.lang.String toString();
+  public final int hashCode();
+  public final boolean equals(java.lang.Object);
+  public io.aura.mcp.McpSseHub$AttachResult result();
+  public io.aura.mcp.McpSseHub$ConnectionHandle handle();
+}
+### aura-mcp:io.aura.mcp.McpSseHub$Connection
+final class io.aura.mcp.McpSseHub$Connection {
+}
+### aura-mcp:io.aura.mcp.McpSseHub$ConnectionHandle
+final class io.aura.mcp.McpSseHub$ConnectionHandle {
+}
+### aura-mcp:io.aura.mcp.McpSseHub$Event
+final class io.aura.mcp.McpSseHub$Event extends java.lang.Record {
+  public final java.lang.String toString();
+  public final int hashCode();
+  public final boolean equals(java.lang.Object);
+  public long id();
+  public java.lang.String payload();
+  public int bytes();
+}
+### aura-mcp:io.aura.mcp.McpSseHub$QueueSize
+final class io.aura.mcp.McpSseHub$QueueSize extends java.lang.Record {
+  public final java.lang.String toString();
+  public final int hashCode();
+  public final boolean equals(java.lang.Object);
+  public long events();
+  public long bytes();
+}
+### aura-mcp:io.aura.mcp.McpSseHub$Replay
+final class io.aura.mcp.McpSseHub$Replay extends java.lang.Record {
+  public final java.lang.String toString();
+  public final int hashCode();
+  public final boolean equals(java.lang.Object);
+  public boolean gap();
+  public java.util.List<io.aura.mcp.McpSseHub$Event> events();
+  public long oldestAvailableId();
+  public long nextEventId();
+}
+### aura-mcp:io.aura.mcp.McpSseHub$SessionHistory
+final class io.aura.mcp.McpSseHub$SessionHistory {
+}
+### aura-mcp:io.aura.mcp.McpSseHub$WriteResult
+final class io.aura.mcp.McpSseHub$WriteResult extends java.lang.Enum<io.aura.mcp.McpSseHub$WriteResult> {
+  public static final io.aura.mcp.McpSseHub$WriteResult SENT;
+  public static final io.aura.mcp.McpSseHub$WriteResult IDLE;
+  public static final io.aura.mcp.McpSseHub$WriteResult CLOSED;
+  public static io.aura.mcp.McpSseHub$WriteResult[] values();
+  public static io.aura.mcp.McpSseHub$WriteResult valueOf(java.lang.String);
+}
+### aura-mcp:io.aura.mcp.McpSseHub
+final class io.aura.mcp.McpSseHub implements java.lang.AutoCloseable {
+  public void close();
+}
+### aura-mcp:io.aura.mcp.McpSseMetrics
+public final class io.aura.mcp.McpSseMetrics extends java.lang.Record {
+  public io.aura.mcp.McpSseMetrics(long, long, long, long, long, long, long, long);
+  public final java.lang.String toString();
+  public final int hashCode();
+  public final boolean equals(java.lang.Object);
+  public long activeConnections();
+  public long closingConnections();
+  public long histories();
+  public long queuedEvents();
+  public long queuedBytes();
+  public long overflowedConnections();
+  public long replayGaps();
+  public long writeFailures();
+}
+### aura-mcp:io.aura.mcp.McpStructured
+public final class io.aura.mcp.McpStructured extends java.lang.Record implements io.aura.mcp.McpOutput {
+  public io.aura.mcp.McpStructured(java.util.Map<java.lang.String, java.lang.Object>);
+  public final java.lang.String toString();
+  public final int hashCode();
+  public final boolean equals(java.lang.Object);
+  public java.util.Map<java.lang.String, java.lang.Object> value();
+}
+### aura-mcp:io.aura.mcp.McpText
+public final class io.aura.mcp.McpText extends java.lang.Record implements io.aura.mcp.McpOutput {
+  public io.aura.mcp.McpText(java.lang.String);
+  public final java.lang.String toString();
+  public final int hashCode();
+  public final boolean equals(java.lang.Object);
+  public java.lang.String text();
+}
+### aura-mcp:io.aura.mcp.McpTool
+public final class io.aura.mcp.McpTool extends java.lang.Record {
+  public io.aura.mcp.McpTool(java.lang.String, java.lang.String, java.util.List<io.aura.mcp.McpParam>, io.aura.mcp.McpHandler);
+  public io.aura.mcp.McpTool(java.lang.String, java.lang.String, java.util.List<io.aura.mcp.McpParam>, io.aura.mcp.McpHandler, java.lang.String);
+  public io.aura.mcp.McpTool(java.lang.String, java.lang.String, java.util.List<io.aura.mcp.McpParam>, io.aura.mcp.McpHandler, java.lang.String, boolean);
+  public final java.lang.String toString();
+  public final int hashCode();
+  public final boolean equals(java.lang.Object);
+  public java.lang.String name();
+  public java.lang.String description();
+  public java.util.List<io.aura.mcp.McpParam> params();
+  public io.aura.mcp.McpHandler handler();
+  public java.lang.String permission();
+  public boolean authenticated();
+}
+### aura-mcp:io.aura.mcp.McpToolBuilder
+public class io.aura.mcp.McpToolBuilder {
+  public io.aura.mcp.McpToolBuilder param(java.lang.String, java.lang.Class<?>, java.lang.String);
+  public io.aura.mcp.McpToolBuilder optional(java.lang.String, java.lang.Class<?>, java.lang.String);
+  public io.aura.mcp.McpToolBuilder param(java.lang.String, java.lang.Class<?>, java.lang.String, java.util.Map<java.lang.String, ?>);
+  public io.aura.mcp.McpToolBuilder handler(io.aura.mcp.McpHandler);
+  public io.aura.mcp.McpToolBuilder permission(java.lang.String);
+}
+### aura-mcp:io.aura.mcp.McpUtil$ParamInfo
+public final class io.aura.mcp.McpUtil$ParamInfo extends java.lang.Record {
+  public io.aura.mcp.McpUtil$ParamInfo(java.lang.String, java.lang.String, java.lang.String);
+  public final java.lang.String toString();
+  public final int hashCode();
+  public final boolean equals(java.lang.Object);
+  public java.lang.String name();
+  public java.lang.String type();
+  public java.lang.String description();
+}
+### aura-mcp:io.aura.mcp.McpUtil
+public final class io.aura.mcp.McpUtil {
+  public static java.lang.String buildToolName(java.lang.String, java.lang.String);
+  public static java.lang.String jsonType(java.lang.String);
+  public static java.util.Map<java.lang.String, java.lang.Object> buildInputSchema(java.util.List<io.aura.mcp.McpUtil$ParamInfo>);
+}
+### aura-ai:io.aura.ai.AiBudget$Builder
+public final class io.aura.ai.AiBudget$Builder {
+  public io.aura.ai.AiBudget$Builder();
+  public io.aura.ai.AiBudget$Builder maxInputCharacters(long);
+  public io.aura.ai.AiBudget$Builder maxOutputCharacters(long);
+  public io.aura.ai.AiBudget$Builder maxInputTokens(long);
+  public io.aura.ai.AiBudget$Builder maxOutputTokens(long);
+  public io.aura.ai.AiBudget$Builder maxTotalTokens(long);
+  public io.aura.ai.AiBudget$Builder maxCostMicros(long);
+  public io.aura.ai.AiBudget build();
+}
+### aura-ai:io.aura.ai.AiBudget
+public final class io.aura.ai.AiBudget extends java.lang.Record {
+  public io.aura.ai.AiBudget(long, long, long);
+  public io.aura.ai.AiBudget(long, long, long, long, long, long);
+  public static io.aura.ai.AiBudget unlimited();
+  public static io.aura.ai.AiBudget$Builder builder();
+  public boolean requiresUsage();
+  public final java.lang.String toString();
+  public final int hashCode();
+  public final boolean equals(java.lang.Object);
+  public long maxInputCharacters();
+  public long maxOutputCharacters();
+  public long maxInputTokens();
+  public long maxOutputTokens();
+  public long maxTotalTokens();
+  public long maxCostMicros();
+}
+### aura-ai:io.aura.ai.AiBudgetExceededException
+public final class io.aura.ai.AiBudgetExceededException extends java.lang.RuntimeException {
+  public static final java.lang.String EXCEEDED;
+  public static final java.lang.String USAGE_MISSING;
+  public java.lang.String code();
+  public java.lang.String dimension();
+  public long limit();
+  public long actual();
+}
+### aura-ai:io.aura.ai.AiClient$StreamAttempt
+final class io.aura.ai.AiClient$StreamAttempt implements io.aura.ai.AiStreamHandler {
+  public synchronized void onToken(java.lang.String);
+  public synchronized void onComplete(io.aura.ai.AiResponse);
+  public synchronized void onError(java.lang.Throwable);
+}
+### aura-ai:io.aura.ai.AiClient$StreamCallbacks
+final class io.aura.ai.AiClient$StreamCallbacks {
+}
+### aura-ai:io.aura.ai.AiClient$StreamTerminal
+final class io.aura.ai.AiClient$StreamTerminal extends java.lang.Record {
+  public final java.lang.String toString();
+  public final int hashCode();
+  public final boolean equals(java.lang.Object);
+  public io.aura.ai.AiResponse response();
+  public java.lang.Throwable error();
+}
+### aura-ai:io.aura.ai.AiClient
+public final class io.aura.ai.AiClient implements java.lang.AutoCloseable {
+  public io.aura.ai.AiClient(io.aura.ai.AiProvider);
+  public io.aura.ai.AiClient(io.aura.ai.AiProvider, java.util.concurrent.ExecutorService);
+  public io.aura.ai.AiProvider provider();
+  public io.aura.contract.ExecutorMetrics executorMetrics();
+  public io.aura.ai.AiUsageTotals usageTotals();
+  public void resetUsage();
+  public io.aura.ai.AiResponse chat(io.aura.ai.AiRequest) throws java.lang.Exception;
+  public void stream(io.aura.ai.AiRequest, io.aura.ai.AiStreamHandler) throws java.lang.Exception;
+  public static io.aura.ai.AiClient load();
+  public static io.aura.ai.AiClient load(java.lang.String);
+  public void close();
+}
+### aura-ai:io.aura.ai.AiJson
+final class io.aura.ai.AiJson {
+}
+### aura-ai:io.aura.ai.AiModule
+public final class io.aura.ai.AiModule implements io.aura.AuraModule {
+  public static io.aura.ai.AiModule create(io.aura.ai.AiProvider);
+  public static io.aura.ai.AiModule create(io.aura.ai.AiProvider, java.util.concurrent.ExecutorService);
+  public io.aura.contract.ModuleMetadata descriptor();
+  public void install(io.aura.ModuleContext);
+  public void stop(io.aura.ModuleContext);
+  public io.aura.ai.AiClient client();
+}
+### aura-ai:io.aura.ai.AiPricing
+public final class io.aura.ai.AiPricing extends java.lang.Record {
+  public io.aura.ai.AiPricing(long, long);
+  public static io.aura.ai.AiPricing of(long, long);
+  public long estimateCostMicros(io.aura.ai.AiUsage);
+  public final java.lang.String toString();
+  public final int hashCode();
+  public final boolean equals(java.lang.Object);
+  public long inputMicrosPerMillionTokens();
+  public long outputMicrosPerMillionTokens();
+}
+### aura-ai:io.aura.ai.AiProvider
+public interface io.aura.ai.AiProvider {
+  public default java.lang.String name();
+  public abstract io.aura.ai.AiResponse chat(io.aura.ai.AiRequest) throws java.lang.Exception;
+  public default void stream(io.aura.ai.AiRequest, io.aura.ai.AiStreamHandler) throws java.lang.Exception;
+}
+### aura-ai:io.aura.ai.AiProviderContractException
+public final class io.aura.ai.AiProviderContractException extends java.lang.RuntimeException {
+  public static final java.lang.String CODE;
+  public io.aura.ai.AiProviderContractException(java.lang.String);
+  public io.aura.ai.AiProviderContractException(java.lang.String, java.lang.Throwable);
+  public java.lang.String code();
+}
+### aura-ai:io.aura.ai.AiProviderException
+public final class io.aura.ai.AiProviderException extends java.lang.Exception {
+  public io.aura.ai.AiProviderException(java.lang.String, int, java.lang.String);
+  public java.lang.String code();
+  public int status();
+}
+### aura-ai:io.aura.ai.AiRedactor
+public interface io.aura.ai.AiRedactor {
+  public abstract java.lang.String redact(java.lang.String);
+  public default java.lang.Object redactValue(java.lang.Object);
+  public static io.aura.ai.AiRedactor none();
+  public static io.aura.ai.AiRedactor defaultRedactor();
+}
+### aura-ai:io.aura.ai.AiRequest$Builder
+public final class io.aura.ai.AiRequest$Builder {
+  public io.aura.ai.AiRequest$Builder();
+  public io.aura.ai.AiRequest$Builder prompt(java.lang.String);
+  public io.aura.ai.AiRequest$Builder systemPrompt(java.lang.String);
+  public io.aura.ai.AiRequest$Builder model(java.lang.String);
+  public io.aura.ai.AiRequest$Builder parameter(java.lang.String, java.lang.Object);
+  public io.aura.ai.AiRequest$Builder parameters(java.util.Map<java.lang.String, ?>);
+  public io.aura.ai.AiRequest$Builder timeout(java.time.Duration);
+  public io.aura.ai.AiRequest$Builder cancellationToken(io.aura.contract.CancellationToken);
+  public io.aura.ai.AiRequest$Builder budget(io.aura.ai.AiBudget);
+  public io.aura.ai.AiRequest$Builder redactor(io.aura.ai.AiRedactor);
+  public io.aura.ai.AiRequest$Builder tool(io.aura.ai.AiToolDefinition);
+  public io.aura.ai.AiRequest$Builder tools(java.util.List<io.aura.ai.AiToolDefinition>);
+  public io.aura.ai.AiRequest$Builder toolChoice(java.lang.String);
+  public io.aura.ai.AiRequest$Builder retry(io.aura.ai.AiRetryPolicy);
+  public io.aura.ai.AiRequest$Builder pricing(io.aura.ai.AiPricing);
+  public io.aura.ai.AiRequest$Builder structuredOutput(io.aura.ai.StructuredOutputSpec);
+  public io.aura.ai.AiRequest build();
+}
+### aura-ai:io.aura.ai.AiRequest
+public final class io.aura.ai.AiRequest {
+  public io.aura.ai.AiRequest(java.lang.String);
+  public io.aura.ai.AiRequest(java.lang.String, java.time.Duration);
+  public static io.aura.ai.AiRequest$Builder builder();
+  public java.lang.String prompt();
+  public java.lang.String redactedPrompt();
+  public java.lang.String systemPrompt();
+  public java.lang.String redactedSystemPrompt();
+  public java.lang.String model();
+  public java.util.Map<java.lang.String, java.lang.Object> parameters();
+  public java.util.Map<java.lang.String, java.lang.Object> redactedParameters();
+  public java.time.Duration timeout();
+  public io.aura.contract.CancellationToken cancellationToken();
+  public io.aura.ai.AiBudget budget();
+  public java.util.List<io.aura.ai.AiToolDefinition> tools();
+  public java.util.List<io.aura.ai.AiToolDefinition> redactedTools();
+  public java.lang.String toolChoice();
+  public io.aura.ai.AiRetryPolicy retryPolicy();
+  public io.aura.ai.AiPricing pricing();
+  public io.aura.ai.StructuredOutputSpec structuredOutput();
+  public long inputCharacters();
+}
+### aura-ai:io.aura.ai.AiResponse
+public final class io.aura.ai.AiResponse {
+  public io.aura.ai.AiResponse(java.lang.String);
+  public io.aura.ai.AiResponse(java.lang.String, java.lang.String, java.util.Map<java.lang.String, ?>, java.lang.Object);
+  public io.aura.ai.AiResponse(java.lang.String, java.lang.String, java.util.Map<java.lang.String, ?>, java.lang.Object, java.util.List<io.aura.ai.AiToolCall>);
+  public static io.aura.ai.AiResponse text(java.lang.String);
+  public java.lang.String content();
+  public java.lang.String model();
+  public java.util.Map<java.lang.String, java.lang.Object> usage();
+  public java.lang.Object raw();
+  public java.util.List<io.aura.ai.AiToolCall> toolCalls();
+}
+### aura-ai:io.aura.ai.AiRetryPolicy
+public final class io.aura.ai.AiRetryPolicy extends java.lang.Record {
+  public io.aura.ai.AiRetryPolicy(int, java.time.Duration);
+  public static io.aura.ai.AiRetryPolicy none();
+  public static io.aura.ai.AiRetryPolicy fixed(int, java.time.Duration);
+  public boolean shouldRetry(java.lang.Throwable);
+  public final java.lang.String toString();
+  public final int hashCode();
+  public final boolean equals(java.lang.Object);
+  public int maxAttempts();
+  public java.time.Duration backoff();
+}
+### aura-ai:io.aura.ai.AiStreamHandler
+public interface io.aura.ai.AiStreamHandler {
+  public abstract void onToken(java.lang.String);
+  public default void onStart();
+  public default void onComplete(io.aura.ai.AiResponse);
+  public default void onError(java.lang.Throwable);
+}
+### aura-ai:io.aura.ai.AiStructuredOutputException
+public final class io.aura.ai.AiStructuredOutputException extends java.lang.RuntimeException {
+  public static final java.lang.String CODE;
+  public io.aura.ai.AiStructuredOutputException(java.lang.String);
+  public io.aura.ai.AiStructuredOutputException(java.lang.String, java.lang.Throwable);
+  public java.lang.String code();
+}
+### aura-ai:io.aura.ai.AiToolCall
+public final class io.aura.ai.AiToolCall extends java.lang.Record {
+  public io.aura.ai.AiToolCall(java.lang.String, java.lang.String, java.util.Map<java.lang.String, java.lang.Object>);
+  public final java.lang.String toString();
+  public final int hashCode();
+  public final boolean equals(java.lang.Object);
+  public java.lang.String id();
+  public java.lang.String name();
+  public java.util.Map<java.lang.String, java.lang.Object> arguments();
+}
+### aura-ai:io.aura.ai.AiToolDefinition
+public final class io.aura.ai.AiToolDefinition extends java.lang.Record {
+  public io.aura.ai.AiToolDefinition(java.lang.String, java.lang.String, java.util.Map<java.lang.String, java.lang.Object>);
+  public io.aura.ai.AiToolDefinition(java.lang.String, java.lang.String);
+  public final java.lang.String toString();
+  public final int hashCode();
+  public final boolean equals(java.lang.Object);
+  public java.lang.String name();
+  public java.lang.String description();
+  public java.util.Map<java.lang.String, java.lang.Object> inputSchema();
+}
+### aura-ai:io.aura.ai.AiUsage
+public final class io.aura.ai.AiUsage extends java.lang.Record {
+  public io.aura.ai.AiUsage(long, long, long, long);
+  public static io.aura.ai.AiUsage unknown();
+  public static io.aura.ai.AiUsage from(java.util.Map<java.lang.String, ?>);
+  public boolean hasTokenUsage();
+  public boolean hasCost();
+  public final java.lang.String toString();
+  public final int hashCode();
+  public final boolean equals(java.lang.Object);
+  public long inputTokens();
+  public long outputTokens();
+  public long totalTokens();
+  public long costMicros();
+}
+### aura-ai:io.aura.ai.AiUsageTotals
+public final class io.aura.ai.AiUsageTotals extends java.lang.Record {
+  public io.aura.ai.AiUsageTotals(long, long, long, long, long, long);
+  public static io.aura.ai.AiUsageTotals empty();
+  public final java.lang.String toString();
+  public final int hashCode();
+  public final boolean equals(java.lang.Object);
+  public long requests();
+  public long inputTokens();
+  public long outputTokens();
+  public long totalTokens();
+  public long costMicros();
+  public long unknownUsage();
+}
+### aura-ai:io.aura.ai.ConversationStore$AiMessage
+public final class io.aura.ai.ConversationStore$AiMessage extends java.lang.Record {
+  public io.aura.ai.ConversationStore$AiMessage(java.lang.String, java.lang.String);
+  public final java.lang.String toString();
+  public final int hashCode();
+  public final boolean equals(java.lang.Object);
+  public java.lang.String role();
+  public java.lang.String content();
+}
+### aura-ai:io.aura.ai.ConversationStore
+public interface io.aura.ai.ConversationStore {
+  public abstract void append(java.lang.String, io.aura.ai.ConversationStore$AiMessage);
+  public abstract java.util.List<io.aura.ai.ConversationStore$AiMessage> load(java.lang.String);
+}
+### aura-ai:io.aura.ai.EmbeddingProvider
+public interface io.aura.ai.EmbeddingProvider {
+  public abstract java.util.List<java.lang.Double> embed(java.lang.String) throws java.lang.Exception;
+}
+### aura-ai:io.aura.ai.OpenAiCompatibleProvider$StreamingToolCall
+final class io.aura.ai.OpenAiCompatibleProvider$StreamingToolCall {
+}
+### aura-ai:io.aura.ai.OpenAiCompatibleProvider
+public final class io.aura.ai.OpenAiCompatibleProvider implements io.aura.ai.AiProvider {
+  public static final int DEFAULT_MAX_RESPONSE_BYTES;
+  public io.aura.ai.OpenAiCompatibleProvider(java.net.URI, java.lang.String, java.lang.String);
+  public io.aura.ai.OpenAiCompatibleProvider(java.net.URI, java.lang.String, java.lang.String, java.net.http.HttpClient, java.time.Duration, int);
+  public static io.aura.ai.OpenAiCompatibleProvider create(java.lang.String, java.lang.String, java.lang.String);
+  public java.lang.String name();
+  public io.aura.ai.AiResponse chat(io.aura.ai.AiRequest) throws java.lang.Exception;
+  public void stream(io.aura.ai.AiRequest, io.aura.ai.AiStreamHandler) throws java.lang.Exception;
+}
+### aura-ai:io.aura.ai.Retriever
+public interface io.aura.ai.Retriever {
+  public abstract java.util.List<java.lang.String> retrieve(java.lang.String, int) throws java.lang.Exception;
+}
+### aura-ai:io.aura.ai.StrictJson
+final class io.aura.ai.StrictJson {
+}
+### aura-ai:io.aura.ai.StructuredOutput
+public final class io.aura.ai.StructuredOutput {
+  public static <T> T parse(io.aura.ai.AiResponse, java.lang.Class<T>);
+  public static <T> T parse(java.lang.String, java.lang.Class<T>);
+  public static <T> T parseAndValidate(io.aura.ai.AiResponse, java.lang.Class<T>, java.util.function.Consumer<? super T>);
+  public static void validateJson(java.lang.String);
+}
+### aura-ai:io.aura.ai.StructuredOutputSpec
+public final class io.aura.ai.StructuredOutputSpec {
+  public io.aura.ai.StructuredOutputSpec(java.lang.String, java.util.Map<java.lang.String, ?>, boolean);
+  public static io.aura.ai.StructuredOutputSpec strict(java.lang.String, java.util.Map<java.lang.String, ?>);
+  public java.lang.String name();
+  public java.util.Map<java.lang.String, java.lang.Object> schema();
+  public boolean strict();
+  public void validate(java.lang.String);
+}
+### aura-workflow:io.aura.workflow.AuraWorkflow
+public interface io.aura.workflow.AuraWorkflow<C> extends io.aura.workflow.Workflow<C> {
+}
+### aura-workflow:io.aura.workflow.DurableWorkflowExecutionStore
+public interface io.aura.workflow.DurableWorkflowExecutionStore extends io.aura.workflow.WorkflowExecutionStore {
+  public abstract void saveLeased(io.aura.workflow.WorkflowExecutionSnapshot, io.aura.workflow.WorkflowLease);
+  public abstract void saveSnapshot(io.aura.workflow.WorkflowExecutionSnapshot);
+  public abstract java.util.Optional<io.aura.workflow.WorkflowExecutionSnapshot> findSnapshot(java.lang.String);
+  public abstract java.util.List<io.aura.workflow.WorkflowExecutionSnapshot> listSnapshots(java.lang.String);
+  public abstract java.util.Optional<io.aura.workflow.WorkflowExecutionSnapshot> findSnapshotByIdempotencyKey(java.lang.String, java.lang.String);
+  public abstract java.util.Optional<io.aura.workflow.WorkflowLease> tryAcquire(java.lang.String, java.lang.String, java.lang.String, java.time.Duration);
+  public abstract java.util.Optional<io.aura.workflow.WorkflowLease> renew(io.aura.workflow.WorkflowLease, java.time.Duration);
+  public abstract void release(io.aura.workflow.WorkflowLease);
+  public abstract java.util.Optional<io.aura.workflow.WorkflowLease> currentLease(java.lang.String, java.lang.String);
+}
+### aura-workflow:io.aura.workflow.InMemoryWorkflowExecutionStore
+public final class io.aura.workflow.InMemoryWorkflowExecutionStore implements io.aura.workflow.DurableWorkflowExecutionStore {
+  public io.aura.workflow.InMemoryWorkflowExecutionStore();
+  public io.aura.workflow.InMemoryWorkflowExecutionStore(int);
+  public int maxExecutions();
+  public synchronized void retainLocal(io.aura.workflow.WorkflowExecution);
+  public synchronized void saveSnapshot(io.aura.workflow.WorkflowExecutionSnapshot);
+  public java.util.Optional<io.aura.workflow.WorkflowExecutionSnapshot> findSnapshot(java.lang.String);
+  public java.util.List<io.aura.workflow.WorkflowExecutionSnapshot> listSnapshots(java.lang.String);
+  public java.util.Optional<io.aura.workflow.WorkflowExecution> find(java.lang.String);
+  public java.util.Optional<io.aura.workflow.WorkflowExecution> findByIdempotencyKey(java.lang.String, java.lang.String);
+  public java.util.Optional<io.aura.workflow.WorkflowExecutionSnapshot> findSnapshotByIdempotencyKey(java.lang.String, java.lang.String);
+  public java.util.List<io.aura.workflow.WorkflowExecution> list(java.lang.String);
+  public synchronized java.util.Optional<io.aura.workflow.WorkflowLease> tryAcquire(java.lang.String, java.lang.String, java.lang.String, java.time.Duration);
+  public synchronized void saveLeased(io.aura.workflow.WorkflowExecutionSnapshot, io.aura.workflow.WorkflowLease);
+  public synchronized java.util.Optional<io.aura.workflow.WorkflowLease> renew(io.aura.workflow.WorkflowLease, java.time.Duration);
+  public synchronized void release(io.aura.workflow.WorkflowLease);
+  public synchronized java.util.Optional<io.aura.workflow.WorkflowLease> currentLease(java.lang.String, java.lang.String);
+}
+### aura-workflow:io.aura.workflow.RetryPolicy
+public final class io.aura.workflow.RetryPolicy {
+  public static io.aura.workflow.RetryPolicy none();
+  public static io.aura.workflow.RetryPolicy of(int);
+  public static io.aura.workflow.RetryPolicy fixed(int, java.time.Duration);
+  public io.aura.workflow.RetryPolicy retryOn(java.util.function.Predicate<java.lang.Throwable>);
+  public int maxAttempts();
+  public java.time.Duration delay();
+  public boolean shouldRetry(java.lang.Throwable);
+}
+### aura-workflow:io.aura.workflow.StepExecution$Status
+public final class io.aura.workflow.StepExecution$Status extends java.lang.Enum<io.aura.workflow.StepExecution$Status> {
+  public static final io.aura.workflow.StepExecution$Status PENDING;
+  public static final io.aura.workflow.StepExecution$Status RUNNING;
+  public static final io.aura.workflow.StepExecution$Status SUCCEEDED;
+  public static final io.aura.workflow.StepExecution$Status FAILED;
+  public static final io.aura.workflow.StepExecution$Status COMPENSATED;
+  public static final io.aura.workflow.StepExecution$Status CANCELLED;
+  public static io.aura.workflow.StepExecution$Status[] values();
+  public static io.aura.workflow.StepExecution$Status valueOf(java.lang.String);
+}
+### aura-workflow:io.aura.workflow.StepExecution
+public final class io.aura.workflow.StepExecution {
+  public java.lang.String stepId();
+  public io.aura.workflow.StepMode mode();
+  public io.aura.workflow.RetryPolicy retryPolicy();
+  public io.aura.workflow.StepExecution$Status status();
+  public int attempts();
+  public java.lang.Object result();
+  public java.lang.Throwable error();
+  public java.time.Instant startedAt();
+  public java.time.Instant finishedAt();
+}
+### aura-workflow:io.aura.workflow.StepMode
+public final class io.aura.workflow.StepMode extends java.lang.Enum<io.aura.workflow.StepMode> {
+  public static final io.aura.workflow.StepMode NORMAL;
+  public static final io.aura.workflow.StepMode IDEMPOTENT;
+  public static final io.aura.workflow.StepMode COMPENSATABLE;
+  public static final io.aura.workflow.StepMode IDEMPOTENT_COMPENSATABLE;
+  public static io.aura.workflow.StepMode[] values();
+  public static io.aura.workflow.StepMode valueOf(java.lang.String);
+  public boolean idempotent();
+  public boolean compensatable();
+}
+### aura-workflow:io.aura.workflow.Workflow
+public interface io.aura.workflow.Workflow<C> {
+  public abstract io.aura.workflow.WorkflowResult execute(C, io.aura.workflow.WorkflowSelector<C>);
+  public default io.aura.workflow.WorkflowResult execute(C);
+  public static <C> io.aura.workflow.WorkflowDefinition$Builder<C> builder(java.lang.String);
+}
+### aura-workflow:io.aura.workflow.WorkflowCompensation
+public interface io.aura.workflow.WorkflowCompensation<C> {
+  public abstract void compensate(C, java.lang.Object) throws java.lang.Exception;
+}
+### aura-workflow:io.aura.workflow.WorkflowDefinition$Builder
+public final class io.aura.workflow.WorkflowDefinition$Builder<C> {
+  public io.aura.workflow.WorkflowDefinition$Builder<C> step(java.lang.String, io.aura.workflow.WorkflowStep<C>);
+  public io.aura.workflow.WorkflowDefinition$Builder<C> step(java.lang.String, io.aura.workflow.WorkflowStep<C>, io.aura.workflow.StepMode);
+  public io.aura.workflow.WorkflowDefinition$Builder<C> step(java.lang.String, io.aura.workflow.WorkflowStep<C>, io.aura.workflow.StepMode, io.aura.workflow.RetryPolicy);
+  public io.aura.workflow.WorkflowDefinition$Builder<C> before(java.lang.String, java.lang.String);
+  public io.aura.workflow.WorkflowDefinition$Builder<C> after(java.lang.String, java.lang.String);
+  public io.aura.workflow.WorkflowDefinition$Builder<C> insertBefore(java.lang.String, java.lang.String, io.aura.workflow.WorkflowStep<C>);
+  public io.aura.workflow.WorkflowDefinition$Builder<C> insertAfter(java.lang.String, java.lang.String, io.aura.workflow.WorkflowStep<C>);
+  public io.aura.workflow.WorkflowDefinition$Builder<C> compensate(java.lang.String, io.aura.workflow.WorkflowCompensation<C>);
+  public io.aura.workflow.WorkflowDefinition$Builder<C> variant(java.lang.String, java.util.function.Consumer<io.aura.workflow.WorkflowVariantBuilder<C>>);
+  public io.aura.workflow.WorkflowDefinition$Builder<C> extension(java.lang.String, io.aura.workflow.WorkflowExtension<C>);
+  public io.aura.workflow.WorkflowDefinition<C> build();
+}
+### aura-workflow:io.aura.workflow.WorkflowDefinition$ObserverFailure
+final class io.aura.workflow.WorkflowDefinition$ObserverFailure extends java.lang.RuntimeException {
+}
+### aura-workflow:io.aura.workflow.WorkflowDefinition$Resolved
+final class io.aura.workflow.WorkflowDefinition$Resolved<C> extends java.lang.Record {
+  public final java.lang.String toString();
+  public final int hashCode();
+  public final boolean equals(java.lang.Object);
+  public java.util.Map<java.lang.String, io.aura.workflow.WorkflowStepSpec<C>> steps();
+  public java.util.Set<io.aura.workflow.WorkflowVariantBuilder$Edge> edges();
+}
+### aura-workflow:io.aura.workflow.WorkflowDefinition$Variant
+final class io.aura.workflow.WorkflowDefinition$Variant<C> extends java.lang.Record {
+  public final java.lang.String toString();
+  public final int hashCode();
+  public final boolean equals(java.lang.Object);
+  public java.util.Map<java.lang.String, io.aura.workflow.WorkflowStepSpec<C>> steps();
+  public java.util.Set<io.aura.workflow.WorkflowVariantBuilder$Edge> edges();
+}
+### aura-workflow:io.aura.workflow.WorkflowDefinition
+public final class io.aura.workflow.WorkflowDefinition<C> implements io.aura.workflow.AuraWorkflow<C> {
+  public java.lang.String id();
+  public java.util.Set<java.lang.String> variants();
+  public java.util.Map<java.lang.String, java.lang.Object> schema();
+  public java.util.List<java.lang.String> order(java.lang.String);
+  public io.aura.workflow.WorkflowResult execute(C, io.aura.workflow.WorkflowSelector<C>);
+  public static <C> io.aura.workflow.WorkflowDefinition$Builder<C> builder(java.lang.String);
+}
+### aura-workflow:io.aura.workflow.WorkflowException
+public class io.aura.workflow.WorkflowException extends java.lang.RuntimeException {
+  public static final java.lang.String MISSING_STEP;
+  public static final java.lang.String DUPLICATE_STEP;
+  public static final java.lang.String DEPENDENCY_CYCLE;
+  public static final java.lang.String ORDER_CONFLICT;
+  public static final java.lang.String UNKNOWN_VARIANT;
+  public static final java.lang.String STEP_FAILED;
+  public static final java.lang.String RETRY_EXHAUSTED;
+  public static final java.lang.String COMPENSATION_FAILED;
+  public static final java.lang.String REGISTRATION_CONFLICT;
+  public static final java.lang.String UNKNOWN_WORKFLOW;
+  public static final java.lang.String EXECUTOR_SATURATED;
+  public static final java.lang.String CANCELLED;
+  public static final java.lang.String IDEMPOTENCY_CONFLICT;
+  public static final java.lang.String IDEMPOTENCY_RETAINED;
+  public static final java.lang.String LEASE_UNAVAILABLE;
+  public static final java.lang.String LEASE_LOST;
+  public static final java.lang.String LEASE_CAPACITY_EXHAUSTED;
+  public static final java.lang.String STORE_FAILURE;
+  public io.aura.workflow.WorkflowException(java.lang.String, java.lang.String);
+  public io.aura.workflow.WorkflowException(java.lang.String, java.lang.String, java.lang.Throwable);
+  public io.aura.workflow.WorkflowException(java.lang.String, java.lang.String, java.util.Map<java.lang.String, ?>);
+  public io.aura.workflow.WorkflowException(java.lang.String, java.lang.String, java.lang.Throwable, java.util.Map<java.lang.String, ?>);
+  public java.lang.String code();
+  public java.util.Map<java.lang.String, java.lang.Object> details();
+}
+### aura-workflow:io.aura.workflow.WorkflowExecution$Status
+public final class io.aura.workflow.WorkflowExecution$Status extends java.lang.Enum<io.aura.workflow.WorkflowExecution$Status> {
+  public static final io.aura.workflow.WorkflowExecution$Status PENDING;
+  public static final io.aura.workflow.WorkflowExecution$Status RUNNING;
+  public static final io.aura.workflow.WorkflowExecution$Status SUCCEEDED;
+  public static final io.aura.workflow.WorkflowExecution$Status FAILED;
+  public static final io.aura.workflow.WorkflowExecution$Status CANCELLED;
+  public static io.aura.workflow.WorkflowExecution$Status[] values();
+  public static io.aura.workflow.WorkflowExecution$Status valueOf(java.lang.String);
+}
+### aura-workflow:io.aura.workflow.WorkflowExecution
+public final class io.aura.workflow.WorkflowExecution {
+  public java.lang.String executionId();
+  public java.lang.String workflowId();
+  public java.lang.String variant();
+  public java.lang.String idempotencyKey();
+  public io.aura.workflow.WorkflowExecution$Status status();
+  public java.lang.Throwable error();
+  public java.time.Instant startedAt();
+  public java.time.Instant finishedAt();
+  public java.util.Map<java.lang.String, io.aura.workflow.StepExecution> steps();
+  public java.util.List<io.aura.workflow.StepExecution> stepExecutions();
+  public io.aura.workflow.StepExecution step(java.lang.String);
+  public io.aura.workflow.WorkflowExecutionSnapshot snapshot();
+}
+### aura-workflow:io.aura.workflow.WorkflowExecutionSnapshot$StepSnapshot
+public final class io.aura.workflow.WorkflowExecutionSnapshot$StepSnapshot extends java.lang.Record {
+  public io.aura.workflow.WorkflowExecutionSnapshot$StepSnapshot(java.lang.String, io.aura.workflow.StepExecution$Status, int, java.time.Instant, java.time.Instant);
+  public final java.lang.String toString();
+  public final int hashCode();
+  public final boolean equals(java.lang.Object);
+  public java.lang.String stepId();
+  public io.aura.workflow.StepExecution$Status status();
+  public int attempts();
+  public java.time.Instant startedAt();
+  public java.time.Instant finishedAt();
+}
+### aura-workflow:io.aura.workflow.WorkflowExecutionSnapshot
+public final class io.aura.workflow.WorkflowExecutionSnapshot extends java.lang.Record {
+  public io.aura.workflow.WorkflowExecutionSnapshot(java.lang.String, java.lang.String, java.lang.String, java.lang.String, io.aura.workflow.WorkflowExecution$Status, java.time.Instant, java.time.Instant, java.lang.String, java.lang.String, java.util.List<io.aura.workflow.WorkflowExecutionSnapshot$StepSnapshot>);
+  public static io.aura.workflow.WorkflowExecutionSnapshot from(io.aura.workflow.WorkflowExecution);
+  public java.util.Map<java.lang.String, java.lang.Object> toMap();
+  public final java.lang.String toString();
+  public final int hashCode();
+  public final boolean equals(java.lang.Object);
+  public java.lang.String executionId();
+  public java.lang.String workflowId();
+  public java.lang.String variant();
+  public java.lang.String idempotencyKey();
+  public io.aura.workflow.WorkflowExecution$Status status();
+  public java.time.Instant startedAt();
+  public java.time.Instant finishedAt();
+  public java.lang.String errorType();
+  public java.lang.String errorCode();
+  public java.util.List<io.aura.workflow.WorkflowExecutionSnapshot$StepSnapshot> steps();
+}
+### aura-workflow:io.aura.workflow.WorkflowExecutionStore
+public interface io.aura.workflow.WorkflowExecutionStore {
+  public default void retainLocal(io.aura.workflow.WorkflowExecution);
+  public abstract void saveSnapshot(io.aura.workflow.WorkflowExecutionSnapshot);
+  public default java.util.Optional<io.aura.workflow.WorkflowExecutionSnapshot> findSnapshot(java.lang.String);
+  public default java.util.List<io.aura.workflow.WorkflowExecutionSnapshot> listSnapshots(java.lang.String);
+  public abstract java.util.Optional<io.aura.workflow.WorkflowExecution> find(java.lang.String);
+  public abstract java.util.List<io.aura.workflow.WorkflowExecution> list(java.lang.String);
+  public default java.util.Optional<io.aura.workflow.WorkflowExecution> findByIdempotencyKey(java.lang.String, java.lang.String);
+}
+### aura-workflow:io.aura.workflow.WorkflowExtension
+public interface io.aura.workflow.WorkflowExtension<C> {
+  public abstract void apply(io.aura.workflow.WorkflowVariantBuilder<C>);
+}
+### aura-workflow:io.aura.workflow.WorkflowLease
+public final class io.aura.workflow.WorkflowLease extends java.lang.Record {
+  public io.aura.workflow.WorkflowLease(java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.time.Instant);
+  public boolean expiredAt(java.time.Instant);
+  public final java.lang.String toString();
+  public final int hashCode();
+  public final boolean equals(java.lang.Object);
+  public java.lang.String workflowId();
+  public java.lang.String idempotencyKey();
+  public java.lang.String ownerId();
+  public java.lang.String token();
+  public java.time.Instant expiresAt();
+}
+### aura-workflow:io.aura.workflow.WorkflowModule
+public final class io.aura.workflow.WorkflowModule implements io.aura.AuraModule {
+  public static io.aura.workflow.WorkflowModule create();
+  public static io.aura.workflow.WorkflowModule create(io.aura.workflow.WorkflowRegistry);
+  public static io.aura.workflow.WorkflowModule create(io.aura.workflow.WorkflowRegistry, io.aura.workflow.WorkflowExecutionStore);
+  public io.aura.contract.ModuleMetadata descriptor();
+  public void install(io.aura.ModuleContext);
+  public io.aura.workflow.WorkflowRegistry registry();
+}
+### aura-workflow:io.aura.workflow.WorkflowRecoveryCandidate
+public final class io.aura.workflow.WorkflowRecoveryCandidate extends java.lang.Record {
+  public io.aura.workflow.WorkflowRecoveryCandidate(io.aura.workflow.WorkflowExecutionSnapshot, boolean);
+  public final java.lang.String toString();
+  public final int hashCode();
+  public final boolean equals(java.lang.Object);
+  public io.aura.workflow.WorkflowExecutionSnapshot snapshot();
+  public boolean currentlyLeased();
+}
+### aura-workflow:io.aura.workflow.WorkflowRegistry
+public final class io.aura.workflow.WorkflowRegistry {
+  public io.aura.workflow.WorkflowRegistry();
+  public <C> io.aura.workflow.WorkflowRegistry register(io.aura.workflow.WorkflowDefinition<C>);
+  public boolean contains(java.lang.String);
+  public io.aura.workflow.WorkflowDefinition<?> get(java.lang.String);
+  public java.util.Map<java.lang.String, io.aura.workflow.WorkflowDefinition<?>> snapshot();
+  public java.util.Map<java.lang.String, java.lang.Object> schema();
+}
+### aura-workflow:io.aura.workflow.WorkflowResult
+public final class io.aura.workflow.WorkflowResult {
+  public io.aura.workflow.WorkflowExecution execution();
+  public java.lang.Object value();
+  public java.lang.Object result();
+  public boolean succeeded();
+  public boolean failed();
+  public boolean cancelled();
+}
+### aura-workflow:io.aura.workflow.WorkflowRuntime$ExecutionHandle
+final class io.aura.workflow.WorkflowRuntime$ExecutionHandle {
+}
+### aura-workflow:io.aura.workflow.WorkflowRuntime$LeaseGuard
+final class io.aura.workflow.WorkflowRuntime$LeaseGuard implements java.lang.AutoCloseable {
+  public void close();
+}
+### aura-workflow:io.aura.workflow.WorkflowRuntime$LeaseIdentity
+final class io.aura.workflow.WorkflowRuntime$LeaseIdentity extends java.lang.Record {
+  public final java.lang.String toString();
+  public final int hashCode();
+  public final boolean equals(java.lang.Object);
+  public java.lang.String workflowId();
+  public java.lang.String idempotencyKey();
+  public java.lang.String token();
+}
+### aura-workflow:io.aura.workflow.WorkflowRuntime$LeaseScope
+final class io.aura.workflow.WorkflowRuntime$LeaseScope {
+}
+### aura-workflow:io.aura.workflow.WorkflowRuntime
+public final class io.aura.workflow.WorkflowRuntime<C> implements java.lang.AutoCloseable {
+  public io.aura.workflow.WorkflowRuntime();
+  public io.aura.workflow.WorkflowRuntime(io.aura.workflow.WorkflowRegistry);
+  public io.aura.workflow.WorkflowRuntime(io.aura.workflow.WorkflowRegistry, io.aura.workflow.WorkflowExecutionStore);
+  public io.aura.workflow.WorkflowRuntime(io.aura.workflow.WorkflowRegistry, io.aura.workflow.WorkflowExecutionStore, int, int);
+  public io.aura.workflow.WorkflowRuntime(io.aura.workflow.WorkflowRegistry, io.aura.workflow.WorkflowExecutionStore, int, int, java.time.Duration, java.lang.String);
+  public io.aura.workflow.WorkflowRegistry registry();
+  public io.aura.workflow.WorkflowExecutionStore store();
+  public int activeExecutions();
+  public int queuedExecutions();
+  public long completedExecutions();
+  public long rejectedExecutions();
+  public long leaseConflicts();
+  public long lostLeases();
+  public int activeLeases();
+  public java.lang.String ownerId();
+  public java.util.Optional<io.aura.workflow.WorkflowLease> currentLease();
+  public int workerLimit();
+  public int queueCapacity();
+  public io.aura.contract.ExecutorMetrics executorMetrics();
+  public io.aura.contract.ExecutorMetrics leaseRenewalMetrics();
+  public io.aura.workflow.WorkflowResult execute(java.lang.String, C, io.aura.workflow.WorkflowSelector<C>);
+  public io.aura.workflow.WorkflowResult execute(java.lang.String, C, io.aura.workflow.WorkflowSelector<C>, io.aura.contract.CancellationToken);
+  public io.aura.workflow.WorkflowResult execute(java.lang.String, C, io.aura.workflow.WorkflowSelector<C>, io.aura.contract.CancellationToken, java.lang.String);
+  public io.aura.workflow.WorkflowResult execute(java.lang.String, C);
+  public java.util.concurrent.CompletableFuture<io.aura.workflow.WorkflowResult> executeAsync(java.lang.String, C, io.aura.workflow.WorkflowSelector<C>);
+  public java.util.concurrent.CompletableFuture<io.aura.workflow.WorkflowResult> executeAsync(java.lang.String, C, io.aura.workflow.WorkflowSelector<C>, io.aura.contract.CancellationToken);
+  public java.util.concurrent.CompletableFuture<io.aura.workflow.WorkflowResult> executeAsync(java.lang.String, C, io.aura.workflow.WorkflowSelector<C>, java.lang.String);
+  public java.util.concurrent.CompletableFuture<io.aura.workflow.WorkflowResult> executeAsync(java.lang.String, C, io.aura.workflow.WorkflowSelector<C>, io.aura.contract.CancellationToken, java.lang.String);
+  public java.util.concurrent.CompletableFuture<io.aura.workflow.WorkflowResult> executeAsync(java.lang.String, C);
+  public java.util.concurrent.CompletableFuture<io.aura.workflow.WorkflowResult> executeAsync(java.lang.String, C, io.aura.contract.CancellationToken);
+  public java.util.concurrent.CompletableFuture<io.aura.workflow.WorkflowResult> executeAsync(java.lang.String, C, java.lang.String);
+  public java.util.Optional<io.aura.workflow.WorkflowExecution> execution(java.lang.String);
+  public java.util.Optional<io.aura.workflow.WorkflowExecutionSnapshot> executionSnapshot(java.lang.String);
+  public java.util.List<io.aura.workflow.WorkflowExecution> executions(java.lang.String);
+  public java.util.List<io.aura.workflow.WorkflowExecutionSnapshot> executionSnapshots(java.lang.String);
+  public java.util.List<io.aura.workflow.WorkflowRecoveryCandidate> recoveryCandidates(java.lang.String);
+  public boolean cancel(java.lang.String);
+  public io.aura.workflow.WorkflowResult execute(io.aura.workflow.WorkflowDefinition<C>, C, io.aura.workflow.WorkflowSelector<C>);
+  public io.aura.workflow.WorkflowResult execute(io.aura.workflow.WorkflowDefinition<C>, C, io.aura.workflow.WorkflowSelector<C>, io.aura.contract.CancellationToken);
+  public io.aura.workflow.WorkflowResult execute(io.aura.workflow.WorkflowDefinition<C>, C, io.aura.workflow.WorkflowSelector<C>, io.aura.contract.CancellationToken, java.lang.String);
+  public void close();
+}
+### aura-workflow:io.aura.workflow.WorkflowSelector
+public interface io.aura.workflow.WorkflowSelector<C> {
+  public abstract java.lang.String select(C);
+  public static <C> io.aura.workflow.WorkflowSelector<C> defaultVariant();
+  public static <C> io.aura.workflow.WorkflowSelector<C> constant(java.lang.String);
+  public static <C> io.aura.workflow.WorkflowSelector<C> by(java.util.function.Function<C, java.lang.String>);
+}
+### aura-workflow:io.aura.workflow.WorkflowStep
+public interface io.aura.workflow.WorkflowStep<C> {
+  public abstract java.lang.Object execute(C) throws java.lang.Exception;
+}
+### aura-workflow:io.aura.workflow.WorkflowStepSpec
+public final class io.aura.workflow.WorkflowStepSpec<C> {
+  public java.lang.String id();
+  public io.aura.workflow.WorkflowStep<C> step();
+  public io.aura.workflow.StepMode mode();
+  public io.aura.workflow.RetryPolicy retryPolicy();
+  public io.aura.workflow.WorkflowCompensation<C> compensation();
+}
+### aura-workflow:io.aura.workflow.WorkflowVariantBuilder$Edge
+final class io.aura.workflow.WorkflowVariantBuilder$Edge extends java.lang.Record {
+  public final java.lang.String toString();
+  public final int hashCode();
+  public final boolean equals(java.lang.Object);
+  public java.lang.String from();
+  public java.lang.String to();
+}
+### aura-workflow:io.aura.workflow.WorkflowVariantBuilder
+public final class io.aura.workflow.WorkflowVariantBuilder<C> {
+  public io.aura.workflow.WorkflowVariantBuilder<C> step(java.lang.String, io.aura.workflow.WorkflowStep<C>);
+  public io.aura.workflow.WorkflowVariantBuilder<C> step(java.lang.String, io.aura.workflow.WorkflowStep<C>, io.aura.workflow.StepMode);
+  public io.aura.workflow.WorkflowVariantBuilder<C> step(java.lang.String, io.aura.workflow.WorkflowStep<C>, io.aura.workflow.StepMode, io.aura.workflow.RetryPolicy);
+  public io.aura.workflow.WorkflowVariantBuilder<C> compensate(java.lang.String, io.aura.workflow.WorkflowCompensation<C>);
+  public io.aura.workflow.WorkflowVariantBuilder<C> insertBefore(java.lang.String, java.lang.String, io.aura.workflow.WorkflowStep<C>);
+  public io.aura.workflow.WorkflowVariantBuilder<C> insertBefore(java.lang.String, java.lang.String, io.aura.workflow.WorkflowStep<C>, io.aura.workflow.StepMode, io.aura.workflow.RetryPolicy);
+  public io.aura.workflow.WorkflowVariantBuilder<C> insertAfter(java.lang.String, java.lang.String, io.aura.workflow.WorkflowStep<C>);
+  public io.aura.workflow.WorkflowVariantBuilder<C> insertAfter(java.lang.String, java.lang.String, io.aura.workflow.WorkflowStep<C>, io.aura.workflow.StepMode, io.aura.workflow.RetryPolicy);
+  public io.aura.workflow.WorkflowVariantBuilder<C> before(java.lang.String, java.lang.String);
+  public io.aura.workflow.WorkflowVariantBuilder<C> after(java.lang.String, java.lang.String);
+}

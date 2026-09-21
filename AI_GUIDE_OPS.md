@@ -150,6 +150,16 @@ The CI workflow additionally runs a full OSV-Scanner scan on every push and on
 the weekly schedule, so newly disclosed vulnerabilities are not dependent on a
 new pull request.
 
+Public API changes use a committed `javap` baseline:
+
+```bash
+bash scripts/verify-public-api.sh
+```
+
+An intentional public API change must update `api/aura-1.0.public-api.txt` in
+the same review with `AURA_API_UPDATE=true`; do not silently regenerate it in
+CI.
+
 ## Packaging (Fat Jar)
 
 ```xml

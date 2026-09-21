@@ -38,6 +38,8 @@ test -f "$repo_root/aura-archetype/src/main/resources/META-INF/maven/archetype-m
 test -x "$repo_root/scripts/verify-maven-archetype.sh"
 test -x "$repo_root/scripts/verify-release-artifacts.sh"
 test -x "$repo_root/scripts/verify-sbom.sh"
+test -x "$repo_root/scripts/verify-public-api.sh"
+test -f "$repo_root/api/aura-1.0.public-api.txt"
 rg -q 'google/osv-scanner-action/osv-scanner-action@v2\.0\.2' \
   "$repo_root/.github/workflows/ci.yml"
 rg -q 'cron: .17 3 \* \* 1.' "$repo_root/.github/workflows/ci.yml"

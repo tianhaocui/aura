@@ -46,6 +46,10 @@ jobs:
         if: matrix.java == 17
         run: bash scripts/verify-sbom.sh
 
+      - name: Public API Baseline
+        if: matrix.java == 17
+        run: bash scripts/verify-public-api.sh
+
       - name: Upload Coverage Report
         if: always() && matrix.java == 17
         uses: actions/upload-artifact@v4
