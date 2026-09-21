@@ -7,9 +7,12 @@ import io.aura.AuraWebRuntime;
 import io.aura.snapshot.Snapshot;
 import io.aura.snapshot.SnapshotScope;
 
-import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.net.URLDecoder;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 
 public class TestClient {
 
@@ -63,7 +66,7 @@ public class TestClient {
     public class Request {
         private final String method;
         private String path;
-        private final Map<String, String> headers = new HashMap<>();
+        private final Map<String, String> headers = new LinkedHashMap<>();
         private String body;
 
         Request(String method, String path) {
@@ -72,13 +75,26 @@ public class TestClient {
         }
 
         public Request header(String name, String value) {
+            headers.entrySet().removeIf(entry -> entry.getKey().equalsIgnoreCase(name));
             headers.put(name, value);
             return this;
         }
 
         public Request query(String name, String value) {
+            if (name == null || value == null) throw new IllegalArgumentException("query name/value must not be null");
             String separator = path.contains("?") ? "&" : "?";
-            path = path + separator + name + "=" + value;
+            path = path + separator + encodeQuery(name) + "=" + encodeQuery(value);
+            return this;
+        }
+
+        /** Adds one request cookie using the same Cookie header format as a browser. */
+        public Request cookie(String name, String value) {
+            if (name == null || name.isBlank() || value == null) {
+                throw new IllegalArgumentException("cookie name must not be blank and value must not be null");
+            }
+            String current = headerValue("Cookie");
+            String entry = name + "=" + value;
+            header("Cookie", current == null || current.isBlank() ? entry : current + "; " + entry);
             return this;
         }
 
@@ -116,7 +132,8 @@ public class TestClient {
                         SnapshotRecorder.of(app).record(failure[0], route, mockCtx, method, routePath,
                                 queryParams, headers, body, activeSnapshotScope);
                     }
-                    return new Response(mockCtx.status == 0 ? 200 : mockCtx.status, mockCtx.responseBody, mockCtx.responseHeaders());
+                    return new Response(mockCtx.status == 0 ? 200 : mockCtx.status,
+                            mockCtx.responseBody, mockCtx.responseHeaders(), mockCtx.responseCookies());
                 }
 
                 // HEAD auto-fallback: use GET handler, suppress body
@@ -135,7 +152,8 @@ public class TestClient {
                             SnapshotRecorder.of(app).record(failure[0], route, mockCtx, method, routePath,
                                     queryParams, headers, body, activeSnapshotScope);
                         }
-                        return new Response(mockCtx.status == 0 ? 200 : mockCtx.status, null, mockCtx.responseHeaders());
+                        return new Response(mockCtx.status == 0 ? 200 : mockCtx.status,
+                                null, mockCtx.responseHeaders(), mockCtx.responseCookies());
                     }
                 }
 
@@ -155,16 +173,31 @@ public class TestClient {
         }
 
         private static Map<String, String> parseQueryString(String path) {
-            Map<String, String> params = new HashMap<>();
+            Map<String, String> params = new LinkedHashMap<>();
             int idx = path.indexOf('?');
             if (idx < 0) return params;
             String qs = path.substring(idx + 1);
             for (String pair : qs.split("&")) {
                 String[] kv = pair.split("=", 2);
-                if (kv.length == 2) params.put(kv[0], kv[1]);
-                else if (kv.length == 1) params.put(kv[0], "");
+                if (kv.length == 2) params.putIfAbsent(decodeQuery(kv[0]), decodeQuery(kv[1]));
+                else if (kv.length == 1 && !kv[0].isEmpty()) params.putIfAbsent(decodeQuery(kv[0]), "");
             }
             return params;
+        }
+
+        private static String encodeQuery(String value) {
+            return URLEncoder.encode(value, StandardCharsets.UTF_8);
+        }
+
+        private static String decodeQuery(String value) {
+            return URLDecoder.decode(value, StandardCharsets.UTF_8);
+        }
+
+        private String headerValue(String name) {
+            for (var entry : headers.entrySet()) {
+                if (entry.getKey().equalsIgnoreCase(name)) return entry.getValue();
+            }
+            return null;
         }
 
         public Response expect(int statusCode) {
@@ -226,13 +259,14 @@ public class TestClient {
 
     public static class TestSession {
         private final TestClient client;
-        private final Map<String, String> defaultHeaders = new HashMap<>();
+        private final Map<String, String> defaultHeaders = new LinkedHashMap<>();
 
         TestSession(TestClient client) {
             this.client = client;
         }
 
         public TestSession header(String name, String value) {
+            defaultHeaders.entrySet().removeIf(entry -> entry.getKey().equalsIgnoreCase(name));
             defaultHeaders.put(name, value);
             return this;
         }
@@ -269,17 +303,30 @@ public class TestClient {
         private final int status;
         private final String body;
         private final Map<String, String> headers;
+        private final List<String> setCookies;
 
         Response(int status, String body, Map<String, String> headers) {
+            this(status, body, headers, List.of());
+        }
+
+        Response(int status, String body, Map<String, String> headers, List<String> setCookies) {
             this.status = status;
             this.body = body;
             this.headers = headers != null ? headers : Map.of();
+            this.setCookies = setCookies == null ? List.of() : List.copyOf(setCookies);
         }
 
         public int status() { return status; }
         public String body() { return body; }
+        /** All Set-Cookie values emitted by the handler, in response order. */
+        public List<String> setCookies() { return setCookies; }
 
-        public String header(String name) { return headers.get(name); }
+        public String header(String name) {
+            for (var entry : headers.entrySet()) {
+                if (entry.getKey().equalsIgnoreCase(name)) return entry.getValue();
+            }
+            return null;
+        }
 
         public <T> T json(Class<T> type) {
             return JSON.parseObject(body, type);
@@ -297,7 +344,7 @@ public class TestClient {
         }
 
         public Response expectHeader(String name, String value) {
-            String actual = headers.get(name);
+            String actual = header(name);
             if (!java.util.Objects.equals(value, actual)) {
                 throw new AssertionError("Expected header '" + name + "' to be '" + value + "' but got '" + actual + "'");
             }

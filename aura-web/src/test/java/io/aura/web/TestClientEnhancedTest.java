@@ -22,6 +22,74 @@ class TestClientEnhancedTest {
         resp.expectJson("$.size", "10");
     }
 
+    @Test
+    void query_matchesUndertowDecodingAndFirstDuplicateValue() {
+        Router router = new Router();
+        router.get("/items", ctx -> ctx.json(Map.of(
+                "value", ctx.query("value"), "other", ctx.query("other"))));
+        var client = TestApplications.client(router);
+
+        var resp = client.get("/items")
+                .query("value", "中文 & space")
+                .query("value", "second")
+                .query("other", "a=b")
+                .execute();
+
+        resp.expect(200)
+                .expectJson("$.value", "中文 & space")
+                .expectJson("$.other", "a=b");
+    }
+
+    @Test
+    void headersAndCookies_matchCaseInsensitiveHttpSemantics() {
+        Router router = new Router();
+        router.get("/session", ctx -> ctx.json(Map.of(
+                "authorization", ctx.header("Authorization"),
+                "session", ctx.cookie("session"))));
+        var client = TestApplications.client(router);
+
+        client.get("/session")
+                .header("authorization", "Bearer test")
+                .cookie("session", "abc")
+                .execute()
+                .expectJson("$.authorization", "Bearer test")
+                .expectJson("$.session", "abc");
+    }
+
+    @Test
+    void responseCookies_areCapturedAsSetCookieHeader() {
+        Router router = new Router();
+        router.get("/login", ctx -> {
+            ctx.cookie("session", "abc", 120);
+            ctx.cookie("theme", "dark", 120);
+            ctx.cookie("session", "updated", 60);
+            ctx.text("ok");
+        });
+        var response = TestApplications.client(router).get("/login").execute();
+        assertThat(response.setCookies()).hasSize(2);
+        assertThat(response.setCookies().get(0)).contains("session=updated").contains("Max-Age=60");
+        assertThat(response.setCookies().get(1)).contains("theme=dark").contains("Max-Age=120");
+    }
+
+    @Test
+    void responseCookiesCannotChangeAfterResponseStartsOrAbort() {
+        Router router = new Router();
+        router.get("/late", ctx -> {
+            ctx.text("ok");
+            ctx.cookie("late", "ignored", 60);
+        });
+
+        var response = TestApplications.client(router).get("/late").execute();
+        assertThat(response.setCookies()).isEmpty();
+
+        router.get("/aborted", ctx -> {
+            ctx.abort();
+            ctx.cookie("late", "ignored", 60);
+        });
+        var aborted = TestApplications.client(router).get("/aborted").execute();
+        assertThat(aborted.setCookies()).isEmpty();
+    }
+
     // --- expectJson ---
 
     @Test

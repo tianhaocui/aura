@@ -22,6 +22,7 @@ public class MockContext extends Context {
     private final Map<Class<?>, Object> attrs = new ConcurrentHashMap<>();
     private final Map<String, Object> namedAttrs = new ConcurrentHashMap<>();
     private final Map<String, String> respHeaders = new HashMap<>();
+    private final java.util.Map<String, String> responseCookies = new java.util.LinkedHashMap<>();
 
     public MockContext(Map<String, String> pathParams, Map<String, String> queryParams,
                        Map<String, String> headers, String body, AuraWebRuntime app) {
@@ -43,8 +44,21 @@ public class MockContext extends Context {
     @Override public String path(String name) { return pathParams.get(name); }
     @Override public String query(String name) { return queryParams.get(name); }
     @Override public String query(String name, String def) { String v = query(name); return v != null ? v : def; }
-    @Override public String header(String name) { return headers.get(name); }
-    @Override public String cookie(String name) { return null; }
+    @Override public String header(String name) {
+        for (var entry : headers.entrySet()) {
+            if (entry.getKey().equalsIgnoreCase(name)) return entry.getValue();
+        }
+        return null;
+    }
+    @Override public String cookie(String name) {
+        String header = header("Cookie");
+        if (header == null) return null;
+        for (String item : header.split(";")) {
+            String[] pair = item.trim().split("=", 2);
+            if (pair.length == 2 && pair[0].trim().equals(name)) return pair[1].trim();
+        }
+        return null;
+    }
     @Override public String bodyText() { return body; }
     @Override public <T> T body(Class<T> type) { return body((java.lang.reflect.Type) type); }
     @Override @SuppressWarnings("unchecked")
@@ -71,11 +85,26 @@ public class MockContext extends Context {
     @Override public void html(String html) { responseBody = html; Snapshot.response(statusCode(), "text/html; charset=utf-8", html); responded = true; }
     @Override public void raw(String body) { responseBody = body; Snapshot.response(statusCode(), null, body); responded = true; }
     @Override public void redirect(String url) { status = 302; Snapshot.response(statusCode(), null, null); responded = true; }
-    @Override public Context header(String name, String value) { respHeaders.put(name, value); return this; }
-    @Override public Context cookie(String name, String value, int maxAge) { return this; }
+    @Override public Context header(String name, String value) {
+        respHeaders.entrySet().removeIf(entry -> entry.getKey().equalsIgnoreCase(name));
+        respHeaders.put(name, value);
+        return this;
+    }
+    @Override public Context cookie(String name, String value, int maxAge) {
+        if (isAborted() || responded) return this;
+        StringBuilder setCookie = new StringBuilder(name).append('=').append(value == null ? "" : value)
+                .append("; Path=/; HttpOnly; Secure; SameSite=Lax");
+        if (maxAge >= 0) setCookie.append("; Max-Age=").append(maxAge);
+        responseCookies.put(name, setCookie.toString());
+        header("Set-Cookie", setCookie.toString());
+        return this;
+    }
 
     @Override public boolean isResponseStarted() { return responded; }
     Map<String, String> responseHeaders() { return respHeaders; }
+    java.util.List<String> responseCookies() {
+        return java.util.List.copyOf(responseCookies.values());
+    }
 
     byte[] fileBytes;
     String fileName;

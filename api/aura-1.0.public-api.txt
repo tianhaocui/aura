@@ -1585,6 +1585,7 @@ public final class io.aura.web.StandardAdmissionPolicy implements io.aura.web.Ad
 public class io.aura.web.TestClient$Request {
   public io.aura.web.TestClient$Request header(java.lang.String, java.lang.String);
   public io.aura.web.TestClient$Request query(java.lang.String, java.lang.String);
+  public io.aura.web.TestClient$Request cookie(java.lang.String, java.lang.String);
   public io.aura.web.TestClient$Request body(java.lang.Object);
   public io.aura.web.TestClient$Response execute();
   public io.aura.web.TestClient$Response expect(int);
@@ -1593,6 +1594,7 @@ public class io.aura.web.TestClient$Request {
 public class io.aura.web.TestClient$Response {
   public int status();
   public java.lang.String body();
+  public java.util.List<java.lang.String> setCookies();
   public java.lang.String header(java.lang.String);
   public <T> T json(java.lang.Class<T>);
   public <T> java.util.List<T> jsonList(java.lang.Class<T>);
@@ -2412,6 +2414,7 @@ final class io.aura.ai.AiClient$StreamTerminal extends java.lang.Record {
 public final class io.aura.ai.AiClient implements java.lang.AutoCloseable {
   public io.aura.ai.AiClient(io.aura.ai.AiProvider);
   public io.aura.ai.AiClient(io.aura.ai.AiProvider, java.util.concurrent.ExecutorService);
+  public io.aura.ai.AiClient(io.aura.ai.AiProvider, java.util.concurrent.ExecutorService, io.aura.ai.AiUsageSink);
   public io.aura.ai.AiProvider provider();
   public io.aura.contract.ExecutorMetrics executorMetrics();
   public io.aura.ai.AiUsageTotals usageTotals();
@@ -2588,6 +2591,23 @@ public final class io.aura.ai.AiUsage extends java.lang.Record {
   public long totalTokens();
   public long costMicros();
 }
+### aura-ai:io.aura.ai.AiUsageSink$UsageEvent
+public final class io.aura.ai.AiUsageSink$UsageEvent extends java.lang.Record {
+  public io.aura.ai.AiUsageSink$UsageEvent(java.time.Instant, java.lang.String, long, io.aura.ai.AiUsage, boolean);
+  public final java.lang.String toString();
+  public final int hashCode();
+  public final boolean equals(java.lang.Object);
+  public java.time.Instant completedAt();
+  public java.lang.String model();
+  public long inputCharacters();
+  public io.aura.ai.AiUsage usage();
+  public boolean usageKnown();
+}
+### aura-ai:io.aura.ai.AiUsageSink
+public interface io.aura.ai.AiUsageSink {
+  public static final io.aura.ai.AiUsageSink NOOP;
+  public abstract void record(io.aura.ai.AiUsageSink$UsageEvent);
+}
 ### aura-ai:io.aura.ai.AiUsageTotals
 public final class io.aura.ai.AiUsageTotals extends java.lang.Record {
   public io.aura.ai.AiUsageTotals(long, long, long, long, long, long);
@@ -2632,6 +2652,21 @@ public final class io.aura.ai.OpenAiCompatibleProvider implements io.aura.ai.AiP
   public java.lang.String name();
   public io.aura.ai.AiResponse chat(io.aura.ai.AiRequest) throws java.lang.Exception;
   public void stream(io.aura.ai.AiRequest, io.aura.ai.AiStreamHandler) throws java.lang.Exception;
+}
+### aura-ai:io.aura.ai.RagPipeline$RagContext
+public final class io.aura.ai.RagPipeline$RagContext extends java.lang.Record {
+  public io.aura.ai.RagPipeline$RagContext(java.lang.String, java.util.List<java.lang.String>, java.lang.String);
+  public final java.lang.String toString();
+  public final int hashCode();
+  public final boolean equals(java.lang.Object);
+  public java.lang.String query();
+  public java.util.List<java.lang.String> passages();
+  public java.lang.String text();
+}
+### aura-ai:io.aura.ai.RagPipeline
+public final class io.aura.ai.RagPipeline {
+  public io.aura.ai.RagPipeline(io.aura.ai.Retriever, int, int);
+  public io.aura.ai.RagPipeline$RagContext retrieve(java.lang.String) throws java.lang.Exception;
 }
 ### aura-ai:io.aura.ai.Retriever
 public interface io.aura.ai.Retriever {

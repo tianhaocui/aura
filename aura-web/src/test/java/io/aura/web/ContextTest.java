@@ -22,7 +22,7 @@ import static org.assertj.core.api.Assertions.*;
  *  - query(name, default) when value is present
  *  - statusCode() default (0 → 200 via MockContext)
  *  - method() / url() on MockContext return empty strings
- *  - cookie(String) on MockContext returns null
+ *  - cookie(String) on MockContext parses the request Cookie header
  *  - SSE sanitize strips CRLF from event names and ids
  *  - SSE multiline data splits into multiple data: lines
  *  - Context.redirect() CRLF guard — \r alone, \n alone, \r\n combined
@@ -161,8 +161,12 @@ class ContextTest {
     // -------------------------------------------------------------------------
 
     @Test
-    void cookie_returnsNull_onMockContext() {
-        assertThat(mockCtx().cookie("session")).isNull();
+    void cookie_parsesRequestCookieHeader() {
+        MockContext ctx = new MockContext(Map.of(), Map.of(),
+                Map.of("cookie", "session=abc; theme=dark"), null, app());
+        assertThat(ctx.cookie("session")).isEqualTo("abc");
+        assertThat(ctx.cookie("theme")).isEqualTo("dark");
+        assertThat(ctx.cookie("missing")).isNull();
     }
 
     // -------------------------------------------------------------------------

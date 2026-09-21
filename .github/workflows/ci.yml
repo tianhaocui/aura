@@ -74,6 +74,16 @@ jobs:
         with:
           fail-on-severity: high
 
+  mcp-npm:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Verify MCP npm package and stdio contract
+        run: node scripts/verify-mcp-npm.mjs
+
   minimum-maven:
     runs-on: ubuntu-latest
     steps:

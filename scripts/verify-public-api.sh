@@ -18,6 +18,10 @@ for module in "${modules[@]}"; do
   if test ! -d "$classes"; then
     mvn -q -f "$repo_root/pom.xml" -pl "$module" -am -DskipTests package
   fi
+  # POM-only and resource-only artifacts intentionally expose no Java classes.
+  if test ! -d "$classes"; then
+    continue
+  fi
   while IFS= read -r class_file; do
     class_name="${class_file#"$classes"/}"
     class_name="${class_name%.class}"

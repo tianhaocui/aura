@@ -3,6 +3,7 @@ set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 root_version="$(sed -n 's:.*<version>\([^<]*\)</version>.*:\1:p' "$repo_root/pom.xml" | head -1)"
+test -n "$root_version"
 maven=(mvn)
 if test -n "${MAVEN_SETTINGS:-}"; then
   maven+=(-s "$MAVEN_SETTINGS")
@@ -26,9 +27,9 @@ for module in "${modules[@]}"; do
   test -f "$base-javadoc.jar"
 done
 
-jar tf "$repo_root/aura-starter/target/aura-starter-1.0.0-javadoc.jar" \
+jar tf "$repo_root/aura-starter/target/aura-starter-$root_version-javadoc.jar" \
   | rg -q '^README\.md$'
-jar tf "$repo_root/aura-archetype/target/aura-archetype-1.0.0-javadoc.jar" \
+jar tf "$repo_root/aura-archetype/target/aura-archetype-$root_version-javadoc.jar" \
   | rg -q '^README\.md$'
 
 rg -q '<maven.deploy.skip>true</maven.deploy.skip>' \

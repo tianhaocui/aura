@@ -74,6 +74,104 @@ class AuraModuleTest {
     }
 
     @Test
+    void rollsBackModulesWhenStartThrowsError() {
+        List<String> events = new ArrayList<>();
+        AuraModule first = new AuraModule() {
+            @Override public io.aura.contract.ModuleMetadata descriptor() {
+                return io.aura.contract.ModuleMetadata.of("first-error", "1.0.0");
+            }
+            @Override public void install(ModuleContext context) { }
+            @Override public void start(ModuleContext context) { events.add("start:first"); }
+            @Override public void stop(ModuleContext context) { events.add("stop:first"); }
+        };
+        AuraModule broken = new AuraModule() {
+            @Override public io.aura.contract.ModuleMetadata descriptor() {
+                return io.aura.contract.ModuleMetadata.of("broken-error", "1.0.0");
+            }
+            @Override public void install(ModuleContext context) { }
+            @Override public void start(ModuleContext context) { throw new AssertionError("boom"); }
+            @Override public void stop(ModuleContext context) { events.add("stop:broken"); }
+        };
+
+        assertThatThrownBy(() -> AuraApp.create().use(first).use(broken).start())
+                .isInstanceOfSatisfying(ModuleException.class, error -> {
+                    assertThat(error.code()).isEqualTo("AURA_MODULE_START_FAILED");
+                    assertThat(error.getCause()).isInstanceOf(AssertionError.class);
+                });
+        assertThat(events).containsExactly("start:first", "stop:broken", "stop:first");
+    }
+
+    @Test
+    void startFailureRetainsAllRollbackFailuresAsSuppressed() {
+        AuraModule first = new AuraModule() {
+            @Override public io.aura.contract.ModuleMetadata descriptor() {
+                return io.aura.contract.ModuleMetadata.of("rollback-failure", "1.0.0");
+            }
+            @Override public void install(ModuleContext context) { }
+            @Override public void stop(ModuleContext context) { throw new IllegalStateException("first cleanup"); }
+        };
+        AuraModule broken = new AuraModule() {
+            @Override public io.aura.contract.ModuleMetadata descriptor() {
+                return io.aura.contract.ModuleMetadata.of("start-failure", "1.0.0");
+            }
+            @Override public void install(ModuleContext context) { }
+            @Override public void start(ModuleContext context) { throw new IllegalArgumentException("start failed"); }
+            @Override public void stop(ModuleContext context) { throw new IllegalStateException("current cleanup"); }
+        };
+
+        assertThatThrownBy(() -> AuraApp.create().use(first).use(broken).start())
+                .isInstanceOfSatisfying(ModuleException.class, error ->
+                        assertThat(error.getCause().getSuppressed())
+                                .extracting(Throwable::getMessage)
+                                .containsExactly("current cleanup", "first cleanup"));
+    }
+
+    @Test
+    void closingPreparedAppStopsInstalledModules() {
+        List<String> events = new ArrayList<>();
+        AuraModule module = new AuraModule() {
+            @Override public io.aura.contract.ModuleMetadata descriptor() {
+                return io.aura.contract.ModuleMetadata.of("prepared-cleanup", "1.0.0");
+            }
+            @Override public void install(ModuleContext context) { events.add("install"); }
+            @Override public void stop(ModuleContext context) { events.add("stop"); }
+        };
+
+        AuraApp app = AuraApp.create().use(module);
+        app.prepare();
+        app.close();
+        assertThat(events).containsExactly("install", "stop");
+    }
+
+    @Test
+    void installFailureRollsBackCurrentAndPreviouslyInstalledModules() {
+        List<String> events = new ArrayList<>();
+        AuraModule first = new AuraModule() {
+            @Override public io.aura.contract.ModuleMetadata descriptor() {
+                return io.aura.contract.ModuleMetadata.of("install-first", "1.0.0");
+            }
+            @Override public void install(ModuleContext context) { events.add("install:first"); }
+            @Override public void stop(ModuleContext context) { events.add("stop:first"); }
+        };
+        AuraModule broken = new AuraModule() {
+            @Override public io.aura.contract.ModuleMetadata descriptor() {
+                return io.aura.contract.ModuleMetadata.of("install-broken", "1.0.0");
+            }
+            @Override public void install(ModuleContext context) {
+                events.add("install:broken");
+                throw new IllegalStateException("install failed");
+            }
+            @Override public void stop(ModuleContext context) { events.add("stop:broken"); }
+        };
+
+        assertThatThrownBy(() -> AuraApp.create().use(first).use(broken).prepare())
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("install failed");
+        assertThat(events).containsExactly(
+                "install:first", "install:broken", "stop:broken", "stop:first");
+    }
+
+    @Test
     void auraAppIsTheComposableModuleFacade() {
         AuraApp app = AuraApp.create()
                 .use(module("sample", List.of(), new ArrayList<>()));

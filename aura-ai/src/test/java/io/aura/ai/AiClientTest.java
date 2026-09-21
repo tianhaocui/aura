@@ -26,8 +26,8 @@ class AiClientTest {
     void usageSinkReceivesCompletedUsageWithoutChangingResponse() throws Exception {
         AtomicReference<AiUsageSink.UsageEvent> event = new AtomicReference<>();
         AiClient client = new AiClient(
-                request -> new AiResponse("ok", Map.of(
-                        "input_tokens", 2, "output_tokens", 3, "total_tokens", 5)),
+                request -> new AiResponse("ok", "test-model", Map.of(
+                        "input_tokens", 2, "output_tokens", 3, "total_tokens", 5), null),
                 Executors.newSingleThreadExecutor(), event::set);
         try {
             assertThat(client.chat(AiRequest.builder().model("test-model").prompt("hello").build()).content())

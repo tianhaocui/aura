@@ -10,6 +10,7 @@ import java.util.function.Function;
 final class ModuleManager {
     private final List<AuraModule> modules = new CopyOnWriteArrayList<>();
     private final List<ModuleMetadata> installedDescriptors = new CopyOnWriteArrayList<>();
+    private final List<AuraModule> installedModules = new CopyOnWriteArrayList<>();
     private final List<AuraModule> startedModules = new CopyOnWriteArrayList<>();
     private volatile boolean installed;
     private volatile boolean started;
@@ -45,10 +46,22 @@ final class ModuleManager {
             return;
         }
         List<AuraModule> ordered = ModuleGraph.order(modules);
-        for (AuraModule module : ordered) {
-            ModuleMetadata descriptor = module.descriptor();
-            module.install(contexts.apply(module));
-            installedDescriptors.add(descriptor);
+        List<AuraModule> installing = new java.util.ArrayList<>();
+        try {
+            for (AuraModule module : ordered) {
+                ModuleMetadata descriptor = module.descriptor();
+                installing.add(module);
+                module.install(contexts.apply(module));
+                installedDescriptors.add(descriptor);
+                installedModules.add(module);
+            }
+        } catch (Throwable failure) {
+            stopModules(installing, contexts, failure);
+            installedDescriptors.clear();
+            installedModules.clear();
+            if (failure instanceof RuntimeException runtimeFailure) throw runtimeFailure;
+            if (failure instanceof Error errorFailure) throw errorFailure;
+            throw new RuntimeException(failure);
         }
         modules.clear();
         modules.addAll(ordered);
@@ -62,13 +75,15 @@ final class ModuleManager {
             try {
                 module.start(contexts.apply(module));
                 startedModules.add(module);
-            } catch (Exception error) {
+            } catch (Throwable error) {
                 try {
                     module.stop(contexts.apply(module));
-                } catch (Exception cleanupFailure) {
+                } catch (Throwable cleanupFailure) {
                     error.addSuppressed(cleanupFailure);
                 }
-                stopStarted(contexts);
+                stopStarted(contexts, error);
+                installedModules.clear();
+                installedDescriptors.clear();
                 throw new ModuleException("AURA_MODULE_START_FAILED", module.descriptor().id(),
                         "Failed to start module " + module.descriptor().id() + ": " + error.getMessage(),
                         error);
@@ -78,20 +93,35 @@ final class ModuleManager {
     }
 
     synchronized void stop(Function<AuraModule, ModuleContext> contexts) {
-        stopStarted(contexts);
+        if (!startedModules.isEmpty()) {
+            stopStarted(contexts, null);
+        } else {
+            stopModules(installedModules, contexts, null);
+            installedModules.clear();
+            started = false;
+        }
     }
 
-    private void stopStarted(Function<AuraModule, ModuleContext> contexts) {
-        for (int i = startedModules.size() - 1; i >= 0; i--) {
-            AuraModule module = startedModules.get(i);
-            try {
-                module.stop(contexts.apply(module));
-            } catch (Exception error) {
-                org.slf4j.LoggerFactory.getLogger(ModuleManager.class)
-                        .error("Error stopping module {}", module.descriptor().id(), error);
-            }
-        }
+    private void stopStarted(Function<AuraModule, ModuleContext> contexts, Throwable primaryFailure) {
+        stopModules(startedModules, contexts, primaryFailure);
         startedModules.clear();
         started = false;
+    }
+
+    private void stopModules(List<AuraModule> targets, Function<AuraModule, ModuleContext> contexts,
+                             Throwable primaryFailure) {
+        for (int i = targets.size() - 1; i >= 0; i--) {
+            AuraModule module = targets.get(i);
+            try {
+                module.stop(contexts.apply(module));
+            } catch (Throwable error) {
+                if (primaryFailure != null) {
+                    primaryFailure.addSuppressed(error);
+                } else {
+                    org.slf4j.LoggerFactory.getLogger(ModuleManager.class)
+                            .error("Error stopping module {}", module.descriptor().id(), error);
+                }
+            }
+        }
     }
 }
