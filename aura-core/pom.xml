@@ -12,6 +12,10 @@
 
     <artifactId>aura-core</artifactId>
     <name>aura-core</name>
+    <properties>
+        <jacoco.line.minimum>0.65</jacoco.line.minimum>
+        <jacoco.branch.minimum>0.50</jacoco.branch.minimum>
+    </properties>
 
     <dependencies>
         <dependency>

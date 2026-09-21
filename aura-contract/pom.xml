@@ -13,6 +13,10 @@
     <artifactId>aura-contract</artifactId>
     <name>aura-contract</name>
     <description>Dependency-free contracts shared by Aura modules and adapters</description>
+    <properties>
+        <jacoco.line.minimum>0.60</jacoco.line.minimum>
+        <jacoco.branch.minimum>0.45</jacoco.branch.minimum>
+    </properties>
 
     <dependencies>
         <dependency>

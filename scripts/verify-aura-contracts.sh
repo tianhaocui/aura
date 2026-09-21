@@ -8,7 +8,8 @@ test -n "$root_version"
 rg -q '<undertow.version>2\.3\.(2[1-9]|[3-9][0-9])\.Final</undertow.version>' "$pom"
 rg -q '<parameters>true</parameters>' "$pom"
 rg -q '<artifactId>maven-enforcer-plugin</artifactId>' "$pom"
-rg -q '<minimum>0\.50</minimum>' "$pom"
+rg -q '<jacoco.line.minimum>0\.55</jacoco.line.minimum>' "$pom"
+rg -q '<jacoco.branch.minimum>0\.45</jacoco.branch.minimum>' "$pom"
 if rg -q '<module>aura-dev</module>' "$pom"; then
   echo "legacy aura-dev module must not re-enter the 1.0 reactor" >&2
   exit 1

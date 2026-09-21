@@ -11,6 +11,10 @@
     <artifactId>aura-workflow</artifactId>
     <name>aura-workflow</name>
     <description>Small, explicit workflow orchestration primitives for Aura</description>
+    <properties>
+        <jacoco.line.minimum>0.80</jacoco.line.minimum>
+        <jacoco.branch.minimum>0.60</jacoco.branch.minimum>
+    </properties>
     <dependencies>
         <dependency>
             <groupId>io.github.tianhaocui</groupId>

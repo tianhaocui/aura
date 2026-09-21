@@ -12,6 +12,10 @@
 
     <artifactId>aura-web</artifactId>
     <name>aura-web</name>
+    <properties>
+        <jacoco.line.minimum>0.70</jacoco.line.minimum>
+        <jacoco.branch.minimum>0.55</jacoco.branch.minimum>
+    </properties>
 
     <dependencies>
         <dependency>

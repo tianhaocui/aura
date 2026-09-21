@@ -12,6 +12,10 @@
 
     <artifactId>aura-db</artifactId>
     <name>aura-db</name>
+    <properties>
+        <jacoco.line.minimum>0.80</jacoco.line.minimum>
+        <jacoco.branch.minimum>0.65</jacoco.branch.minimum>
+    </properties>
 
     <dependencies>
         <dependency>

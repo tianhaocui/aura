@@ -67,6 +67,8 @@
         <commons-collections4.version>4.6.0</commons-collections4.version>
         <commons-text.version>1.15.0</commons-text.version>
         <maven.archetype.version>3.4.1</maven.archetype.version>
+        <jacoco.line.minimum>0.55</jacoco.line.minimum>
+        <jacoco.branch.minimum>0.45</jacoco.branch.minimum>
         <slf4j.version>2.0.12</slf4j.version>
         <jboss-logging.version>3.6.1.Final</jboss-logging.version>
     </properties>
@@ -263,7 +265,12 @@
                                         <limit>
                                             <counter>LINE</counter>
                                             <value>COVEREDRATIO</value>
-                                            <minimum>0.50</minimum>
+                                            <minimum>${jacoco.line.minimum}</minimum>
+                                        </limit>
+                                        <limit>
+                                            <counter>BRANCH</counter>
+                                            <value>COVEREDRATIO</value>
+                                            <minimum>${jacoco.branch.minimum}</minimum>
                                         </limit>
                                     </limits>
                                 </rule>
