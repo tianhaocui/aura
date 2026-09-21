@@ -62,6 +62,37 @@ AuraApp app = AuraApp.create()
 app.prepare();
 ```
 
+<!-- aura:compile name=documentation-composition -->
+```java
+package docs.example;
+
+import io.aura.AuraApp;
+import io.aura.AuraModule;
+import io.aura.ModuleContext;
+import io.aura.contract.ModuleMetadata;
+import io.aura.contract.RouteContribution;
+import io.aura.web.BaseHandler;
+
+public final class DocumentationComposition {
+    private DocumentationComposition() { }
+
+    public static AuraApp create() {
+        return AuraApp.create().use(new HelloModule());
+    }
+
+    private static final class HelloModule implements AuraModule {
+        @Override public ModuleMetadata descriptor() {
+            return ModuleMetadata.of("hello", "1.0.0").provides("hello.api");
+        }
+
+        @Override public void install(ModuleContext context) {
+            context.route(new RouteContribution(
+                    "GET", "/hello", (BaseHandler) ctx -> ctx.text("hello")));
+        }
+    }
+}
+```
+
 Modules are explicit and ordered by declared dependencies. A capability module
 owns reusable infrastructure such as HTTP, database, health, workflow, AI, or
 MCP. A business module owns application behavior and can contribute routes,

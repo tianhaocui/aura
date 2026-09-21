@@ -69,6 +69,37 @@ public final class OrderModule implements AuraModule {
 }
 ```
 
+<!-- aura:compile name=ai-module-composition -->
+```java
+package docs.example;
+
+import io.aura.AuraApp;
+import io.aura.AuraModule;
+import io.aura.ModuleContext;
+import io.aura.contract.ModuleMetadata;
+import io.aura.contract.RouteContribution;
+import io.aura.web.BaseHandler;
+
+public final class AiModuleComposition {
+    private AiModuleComposition() { }
+
+    public static AuraApp create() {
+        return AuraApp.create().use(new OrdersModule());
+    }
+
+    private static final class OrdersModule implements AuraModule {
+        @Override public ModuleMetadata descriptor() {
+            return ModuleMetadata.of("orders", "1.0.0").provides("orders.api");
+        }
+
+        @Override public void install(ModuleContext context) {
+            context.route(new RouteContribution(
+                    "GET", "/orders", (BaseHandler) ctx -> ctx.text("ready")));
+        }
+    }
+}
+```
+
 `descriptor()` declares identity, version, dependencies, and capabilities.
 `install()` registers routes, services, permissions, and checks. `start()` and
 `stop()` own external resources. Missing dependencies, cycles, duplicate IDs,
