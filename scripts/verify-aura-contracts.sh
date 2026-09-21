@@ -38,6 +38,7 @@ test -f "$repo_root/aura-starter/pom.xml"
 test -f "$repo_root/aura-archetype/src/main/resources/META-INF/maven/archetype-metadata.xml"
 test -x "$repo_root/scripts/verify-maven-archetype.sh"
 test -x "$repo_root/scripts/verify-release-artifacts.sh"
+test -x "$repo_root/scripts/verify-release-signatures.sh"
 test -x "$repo_root/scripts/verify-sbom.sh"
 test -x "$repo_root/scripts/verify-public-api.sh"
 test -x "$repo_root/scripts/verify-docs-code.sh"
@@ -47,6 +48,17 @@ test -f "$repo_root/aura-db-migration-flyway/src/test/java/io/aura/db/flyway/Fly
 test -f "$repo_root/aura-db-migration-liquibase/src/test/java/io/aura/db/liquibase/LiquibaseExternalDatabaseTest.java"
 test -f "$repo_root/api/aura-1.0.public-api.txt"
 rg -q 'google/osv-scanner-action/osv-scanner-action@v2\.0\.2' \
+  "$repo_root/.github/workflows/ci.yml"
+rg -q 'bash scripts/verify-release-signatures\.sh' \
+  "$repo_root/.github/workflows/ci.yml"
+rg -q -- '-Prelease -DskipTests' \
+  "$repo_root/scripts/verify-release-signatures.sh"
+if rg -n '(^|[[:space:]])deploy([[:space:]]|$)' \
+    "$repo_root/scripts/verify-release-signatures.sh"; then
+  echo "release signature verification must never invoke Maven deploy" >&2
+  exit 1
+fi
+rg -q 'path: target/aura-sbom\.json' \
   "$repo_root/.github/workflows/ci.yml"
 rg -q 'cron: .17 3 \* \* 1.' "$repo_root/.github/workflows/ci.yml"
 for artifact in \

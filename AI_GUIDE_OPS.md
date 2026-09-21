@@ -146,9 +146,24 @@ The gate writes `target/aura-sbom.json` with the reactor's runtime and compile
 components, versions, licenses, and dependency relationships. CI also runs
 GitHub Dependency Review on pull requests; a release must pass both the SBOM
 shape check and the dependency vulnerability policy before Central publishing.
+The verifier requires `jq` and rejects missing or duplicate public Aura modules,
+version drift, dangling dependency references, and malformed JSON.
 The CI workflow additionally runs a full OSV-Scanner scan on every push and on
 the weekly schedule, so newly disclosed vulnerabilities are not dependent on a
-new pull request.
+new pull request. CI archives the verified SBOM for 90 days as
+`aura-1.0-sbom`; release evidence must use that artifact rather than an
+unverified file copied from a developer workstation.
+
+Exercise the real GPG plugin without publishing anything:
+
+```bash
+bash scripts/verify-release-signatures.sh
+```
+
+The script creates an isolated one-day test key, runs the Maven `release`
+profile through `verify`, and verifies every public POM, JAR, source JAR, and
+Javadoc JAR signature. It never runs `deploy` and never uses a developer's
+default GPG keyring.
 
 Public API changes use a committed `javap` baseline:
 
