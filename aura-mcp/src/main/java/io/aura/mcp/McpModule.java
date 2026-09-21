@@ -3,6 +3,7 @@ package io.aura.mcp;
 import io.aura.AuraModule;
 import io.aura.ModuleContext;
 import io.aura.contract.ModuleMetadata;
+import io.aura.contract.McpRouterSpec;
 import io.aura.contract.RouteContribution;
 import io.aura.web.BaseHandler;
 
@@ -12,14 +13,14 @@ import java.util.Objects;
 
 /** Explicit Aura module for MCP tool/resource/prompt registration. */
 public final class McpModule implements AuraModule {
-    private final McpRouter router;
+    private final McpRouterSpec router;
     private final String httpPath;
     private final McpSessionManager sessions;
     private final int maxResponseBytes;
     private final boolean sseEnabled;
     private final McpSseHub sseHub;
 
-    private McpModule(McpRouter router, String httpPath, McpSessionManager sessions, int maxResponseBytes,
+    private McpModule(McpRouterSpec router, String httpPath, McpSessionManager sessions, int maxResponseBytes,
                       boolean sseEnabled, McpSseHub sseHub) {
         this.router = Objects.requireNonNull(router, "router");
         this.httpPath = httpPath;
@@ -31,6 +32,9 @@ public final class McpModule implements AuraModule {
 
     public static McpModule create() { return new McpModule(new McpRouter(), null, null, 0, false, null); }
     public static McpModule create(McpRouter router) { return new McpModule(router, null, null, 0, false, null); }
+    public static McpModule create(McpRouterSpec router) {
+        return new McpModule(router, null, null, 0, false, null);
+    }
 
     /** Enables authenticated JSON-RPC over HTTP at {@code /mcp}. */
     public McpModule http() {
@@ -104,7 +108,12 @@ public final class McpModule implements AuraModule {
         }
     }
 
-    public McpRouter router() { return router; }
+    /** Returns the built-in mutable router or fails for a custom router implementation. */
+    public McpRouter router() {
+        if (router instanceof McpRouter builtIn) return builtIn;
+        throw new IllegalStateException("This MCP module uses a custom McpRouterSpec; use routerSpec()");
+    }
+    public McpRouterSpec routerSpec() { return router; }
     public boolean httpEnabled() { return sessions != null; }
     public String httpPath() { return httpPath; }
     public McpSessionManager sessions() { return sessions; }

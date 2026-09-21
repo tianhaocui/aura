@@ -174,6 +174,21 @@ class ContractTypesTest {
     @Test
     void optionalMcpIntegrationUsesTheCoreFreeContract() {
         assertThat(McpRouterSpec.class.getPackageName()).isEqualTo("io.aura.contract");
+        McpRouterSpec custom = new McpRouterSpec() {
+            @Override public Map<String, Object> buildSchema() {
+                return Map.of("tools", List.of());
+            }
+
+            @Override public Object invoke(String toolName, Map<String, Object> arguments,
+                                           String userId,
+                                           java.util.function.BiPredicate<String, String> permissions) {
+                return toolName;
+            }
+        };
+        assertThat(custom.listResources()).containsEntry("resources", List.of());
+        assertThat(custom.listPrompts()).containsEntry("prompts", List.of());
+        assertThatThrownBy(() -> custom.readResource("aura://missing"))
+                .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test

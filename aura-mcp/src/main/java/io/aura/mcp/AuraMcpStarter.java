@@ -4,6 +4,7 @@ import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONObject;
 import io.aura.AuraMcpRuntime;
 import io.aura.McpStarter;
+import io.aura.contract.McpRouterSpec;
 
 import java.io.*;
 import java.util.LinkedHashMap;
@@ -25,21 +26,9 @@ public class AuraMcpStarter implements McpStarter {
     public void startStdio(AuraMcpRuntime app) {
         try {
             PrintStream out = app.mcpStdout() != null ? app.mcpStdout() : System.out;
-            if (app.mcpRouter() instanceof McpRouter mcpRouter) {
-                McpProtocol protocol = new McpProtocol(out, "aura-mcp", (method, params) -> switch (method) {
-                        case "tools/list" -> mcpRouter.buildSchema();
-                        case "tools/call" -> handleRouterCall(app, mcpRouter, params);
-                        case "ping" -> Map.of();
-                        case "resources/list" -> mcpRouter.listResources();
-                        case "resources/read" -> mcpRouter.readResource(params.getString("uri"));
-                        case "prompts/list" -> mcpRouter.listPrompts();
-                        case "prompts/get" -> {
-                            JSONObject arguments = params.getJSONObject("arguments");
-                            yield mcpRouter.getPrompt(params.getString("name"), arguments == null
-                                    ? Map.of() : arguments.toJavaObject(Map.class));
-                        }
-                    default -> null;
-                });
+            McpRouterSpec mcpRouter = app.mcpRouter();
+            if (mcpRouter != null) {
+                McpProtocol protocol = new McpProtocol(out, "aura-mcp", handler(app, mcpRouter));
                 protocol.runStdio();
             } else {
                 new McpBridge("http://localhost:" + app.port(), out,
@@ -53,7 +42,50 @@ public class AuraMcpStarter implements McpStarter {
     @Override
     public void stop() {}
 
-    private static Map<String, Object> handleRouterCall(AuraMcpRuntime app, McpRouter router, JSONObject params) {
+    static McpProtocol.RequestHandler handler(AuraMcpRuntime app, McpRouterSpec router) {
+        return (method, rawParams) -> {
+            JSONObject params = rawParams == null ? new JSONObject() : rawParams;
+            return switch (method) {
+            case "tools/list" -> router.buildSchema();
+            case "tools/call" -> {
+                requireText(params, "name");
+                requireObjectOrAbsent(params, "arguments");
+                yield handleRouterCall(app, router, params);
+            }
+            case "ping" -> Map.of();
+            case "resources/list" -> router.listResources();
+            case "resources/read" -> {
+                requireText(params, "uri");
+                yield router.readResource(params.getString("uri"));
+            }
+            case "prompts/list" -> router.listPrompts();
+            case "prompts/get" -> {
+                requireText(params, "name");
+                requireObjectOrAbsent(params, "arguments");
+                JSONObject arguments = params.getJSONObject("arguments");
+                yield router.getPrompt(params.getString("name"), arguments == null
+                        ? Map.of() : arguments.toJavaObject(Map.class));
+            }
+            default -> null;
+            };
+        };
+    }
+
+    private static void requireText(JSONObject params, String name) {
+        Object value = params.get(name);
+        if (!(value instanceof String text) || text.isBlank()) {
+            throw new McpProtocol.RequestException(-32602, "Invalid params");
+        }
+    }
+
+    private static void requireObjectOrAbsent(JSONObject params, String name) {
+        Object value = params.get(name);
+        if (value != null && !(value instanceof JSONObject) && !(value instanceof Map<?, ?>)) {
+            throw new McpProtocol.RequestException(-32602, "Invalid params");
+        }
+    }
+
+    private static Map<String, Object> handleRouterCall(AuraMcpRuntime app, McpRouterSpec router, JSONObject params) {
         String toolName = params.getString("name");
         JSONObject args = params.getJSONObject("arguments");
         JSONObject metadata = params.getJSONObject("_meta");
@@ -66,13 +98,25 @@ public class AuraMcpStarter implements McpStarter {
         }
         @SuppressWarnings("unchecked")
         Map<String, Object> argsMap = args != null ? (Map<String, Object>) args.toJavaObject(Map.class) : Map.of();
+        String userId;
         try {
-            String userId = app.mcpAuthenticator() == null
+            userId = app.mcpAuthenticator() == null
                     ? null : app.mcpAuthenticator().authenticate(Map.copyOf(transportMetadata));
+        } catch (RuntimeException authenticationFailure) {
+            log.warn("MCP stdio authentication failed", authenticationFailure);
+            return McpContent.error("MCP_AUTHENTICATION_REQUIRED");
+        }
+        if (app.mcpAuthenticator() != null && userId == null) {
+            return McpContent.error("MCP_AUTHENTICATION_REQUIRED");
+        }
+        try {
             io.aura.contract.McpAuthorizer authorizer = app.mcpAuthorizer();
             Object result = router.invoke(toolName, argsMap, userId,
                     authorizer == null ? null : authorizer::authorize);
             return McpContent.result(result);
+        } catch (SecurityException denied) {
+            log.warn("MCP tool permission denied for {}", toolName);
+            return McpContent.error("MCP_PERMISSION_DENIED");
         } catch (Exception e) {
             log.warn("MCP tool invocation failed for {}", toolName, e);
             return McpContent.error("MCP_TOOL_ERROR");

@@ -102,6 +102,12 @@ public interface io.aura.contract.McpAuthorizer {
 }
 ### aura-contract:io.aura.contract.McpRouterSpec
 public interface io.aura.contract.McpRouterSpec {
+  public abstract java.util.Map<java.lang.String, java.lang.Object> buildSchema();
+  public abstract java.lang.Object invoke(java.lang.String, java.util.Map<java.lang.String, java.lang.Object>, java.lang.String, java.util.function.BiPredicate<java.lang.String, java.lang.String>) throws java.lang.Exception;
+  public default java.util.Map<java.lang.String, java.lang.Object> listResources();
+  public default java.util.Map<java.lang.String, java.lang.Object> readResource(java.lang.String);
+  public default java.util.Map<java.lang.String, java.lang.Object> listPrompts();
+  public default java.util.Map<java.lang.String, java.lang.Object> getPrompt(java.lang.String, java.util.Map<java.lang.String, java.lang.Object>);
 }
 ### aura-contract:io.aura.contract.ModuleMetadata
 public final class io.aura.contract.ModuleMetadata extends java.lang.Record {
@@ -1721,6 +1727,7 @@ public final class io.aura.mcp.McpImage extends java.lang.Record implements io.a
 public final class io.aura.mcp.McpModule implements io.aura.AuraModule {
   public static io.aura.mcp.McpModule create();
   public static io.aura.mcp.McpModule create(io.aura.mcp.McpRouter);
+  public static io.aura.mcp.McpModule create(io.aura.contract.McpRouterSpec);
   public io.aura.mcp.McpModule http();
   public io.aura.mcp.McpModule http(java.lang.String, int, java.time.Duration);
   public io.aura.mcp.McpModule http(java.lang.String, int, java.time.Duration, int);
@@ -1730,6 +1737,7 @@ public final class io.aura.mcp.McpModule implements io.aura.AuraModule {
   public void stop(io.aura.ModuleContext);
   public void install(io.aura.ModuleContext);
   public io.aura.mcp.McpRouter router();
+  public io.aura.contract.McpRouterSpec routerSpec();
   public boolean httpEnabled();
   public java.lang.String httpPath();
   public io.aura.mcp.McpSessionManager sessions();

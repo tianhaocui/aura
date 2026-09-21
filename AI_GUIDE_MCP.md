@@ -39,6 +39,22 @@ AuraApp.create().use(McpModule.create(mcp)).start("--mcp-stdio");
 // Run: java -jar app.jar --mcp-stdio
 ```
 
+For a custom catalog or dispatcher, implement dependency-neutral
+`io.aura.contract.McpRouterSpec` and compose it explicitly:
+
+```java
+McpRouterSpec custom = new CompanyMcpRouter();
+AuraApp.create()
+    .mcpAuthenticate(metadata -> authenticate(metadata))
+    .mcpAuthorize((user, permission) -> authorize(user, permission))
+    .use(McpModule.create(custom).http())
+    .start("--mcp-stdio");
+```
+
+The same implementation serves stdio and HTTP/SSE. Its `invoke(...)` method
+must apply the supplied permission checker before executing protected tools;
+do not create transport-specific adapters or bypass the checker.
+
 For an authenticated transport, keep identity resolution and permission
 decisions explicit:
 

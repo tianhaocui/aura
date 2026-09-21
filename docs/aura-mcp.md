@@ -26,6 +26,24 @@ HTTP responses、structured tool compatibility text 和 SSE notification 都通�
 同一个 streaming byte-budget encoder 输出；超过预算会立即中止，不会先分配完整的
 无界 JSON 字符串，再返回 `MCP_RESPONSE_TOO_LARGE`。
 
+### Custom Router SPI
+
+实现 `io.aura.contract.McpRouterSpec` 可以替换内置 `McpRouter`，无需为 stdio、
+HTTP 或 SSE 分别编写适配器：
+
+```java
+McpRouterSpec custom = new CompanyMcpRouter();
+AuraApp.create()
+    .mcpAuthenticate(metadata -> authenticate(metadata))
+    .mcpAuthorize((user, permission) -> authorize(user, permission))
+    .use(McpModule.create(custom).http().sse())
+    .start("--mcp-stdio");
+```
+
+SPI 仅依赖 JDK 类型，提供 tools/resources/prompts catalog 和工具调用边界。
+自定义 `invoke(...)` 必须在执行受保护工具前调用 transport 传入的 permission
+checker；内置 transport 负责认证和传递 identity，但不会猜测自定义工具的权限。
+
 Streamable HTTP 客户端应在 POST 请求中发送
 `Accept: application/json, text/event-stream`。为兼容旧客户端，当前实现允许
 省略该 header，但如果显式提供则必须包含 `application/json`、

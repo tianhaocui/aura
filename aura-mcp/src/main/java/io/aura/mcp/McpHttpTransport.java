@@ -18,13 +18,13 @@ final class McpHttpTransport {
     static final int DEFAULT_MAX_RESPONSE_BYTES = 1024 * 1024;
     private static final int SSE_MESSAGE_FRAME_BYTES = 23;
 
-    private final McpRouter router;
+    private final io.aura.contract.McpRouterSpec router;
     private final McpSessionManager sessions;
     private final int maxResponseBytes;
     private final McpSseHub sseHub;
     private final String httpPath;
 
-    McpHttpTransport(McpRouter router, McpSessionManager sessions, int maxResponseBytes,
+    McpHttpTransport(io.aura.contract.McpRouterSpec router, McpSessionManager sessions, int maxResponseBytes,
                      McpSseHub sseHub, String httpPath) {
         this.router = java.util.Objects.requireNonNull(router, "router");
         this.sessions = java.util.Objects.requireNonNull(sessions, "sessions");

@@ -56,7 +56,8 @@ public final class McpProtocol {
                     out.flush();
                 }
             } catch (Exception e) {
-                sendError(null, -32700, "Parse error: " + e.getMessage());
+                log.warn("MCP stdio JSON parsing failed", e);
+                sendError(null, -32700, "Parse error");
             }
         }
         log.info("MCP stdio stream closed");
@@ -109,7 +110,16 @@ public final class McpProtocol {
         } else if ("notifications/initialized".equals(method)) {
             result = null;
         } else {
-            result = handler.handle(method, request.getJSONObject("params"));
+            try {
+                result = handler.handle(method, request.getJSONObject("params"));
+            } catch (RequestException invalidRequest) {
+                if (id != null) sendError(id, invalidRequest.code(), invalidRequest.getMessage());
+                return null;
+            } catch (RuntimeException handlerFailure) {
+                log.warn("MCP stdio handler failed for method {}", method, handlerFailure);
+                if (id != null) sendError(id, -32603, "Internal error");
+                return null;
+            }
         }
 
         if (id == null) return null;
@@ -132,5 +142,16 @@ public final class McpProtocol {
         err.put("error", Map.of("code", code, "message", message));
         out.println(err.toJSONString());
         out.flush();
+    }
+
+    static final class RequestException extends RuntimeException {
+        private final int code;
+
+        RequestException(int code, String message) {
+            super(message);
+            this.code = code;
+        }
+
+        int code() { return code; }
     }
 }
