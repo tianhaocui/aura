@@ -82,6 +82,21 @@ rates. Reported provider cost always takes precedence over the estimate.
 - 取消是协作式的；provider 应在网络读取和 token 回调之间检查 `request.cancellationToken()`。
 - `StructuredOutput` 使用安全 JSON 解析，不执行 AutoType；业务校验通过 `parseAndValidate` 注入。
 - `ConversationStore`、`EmbeddingProvider` 和 `Retriever` 只定义扩展契约，不引入数据库、向量库或具体云厂商依赖。
+- `RagPipeline` 提供唯一推荐的 bounded retrieval-to-context 组合；检索数量和 context 字符数都必须有上限。
+
+```java
+RagPipeline rag = new RagPipeline(retriever, 8, 12_000);
+RagPipeline.RagContext context = rag.retrieve("Which orders are delayed?");
+AiRequest request = AiRequest.builder()
+        .systemPrompt("Answer only from the supplied context")
+        .prompt(context.text() + "\n\nQuestion: Which orders are delayed?")
+        .build();
+AiResponse answer = client.chat(request);
+```
+
+`RagPipeline` 不执行隐式 tool call、不持久化会话、不绑定向量数据库；Embedding、Retriever 和
+ConversationStore 仍由能力模块通过 SPI 提供。大结果会在边界处确定性截断，不允许无界 context
+进入 AI 请求预算。
 - `AiClient.usageTotals()` exposes cumulative request/token/cost counters for one
   accounting window. Call `resetUsage()` at the start of a new window; unknown
   provider usage is counted separately instead of being guessed.
