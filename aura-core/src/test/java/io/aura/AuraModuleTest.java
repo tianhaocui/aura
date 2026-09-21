@@ -65,7 +65,7 @@ class AuraModuleTest {
                     assertThat(error.code()).isEqualTo("AURA_MODULE_START_FAILED");
                     assertThat(error.getCause()).isInstanceOf(IllegalStateException.class);
                     assertThat(error.causeCode()).isNull();
-                    assertThat(error.getCause().getSuppressed()).singleElement()
+                    assertThat(error.getSuppressed()).singleElement()
                             .isInstanceOf(IllegalArgumentException.class)
                             .satisfies(suppressed -> assertThat(suppressed.getMessage())
                                     .isEqualTo("cleanup failed"));
@@ -121,7 +121,7 @@ class AuraModuleTest {
 
         assertThatThrownBy(() -> AuraApp.create().use(first).use(broken).start())
                 .isInstanceOfSatisfying(ModuleException.class, error ->
-                        assertThat(error.getCause().getSuppressed())
+                        assertThat(error.getSuppressed())
                                 .extracting(Throwable::getMessage)
                                 .containsExactly("current cleanup", "first cleanup"));
     }
@@ -141,6 +141,78 @@ class AuraModuleTest {
         app.prepare();
         app.close();
         assertThat(events).containsExactly("install", "stop");
+    }
+
+    @Test
+    void stopRequestedInsideModuleStartIsDeferredAndExecutedExactlyOnce() {
+        List<String> events = new ArrayList<>();
+        List<AuraEvent> runtimeEvents = new ArrayList<>();
+        AuraModule module = new AuraModule() {
+            @Override public io.aura.contract.ModuleMetadata descriptor() {
+                return io.aura.contract.ModuleMetadata.of("self-stopping", "1.0.0");
+            }
+
+            @Override public void install(ModuleContext context) { events.add("install"); }
+
+            @Override public void start(ModuleContext context) {
+                events.add("start");
+                context.require(AuraRuntime.class).stop();
+                events.add("start-returned");
+            }
+
+            @Override public void stop(ModuleContext context) { events.add("stop"); }
+        };
+        AuraApp app = AuraApp.create().observe(runtimeEvents::add).use(module);
+
+        app.start();
+        app.stop();
+
+        assertThat(app.state()).isEqualTo(io.aura.contract.RuntimeState.STOPPED);
+        assertThat(app.isRunning()).isFalse();
+        assertThat(events).containsExactly("install", "start", "start-returned", "stop");
+        assertThat(runtimeEvents).extracting(AuraEvent::type)
+                .containsExactly("runtime.shutdown.completed");
+    }
+
+    @Test
+    void stopRequestedInsideModuleInstallWaitsUntilPreparationCompletes() {
+        List<String> events = new ArrayList<>();
+        List<AuraEvent> runtimeEvents = new ArrayList<>();
+        AuraModule first = new AuraModule() {
+            @Override public io.aura.contract.ModuleMetadata descriptor() {
+                return io.aura.contract.ModuleMetadata.of("install-stop-first", "1.0.0");
+            }
+
+            @Override public void install(ModuleContext context) {
+                events.add("install:first");
+                context.require(AuraRuntime.class).stop();
+                events.add("install:first-returned");
+            }
+
+            @Override public void stop(ModuleContext context) { events.add("stop:first"); }
+        };
+        AuraModule second = new AuraModule() {
+            @Override public io.aura.contract.ModuleMetadata descriptor() {
+                return io.aura.contract.ModuleMetadata.of("install-stop-second", "1.0.0");
+            }
+
+            @Override public void install(ModuleContext context) { events.add("install:second"); }
+            @Override public void stop(ModuleContext context) { events.add("stop:second"); }
+        };
+        AuraApp app = AuraApp.create()
+                .observe(runtimeEvents::add)
+                .use(first)
+                .use(second);
+
+        app.prepare();
+        app.stop();
+
+        assertThat(app.state()).isEqualTo(io.aura.contract.RuntimeState.STOPPED);
+        assertThat(events).containsExactly(
+                "install:first", "install:first-returned", "install:second",
+                "stop:second", "stop:first");
+        assertThat(runtimeEvents).extracting(AuraEvent::type)
+                .containsExactly("runtime.shutdown.completed");
     }
 
     @Test

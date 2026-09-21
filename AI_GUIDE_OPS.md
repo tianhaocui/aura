@@ -111,7 +111,12 @@ aura.shutdown-timeout=30
 Module keys such as `aura.orders.timeout` are overridden by environment variable
 `AURA_ORDERS_TIMEOUT`.
 
-**Graceful shutdown** is built-in: on SIGTERM/SIGINT, waits up to `shutdownTimeout` seconds for in-flight requests. Default: 30s.
+**Graceful shutdown** is built-in: on SIGTERM/SIGINT, waits up to
+`shutdownTimeout` seconds for in-flight requests. Default: 30s. Register an
+`AuraApp.observe(...)` listener for `runtime.shutdown.failure` and
+`runtime.shutdown.completed`; these events are stable and omit raw exception
+messages. Fatal JVM conditions are rethrown rather than hidden as ordinary
+cleanup failures.
 
 **Request timeout**: `requestTimeout(seconds)` cancels the request token,
 interrupts the handler thread, and returns 503 when no response was committed.

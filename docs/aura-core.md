@@ -32,6 +32,15 @@ NEW -> STARTING -> RUNNING -> STOPPING -> STOPPED
 Repeated `start()` while running and repeated `stop()` are idempotent. A stopped
 runtime cannot be restarted.
 
+Shutdown always attempts every registered cleanup even when an earlier module,
+adapter, or resource fails. Observe `runtime.shutdown.failure` for each
+failure and `runtime.shutdown.completed` for the final `failureCount`. Failure
+events expose only a stable code, phase, component, and exception type; raw
+exception messages are not emitted. During startup rollback, cleanup causes are
+also attached to the original startup exception as suppressed exceptions.
+Fatal JVM conditions (`VirtualMachineError` and `ThreadDeath`) are never
+converted into lifecycle events; they are rethrown immediately.
+
 ## Module Contract
 
 ```java

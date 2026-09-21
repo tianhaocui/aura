@@ -8,15 +8,21 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Function;
 
 /** Pure module dependency graph validation and deterministic topological ordering. */
 final class ModuleGraph {
     private ModuleGraph() { }
 
     static List<AuraModule> order(List<AuraModule> modules) {
+        return order(modules, AuraModule::descriptor);
+    }
+
+    static List<AuraModule> order(List<AuraModule> modules,
+                                  Function<AuraModule, io.aura.contract.ModuleMetadata> descriptors) {
         Map<String, AuraModule> byId = new LinkedHashMap<>();
         for (AuraModule module : modules) {
-            io.aura.contract.ModuleMetadata descriptor = module.descriptor();
+            io.aura.contract.ModuleMetadata descriptor = descriptors.apply(module);
             if (byId.putIfAbsent(descriptor.id(), module) != null) {
                 throw new ModuleException("AURA_MODULE_DUPLICATE", descriptor.id(),
                         "Duplicate module id: " + descriptor.id());
@@ -25,32 +31,36 @@ final class ModuleGraph {
         List<AuraModule> sorted = new ArrayList<>();
         Set<String> visiting = new LinkedHashSet<>();
         Set<String> visited = new LinkedHashSet<>();
-        for (AuraModule module : modules) orderModule(module, byId, visiting, visited, sorted);
+        for (AuraModule module : modules) {
+            orderModule(module, byId, visiting, visited, sorted, descriptors);
+        }
         return sorted;
     }
 
     private static void orderModule(AuraModule module, Map<String, AuraModule> byId,
                                     Set<String> visiting, Set<String> visited,
-                                    List<AuraModule> sorted) {
-        String id = module.descriptor().id();
+                                    List<AuraModule> sorted,
+                                    Function<AuraModule, io.aura.contract.ModuleMetadata> descriptors) {
+        io.aura.contract.ModuleMetadata descriptor = descriptors.apply(module);
+        String id = descriptor.id();
         if (visited.contains(id)) return;
         if (!visiting.add(id)) {
             throw new ModuleException("AURA_MODULE_DEPENDENCY_CYCLE", id,
                     "Circular module dependency involving " + String.join(" -> ", visiting) + " -> " + id);
         }
-        for (ModuleRequirement requirement : module.descriptor().requires()) {
+        for (ModuleRequirement requirement : descriptor.requires()) {
             AuraModule dependency = byId.get(requirement.id());
             if (dependency == null) {
                 throw new ModuleException("AURA_MODULE_DEPENDENCY_MISSING", id,
                         "Module " + id + " requires " + requirement.id());
             }
             if (requirement.versionRange() != null
-                    && !versionMatches(dependency.descriptor().version(), requirement.versionRange())) {
+                    && !versionMatches(descriptors.apply(dependency).version(), requirement.versionRange())) {
                 throw new ModuleException("AURA_MODULE_VERSION_MISMATCH", id,
                         "Module " + id + " requires " + requirement.id() + " " + requirement.versionRange()
-                                + " but found " + dependency.descriptor().version());
+                                + " but found " + descriptors.apply(dependency).version());
             }
-            orderModule(dependency, byId, visiting, visited, sorted);
+            orderModule(dependency, byId, visiting, visited, sorted, descriptors);
         }
         visiting.remove(id);
         visited.add(id);

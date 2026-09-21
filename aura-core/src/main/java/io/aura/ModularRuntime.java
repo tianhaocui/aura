@@ -28,6 +28,8 @@ import java.util.function.Function;
  * lifecycle state behind the stable runtime contracts.
  */
 final class ModularRuntime implements AuraWebRuntime {
+    private static final org.slf4j.Logger LOG =
+            org.slf4j.LoggerFactory.getLogger(ModularRuntime.class);
     private final AuraConfigSnapshot config;
     private final javax.net.ssl.SSLContext tlsContext;
     private final Map<String, String> properties = new ConcurrentHashMap<>();
@@ -46,6 +48,7 @@ final class ModularRuntime implements AuraWebRuntime {
     private final ModuleManager moduleManager = new ModuleManager();
     private final AtomicReference<RuntimeState> state = new AtomicReference<>(RuntimeState.NEW);
     private final AtomicBoolean shuttingDown = new AtomicBoolean();
+    private final AtomicBoolean stopRequested = new AtomicBoolean();
     private final io.aura.contract.CancellationToken shutdownCancellation =
             new io.aura.contract.CancellationToken();
     private BiPredicate<String, String> permissionChecker;
@@ -63,6 +66,7 @@ final class ModularRuntime implements AuraWebRuntime {
     private McpStarter mcpStarter;
     private volatile Thread keepAliveThread;
     private volatile boolean devMode;
+    private boolean preparing;
 
     ModularRuntime(AuraConfig source) {
         this.config = AuraConfigSnapshot.from(source);
@@ -152,11 +156,23 @@ final class ModularRuntime implements AuraWebRuntime {
         return this;
     }
 
-    @Override public void prepareModules() {
-        moduleManager.install(this::moduleContext, false);
+    @Override public synchronized void prepareModules() {
+        List<ShutdownFailure> rollbackFailures = new java.util.ArrayList<>();
+        preparing = true;
+        try {
+            moduleManager.install(this::moduleContext, false,
+                    moduleFailureCollector(rollbackFailures));
+        } catch (RuntimeException | Error failure) {
+            rethrowIfFatal(failure);
+            failStart(failure, rollbackFailures);
+            throw failure;
+        } finally {
+            preparing = false;
+        }
+        completeRequestedStop();
     }
 
-    @Override public void start(String[] args) {
+    @Override public synchronized void start(String[] args) {
         boolean stdio = false;
         if (args != null) for (String arg : args) {
             if (arg == null) continue;
@@ -179,27 +195,30 @@ final class ModularRuntime implements AuraWebRuntime {
         start();
     }
 
-    @Override public void start() {
+    @Override public synchronized void start() {
         RuntimeState current = state.get();
         if (current == RuntimeState.RUNNING || current == RuntimeState.STARTING) return;
         if (current == RuntimeState.STOPPING || current == RuntimeState.STOPPED) {
             throw new IllegalStateException("Aura runtime cannot be started after stopping");
         }
         if (!state.compareAndSet(RuntimeState.NEW, RuntimeState.STARTING)) return;
+        List<ShutdownFailure> rollbackFailures = new java.util.ArrayList<>();
         try {
-            moduleManager.install(this::moduleContext, true);
+            moduleManager.install(this::moduleContext, true,
+                    moduleFailureCollector(rollbackFailures));
+            if (completeRequestedStop()) return;
             StartupCheck.requireParameterNames(services);
             starter = java.util.ServiceLoader.load(AuraStarter.class).findFirst()
                     .orElseThrow(() -> new IllegalStateException("No AuraStarter found. Add aura-web to your dependencies."));
             starter.start(this);
-            state.set(RuntimeState.RUNNING);
-            Runtime.getRuntime().addShutdownHook(new Thread(this::stop, "aura-shutdown"));
+            if (completeRequestedStop()) return;
             if (mcpPort >= 0 || mcpPort == -2) {
                 mcpStarter = java.util.ServiceLoader.load(McpStarter.class).findFirst().orElse(null);
                 if (mcpStarter == null) {
                     throw new IllegalStateException("MCP is enabled but no McpStarter was found. Add aura-mcp.");
                 }
                 if (mcpPort == -2) mcpStarter.startStdio(this); else mcpStarter.start(this);
+                if (completeRequestedStop()) return;
             }
             keepAliveThread = new Thread(() -> {
                 try { new java.util.concurrent.CountDownLatch(1).await(); }
@@ -207,24 +226,53 @@ final class ModularRuntime implements AuraWebRuntime {
             }, "aura-main");
             keepAliveThread.setDaemon(false);
             keepAliveThread.start();
+            if (completeRequestedStop()) return;
+            Runtime.getRuntime().addShutdownHook(new Thread(this::stop, "aura-shutdown"));
+            state.set(RuntimeState.RUNNING);
         } catch (RuntimeException | Error failure) {
-            failStart(failure);
+            rethrowIfFatal(failure);
+            failStart(failure, rollbackFailures);
             throw failure;
         }
     }
 
-    @Override public void stop() {
+    @Override public synchronized void stop() {
         RuntimeState current = state.get();
         if (current == RuntimeState.STOPPED || current == RuntimeState.STOPPING) return;
+        if (current == RuntimeState.STARTING || preparing) {
+            stopRequested.set(true);
+            shuttingDown.set(true);
+            shutdownCancellation.cancel();
+            return;
+        }
         if (!state.compareAndSet(current, RuntimeState.STOPPING)) return;
+        performStop("stop");
+    }
+
+    private boolean completeRequestedStop() {
+        if (!stopRequested.get()) return false;
+        state.set(RuntimeState.STOPPING);
+        performStop("stop");
+        return true;
+    }
+
+    private void performStop(String phase) {
         shuttingDown.set(true);
         shutdownCancellation.cancel();
         if (keepAliveThread != null) keepAliveThread.interrupt();
-        if (mcpStarter != null) { try { mcpStarter.stop(); } catch (RuntimeException ignored) { } mcpStarter = null; }
-        if (starter != null) { try { starter.stop(); } catch (RuntimeException ignored) { } starter = null; }
-        moduleManager.stop(this::moduleContext);
-        closeResources();
+        List<ShutdownFailure> failures = new java.util.ArrayList<>();
+        if (mcpStarter != null) {
+            stopComponent("mcp-starter", mcpStarter::stop, failures);
+            mcpStarter = null;
+        }
+        if (starter != null) {
+            stopComponent("web-starter", starter::stop, failures);
+            starter = null;
+        }
+        moduleManager.stop(this::moduleContext, moduleFailureCollector(failures));
+        closeResources(failures);
         state.set(RuntimeState.STOPPED);
+        publishShutdownEvents(phase, failures);
     }
 
     @Override public List<ModuleMetadata> moduleDescriptors() { return moduleManager.descriptors(); }
@@ -279,7 +327,17 @@ final class ModularRuntime implements AuraWebRuntime {
         if (isShuttingDown()) return io.aura.contract.HealthStatus.DOWN;
         return HealthProbe.check(healthChecks, config.healthCheckTimeout());
     }
-    @Override public void emit(AuraEvent event) { for (AuraEventListener listener : eventListeners) try { listener.onEvent(event); } catch (RuntimeException ignored) { } }
+    @Override public void emit(AuraEvent event) {
+        for (AuraEventListener listener : eventListeners) {
+            try {
+                listener.onEvent(event);
+            } catch (Throwable listenerFailure) {
+                rethrowIfFatal(listenerFailure);
+                LOG.error("Aura event listener failed: eventType={}, failureType={}",
+                        event.type(), listenerFailure.getClass().getName());
+            }
+        }
+    }
     @Override public String prop(String key) {
         String envKey = key.replace('.', '_').replace('-', '_').toUpperCase();
         String value = System.getenv(envKey);
@@ -302,22 +360,95 @@ final class ModularRuntime implements AuraWebRuntime {
     @Override public io.aura.web.AdmissionPolicy admissionPolicy() { return admissionPolicy; }
     @Override public SnapshotOptions snapshotOptions() { return config.snapshotOptions(); }
 
-    private void failStart(Throwable failure) {
+    private void failStart(Throwable failure, List<ShutdownFailure> failures) {
         shuttingDown.set(true);
         shutdownCancellation.cancel();
         if (keepAliveThread != null) keepAliveThread.interrupt();
-        if (mcpStarter != null) { try { mcpStarter.stop(); } catch (RuntimeException ignored) { } mcpStarter = null; }
-        if (starter != null) { try { starter.stop(); } catch (RuntimeException ignored) { } starter = null; }
-        moduleManager.stop(this::moduleContext);
-        closeResources();
+        if (mcpStarter != null) {
+            stopComponent("mcp-starter", mcpStarter::stop, failures);
+            mcpStarter = null;
+        }
+        if (starter != null) {
+            stopComponent("web-starter", starter::stop, failures);
+            starter = null;
+        }
+        moduleManager.stop(this::moduleContext, moduleFailureCollector(failures));
+        closeResources(failures);
+        java.util.Set<Throwable> attached = java.util.Collections.newSetFromMap(
+                new java.util.IdentityHashMap<>());
+        attached.add(failure);
+        if (failure.getCause() != null) attached.add(failure.getCause());
+        for (ShutdownFailure cleanupFailure : failures) {
+            if (attached.add(cleanupFailure.cause())) {
+                failure.addSuppressed(cleanupFailure.cause());
+            }
+        }
         state.set(RuntimeState.STOPPED);
+        publishShutdownEvents("startup-rollback", failures);
     }
 
-    private void closeResources() {
+    private java.util.function.BiConsumer<AuraModule, Throwable> moduleFailureCollector(
+            List<ShutdownFailure> failures) {
+        return (module, error) -> {
+            rethrowIfFatal(error);
+            failures.add(new ShutdownFailure(
+                    "module:" + moduleManager.descriptor(module).id(), error));
+        };
+    }
+
+    private void closeResources(List<ShutdownFailure> failures) {
         for (int i = closeables.size() - 1; i >= 0; i--) {
-            try { closeables.get(i).close(); } catch (Exception ignored) { }
+            AutoCloseable resource = closeables.get(i);
+            try {
+                resource.close();
+            } catch (Throwable error) {
+                rethrowIfFatal(error);
+                failures.add(new ShutdownFailure("resource", error));
+            }
         }
         closeables.clear();
+    }
+
+    private void stopComponent(String component, Runnable stopAction,
+                               List<ShutdownFailure> failures) {
+        try {
+            stopAction.run();
+        } catch (Throwable error) {
+            rethrowIfFatal(error);
+            failures.add(new ShutdownFailure(component, error));
+        }
+    }
+
+    private void publishShutdownEvents(String phase, List<ShutdownFailure> failures) {
+        for (ShutdownFailure failure : failures) {
+            LOG.error("Aura lifecycle cleanup failed: phase={}, component={}, failureType={}",
+                    phase, failure.component(), failure.cause().getClass().getName());
+            emitSafely(AuraEvent.of("runtime.shutdown.failure", Map.of(
+                    "code", "AURA_RUNTIME_SHUTDOWN_FAILED",
+                    "phase", phase,
+                    "component", failure.component(),
+                    "failureType", failure.cause().getClass().getName())));
+        }
+        emitSafely(AuraEvent.of("runtime.shutdown.completed", Map.of(
+                "phase", phase,
+                "failureCount", failures.size())));
+    }
+
+    private void emitSafely(AuraEvent event) {
+        try {
+            emit(event);
+        } catch (Throwable listenerFailure) {
+            rethrowIfFatal(listenerFailure);
+            LOG.error("Aura event listener failed during lifecycle cleanup: eventType={}, failureType={}",
+                    event.type(), listenerFailure.getClass().getName());
+        }
+    }
+
+    private record ShutdownFailure(String component, Throwable cause) { }
+
+    private static void rethrowIfFatal(Throwable error) {
+        if (error instanceof VirtualMachineError fatal) throw fatal;
+        if (error instanceof ThreadDeath fatal) throw fatal;
     }
 
     private <T> T register(T value) {
@@ -332,7 +463,9 @@ final class ModularRuntime implements AuraWebRuntime {
         Object existing = namedRegistry.putIfAbsent(name, registered);
         if (existing != null) throw new IllegalStateException("Named capability already registered: " + name);
     }
-    private ModuleContext moduleContext(AuraModule module) { return new ModuleContextImpl(module, module.descriptor()); }
+    private ModuleContext moduleContext(AuraModule module) {
+        return new ModuleContextImpl(module, moduleManager.descriptor(module));
+    }
     private void trackLifecycle(Object value) { if (value instanceof AutoCloseable closeable && !closeables.contains(closeable)) closeables.add(closeable); }
 
     private final class ModuleContextImpl implements ModuleContext {
