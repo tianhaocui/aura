@@ -2250,6 +2250,24 @@ public final class io.aura.ai.RagPipeline$RagContext extends java.lang.Record {
 public final class io.aura.ai.RagPipeline {
   public io.aura.ai.RagPipeline(io.aura.ai.Retriever, int, int);
   public io.aura.ai.RagPipeline$RagContext retrieve(java.lang.String) throws java.lang.Exception;
+  public io.aura.ai.RagRequestBuilder request(java.lang.String) throws java.lang.Exception;
+}
+### aura-ai:io.aura.ai.RagRequestBuilder
+public final class io.aura.ai.RagRequestBuilder {
+  public io.aura.ai.RagPipeline$RagContext context();
+  public io.aura.ai.RagRequestBuilder model(java.lang.String);
+  public io.aura.ai.RagRequestBuilder parameter(java.lang.String, java.lang.Object);
+  public io.aura.ai.RagRequestBuilder parameters(java.util.Map<java.lang.String, ?>);
+  public io.aura.ai.RagRequestBuilder timeout(java.time.Duration);
+  public io.aura.ai.RagRequestBuilder cancellationToken(io.aura.contract.CancellationToken);
+  public io.aura.ai.RagRequestBuilder budget(io.aura.ai.AiBudget);
+  public io.aura.ai.RagRequestBuilder tool(io.aura.ai.AiToolDefinition);
+  public io.aura.ai.RagRequestBuilder tools(java.util.List<io.aura.ai.AiToolDefinition>);
+  public io.aura.ai.RagRequestBuilder toolChoice(java.lang.String);
+  public io.aura.ai.RagRequestBuilder retry(io.aura.ai.AiRetryPolicy);
+  public io.aura.ai.RagRequestBuilder pricing(io.aura.ai.AiPricing);
+  public io.aura.ai.RagRequestBuilder structuredOutput(io.aura.ai.StructuredOutputSpec);
+  public io.aura.ai.AiRequest build();
 }
 ### aura-ai:io.aura.ai.Retriever
 public interface io.aura.ai.Retriever {

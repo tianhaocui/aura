@@ -26,7 +26,15 @@ final class AiJson {
     }
 
     static int length(Object value) {
-        return JSON.toJSONString(value).length();
+        return stringify(value).length();
+    }
+
+    static String stringify(Object value) {
+        try {
+            return JSON.toJSONString(value);
+        } catch (RuntimeException | StackOverflowError error) {
+            throw new IllegalArgumentException("value must contain finite JSON-compatible data", error);
+        }
     }
 
     private static Object freeze(Object value) {

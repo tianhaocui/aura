@@ -100,17 +100,21 @@ rates. Reported provider cost always takes precedence over the estimate.
 
 ```java
 RagPipeline rag = new RagPipeline(retriever, 8, 12_000);
-RagPipeline.RagContext context = rag.retrieve("Which orders are delayed?");
-AiRequest request = AiRequest.builder()
-        .systemPrompt("Answer only from the supplied context")
-        .prompt(context.text() + "\n\nQuestion: Which orders are delayed?")
+AiRequest request = rag.request("Which orders are delayed?")
+        .model("my-model")
+        .timeout(Duration.ofSeconds(20))
+        .budget(AiBudget.builder().maxInputCharacters(16_000).build())
         .build();
 AiResponse answer = client.chat(request);
 ```
 
 `RagPipeline` 不执行隐式 tool call、不持久化会话、不绑定向量数据库；Embedding、Retriever 和
 ConversationStore 仍由能力模块通过 SPI 提供。大结果会在边界处确定性截断，不允许无界 context
-进入 AI 请求预算。
+进入 AI 请求预算。`request(query)` 是推荐的组合入口：固定的 system prompt 明确把检索内容视为
+不可信数据，passages 与 question 使用 JSON 编码，检索内容不能伪造边界。返回的
+`RagRequestBuilder` 只开放 model、timeout、budget、parameters、tools、retry、pricing、structured
+output 和 cancellation；它不允许替换 prompt、system prompt 或默认 redactor。不要手工拼接
+`context.text()`。
 - `AiClient.usageTotals()` exposes cumulative request/token/cost counters for one
   accounting window. Call `resetUsage()` at the start of a new window; unknown
   provider usage is counted separately instead of being guessed.
