@@ -96,6 +96,20 @@ rates. Reported provider cost always takes precedence over the estimate.
 - 取消是协作式的；provider 应在网络读取和 token 回调之间检查 `request.cancellationToken()`。
 - `StructuredOutput` 使用安全 JSON 解析，不执行 AutoType；业务校验通过 `parseAndValidate` 注入。
 - `ConversationStore`、`EmbeddingProvider` 和 `Retriever` 只定义扩展契约，不引入数据库、向量库或具体云厂商依赖。
+- `ConversationStore` 的 append/load 使用不可变 versioned snapshot；`InMemoryConversationStore` 提供有上限的参考实现。持久化适配器必须原子执行 bounds 和 expected-version 检查，不能把会话变成无界字符串列表。
+
+```java
+ConversationStore conversations = new InMemoryConversationStore(32, 24_000);
+ConversationStore.ConversationSnapshot before = conversations.load("order-42");
+ConversationStore.ConversationSnapshot after = conversations.append(
+        "order-42", new ConversationStore.AiMessage("user", "Is this delayed?"),
+        before.version());
+```
+
+Appending with a stale non-negative version fails with
+`ConversationConflictException`; passing `-1` uses an atomic unconditional append.
+The reference store evicts the oldest messages when aggregate bounds are reached
+and rejects a single message that cannot fit.
 - `RagPipeline` 提供唯一推荐的 bounded retrieval-to-context 组合；检索数量和 context 字符数都必须有上限。
 
 ```java

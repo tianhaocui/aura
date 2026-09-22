@@ -2208,23 +2208,51 @@ public final class io.aura.ai.AiUsageTotals extends java.lang.Record {
   public long costMicros();
   public long unknownUsage();
 }
+### aura-ai:io.aura.ai.ConversationConflictException
+public final class io.aura.ai.ConversationConflictException extends java.lang.IllegalStateException {
+  public io.aura.ai.ConversationConflictException(java.lang.String, long, long);
+  public java.lang.String conversationId();
+  public long expectedVersion();
+  public long actualVersion();
+}
 ### aura-ai:io.aura.ai.ConversationStore$AiMessage
 public final class io.aura.ai.ConversationStore$AiMessage extends java.lang.Record {
   public io.aura.ai.ConversationStore$AiMessage(java.lang.String, java.lang.String);
+  public long characterCount();
   public final java.lang.String toString();
   public final int hashCode();
   public final boolean equals(java.lang.Object);
   public java.lang.String role();
   public java.lang.String content();
 }
+### aura-ai:io.aura.ai.ConversationStore$ConversationSnapshot
+public final class io.aura.ai.ConversationStore$ConversationSnapshot extends java.lang.Record {
+  public io.aura.ai.ConversationStore$ConversationSnapshot(java.lang.String, long, java.util.List<io.aura.ai.ConversationStore$AiMessage>, long);
+  public final java.lang.String toString();
+  public final int hashCode();
+  public final boolean equals(java.lang.Object);
+  public java.lang.String conversationId();
+  public long version();
+  public java.util.List<io.aura.ai.ConversationStore$AiMessage> messages();
+  public long characterCount();
+}
 ### aura-ai:io.aura.ai.ConversationStore
 public interface io.aura.ai.ConversationStore {
-  public abstract void append(java.lang.String, io.aura.ai.ConversationStore$AiMessage);
-  public abstract java.util.List<io.aura.ai.ConversationStore$AiMessage> load(java.lang.String);
+  public abstract io.aura.ai.ConversationStore$ConversationSnapshot load(java.lang.String);
+  public abstract io.aura.ai.ConversationStore$ConversationSnapshot append(java.lang.String, io.aura.ai.ConversationStore$AiMessage, long);
+  public default io.aura.ai.ConversationStore$ConversationSnapshot append(java.lang.String, io.aura.ai.ConversationStore$AiMessage);
 }
 ### aura-ai:io.aura.ai.EmbeddingProvider
 public interface io.aura.ai.EmbeddingProvider {
   public abstract java.util.List<java.lang.Double> embed(java.lang.String) throws java.lang.Exception;
+}
+### aura-ai:io.aura.ai.InMemoryConversationStore
+public final class io.aura.ai.InMemoryConversationStore implements io.aura.ai.ConversationStore {
+  public io.aura.ai.InMemoryConversationStore(int, long);
+  public int maxMessages();
+  public long maxCharacters();
+  public io.aura.ai.ConversationStore$ConversationSnapshot load(java.lang.String);
+  public io.aura.ai.ConversationStore$ConversationSnapshot append(java.lang.String, io.aura.ai.ConversationStore$AiMessage, long);
 }
 ### aura-ai:io.aura.ai.OpenAiCompatibleProvider
 public final class io.aura.ai.OpenAiCompatibleProvider implements io.aura.ai.AiProvider {
