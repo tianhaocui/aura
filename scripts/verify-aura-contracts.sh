@@ -52,6 +52,7 @@ test -f "$repo_root/aura-db-migration-liquibase/src/test/java/io/aura/db/liquiba
 test -f "$repo_root/api/aura-1.0.public-api.txt"
 test -f "$repo_root/docs/mcp-compatibility.md"
 test -f "$repo_root/docs/1.0-readiness.md"
+rg -q 'docs/1\.0-readiness\.md' "$repo_root/README.md" "$repo_root/README_CN.md"
 rg -q 'Aura 1.0 is not release-complete' "$repo_root/docs/1.0-readiness.md"
 rg -q 'Central Portal staging' "$repo_root/docs/1.0-readiness.md"
 rg -q 'GitHub-hosted Docker/kind' "$repo_root/docs/1.0-readiness.md"
