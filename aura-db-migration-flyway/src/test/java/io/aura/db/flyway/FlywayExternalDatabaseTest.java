@@ -27,7 +27,12 @@ class FlywayExternalDatabaseTest {
             assertThat(db.find("SELECT COUNT(*) AS item_count FROM items")
                     .get(0).getLong("item_count")).isEqualTo(1L);
         } finally {
-            db.close();
+            try {
+                db.execute("DROP TABLE IF EXISTS items");
+                db.execute("DROP TABLE IF EXISTS flyway_schema_history");
+            } finally {
+                db.close();
+            }
         }
     }
 }
