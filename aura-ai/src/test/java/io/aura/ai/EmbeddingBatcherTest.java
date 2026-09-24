@@ -53,4 +53,17 @@ class EmbeddingBatcherTest {
         assertThatThrownBy(() -> nonFinite.embed(List.of("a")))
                 .isInstanceOf(IllegalStateException.class).hasMessageContaining("non-finite");
     }
+
+    @Test
+    void allowsAggregateLimitBelowSingleBatchSizeAndRejectsInvalidEmptyBatchMetadata() throws Exception {
+        EmbeddingBatcher batcher = new EmbeddingBatcher((EmbeddingProvider) text -> List.of(1.0), 8, 2, 1);
+        assertThat(batcher.embed(List.of("a", "b")).vectors()).hasSize(2);
+        assertThat(batcher.embed(List.of()).dimension()).isEqualTo(1);
+
+        assertThatThrownBy(() -> new EmbeddingBatch(List.of(), List.of(), -1))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("must not be negative");
+        assertThatThrownBy(() -> new EmbeddingBatch(List.of(), null, 0))
+                .isInstanceOf(NullPointerException.class);
+    }
 }

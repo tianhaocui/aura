@@ -15,9 +15,6 @@ public final class EmbeddingBatcher {
                             int expectedDimension) {
         this.provider = Objects.requireNonNull(provider, "provider");
         if (maxBatchSize < 1) throw new IllegalArgumentException("maxBatchSize must be positive");
-        if (maxItems < maxBatchSize) {
-            throw new IllegalArgumentException("maxItems must be at least maxBatchSize");
-        }
         if (expectedDimension < 0) {
             throw new IllegalArgumentException("expectedDimension must not be negative");
         }
