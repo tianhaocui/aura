@@ -2242,9 +2242,28 @@ public interface io.aura.ai.ConversationStore {
   public abstract io.aura.ai.ConversationStore$ConversationSnapshot append(java.lang.String, io.aura.ai.ConversationStore$AiMessage, long);
   public default io.aura.ai.ConversationStore$ConversationSnapshot append(java.lang.String, io.aura.ai.ConversationStore$AiMessage);
 }
+### aura-ai:io.aura.ai.EmbeddingBatch
+public final class io.aura.ai.EmbeddingBatch extends java.lang.Record {
+  public io.aura.ai.EmbeddingBatch(java.util.List<java.lang.String>, java.util.List<java.util.List<java.lang.Double>>, int);
+  public final java.lang.String toString();
+  public final int hashCode();
+  public final boolean equals(java.lang.Object);
+  public java.util.List<java.lang.String> texts();
+  public java.util.List<java.util.List<java.lang.Double>> vectors();
+  public int dimension();
+}
+### aura-ai:io.aura.ai.EmbeddingBatcher
+public final class io.aura.ai.EmbeddingBatcher {
+  public io.aura.ai.EmbeddingBatcher(io.aura.ai.EmbeddingProvider, int, int, int);
+  public int maxBatchSize();
+  public int maxItems();
+  public int expectedDimension();
+  public io.aura.ai.EmbeddingBatch embed(java.util.List<java.lang.String>) throws java.lang.Exception;
+}
 ### aura-ai:io.aura.ai.EmbeddingProvider
 public interface io.aura.ai.EmbeddingProvider {
   public abstract java.util.List<java.lang.Double> embed(java.lang.String) throws java.lang.Exception;
+  public default java.util.List<java.util.List<java.lang.Double>> embedBatch(java.util.List<java.lang.String>) throws java.lang.Exception;
 }
 ### aura-ai:io.aura.ai.InMemoryConversationStore
 public final class io.aura.ai.InMemoryConversationStore implements io.aura.ai.ConversationStore {

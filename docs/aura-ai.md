@@ -98,6 +98,18 @@ rates. Reported provider cost always takes precedence over the estimate.
 - `ConversationStore`、`EmbeddingProvider` 和 `Retriever` 只定义扩展契约，不引入数据库、向量库或具体云厂商依赖。
 - `ConversationStore` 的 append/load 使用不可变 versioned snapshot；`InMemoryConversationStore` 提供有上限的参考实现。持久化适配器必须原子执行 bounds 和 expected-version 检查，不能把会话变成无界字符串列表。
 
+`EmbeddingProvider` 保留单文本 `embed(String)` 作为最小 SPI，并提供可覆盖的
+`embedBatch(List<String>)`。业务代码应通过 `EmbeddingBatcher(provider, maxBatchSize,
+maxItems, expectedDimension)` 调用，框架负责分批、输入数量上限、维度一致性和有限浮点值校验：
+
+```java
+EmbeddingBatch batch = new EmbeddingBatcher(provider, 32, 1_000, 1_536)
+        .embed(passages);
+```
+
+没有向量数据库或厂商 SDK 的强制依赖；batch provider 可以在能力模块内替换，调用方仍使用同一
+可验证契约。
+
 ```java
 ConversationStore conversations = new InMemoryConversationStore(32, 24_000);
 ConversationStore.ConversationSnapshot before = conversations.load("order-42");
