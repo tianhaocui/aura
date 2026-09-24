@@ -153,9 +153,10 @@ GitHub Dependency Review on pull requests; a release must pass both the SBOM
 shape check and the dependency vulnerability policy before Central publishing.
 The verifier requires `jq` and rejects missing or duplicate public Aura modules,
 version drift, dangling dependency references, and malformed JSON.
-The CI workflow additionally runs a full OSV-Scanner scan on every push and on
-the weekly schedule, so newly disclosed vulnerabilities are not dependent on a
-new pull request. CI archives the verified SBOM for 90 days as
+The CI workflow additionally runs a full OSV-Scanner scan on pull requests,
+every push, and the weekly schedule, so merge-time and newly disclosed
+vulnerabilities are not dependent on one narrow event type. CI archives the
+verified SBOM for 90 days as
 `aura-1.0-sbom`; release evidence must use that artifact rather than an
 unverified file copied from a developer workstation.
 

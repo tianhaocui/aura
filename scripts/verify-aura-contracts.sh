@@ -57,6 +57,11 @@ rg -q 'MCP_RESPONSE_TOO_LARGE' "$repo_root/docs/mcp-compatibility.md"
 rg -q 'McpRouterSpecIntegrationTest' "$repo_root/docs/mcp-compatibility.md"
 rg -q 'google/osv-scanner-action/osv-scanner-action@v2\.0\.2' \
   "$repo_root/.github/workflows/ci.yml"
+if rg -n "osv-full-scan:[[:space:]]*$" "$repo_root/.github/workflows/ci.yml" >/dev/null \
+    && rg -n "github\.event_name != 'pull_request'" "$repo_root/.github/workflows/ci.yml"; then
+  echo "full OSV scan must run before pull requests are merged" >&2
+  exit 1
+fi
 rg -q 'bash scripts/verify-release-signatures\.sh' \
   "$repo_root/.github/workflows/ci.yml"
 rg -q -- '-Prelease -DskipTests' \
