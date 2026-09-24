@@ -92,6 +92,18 @@ class SqlMigrationRunnerTest {
     }
 
     @Test
+    void classpathSourceRejectsOversizedMigration(@TempDir Path root) throws Exception {
+        Path migrations = Files.createDirectories(root.resolve("migrations"));
+        Files.writeString(migrations.resolve("001_oversized.sql"), "x".repeat(16 * 1024 * 1024 + 1));
+
+        try (URLClassLoader loader = new URLClassLoader(new java.net.URL[]{root.toUri().toURL()}, null)) {
+            assertThatThrownBy(() -> new ClasspathSqlMigrationSource("migrations", loader).migrations())
+                    .isInstanceOf(MigrationException.class)
+                    .hasMessageContaining("exceeds maximum size");
+        }
+    }
+
+    @Test
     void classpathSourceRejectsBlankLocation() {
         assertThatThrownBy(() -> new ClasspathSqlMigrationSource(" "))
                 .isInstanceOf(IllegalArgumentException.class)

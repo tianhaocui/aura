@@ -16,6 +16,7 @@ import java.util.jar.JarEntry;
 
 /** Loads {@code *.sql} migrations from a classpath directory. */
 public final class ClasspathSqlMigrationSource implements SqlMigrationSource {
+    private static final int MAX_MIGRATION_BYTES = 16 * 1024 * 1024;
     private final String location;
     private final ClassLoader classLoader;
 
@@ -56,8 +57,11 @@ public final class ClasspathSqlMigrationSource implements SqlMigrationSource {
                         JarEntry entry = entries.nextElement();
                         if (!entry.isDirectory() && entry.getName().startsWith(path + "/") && entry.getName().endsWith(".sql")) {
                             try (InputStream in = classLoader.getResourceAsStream(entry.getName())) {
+                                if (in == null) {
+                                    throw new MigrationException("Cannot read migration " + entry.getName());
+                                }
                                 result.add(readMigration(entry.getName().substring(entry.getName().lastIndexOf('/') + 1),
-                                        new String(in.readAllBytes(), StandardCharsets.UTF_8)));
+                                        readBounded(in, entry.getName())));
                             }
                         }
                     }
@@ -83,10 +87,19 @@ public final class ClasspathSqlMigrationSource implements SqlMigrationSource {
     }
 
     private static String readFile(Path path) {
-        try {
-            return Files.readString(path);
+        try (InputStream input = Files.newInputStream(path)) {
+            return readBounded(input, path.toString());
         } catch (IOException e) {
             throw new MigrationException("Cannot read migration " + path, e);
         }
+    }
+
+    private static String readBounded(InputStream input, String source) throws IOException {
+        byte[] bytes = input.readNBytes(MAX_MIGRATION_BYTES + 1);
+        if (bytes.length > MAX_MIGRATION_BYTES) {
+            throw new MigrationException("Migration exceeds maximum size of " + MAX_MIGRATION_BYTES
+                    + " bytes: " + source);
+        }
+        return new String(bytes, StandardCharsets.UTF_8);
     }
 }
