@@ -56,15 +56,15 @@ public final class LiquibaseSchemaMigrator implements SchemaMigrator {
         for (int attempt = 0; ; attempt++) {
             try {
                 return migrateOnce(context);
-            } catch (Exception failure) {
-                if (attempt >= MAX_BOOTSTRAP_RETRIES || !isConcurrentHistoryBootstrap(failure)) {
-                    throw failure;
+            } catch (ConcurrentHistoryBootstrapException collision) {
+                if (attempt >= MAX_BOOTSTRAP_RETRIES) {
+                    throw collision.getCause();
                 }
                 try {
                     Thread.sleep(RETRY_BACKOFF_MILLIS[attempt]);
                 } catch (InterruptedException interrupted) {
                     Thread.currentThread().interrupt();
-                    interrupted.addSuppressed(failure);
+                    interrupted.addSuppressed(collision.getCause());
                     throw interrupted;
                 }
             }
@@ -74,14 +74,44 @@ public final class LiquibaseSchemaMigrator implements SchemaMigrator {
     private SchemaMigrationResult migrateOnce(MigrationContext context) throws Exception {
         try (Connection connection = context.dataSource().getConnection();
              ClassLoaderResourceAccessor resources = new ClassLoaderResourceAccessor(classLoader)) {
+            boolean historyBootstrapNeeded = !hasTable(connection, "DATABASECHANGELOG")
+                    || !hasTable(connection, "DATABASECHANGELOGLOCK");
             Database database = DatabaseFactory.getInstance()
                     .findCorrectDatabaseImplementation(new JdbcConnection(connection));
             try {
-                int applied = runUpdate(database, resources);
-                return new SchemaMigrationResult(ID, applied);
+                try {
+                    int applied = runUpdate(database, resources);
+                    return new SchemaMigrationResult(ID, applied);
+                } catch (Exception failure) {
+                    if (historyBootstrapNeeded && isConcurrentHistoryBootstrap(failure)) {
+                        throw new ConcurrentHistoryBootstrapException(failure);
+                    }
+                    throw failure;
+                }
             } finally {
                 database.close();
             }
+        }
+    }
+
+    private static boolean hasTable(Connection connection, String expectedName) throws SQLException {
+        try (var tables = connection.getMetaData().getTables(
+                connection.getCatalog(), null, null, new String[]{"TABLE"})) {
+            while (tables.next()) {
+                String actual = tables.getString("TABLE_NAME");
+                if (expectedName.equalsIgnoreCase(actual)) return true;
+            }
+            return false;
+        }
+    }
+
+    private static final class ConcurrentHistoryBootstrapException extends Exception {
+        private ConcurrentHistoryBootstrapException(Exception cause) {
+            super(cause);
+        }
+
+        @Override public synchronized Exception getCause() {
+            return (Exception) super.getCause();
         }
     }
 
