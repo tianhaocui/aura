@@ -50,6 +50,11 @@ test -x "$repo_root/scripts/verify-deployment.sh"
 test -f "$repo_root/aura-db-migration-flyway/src/test/java/io/aura/db/flyway/FlywayExternalDatabaseTest.java"
 test -f "$repo_root/aura-db-migration-liquibase/src/test/java/io/aura/db/liquibase/LiquibaseExternalDatabaseTest.java"
 test -f "$repo_root/api/aura-1.0.public-api.txt"
+test -f "$repo_root/docs/mcp-compatibility.md"
+rg -q '2025-03-26' "$repo_root/docs/mcp-compatibility.md"
+rg -q 'MCP_PERMISSION_DENIED' "$repo_root/docs/mcp-compatibility.md"
+rg -q 'MCP_RESPONSE_TOO_LARGE' "$repo_root/docs/mcp-compatibility.md"
+rg -q 'McpRouterSpecIntegrationTest' "$repo_root/docs/mcp-compatibility.md"
 rg -q 'google/osv-scanner-action/osv-scanner-action@v2\.0\.2' \
   "$repo_root/.github/workflows/ci.yml"
 rg -q 'bash scripts/verify-release-signatures\.sh' \
