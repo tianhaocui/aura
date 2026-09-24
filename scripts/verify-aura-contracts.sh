@@ -85,6 +85,8 @@ rg -q 'path: target/aura-public-api-report\.json' \
 rg -q 'breakingChanges' "$repo_root/scripts/verify-public-api.sh"
 bash "$repo_root/scripts/verify-public-api-classifier.sh"
 rg -q 'cron: .17 3 \* \* 1.' "$repo_root/.github/workflows/ci.yml"
+rg -q '^  workflow_dispatch:' "$repo_root/.github/workflows/ci.yml"
+rg -q 'run-name:' "$repo_root/.github/workflows/ci.yml"
 for artifact in \
   aura-contract aura-core aura-web aura-db aura-db-migration-flyway \
   aura-db-migration-liquibase aura-workflow aura-ai aura-mcp aura-processor \

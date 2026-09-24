@@ -1,12 +1,21 @@
 name: CI
 
 on:
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: 'Why this release-readiness run is being requested'
+        required: false
+        default: 'manual readiness verification'
   pull_request:
     branches: [master]
   push:
     branches: [master]
   schedule:
     - cron: '17 3 * * 1'
+
+run-name: >-
+  Aura 1.0 readiness${{ github.event_name == 'workflow_dispatch' && format(' — {0}', inputs.reason) || '' }}
 
 jobs:
   test:
