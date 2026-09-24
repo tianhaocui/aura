@@ -23,6 +23,7 @@ public class McpPackager {
 
     private static final int MAX_SCHEMA_BYTES = 1024 * 1024;
     private static final int MAX_TEMPLATE_BYTES = 1024 * 1024;
+    private static final int MAX_PACKAGE_METADATA_BYTES = 1024 * 1024;
     private static final int CONNECT_TIMEOUT_MS = 5_000;
     private static final int READ_TIMEOUT_MS = 10_000;
     private static final int MAX_PROCESS_OUTPUT_BYTES = 64 * 1024;
@@ -281,7 +282,7 @@ public class McpPackager {
             System.out.println("\n[dry-run] Would publish:");
             System.out.println("  " + dir.resolve("package.json"));
             System.out.println("  " + dir.resolve("index.js"));
-            String pkg = Files.readString(dir.resolve("package.json"));
+            String pkg = readBoundedFile(dir.resolve("package.json"), MAX_PACKAGE_METADATA_BYTES);
             System.out.println("\n" + pkg);
             System.out.println("[dry-run] No changes made. Remove --dry-run to publish.");
             return;
@@ -304,6 +305,16 @@ public class McpPackager {
         } else {
             System.err.println("npm publish failed with exit code " + code);
             System.exit(code);
+        }
+    }
+
+    private static String readBoundedFile(Path path, int maxBytes) throws IOException {
+        try (InputStream input = Files.newInputStream(path)) {
+            byte[] bytes = input.readNBytes(maxBytes + 1);
+            if (bytes.length > maxBytes) {
+                throw new IOException("File exceeds maximum size of " + maxBytes + " bytes: " + path);
+            }
+            return new String(bytes, StandardCharsets.UTF_8);
         }
     }
 
