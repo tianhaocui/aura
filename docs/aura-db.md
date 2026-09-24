@@ -428,6 +428,16 @@ the number of migrations or changesets applied by that run. Migration runs
 outside an Aura transaction so the selected engine owns locking, validation,
 transactions, baseline, and dialect semantics.
 
+The Flyway and Liquibase adapters are covered for concurrent first-starts from
+independent connection pools. Flyway uses its schema-history lock; Liquibase
+uses its changelog lock and retries only a bounded set of recognized duplicate
+`DATABASECHANGELOG` bootstrap races before acquiring that lock. The built-in
+classifier covers H2, PostgreSQL, MySQL/MariaDB, SQL Server, and Oracle duplicate
+object codes, and requires an exact Liquibase history-table identifier; ordinary
+changelog SQL failures and user tables with similar names are never retried.
+Custom `SchemaMigrator` implementations must provide equivalent cross-process
+locking for production deployment.
+
 `aura-db-migration-flyway` includes Flyway's PostgreSQL and MySQL/MariaDB
 database-type plugins. The application must still install its chosen JDBC
 driver. For Oracle, SQL Server, or another database, add the matching Flyway

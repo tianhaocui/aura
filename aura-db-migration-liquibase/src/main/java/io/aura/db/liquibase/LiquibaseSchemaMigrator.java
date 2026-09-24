@@ -17,13 +17,19 @@ import liquibase.database.jvm.JdbcConnection;
 import liquibase.resource.ClassLoaderResourceAccessor;
 
 import java.sql.Connection;
+import java.sql.SQLException;
+import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 
 /** Runs a Liquibase classpath changelog during {@code DatabaseModule} startup. */
 public final class LiquibaseSchemaMigrator implements SchemaMigrator {
     public static final String ID = "liquibase";
+    private static final int MAX_BOOTSTRAP_RETRIES = 3;
+    private static final long[] RETRY_BACKOFF_MILLIS = {25, 50, 100};
 
     private final String changelogFile;
     private final ClassLoader classLoader;
@@ -47,6 +53,25 @@ public final class LiquibaseSchemaMigrator implements SchemaMigrator {
 
     @Override public SchemaMigrationResult migrate(MigrationContext context) throws Exception {
         Objects.requireNonNull(context, "context");
+        for (int attempt = 0; ; attempt++) {
+            try {
+                return migrateOnce(context);
+            } catch (Exception failure) {
+                if (attempt >= MAX_BOOTSTRAP_RETRIES || !isConcurrentHistoryBootstrap(failure)) {
+                    throw failure;
+                }
+                try {
+                    Thread.sleep(RETRY_BACKOFF_MILLIS[attempt]);
+                } catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                    interrupted.addSuppressed(failure);
+                    throw interrupted;
+                }
+            }
+        }
+    }
+
+    private SchemaMigrationResult migrateOnce(MigrationContext context) throws Exception {
         try (Connection connection = context.dataSource().getConnection();
              ClassLoaderResourceAccessor resources = new ClassLoaderResourceAccessor(classLoader)) {
             Database database = DatabaseFactory.getInstance()
@@ -58,6 +83,30 @@ public final class LiquibaseSchemaMigrator implements SchemaMigrator {
                 database.close();
             }
         }
+    }
+
+    static boolean isConcurrentHistoryBootstrap(Throwable failure) {
+        Set<Throwable> seen = Collections.newSetFromMap(new IdentityHashMap<>());
+        for (Throwable current = failure; current != null && seen.add(current); current = current.getCause()) {
+            if (!(current instanceof SQLException sqlFailure)) continue;
+            String state = sqlFailure.getSQLState();
+            int vendorCode = sqlFailure.getErrorCode();
+            String message = sqlFailure.getMessage();
+            if (message == null) continue;
+            String normalized = message.toUpperCase(java.util.Locale.ROOT);
+            boolean historyTable = java.util.regex.Pattern.compile(
+                    "(?<![A-Z0-9_])DATABASECHANGELOG(?:LOCK)?(?![A-Z0-9_])")
+                    .matcher(normalized).find();
+            boolean duplicateObject = "42101".equals(state) // H2 table already exists
+                    || "42P07".equals(state) // PostgreSQL duplicate_table
+                    || "42S01".equals(state) // MySQL table already exists
+                    || "S0001".equals(state) // SQL Server object already exists
+                    || vendorCode == 1050 // MySQL ER_TABLE_EXISTS_ERROR
+                    || vendorCode == 2714 // SQL Server object already exists
+                    || vendorCode == 955; // Oracle name is already used
+            if (historyTable && duplicateObject) return true;
+        }
+        return false;
     }
 
     private int runUpdate(Database database, ClassLoaderResourceAccessor resources) throws Exception {
