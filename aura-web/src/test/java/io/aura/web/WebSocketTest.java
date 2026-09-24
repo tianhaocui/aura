@@ -105,16 +105,20 @@ class WebSocketTest {
     @Test
     void shutdownClosesActiveConnectionWithGoingAway() throws Exception {
         int port = nextPort();
+        var activeConnectionReady = new CountDownLatch(1);
         var app = app(new AuraConfig().port(port)
                         .maxWebSocketConnections(4)
                         .webSocketIdleTimeout(30),
-                context -> context.webSocket("/ws/shutdown", ws -> { }));
+                context -> context.webSocket("/ws/shutdown", ws ->
+                        ws.onOpen(conn -> activeConnectionReady.countDown())));
         app.start();
         var closeCode = new CompletableFuture<Integer>();
         try {
             HttpClient.newHttpClient().newWebSocketBuilder()
                     .buildAsync(URI.create("ws://localhost:" + port + "/ws/shutdown"),
                             closeListener(closeCode)).join();
+
+            assertThat(activeConnectionReady.await(3, TimeUnit.SECONDS)).isTrue();
 
             app.stop();
 
