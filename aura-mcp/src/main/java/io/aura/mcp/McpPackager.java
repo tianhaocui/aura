@@ -22,6 +22,7 @@ public class McpPackager {
     public static final String ALLOW_PRIVATE_URL_ENV = "AURA_MCP_ALLOW_PRIVATE_URL";
 
     private static final int MAX_SCHEMA_BYTES = 1024 * 1024;
+    private static final int MAX_TEMPLATE_BYTES = 1024 * 1024;
     private static final int CONNECT_TIMEOUT_MS = 5_000;
     private static final int READ_TIMEOUT_MS = 10_000;
     private static final int MAX_PROCESS_OUTPUT_BYTES = 64 * 1024;
@@ -234,7 +235,11 @@ public class McpPackager {
     private static String loadTemplate() throws IOException {
         try (InputStream is = McpPackager.class.getResourceAsStream("/mcp-bridge-template.js")) {
             if (is == null) throw new IOException("mcp-bridge-template.js not found in classpath");
-            return new String(is.readAllBytes(), StandardCharsets.UTF_8);
+            byte[] bytes = is.readNBytes(MAX_TEMPLATE_BYTES + 1);
+            if (bytes.length > MAX_TEMPLATE_BYTES) {
+                throw new IOException("MCP bridge template exceeds maximum size");
+            }
+            return new String(bytes, StandardCharsets.UTF_8);
         }
     }
 
