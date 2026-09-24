@@ -6,6 +6,8 @@ import io.aura.snapshot.ExceptionSnapshot;
 import io.aura.snapshot.Snapshot;
 import io.aura.snapshot.SnapshotScope;
 
+import java.io.IOException;
+import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.LinkedHashMap;
@@ -33,7 +35,16 @@ public class SnapshotReplayer {
 
     public SnapshotReplayer load(Path path) {
         try {
-            this.snapshot = JSON.parseObject(Files.readString(path), ExceptionSnapshot.class);
+            int maxBytes = app.config().snapshotOptions().maxSnapshotFileSize();
+            try (InputStream input = Files.newInputStream(path)) {
+                byte[] bytes = input.readNBytes(maxBytes + 1L > Integer.MAX_VALUE
+                        ? Integer.MAX_VALUE : maxBytes + 1);
+                if (bytes.length > maxBytes) {
+                    throw new IOException("Snapshot exceeds maximum size of " + maxBytes + " bytes");
+                }
+                this.snapshot = JSON.parseObject(new String(bytes, StandardCharsets.UTF_8),
+                        ExceptionSnapshot.class);
+            }
             return this;
         } catch (Exception e) {
             throw new IllegalArgumentException("Failed to load snapshot: " + path, e);

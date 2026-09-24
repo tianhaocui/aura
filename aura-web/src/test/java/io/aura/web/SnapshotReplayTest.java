@@ -184,6 +184,19 @@ class SnapshotReplayTest {
     }
 
     @Test
+    void replayerRejectsSnapshotFilesAboveConfiguredLimit() throws Exception {
+        Path snapshotFile = tempDir.resolve("oversized-replay.json");
+        Files.writeString(snapshotFile, "{}" + "x".repeat(128));
+        AuraApp app = AuraApp.create(new AuraConfig()
+                .snapshot(options -> options.maxSnapshotFileSize(16)));
+
+        assertThatThrownBy(() -> SnapshotReplayer.of(app).load(snapshotFile))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Failed to load snapshot")
+                .hasRootCauseMessage("Snapshot exceeds maximum size of 16 bytes");
+    }
+
+    @Test
     void replayExternalHttpErrorsAsApiExceptions() {
         ExceptionSnapshot base = snapshot();
         ExceptionSnapshot.ExternalCallSnapshot failed = new ExceptionSnapshot.ExternalCallSnapshot(
