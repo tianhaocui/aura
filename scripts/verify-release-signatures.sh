@@ -67,12 +67,27 @@ done
 
 checksum_manifest="$repo_root/target/aura-release-checksums.sha256"
 mkdir -p "$(dirname "$checksum_manifest")"
-hash_tool=()
-if command -v sha256sum >/dev/null; then
-  hash_tool=(sha256sum)
-elif command -v shasum >/dev/null; then
-  hash_tool=(shasum -a 256)
-else
+checksum_file() {
+  if command -v sha256sum >/dev/null; then
+    sha256sum "$1"
+  elif command -v shasum >/dev/null; then
+    shasum -a 256 "$1"
+  else
+    echo "Release checksum verification requires sha256sum or shasum" >&2
+    return 1
+  fi
+}
+verify_checksum_manifest() {
+  if command -v sha256sum >/dev/null; then
+    sha256sum -c "$1"
+  elif command -v shasum >/dev/null; then
+    shasum -a 256 -c "$1"
+  else
+    echo "Release checksum verification requires sha256sum or shasum" >&2
+    return 1
+  fi
+}
+if ! command -v sha256sum >/dev/null && ! command -v shasum >/dev/null; then
   echo "Release checksum verification requires sha256sum or shasum" >&2
   exit 1
 fi
@@ -80,13 +95,13 @@ fi
   cd "$repo_root"
   for artifact in "${artifacts[@]}"; do
     relative="${artifact#"$repo_root/"}"
-    "${hash_tool[@]}" "$relative"
+    checksum_file "$relative"
   done
 ) | LC_ALL=C sort >"$checksum_manifest"
 test -s "$checksum_manifest"
 (
   cd "$repo_root"
-  "${hash_tool[@]}" --check "$checksum_manifest"
+  verify_checksum_manifest "$checksum_manifest"
 ) >/dev/null
 
 echo "Aura release signatures and checksums passed: $verified artifacts verified"
