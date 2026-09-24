@@ -29,6 +29,7 @@ class SnapshotRecorder {
 
     private static final String TRUNCATION_MARKER = "...<truncated>";
     private static final String SAFE_PATH_PARAMETER = "redacted";
+    private static final int MAX_SNAPSHOT_COLLECTION_ENTRIES = 256;
     private static final Map<AuraWebRuntime, SnapshotRecorder> RECORDERS = new ConcurrentHashMap<>();
     private static final Map<Path, Object> STORAGE_LOCKS = new ConcurrentHashMap<>();
 
@@ -131,6 +132,12 @@ class SnapshotRecorder {
                         String handler, String method, String path, Map<String, String> query,
                         Map<String, String> headers, String body, String ip, String requestId,
                         int status, SnapshotScope scope) {
+        if (tooManyEntries(query) || tooManyEntries(headers)
+                || scope != null && (tooManyEntries(scope.artifacts())
+                || scope.externalCalls().size() > MAX_SNAPSHOT_COLLECTION_ENTRIES)) {
+            drop("collection-limit");
+            return;
+        }
         Throwable cause = ExceptionResolver.unwrap(e);
         ExceptionSnapshot snapshot = new ExceptionSnapshot(
                 1,
@@ -150,6 +157,10 @@ class SnapshotRecorder {
                 scope != null ? redactArtifacts(scope.artifacts()) : Map.of()
         );
         write(snapshot);
+    }
+
+    private static boolean tooManyEntries(Map<?, ?> values) {
+        return values != null && values.size() > MAX_SNAPSHOT_COLLECTION_ENTRIES;
     }
 
     private ExceptionSnapshot.ResponseSnapshot response(int status, SnapshotScope scope) {

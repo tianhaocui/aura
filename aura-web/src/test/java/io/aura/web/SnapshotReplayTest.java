@@ -161,6 +161,23 @@ class SnapshotReplayTest {
     }
 
     @Test
+    void snapshotDropsRequestsWithTooManyMetadataEntries() throws Exception {
+        java.util.concurrent.atomic.AtomicReference<String> drop = new java.util.concurrent.atomic.AtomicReference<>();
+        AuraConfig config = new AuraConfig().snapshot(s -> s.enabled(true).async(false).dir(tempDir)
+                .onDrop(drop::set));
+        Router router = new Router();
+        router.get("/fail", ctx -> { throw new RuntimeException("failure"); });
+        String query = java.util.stream.IntStream.range(0, 257)
+                .mapToObj(index -> "field" + index + "=value")
+                .collect(java.util.stream.Collectors.joining("&"));
+
+        TestApplications.client(config, router).get("/fail?" + query).execute();
+
+        assertThat(drop.get()).isEqualTo("collection-limit");
+        assertThat(Files.list(tempDir).toList()).isEmpty();
+    }
+
+    @Test
     void replayerStubsExternalCallsFromSnapshot() throws Exception {
         Path snapshotFile = tempDir.resolve("replay.json");
         ExceptionSnapshot snapshot = snapshot();
