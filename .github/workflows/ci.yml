@@ -145,10 +145,11 @@ jobs:
           echo "$RUNNER_TEMP/apache-maven-3.8.6/bin" >> "$GITHUB_PATH"
       - name: Verify minimum Maven toolchain
         run: |
-          mvn --version
-          mvn --batch-mode --fail-at-end -q \
-            -pl aura-bom,aura-starter,aura-archetype -am \
-            -DskipTests package
+          mvn --version | tee "$RUNNER_TEMP/maven-version.txt"
+          rg -q 'Apache Maven 3\.8\.6' "$RUNNER_TEMP/maven-version.txt"
+          mvn --batch-mode --fail-at-end verify
+          bash scripts/verify-aura-contracts.sh
+          bash scripts/verify-docs-code.sh
 
   database-migrations:
     runs-on: ubuntu-latest
