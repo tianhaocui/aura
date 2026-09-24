@@ -69,6 +69,8 @@ if rg -n "osv-full-scan:[[:space:]]*$" "$repo_root/.github/workflows/ci.yml" >/d
 fi
 rg -q 'bash scripts/verify-release-signatures\.sh' \
   "$repo_root/.github/workflows/ci.yml"
+rg -q 'path: target/aura-release-checksums\.sha256' \
+  "$repo_root/.github/workflows/ci.yml"
 rg -q -- '-Prelease -DskipTests' \
   "$repo_root/scripts/verify-release-signatures.sh"
 if rg -n '(^|[[:space:]])deploy([[:space:]]|$)' \

@@ -169,7 +169,9 @@ bash scripts/verify-release-signatures.sh
 The script creates an isolated one-day test key, runs the Maven `release`
 profile through `verify`, and verifies every public POM, JAR, source JAR, and
 Javadoc JAR signature. It never runs `deploy` and never uses a developer's
-default GPG keyring.
+default GPG keyring. It also writes and verifies
+`target/aura-release-checksums.sha256` for every artifact and `.asc` signature;
+CI archives that manifest for 90 days.
 
 Public API changes use a committed `javap` baseline:
 

@@ -46,6 +46,15 @@ jobs:
         if: matrix.java == 17
         run: bash scripts/verify-release-signatures.sh
 
+      - name: Archive Release Checksums
+        if: matrix.java == 17
+        uses: actions/upload-artifact@v4
+        with:
+          name: aura-1.0-release-checksums
+          path: target/aura-release-checksums.sha256
+          if-no-files-found: error
+          retention-days: 90
+
       - name: Aggregate SBOM
         if: matrix.java == 17
         run: bash scripts/verify-sbom.sh
