@@ -37,9 +37,29 @@ if test -n "${MAVEN_SETTINGS:-}"; then
   maven+=(-s "$MAVEN_SETTINGS")
 fi
 
+release_timeout_seconds="${AURA_RELEASE_VERIFY_TIMEOUT_SECONDS:-600}"
+case "$release_timeout_seconds" in
+  ''|*[!0-9]*|0) echo "AURA_RELEASE_VERIFY_TIMEOUT_SECONDS must be a positive integer" >&2; exit 1 ;;
+esac
+
 GNUPGHOME="$gpg_home" "${maven[@]}" -q -f "$repo_root/pom.xml" \
   -pl "$module_list" -am -Prelease -DskipTests \
-  -Dgpg.keyname="$fingerprint" verify
+  -Dgpg.keyname="$fingerprint" verify &
+maven_pid=$!
+started_at="$(date +%s)"
+while kill -0 "$maven_pid" 2>/dev/null; do
+  now="$(date +%s)"
+  if test "$((now - started_at))" -ge "$release_timeout_seconds"; then
+    echo "Release signature Maven verification timed out after ${release_timeout_seconds}s" >&2
+    kill "$maven_pid" 2>/dev/null || true
+    sleep 1
+    kill -KILL "$maven_pid" 2>/dev/null || true
+    wait "$maven_pid" 2>/dev/null || true
+    exit 124
+  fi
+  sleep 1
+done
+wait "$maven_pid"
 
 verified=0
 artifacts=()
