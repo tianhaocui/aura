@@ -141,6 +141,16 @@ StandardAdmissionPolicy policy = StandardAdmissionPolicy.builder()
 
 ## Release Gates
 
+For ordinary local changes, run the single deterministic repository-only gate:
+
+```bash
+bash scripts/verify-local-readiness.sh
+```
+
+Use the specialized commands below only when diagnosing one gate or collecting
+its individual artifact. The local entry point never triggers remote CI,
+production signing, or Central Portal publication.
+
 Generate the aggregate CycloneDX SBOM before publishing:
 
 ```bash
