@@ -281,9 +281,9 @@ bash scripts/verify-local-readiness.sh
 ```
 
 This repository-only gate runs the reactor tests, AI evaluations, documentation
-examples, public API baseline, SBOM, release artifact shape, isolated test-key
-signatures, and MCP npm smoke in a deterministic order. It does not publish or
-trigger external release systems.
+examples, public API baseline, generated archetype/executable-JAR smoke, SBOM,
+release artifact shape, isolated test-key signatures, and MCP npm smoke in a
+deterministic order. It does not publish or trigger external release systems.
 
 Route metadata includes both request body fields and the JSON response shape
 when a service method returns a record/POJO. AI clients should use these fields
