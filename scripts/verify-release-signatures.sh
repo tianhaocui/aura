@@ -4,16 +4,33 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 root_version="$(sed -n 's:.*<version>\([^<]*\)</version>.*:\1:p' "$repo_root/pom.xml" | head -1)"
 test -n "$root_version"
-for command_name in gpg gpgconf mvn awk; do
+for command_name in gpg gpgconf mvn awk pgrep; do
   command -v "$command_name" >/dev/null || {
     echo "Release signature verification requires $command_name" >&2
     exit 1
   }
 done
 
+terminate_process_tree() {
+  local pid="$1"
+  local signal="$2"
+  local child
+  while IFS= read -r child; do
+    if test -n "$child"; then terminate_process_tree "$child" "$signal"; fi
+  done < <(pgrep -P "$pid" 2>/dev/null || true)
+  kill "-$signal" "$pid" 2>/dev/null || true
+}
+
+maven_pid=""
 gpg_home="$(mktemp -d "${TMPDIR:-/tmp}/aura-release-gpg.XXXXXX")"
 chmod 700 "$gpg_home"
 cleanup() {
+  if test -n "$maven_pid" && kill -0 "$maven_pid" 2>/dev/null; then
+    terminate_process_tree "$maven_pid" TERM
+    sleep 1
+    terminate_process_tree "$maven_pid" KILL
+    wait "$maven_pid" 2>/dev/null || true
+  fi
   GNUPGHOME="$gpg_home" gpgconf --kill gpg-agent >/dev/null 2>&1 || true
   rm -rf -- "$gpg_home"
 }
@@ -51,15 +68,17 @@ while kill -0 "$maven_pid" 2>/dev/null; do
   now="$(date +%s)"
   if test "$((now - started_at))" -ge "$release_timeout_seconds"; then
     echo "Release signature Maven verification timed out after ${release_timeout_seconds}s" >&2
-    kill "$maven_pid" 2>/dev/null || true
+    terminate_process_tree "$maven_pid" TERM
     sleep 1
-    kill -KILL "$maven_pid" 2>/dev/null || true
+    terminate_process_tree "$maven_pid" KILL
     wait "$maven_pid" 2>/dev/null || true
+    maven_pid=""
     exit 124
   fi
   sleep 1
 done
 wait "$maven_pid"
+maven_pid=""
 
 verified=0
 artifacts=()
