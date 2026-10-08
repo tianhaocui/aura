@@ -17,6 +17,10 @@ on:
 run-name: >-
   Aura 1.0 readiness${{ github.event_name == 'workflow_dispatch' && format(' — {0}', inputs.reason) || '' }}
 
+concurrency:
+  group: aura-1.0-readiness-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test:
     runs-on: ubuntu-latest
