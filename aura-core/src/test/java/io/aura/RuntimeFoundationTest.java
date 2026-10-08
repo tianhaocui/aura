@@ -6,6 +6,8 @@ import io.aura.contract.HealthStatus;
 import org.junit.jupiter.api.Test;
 
 import java.util.Properties;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.*;
 
@@ -118,6 +120,27 @@ class RuntimeFoundationTest {
         assertThat(((AuraWebRuntime) app.runtimeView()).healthStatus()).isEqualTo(HealthStatus.DOWN);
         assertThat(System.nanoTime() - started)
                 .isLessThan(java.util.concurrent.TimeUnit.SECONDS.toNanos(3));
+    }
+
+    @Test void healthChecksShareOneTimeoutBudget() {
+        int checkCount = 5;
+        CountDownLatch startedChecks = new CountDownLatch(checkCount);
+        AuraApp app = AuraApp.create(new AuraConfig().healthCheckTimeout(1));
+        for (int index = 0; index < checkCount; index++) {
+            app.healthCheck(() -> {
+                startedChecks.countDown();
+                Thread.sleep(10_000);
+                return HealthStatus.UP;
+            });
+        }
+
+        long started = System.nanoTime();
+        HealthStatus status = ((AuraWebRuntime) app.runtimeView()).healthStatus();
+        long elapsed = System.nanoTime() - started;
+
+        assertThat(status).isEqualTo(HealthStatus.DOWN);
+        assertThat(startedChecks.getCount()).isZero();
+        assertThat(elapsed).isLessThan(TimeUnit.SECONDS.toNanos(3));
     }
 
     @Test void optionalRuntimeControlsDefaultOffAndTlsFailsFast() {
