@@ -56,6 +56,20 @@
       "maxTokens": 5000,
       "prompt": "Expose an authenticated permissioned Aura MCP tool over bounded HTTP/SSE, negotiate the protocol, handle JSON-RPC batch notifications, and verify a real Undertow socket session.",
       "verificationTests": ["io.aura.mcp.McpHttpTransportTest", "io.aura.mcp.McpSecurityTest"]
+    },
+    {
+      "id": "workflow-variant",
+      "category": "workflow",
+      "maxTokens": 4000,
+      "prompt": "Build an Aura WorkflowModule with a named DAG workflow containing place-order, outbound, and deduct-inventory steps. Add a customer-specific variant that inserts stocktake and quality-check before outbound. Verify the default and variant execution orders, cycle rejection, and cancellation with WorkflowRuntime.",
+      "verificationTests": ["io.aura.workflow.WorkflowTest"]
+    },
+    {
+      "id": "ai-client-budget",
+      "category": "ai",
+      "maxTokens": 4500,
+      "prompt": "Compose Aura AiModule with a business module, call AiClient.chat with an AiBudget limiting input characters and output tokens, and verify budget enforcement, structured output parsing, and usage accounting with a mock AiProvider.",
+      "verificationTests": ["io.aura.ai.AiClientTest", "io.aura.ai.AiBudgetEnforcementTest", "io.aura.ai.StructuredOutputTest"]
     }
   ]
 }
