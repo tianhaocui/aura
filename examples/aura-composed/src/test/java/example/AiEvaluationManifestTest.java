@@ -23,11 +23,12 @@ class AiEvaluationManifestTest {
         JSONObject manifest = JSON.parseObject(Files.readString(root.resolve("evals/tasks.json")));
         assertThat(manifest.getInteger("schemaVersion")).isEqualTo(1);
         JSONArray tasks = manifest.getJSONArray("tasks");
-        assertThat(tasks).hasSize(8);
+        assertThat(tasks).hasSize(10);
         assertThat(tasks.stream().map(value -> ((JSONObject) value).getString("category")))
                 .containsExactlyInAnyOrderElementsOf(Set.of(
                         "crud", "auth", "validation", "database",
-                        "upload", "sse", "websocket", "mcp"));
+                        "upload", "sse", "websocket", "mcp",
+                        "workflow", "ai"));
         for (Object value : tasks) {
             JSONObject task = (JSONObject) value;
             assertThat(task.getString("id")).isNotBlank();
