@@ -96,6 +96,18 @@ class RuntimeFoundationTest {
         assertThatThrownBy(app::start).isInstanceOf(IllegalStateException.class);
     }
 
+    @Test void failedMcpStdioStartupRestoresProcessStdout() {
+        java.io.PrintStream original = System.out;
+        AuraApp app = AuraApp.create();
+
+        assertThatThrownBy(() -> app.start("--mcp-stdio"))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("No AuraStarter found");
+
+        assertThat(System.out).isSameAs(original);
+        assertThat(app.state()).isEqualTo(io.aura.contract.RuntimeState.STOPPED);
+    }
+
     @Test void healthChecksFailClosedWithoutExposingFailure() {
         AuraApp app = AuraApp.create().healthCheck(() -> { throw new IllegalStateException("password=secret"); });
         assertThat(((AuraWebRuntime) app.runtimeView()).healthStatus()).isEqualTo(HealthStatus.DOWN);

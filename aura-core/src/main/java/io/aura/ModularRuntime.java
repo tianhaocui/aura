@@ -30,6 +30,8 @@ import java.util.function.Function;
 final class ModularRuntime implements AuraWebRuntime {
     private static final org.slf4j.Logger LOG =
             org.slf4j.LoggerFactory.getLogger(ModularRuntime.class);
+    private static final Object STDIO_REDIRECT_LOCK = new Object();
+    private static ModularRuntime stdioRedirectOwner;
     private final AuraConfigSnapshot config;
     private final javax.net.ssl.SSLContext tlsContext;
     private final Map<String, String> properties = new ConcurrentHashMap<>();
@@ -61,10 +63,13 @@ final class ModularRuntime implements AuraWebRuntime {
     private String admissionPolicyModule;
     private int mcpPort = -1;
     private PrintStream mcpStdout;
+    private PrintStream originalSystemOut;
+    private PrintStream redirectedSystemOut;
     private McpRouterSpec mcpRouter;
     private AuraStarter starter;
     private McpStarter mcpStarter;
     private volatile Thread keepAliveThread;
+    private volatile Thread shutdownHook;
     private volatile boolean devMode;
     private boolean preparing;
 
@@ -188,11 +193,26 @@ final class ModularRuntime implements AuraWebRuntime {
             }
         }
         if (stdio) {
-            mcpPort = -2;
-            mcpStdout = System.out;
-            System.setOut(System.err);
+            enableStdioOutput();
         }
         start();
+    }
+
+    private void enableStdioOutput() {
+        if (state.get() != RuntimeState.NEW) {
+            throw new IllegalStateException("MCP stdio mode must be configured before runtime startup");
+        }
+        synchronized (STDIO_REDIRECT_LOCK) {
+            if (stdioRedirectOwner != null && stdioRedirectOwner != this) {
+                throw new IllegalStateException("Another Aura runtime already owns MCP stdio output");
+            }
+            originalSystemOut = System.out;
+            redirectedSystemOut = System.err;
+            mcpStdout = originalSystemOut;
+            mcpPort = -2;
+            stdioRedirectOwner = this;
+            System.setOut(redirectedSystemOut);
+        }
     }
 
     @Override public synchronized void start() {
@@ -227,7 +247,8 @@ final class ModularRuntime implements AuraWebRuntime {
             keepAliveThread.setDaemon(false);
             keepAliveThread.start();
             if (completeRequestedStop()) return;
-            Runtime.getRuntime().addShutdownHook(new Thread(this::stop, "aura-shutdown"));
+            shutdownHook = new Thread(this::stop, "aura-shutdown");
+            Runtime.getRuntime().addShutdownHook(shutdownHook);
             state.set(RuntimeState.RUNNING);
         } catch (RuntimeException | Error failure) {
             rethrowIfFatal(failure);
@@ -271,6 +292,8 @@ final class ModularRuntime implements AuraWebRuntime {
         }
         moduleManager.stop(this::moduleContext, moduleFailureCollector(failures));
         closeResources(failures);
+        removeShutdownHook();
+        restoreStdioOutput();
         state.set(RuntimeState.STOPPED);
         publishShutdownEvents(phase, failures);
     }
@@ -374,6 +397,8 @@ final class ModularRuntime implements AuraWebRuntime {
         }
         moduleManager.stop(this::moduleContext, moduleFailureCollector(failures));
         closeResources(failures);
+        removeShutdownHook();
+        restoreStdioOutput();
         java.util.Set<Throwable> attached = java.util.Collections.newSetFromMap(
                 new java.util.IdentityHashMap<>());
         attached.add(failure);
@@ -385,6 +410,29 @@ final class ModularRuntime implements AuraWebRuntime {
         }
         state.set(RuntimeState.STOPPED);
         publishShutdownEvents("startup-rollback", failures);
+    }
+
+    private void removeShutdownHook() {
+        Thread hook = shutdownHook;
+        shutdownHook = null;
+        if (hook == null || hook == Thread.currentThread()) return;
+        try {
+            Runtime.getRuntime().removeShutdownHook(hook);
+        } catch (IllegalStateException ignored) {
+            // The JVM is already running this hook as part of shutdown.
+        }
+    }
+
+    private void restoreStdioOutput() {
+        synchronized (STDIO_REDIRECT_LOCK) {
+            if (stdioRedirectOwner != this) return;
+            if (System.out == redirectedSystemOut) System.setOut(originalSystemOut);
+            stdioRedirectOwner = null;
+            mcpStdout = null;
+            originalSystemOut = null;
+            redirectedSystemOut = null;
+            mcpPort = -1;
+        }
     }
 
     private java.util.function.BiConsumer<AuraModule, Throwable> moduleFailureCollector(
