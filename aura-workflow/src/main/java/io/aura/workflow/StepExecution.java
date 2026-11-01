@@ -14,36 +14,43 @@ public final class StepExecution {
     private Throwable error;
     private Instant startedAt;
     private Instant finishedAt;
+    private final WorkflowClock clock;
 
     StepExecution(String stepId, StepMode mode, RetryPolicy retryPolicy) {
+        this(stepId, mode, retryPolicy, WorkflowClock.SYSTEM);
+    }
+
+    StepExecution(String stepId, StepMode mode, RetryPolicy retryPolicy, WorkflowClock clock) {
         this.stepId = stepId;
         this.mode = mode;
         this.retryPolicy = retryPolicy;
+        this.clock = clock;
     }
 
     private StepExecution(String stepId, StepMode mode, RetryPolicy retryPolicy,
                           Status status, int attempts, Object result, Throwable error,
-                          Instant startedAt, Instant finishedAt) {
+                          Instant startedAt, Instant finishedAt, WorkflowClock clock) {
         this.stepId = stepId;
         this.mode = mode;
         this.retryPolicy = retryPolicy;
         this.status = status;
         this.attempts = attempts;
         this.result = result;
-        this.error = error;
         this.startedAt = startedAt;
+        this.error = error;
         this.finishedAt = finishedAt;
+        this.clock = clock;
     }
 
     StepExecution copy() {
         return new StepExecution(stepId, mode, retryPolicy, status, attempts, result,
-                error, startedAt, finishedAt);
+                error, startedAt, finishedAt, clock);
     }
 
-    void start() { status = Status.RUNNING; startedAt = Instant.now(); }
-    void success(Object value) { result = value; status = Status.SUCCEEDED; finishedAt = Instant.now(); }
-    void fail(Throwable cause) { error = cause; status = Status.FAILED; finishedAt = Instant.now(); }
-    void cancel(Throwable cause) { error = cause; status = Status.CANCELLED; finishedAt = Instant.now(); }
+    void start() { status = Status.RUNNING; startedAt = clock.now(); }
+    void success(Object value) { result = value; status = Status.SUCCEEDED; finishedAt = clock.now(); }
+    void fail(Throwable cause) { error = cause; status = Status.FAILED; finishedAt = clock.now(); }
+    void cancel(Throwable cause) { error = cause; status = Status.CANCELLED; finishedAt = clock.now(); }
     void compensated() { status = Status.COMPENSATED; }
     void attempt() { attempts++; }
     public String stepId() { return stepId; }

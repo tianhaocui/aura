@@ -39,6 +39,7 @@ public final class WorkflowRuntime<C> implements AutoCloseable {
     private final AtomicInteger activeLeaseGuards = new AtomicInteger();
     private final int maxActiveLeases;
     private final long renewalIntervalNanos;
+    private final WorkflowClock clock;
     private volatile ScheduledFuture<?> leaseSweep;
     private final ThreadLocal<java.util.ArrayDeque<LeaseScope>> currentLeases =
             ThreadLocal.withInitial(java.util.ArrayDeque::new);
@@ -58,8 +59,16 @@ public final class WorkflowRuntime<C> implements AutoCloseable {
     /** Creates a runtime with explicit bounded execution and durable lease settings. */
     public WorkflowRuntime(WorkflowRegistry registry, WorkflowExecutionStore store,
                            int workers, int queueCapacity, Duration leaseTtl, String ownerId) {
+        this(registry, store, workers, queueCapacity, leaseTtl, ownerId, WorkflowClock.SYSTEM);
+    }
+
+    /** Creates a runtime with an injected time source for lease renewal deadlines. */
+    public WorkflowRuntime(WorkflowRegistry registry, WorkflowExecutionStore store,
+                           int workers, int queueCapacity, Duration leaseTtl, String ownerId,
+                           WorkflowClock clock) {
         this.registry = Objects.requireNonNull(registry, "registry");
         this.store = Objects.requireNonNull(store, "store");
+        this.clock = Objects.requireNonNull(clock, "clock");
         this.durableStore = store instanceof DurableWorkflowExecutionStore durable ? durable : null;
         this.leaseTtl = Objects.requireNonNull(leaseTtl, "leaseTtl");
         if (leaseTtl.compareTo(Duration.ofMillis(30)) < 0) {
@@ -711,7 +720,7 @@ public final class WorkflowRuntime<C> implements AutoCloseable {
     }
 
     private void sweepLeases() {
-        long now = System.nanoTime();
+        long now = clock.nanos();
         leaseGuards.values().forEach(guard -> guard.submitRenewal(now));
     }
 
@@ -734,7 +743,7 @@ public final class WorkflowRuntime<C> implements AutoCloseable {
         private LeaseGuard(WorkflowLease lease, CancellationToken executionToken) {
             this.lease = lease;
             this.executionToken = executionToken;
-            this.nextRenewalNanos = System.nanoTime() + renewalIntervalNanos;
+            this.nextRenewalNanos = clock.nanos() + renewalIntervalNanos;
         }
 
         private void submitRenewal(long nowNanos) {
@@ -761,7 +770,7 @@ public final class WorkflowRuntime<C> implements AutoCloseable {
                 java.util.Optional<WorkflowLease> renewed = durableStore.renew(lease, leaseTtl);
                 if (renewed.isPresent()) {
                     lease = renewed.get();
-                    nextRenewalNanos = System.nanoTime() + renewalIntervalNanos;
+                    nextRenewalNanos = clock.nanos() + renewalIntervalNanos;
                 } else lose();
             } catch (RuntimeException failure) {
                 lose();

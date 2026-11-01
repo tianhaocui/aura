@@ -19,14 +19,16 @@ public final class WorkflowDefinition<C> implements AuraWorkflow<C> {
     private final Map<String, WorkflowStepSpec<C>> baseSteps;
     private final Set<WorkflowVariantBuilder.Edge> baseEdges;
     private final Map<String, Variant<C>> variants;
+    private final WorkflowClock clock;
 
     private WorkflowDefinition(String id, Map<String, WorkflowStepSpec<C>> steps,
                                Set<WorkflowVariantBuilder.Edge> edges,
-                               Map<String, Variant<C>> variants) {
+                               Map<String, Variant<C>> variants, WorkflowClock clock) {
         this.id = id;
         this.baseSteps = Collections.unmodifiableMap(new LinkedHashMap<>(steps));
         this.baseEdges = Collections.unmodifiableSet(new LinkedHashSet<>(edges));
         this.variants = Collections.unmodifiableMap(new LinkedHashMap<>(variants));
+        this.clock = clock;
         validate(this.baseSteps, this.baseEdges);
         for (Variant<C> variant : variants.values()) validate(variant.steps, variant.edges);
     }
@@ -78,10 +80,10 @@ public final class WorkflowDefinition<C> implements AuraWorkflow<C> {
         String variant = selector.select(context);
         Resolved<C> resolved = resolve(variant);
         List<String> order = topologicalOrder(resolved.steps, resolved.edges);
-        WorkflowExecution execution = new WorkflowExecution(id, variant, idempotencyKey);
+        WorkflowExecution execution = new WorkflowExecution(id, variant, idempotencyKey, clock);
         for (String stepId : order) {
             WorkflowStepSpec<C> spec = resolved.steps.get(stepId);
-            execution.add(new StepExecution(stepId, spec.mode(), spec.retryPolicy()));
+            execution.add(new StepExecution(stepId, spec.mode(), spec.retryPolicy(), clock));
         }
         return execution;
     }
@@ -133,7 +135,7 @@ public final class WorkflowDefinition<C> implements AuraWorkflow<C> {
                             || !spec.retryPolicy().shouldRetry(failure)) break;
                     if (!spec.retryPolicy().delay().isZero()) {
                         try {
-                            awaitRetryDelay(spec.retryPolicy().delay(), cancellationToken);
+                            awaitRetryDelay(spec.retryPolicy().delay(), cancellationToken, clock);
                         } catch (InterruptedException interrupted) {
                             Thread.currentThread().interrupt();
                             if (cancellationToken.isCancelled()) {
@@ -192,8 +194,8 @@ public final class WorkflowDefinition<C> implements AuraWorkflow<C> {
         private RuntimeException failure() { return failure; }
     }
 
-    private static void awaitRetryDelay(java.time.Duration delay, CancellationToken cancellationToken)
-            throws InterruptedException {
+    private static void awaitRetryDelay(java.time.Duration delay, CancellationToken cancellationToken,
+                                        WorkflowClock clock) throws InterruptedException {
         long remainingNanos;
         try {
             remainingNanos = Math.multiplyExact(delay.getSeconds(), 1_000_000_000L)
@@ -204,9 +206,7 @@ public final class WorkflowDefinition<C> implements AuraWorkflow<C> {
         while (remainingNanos > 0) {
             cancellationToken.throwIfCancelled();
             long sliceNanos = Math.min(remainingNanos, java.util.concurrent.TimeUnit.MILLISECONDS.toNanos(50));
-            long millis = java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(sliceNanos);
-            int nanos = (int) (sliceNanos - java.util.concurrent.TimeUnit.MILLISECONDS.toNanos(millis));
-            Thread.sleep(millis, nanos);
+            clock.sleep(java.time.Duration.ofNanos(sliceNanos));
             remainingNanos -= sliceNanos;
         }
         cancellationToken.throwIfCancelled();
@@ -269,15 +269,20 @@ public final class WorkflowDefinition<C> implements AuraWorkflow<C> {
         return List.copyOf(result);
     }
 
-    public static <C> Builder<C> builder(String id) { return new Builder<>(id); }
+    public static <C> Builder<C> builder(String id) { return new Builder<>(id, WorkflowClock.SYSTEM); }
+    public static <C> Builder<C> builder(String id, WorkflowClock clock) {
+        return new Builder<>(id, java.util.Objects.requireNonNull(clock, "clock"));
+    }
 
     public static final class Builder<C> {
         private final String id;
+        private final WorkflowClock clock;
         private final WorkflowVariantBuilder<C> base = new WorkflowVariantBuilder<>();
         private final Map<String, Variant<C>> variants = new LinkedHashMap<>();
-        private Builder(String id) {
+        private Builder(String id, WorkflowClock clock) {
             if (id == null || id.isBlank()) throw new IllegalArgumentException("workflow id must not be blank");
             this.id = id;
+            this.clock = clock;
         }
         public Builder<C> step(String stepId, WorkflowStep<C> step) { base.step(stepId, step); return this; }
         public Builder<C> step(String stepId, WorkflowStep<C> step, StepMode mode) { base.step(stepId, step, mode); return this; }
@@ -306,7 +311,7 @@ public final class WorkflowDefinition<C> implements AuraWorkflow<C> {
         public Builder<C> extension(String name, WorkflowExtension<C> extension) {
             return variant(name, extension::apply);
         }
-        public WorkflowDefinition<C> build() { return new WorkflowDefinition<>(id, base.steps(), base.edges(), variants); }
+        public WorkflowDefinition<C> build() { return new WorkflowDefinition<>(id, base.steps(), base.edges(), variants, clock); }
         private WorkflowVariantBuilder<C> copyBase() {
             WorkflowVariantBuilder<C> copy = new WorkflowVariantBuilder<>();
             base.steps().forEach((stepId, spec) -> copy.step(stepId, spec.step(), spec.mode(), spec.retryPolicy()));

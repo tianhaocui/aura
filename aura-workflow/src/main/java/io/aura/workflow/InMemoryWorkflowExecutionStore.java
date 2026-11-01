@@ -14,12 +14,20 @@ public final class InMemoryWorkflowExecutionStore implements DurableWorkflowExec
     private final ConcurrentLinkedQueue<String> insertionOrder = new ConcurrentLinkedQueue<>();
     private final ConcurrentHashMap<String, WorkflowLease> leases = new ConcurrentHashMap<>();
     private final int maxExecutions;
+    private final WorkflowClock clock;
 
     public InMemoryWorkflowExecutionStore() { this(10_000); }
 
     public InMemoryWorkflowExecutionStore(int maxExecutions) {
+        this(maxExecutions, WorkflowClock.SYSTEM);
+    }
+
+    public InMemoryWorkflowExecutionStore(WorkflowClock clock) { this(10_000, clock); }
+
+    public InMemoryWorkflowExecutionStore(int maxExecutions, WorkflowClock clock) {
         if (maxExecutions < 1) throw new IllegalArgumentException("maxExecutions must be positive");
         this.maxExecutions = maxExecutions;
+        this.clock = java.util.Objects.requireNonNull(clock, "clock");
     }
 
     public int maxExecutions() { return maxExecutions; }
@@ -105,7 +113,7 @@ public final class InMemoryWorkflowExecutionStore implements DurableWorkflowExec
     @Override public synchronized Optional<WorkflowLease> tryAcquire(
             String workflowId, String idempotencyKey, String ownerId, java.time.Duration leaseTtl) {
         validateLeaseRequest(workflowId, idempotencyKey, ownerId, leaseTtl);
-        java.time.Instant now = java.time.Instant.now();
+        java.time.Instant now = clock.now();
         leases.entrySet().removeIf(entry -> entry.getValue().expiredAt(now));
         String key = key(workflowId, idempotencyKey);
         WorkflowLease existing = leases.get(key);
@@ -132,7 +140,7 @@ public final class InMemoryWorkflowExecutionStore implements DurableWorkflowExec
         }
         String leaseKey = key(lease.workflowId(), lease.idempotencyKey());
         WorkflowLease current = leases.get(leaseKey);
-        java.time.Instant now = java.time.Instant.now();
+        java.time.Instant now = clock.now();
         if (current == null || current.expiredAt(now)
                 || !current.token().equals(lease.token())
                 || !current.ownerId().equals(lease.ownerId())) {
@@ -149,7 +157,7 @@ public final class InMemoryWorkflowExecutionStore implements DurableWorkflowExec
         validateLeaseRequest(lease.workflowId(), lease.idempotencyKey(), lease.ownerId(), leaseTtl);
         String key = key(lease.workflowId(), lease.idempotencyKey());
         WorkflowLease current = leases.get(key);
-        java.time.Instant now = java.time.Instant.now();
+        java.time.Instant now = clock.now();
         if (current == null || current.expiredAt(now)
                 || !current.token().equals(lease.token())
                 || !current.ownerId().equals(lease.ownerId())) {
@@ -175,7 +183,7 @@ public final class InMemoryWorkflowExecutionStore implements DurableWorkflowExec
         String key = key(workflowId, idempotencyKey);
         if (key == null) return Optional.empty();
         WorkflowLease current = leases.get(key);
-        if (current != null && current.expiredAt(java.time.Instant.now())) {
+        if (current != null && current.expiredAt(clock.now())) {
             leases.remove(key, current);
             return Optional.empty();
         }

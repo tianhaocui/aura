@@ -18,20 +18,25 @@ public final class WorkflowExecution {
     private Throwable error;
     private final Instant startedAt;
     private Instant finishedAt;
+    private final WorkflowClock clock;
 
     WorkflowExecution(String workflowId, String variant) {
         this(workflowId, variant, null);
     }
 
     WorkflowExecution(String workflowId, String variant, String idempotencyKey) {
+        this(workflowId, variant, idempotencyKey, WorkflowClock.SYSTEM);
+    }
+
+    WorkflowExecution(String workflowId, String variant, String idempotencyKey, WorkflowClock clock) {
         this(UUID.randomUUID().toString(), workflowId, variant, idempotencyKey,
-                new LinkedHashMap<>(), Status.PENDING, null, Instant.now(), null);
+                new LinkedHashMap<>(), Status.PENDING, null, clock.now(), null, clock);
     }
 
     private WorkflowExecution(String executionId, String workflowId, String variant,
                               String idempotencyKey, Map<String, StepExecution> steps,
                               Status status, Throwable error, Instant startedAt,
-                              Instant finishedAt) {
+                              Instant finishedAt, WorkflowClock clock) {
         this.executionId = executionId;
         this.workflowId = workflowId;
         this.variant = variant;
@@ -41,18 +46,19 @@ public final class WorkflowExecution {
         this.error = error;
         this.startedAt = startedAt;
         this.finishedAt = finishedAt;
+        this.clock = clock;
     }
 
     WorkflowExecution copy() {
         Map<String, StepExecution> copiedSteps = new LinkedHashMap<>();
         steps.forEach((id, step) -> copiedSteps.put(id, step.copy()));
         return new WorkflowExecution(executionId, workflowId, variant, idempotencyKey,
-                copiedSteps, status, error, startedAt, finishedAt);
+                copiedSteps, status, error, startedAt, finishedAt, clock);
     }
     void start() { status = Status.RUNNING; }
-    void success() { status = Status.SUCCEEDED; finishedAt = Instant.now(); }
-    void fail(Throwable cause) { status = Status.FAILED; error = cause; finishedAt = Instant.now(); }
-    void cancel(Throwable cause) { status = Status.CANCELLED; error = cause; finishedAt = Instant.now(); }
+    void success() { status = Status.SUCCEEDED; finishedAt = clock.now(); }
+    void fail(Throwable cause) { status = Status.FAILED; error = cause; finishedAt = clock.now(); }
+    void cancel(Throwable cause) { status = Status.CANCELLED; error = cause; finishedAt = clock.now(); }
     void add(StepExecution step) { steps.put(step.stepId(), step); }
     public String executionId() { return executionId; }
     public String workflowId() { return workflowId; }
