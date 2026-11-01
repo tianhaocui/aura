@@ -50,6 +50,9 @@ final class RouteContract {
         view.put("responseSchema", route.responseSchema());
         view.put("authenticated", route.authenticated());
         if (route.permission() != null) view.put("permission", route.permission());
+        // A plain route says nothing about streaming; a streaming one has to, because that
+        // is the fact that makes it unreadable for a request/response consumer.
+        if (route.streaming()) view.put("streaming", true);
         return view;
     }
 

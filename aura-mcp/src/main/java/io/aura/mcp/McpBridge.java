@@ -156,6 +156,12 @@ public class McpBridge {
         List<Map<String, Object>> tools = new ArrayList<>();
         for (int i = 0; i < routes.size(); i++) {
             JSONObject route = routes.getJSONObject(i);
+            String unusable = unusableBecause(route);
+            if (unusable != null) {
+                log().warning("MCP bridge skipped " + route.getString("method") + " "
+                        + route.getString("path") + ": " + unusable);
+                continue;
+            }
             String httpMethod = route.getString("method");
             String path = route.getString("path");
             String desc = route.getString("description");
@@ -177,13 +183,20 @@ public class McpBridge {
             JSONObject route = routes.getJSONObject(i);
             String name = buildToolName(route.getString("method"), route.getString("path"));
             if (!name.equals(toolName)) continue;
+            // Re-checked here so a client cannot reach a route that tools/list refused.
+            if (unusableBecause(route) != null) return McpContent.error("MCP_TOOL_NOT_FOUND");
 
             try {
                 String result = callHttp(route, args);
                 return McpContent.result(result);
+            } catch (UpstreamStatus failure) {
+                log().warning("MCP bridge tool " + toolName + " upstream returned HTTP " + failure.status());
+                return McpContent.error("MCP_UPSTREAM_HTTP_" + failure.status());
+            } catch (MissingArgument failure) {
+                log().warning("MCP bridge tool " + toolName + " missing required argument");
+                return McpContent.error("MCP_MISSING_ARGUMENT");
             } catch (Exception e) {
-                java.util.logging.Logger.getLogger(McpBridge.class.getName())
-                        .warning("MCP bridge tool invocation failed for " + toolName + ": " + e.getClass().getSimpleName());
+                log().warning("MCP bridge tool invocation failed for " + toolName + ": " + e.getClass().getSimpleName());
                 return McpContent.error("MCP_UPSTREAM_ERROR");
             }
         }
@@ -205,7 +218,12 @@ public class McpBridge {
                 String pName = p.getString("name");
                 String source = p.getString("source");
                 Object val = args.get(pName);
-                if (val == null) continue;
+                if (val == null) {
+                    // Skipping a required argument produces a request the server rejects for
+                    // a reason the model never learns; the name is the only useful feedback.
+                    if (Boolean.TRUE.equals(p.getBoolean("required"))) throw new MissingArgument(pName);
+                    continue;
+                }
 
                 if ("path".equals(source)) {
                     path = path.replace("{" + pName + "}", encode(val.toString()));
@@ -229,8 +247,56 @@ public class McpBridge {
 
         HttpResponse<InputStream> response = http().send(request.build(),
                 HttpResponse.BodyHandlers.ofInputStream());
+        int status = response.statusCode();
         try (InputStream is = response.body()) {
-            return is != null ? readBounded(is, MAX_RESPONSE_BYTES) : "";
+            String text = is != null ? readBounded(is, MAX_RESPONSE_BYTES) : "";
+            if (status >= 400) throw new UpstreamStatus(status);
+            return text;
+        }
+    }
+
+    private java.util.logging.Logger log() {
+        return java.util.logging.Logger.getLogger(McpBridge.class.getName());
+    }
+
+    /**
+     * Why this route cannot become a tool, or null when it can. The bridge carries no user
+     * identity and reads one bounded body, so an authenticated or streaming route is not a
+     * tool that happens to fail: it is a choice a model should never have been offered.
+     * A parameter the bridge cannot transmit is the same case one level down.
+     */
+    private static String unusableBecause(JSONObject route) {
+        if (route.getBooleanValue("authenticated")) return "route requires authentication the bridge cannot supply";
+        if (route.getBooleanValue("streaming")) return "route streams a response the bridge cannot read";
+        JSONArray params = route.getJSONArray("params");
+        if (params != null) {
+            for (int i = 0; i < params.size(); i++) {
+                JSONObject parameter = params.getJSONObject(i);
+                String source = parameter.getString("source");
+                if (!"path".equals(source) && !"query".equals(source) && !"body".equals(source)) {
+                    return "parameter " + parameter.getString("name") + " has no transport the bridge can use";
+                }
+            }
+        }
+        return null;
+    }
+
+    /** Upstream HTTP failure, reported as a status code rather than as upstream text. */
+    private static final class UpstreamStatus extends IOException {
+        private final int status;
+
+        private UpstreamStatus(int status) {
+            super("upstream returned HTTP " + status);
+            this.status = status;
+        }
+
+        private int status() { return status; }
+    }
+
+    /** A required argument the model did not send. */
+    private static final class MissingArgument extends IllegalArgumentException {
+        private MissingArgument(String name) {
+            super("required argument missing: " + name);
         }
     }
 
@@ -311,7 +377,6 @@ public class McpBridge {
             for (int i = 0; i < params.size(); i++) {
                 JSONObject p = params.getJSONObject(i);
                 String source = p.getString("source");
-                if (source == null || source.isBlank()) source = "tool";
                 Boolean required = p.getBoolean("required");
                 @SuppressWarnings("unchecked")
                 Map<String, Object> bodySchema = p.getJSONObject("schema") == null
