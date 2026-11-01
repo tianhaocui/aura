@@ -82,6 +82,29 @@ class McpRouterTest {
     }
 
     @Test
+    void tool_sharedRouteContract_keepsBodySchemaIntact() throws Exception {
+        Map<String, Object> body = Map.of("type", "object",
+                "properties", Map.of("name", Map.of("type", "string")));
+        var route = new io.aura.contract.ApiRoute("POST", "/orders", "Create order", "Order",
+                List.of(new io.aura.contract.ApiParameter("request", "CreateOrderRequest", "body",
+                        true, "Order fields", body)), null);
+        McpRouter mcp = new McpRouter().tool(route, ctx -> "created");
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> tool = ((List<Map<String, Object>>) mcp.buildSchema().get("tools")).get(0);
+        @SuppressWarnings("unchecked")
+        Map<String, Object> properties = (Map<String, Object>) ((Map<String, Object>) tool.get("inputSchema"))
+                .get("properties");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> request = (Map<String, Object>) properties.get("request");
+        assertThat(request).containsEntry("type", "object");
+        assertThat(request.get("description")).isEqualTo("Order fields");
+
+        // The whole point of the shared contract: the declared source reaches the tool.
+        assertThat(mcp.tools().get(0).params().get(0).contract().source()).isEqualTo("body");
+    }
+
+    @Test
     void permissionedToolFailsClosedAndAcceptsExplicitAuthorizedIdentity() throws Exception {
         McpRouter mcp = new McpRouter();
         mcp.tool("delete_order", "Delete order")

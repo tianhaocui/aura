@@ -1,5 +1,7 @@
 package io.aura.mcp;
 
+import io.aura.contract.ApiParameter;
+
 import java.util.*;
 
 public final class McpUtil {
@@ -23,40 +25,44 @@ public final class McpUtil {
         };
     }
 
-    public static Map<String, Object> buildInputSchema(List<ParamInfo> params) {
-        List<io.aura.contract.ApiParameter> contractParams = new ArrayList<>();
-        for (ParamInfo p : params) {
-            contractParams.add(new io.aura.contract.ApiParameter(p.name(), p.type(), "tool", true, p.description()));
-        }
-        return buildInputSchemaFromContract(contractParams);
-    }
-
-    static Map<String, Object> buildContractInputSchema(List<io.aura.contract.ApiParameter> params) {
-        return buildInputSchemaFromContract(params);
-    }
-
-    private static Map<String, Object> buildInputSchemaFromContract(List<io.aura.contract.ApiParameter> params) {
+    /**
+     * The one {@code tools/list} {@code inputSchema} builder. Every MCP entry point —
+     * the declarative builder, a shared route contract, and the HTTP bridge — funnels
+     * through here, so a parameter can never render differently per path.
+     *
+     * <p>A parameter's declared JSON Schema wins; {@link #jsonType} is only the fallback
+     * for parameters that never described a shape. Enum labels are what the model emits,
+     * so they appear both in {@code enum} and inline in the description.
+     */
+    public static Map<String, Object> inputSchema(List<McpParam> params) {
         Map<String, Object> schema = new LinkedHashMap<>();
         schema.put("type", "object");
         Map<String, Object> properties = new LinkedHashMap<>();
         List<String> required = new ArrayList<>();
-        for (io.aura.contract.ApiParameter p : params) {
+        for (McpParam param : params) {
+            ApiParameter contract = param.contract();
             var prop = new LinkedHashMap<String, Object>();
-            if (p.schema() == null || p.schema().isEmpty()) {
-                prop.put("type", jsonType(p.type()));
+            if (contract.schema().isEmpty()) {
+                prop.put("type", jsonType(contract.type()));
             } else {
-                prop.putAll(p.schema());
+                prop.putAll(contract.schema());
             }
-            if (p.description() != null) prop.put("description", p.description());
-            properties.put(p.name(), prop);
-            if (p.required()) required.add(p.name());
+            String description = contract.description();
+            if (param.isEnum()) {
+                List<String> labels = param.enumValues().stream().map(McpEnumValue::label).toList();
+                prop.put("enum", labels);
+                if (description != null) {
+                    description = description + ": " + String.join(", ", labels);
+                }
+            }
+            if (description != null) prop.put("description", description);
+            properties.put(contract.name(), prop);
+            if (contract.required()) required.add(contract.name());
         }
         schema.put("properties", properties);
         if (!required.isEmpty()) schema.put("required", required);
         return schema;
     }
-
-    public record ParamInfo(String name, String type, String description) {}
 
     private McpUtil() {}
 }

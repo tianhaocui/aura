@@ -105,9 +105,10 @@ HTTP response budget 控制；超过 retention byte limit 的事件会触发 ove
 ## McpRouter (Selective Tool Exposure)
 
 For a route already described by the shared `ApiRoute` contract, use
-`McpRouter.tool(route, handler)`. The generated tool name, parameter names,
-types, required flags, and descriptions then stay aligned with HTTP Schema and
-OpenAPI output. Use the string-based builder below for MCP-only tools.
+`McpRouter.tool(route, handler)`. Every declared parameter fact transfers
+unchanged — name, type, required flag, description, source, and the JSON Schema
+of a structured body — so the tool stays aligned with HTTP Schema and OpenAPI
+output. Use the string-based builder below for MCP-only tools.
 
 Not all APIs should be MCP tools. McpRouter lets you explicitly choose which operations to expose, with AI-friendly parameter mapping.
 
@@ -392,11 +393,11 @@ McpUtil.jsonType("String");   // → "string"
 McpUtil.jsonType("boolean");  // → "boolean"
 McpUtil.jsonType("double");   // → "number"
 
-// Schema generation
-List<McpUtil.ParamInfo> params = List.of(
-    new McpUtil.ParamInfo("id", "int", "User ID")
+// Schema generation — the one builder every MCP entry point uses
+List<McpParam> params = List.of(
+    new McpParam("id", "int", "User ID", null)
 );
-Map<String, Object> schema = McpUtil.buildInputSchema(params);
+Map<String, Object> schema = McpUtil.inputSchema(params);
 ```
 
 ---

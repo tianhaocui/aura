@@ -76,9 +76,9 @@ function buildInputSchema(params) {
   (params || []).forEach(p => {
     const type = { int: 'integer', long: 'integer', Integer: 'integer', Long: 'integer',
       double: 'number', float: 'number', boolean: 'boolean', Boolean: 'boolean' }[p.type] || 'string';
-    properties[p.name] = { type };
+    properties[p.name] = p.schema && Object.keys(p.schema).length ? { ...p.schema } : { type };
     if (p.description) properties[p.name].description = p.description;
-    required.push(p.name);
+    if (p.required !== false) required.push(p.name);
   });
   return { type: 'object', properties, ...(required.length ? { required } : {}) };
 }

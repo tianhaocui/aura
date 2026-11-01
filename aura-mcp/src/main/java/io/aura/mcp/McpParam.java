@@ -4,7 +4,7 @@ import io.aura.contract.ApiParameter;
 
 import java.util.List;
 
-/** MCP-specific enum metadata attached to the shared API parameter contract. */
+/** A shared API parameter plus the MCP enum metadata that has no HTTP equivalent. */
 public final class McpParam {
     private final ApiParameter contract;
     private final List<McpEnumValue> enumValues;
@@ -20,9 +20,6 @@ public final class McpParam {
 
     public McpParam(ApiParameter contract, List<McpEnumValue> enumValues) {
         this.contract = java.util.Objects.requireNonNull(contract, "contract");
-        if (!"tool".equals(contract.source())) {
-            throw new IllegalArgumentException("MCP parameters must use source 'tool'");
-        }
         this.enumValues = enumValues == null ? List.of() : List.copyOf(enumValues);
     }
 

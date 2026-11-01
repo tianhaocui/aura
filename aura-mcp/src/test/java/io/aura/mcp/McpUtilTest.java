@@ -1,5 +1,6 @@
 package io.aura.mcp;
 
+import io.aura.contract.ApiParameter;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -68,11 +69,11 @@ class McpUtilTest {
         assertThat(McpUtil.jsonType("SomeCustomClass")).isEqualTo("string");
     }
 
-    // --- buildInputSchema ---
+    // --- inputSchema ---
 
     @Test
-    void buildInputSchema_emptyList_emptyProperties() {
-        Map<String, Object> schema = McpUtil.buildInputSchema(List.of());
+    void inputSchema_emptyList_emptyProperties() {
+        Map<String, Object> schema = McpUtil.inputSchema(List.of());
         assertThat(schema).containsEntry("type", "object");
         @SuppressWarnings("unchecked")
         Map<String, Object> props = (Map<String, Object>) schema.get("properties");
@@ -81,12 +82,12 @@ class McpUtilTest {
     }
 
     @Test
-    void buildInputSchema_withParams_correctStructure() {
-        List<McpUtil.ParamInfo> params = List.of(
-                new McpUtil.ParamInfo("id", "int", "the item id"),
-                new McpUtil.ParamInfo("name", "String", null)
+    void inputSchema_withParams_correctStructure() {
+        List<McpParam> params = List.of(
+                new McpParam("id", "int", "the item id", null),
+                new McpParam("name", "String", null, null)
         );
-        Map<String, Object> schema = McpUtil.buildInputSchema(params);
+        Map<String, Object> schema = McpUtil.inputSchema(params);
 
         assertThat(schema).containsEntry("type", "object");
 
@@ -111,28 +112,41 @@ class McpUtilTest {
     }
 
     @Test
-    void buildContractInputSchema_preservesOptionalParameters() {
-        var schema = McpUtil.buildContractInputSchema(java.util.List.of(
-                new io.aura.contract.ApiParameter("query", "String", "query", true, null),
-                new io.aura.contract.ApiParameter("page", "int", "query", false, null)));
+    void inputSchema_preservesOptionalParameters() {
+        List<McpParam> params = List.of(
+                new McpParam(new ApiParameter("query", "String", "query", true, null), List.of()),
+                new McpParam(new ApiParameter("page", "int", "query", false, null), List.of()));
 
         @SuppressWarnings("unchecked")
-        List<String> required = (List<String>) schema.get("required");
+        List<String> required = (List<String>) McpUtil.inputSchema(params).get("required");
         assertThat(required).containsExactly("query");
     }
 
     @Test
     @SuppressWarnings("unchecked")
-    void buildContractInputSchema_preservesStructuredBodySchema() {
+    void inputSchema_preservesStructuredBodySchema() {
         Map<String, Object> body = new java.util.LinkedHashMap<>();
         body.put("type", "object");
         body.put("properties", Map.of("name", Map.of("type", "string")));
-        var schema = McpUtil.buildContractInputSchema(java.util.List.of(
-                new io.aura.contract.ApiParameter("request", "CreateRequest", "body", true, null, body)));
+        List<McpParam> params = List.of(new McpParam(
+                new ApiParameter("request", "CreateRequest", "body", true, null, body), List.of()));
 
-        Map<String, Object> properties = (Map<String, Object>) schema.get("properties");
+        Map<String, Object> properties = (Map<String, Object>) McpUtil.inputSchema(params).get("properties");
         Map<String, Object> request = (Map<String, Object>) properties.get("request");
         assertThat(request).containsEntry("type", "object");
         assertThat((Map<String, Object>) request.get("properties")).containsKey("name");
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void inputSchema_declaresEnumLabelsTheModelCanEmit() {
+        List<McpParam> params = List.of(new McpParam("status", "String", "Order status", List.of(
+                new McpEnumValue("PAID(已支付)", "PAID"),
+                new McpEnumValue("NEW(新建)", "NEW"))));
+
+        Map<String, Object> properties = (Map<String, Object>) McpUtil.inputSchema(params).get("properties");
+        Map<String, Object> status = (Map<String, Object>) properties.get("status");
+        assertThat(status).containsEntry("enum", List.of("PAID(已支付)", "NEW(新建)"));
+        assertThat(status.get("description")).isEqualTo("Order status: PAID(已支付), NEW(新建)");
     }
 }

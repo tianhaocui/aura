@@ -306,7 +306,7 @@ public class McpBridge {
     }
 
     private static Map<String, Object> buildInputSchema(JSONArray params) {
-        List<io.aura.contract.ApiParameter> list = new ArrayList<>();
+        List<McpParam> list = new ArrayList<>();
         if (params != null) {
             for (int i = 0; i < params.size(); i++) {
                 JSONObject p = params.getJSONObject(i);
@@ -316,11 +316,12 @@ public class McpBridge {
                 @SuppressWarnings("unchecked")
                 Map<String, Object> bodySchema = p.getJSONObject("schema") == null
                         ? Map.of() : p.getJSONObject("schema").toJavaObject(Map.class);
-                list.add(new io.aura.contract.ApiParameter(p.getString("name"), p.getString("type"), source,
-                        required == null || required, p.getString("description"), bodySchema));
+                list.add(new McpParam(new io.aura.contract.ApiParameter(p.getString("name"),
+                        p.getString("type"), source, required == null || required,
+                        p.getString("description"), bodySchema), List.of()));
             }
         }
-        return McpUtil.buildContractInputSchema(list);
+        return McpUtil.inputSchema(list);
     }
 
     public static void main(String[] args) throws Exception {

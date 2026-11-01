@@ -99,23 +99,15 @@ class McpToolBuilderTest {
     }
 
     @Test
-    void param_withMapping_populatesMappingsMap() {
-        McpToolBuilder b = builder("t", "d")
-                .param("city", String.class, "城市", Map.of("北京", "010", "上海", "021"));
+    void param_withMapping_resolvesLabelThroughRouter() throws Exception {
+        McpRouter router = new McpRouter();
+        router.tool("city", "查询城市")
+                .param("city", String.class, "城市", Map.of("北京", "010", "上海", "021"))
+                .handler(ctx -> ctx.getString("city"));
 
-        Map<String, Map<String, Object>> mappings = b.mappings();
-        assertThat(mappings).containsKey("city");
-        assertThat(mappings.get("city")).containsEntry("北京", "010");
-        assertThat(mappings.get("city")).containsEntry("上海", "021");
-    }
-
-    @Test
-    void param_withIntMapping_storesIntValues() {
-        McpToolBuilder b = builder("t", "d")
-                .param("zone", int.class, "区号", Map.of("北京", 10, "上海", 21));
-
-        Map<String, Map<String, Object>> mappings = b.mappings();
-        assertThat(mappings.get("zone")).containsEntry("北京", 10);
+        // The mapping lives on the enum parameter itself; nothing else stores a copy.
+        assertThat(router.invoke("city", Map.of("city", "北京"))).isEqualTo("010");
+        assertThat(router.invoke("city", Map.of("city", "上海"))).isEqualTo("021");
     }
 
     @Test
@@ -130,13 +122,21 @@ class McpToolBuilderTest {
     }
 
     @Test
-    void param_multipleMappings_allStoredSeparately() {
-        McpToolBuilder b = builder("t", "d")
+    void param_multipleMappings_keepTheirOwnEnumValues() {
+        McpTool tool = builder("t", "d")
                 .param("city", String.class, "城市", Map.of("北京", "010"))
-                .param("zone", int.class, "区号", Map.of("A", 1));
+                .param("zone", int.class, "区号", Map.of("A", 1))
+                .build();
 
-        Map<String, Map<String, Object>> mappings = b.mappings();
-        assertThat(mappings).containsKeys("city", "zone");
+        assertThat(tool.params()).hasSize(2);
+        assertThat(tool.params().get(0).enumValues()).singleElement().satisfies(ev -> {
+            assertThat(ev.label()).isEqualTo("北京");
+            assertThat(ev.code()).isEqualTo("010");
+        });
+        assertThat(tool.params().get(1).enumValues()).singleElement().satisfies(ev -> {
+            assertThat(ev.label()).isEqualTo("A");
+            assertThat(ev.code()).isEqualTo(1);
+        });
     }
 
     // -----------------------------------------------------------------------

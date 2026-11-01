@@ -16,14 +16,16 @@ public class McpRouter implements McpRouterSpec {
         return new McpToolBuilder(this, name, description);
     }
 
-    /** Exposes a shared HTTP route contract as a deterministic MCP tool. */
+    /**
+     * Exposes a shared HTTP route contract as a deterministic MCP tool. Parameters are
+     * carried verbatim: re-declaring them here is what used to strip the source and the
+     * body POJO schema, collapsing a structured request into {@code {"type":"string"}}.
+     */
     public McpRouter tool(io.aura.contract.ApiRoute route, McpHandler handler) {
         Objects.requireNonNull(route, "route");
         Objects.requireNonNull(handler, "handler");
         List<McpParam> params = route.params().stream()
-                .map(parameter -> new McpParam(new io.aura.contract.ApiParameter(
-                        parameter.name(), parameter.type(), "tool", parameter.required(), parameter.description()),
-                        List.of()))
+                .map(parameter -> new McpParam(parameter, List.of()))
                 .toList();
         register(new McpTool(McpUtil.buildToolName(route.method(), route.path()),
                 route.description(), params, handler, route.permission(), route.authenticated()));
@@ -121,7 +123,7 @@ public class McpRouter implements McpRouterSpec {
             if (tool.description() != null) entry.put("description", tool.description());
             if (tool.authenticated()) entry.put("x-aura-authenticated", true);
             if (tool.permission() != null) entry.put("x-aura-permission", tool.permission());
-            entry.put("inputSchema", buildInputSchema(tool.params()));
+            entry.put("inputSchema", McpUtil.inputSchema(tool.params()));
             toolList.add(entry);
         }
         return Map.of("tools", toolList);
@@ -165,32 +167,6 @@ public class McpRouter implements McpRouterSpec {
             }
         }
         return result;
-    }
-
-    private static Map<String, Object> buildInputSchema(List<McpParam> params) {
-        Map<String, Object> schema = new LinkedHashMap<>();
-        schema.put("type", "object");
-        Map<String, Object> properties = new LinkedHashMap<>();
-        List<String> required = new ArrayList<>();
-        for (McpParam p : params) {
-            io.aura.contract.ApiParameter contract = p.contract();
-            var prop = new LinkedHashMap<String, Object>();
-            prop.put("type", McpUtil.jsonType(contract.type()));
-            String desc = contract.description();
-            if (p.isEnum()) {
-                List<String> enumLabels = p.enumValues().stream().map(McpEnumValue::label).toList();
-                prop.put("enum", enumLabels);
-                if (desc != null) {
-                    desc = desc + ": " + String.join(", ", enumLabels);
-                }
-            }
-            if (desc != null) prop.put("description", desc);
-            properties.put(contract.name(), prop);
-            if (contract.required()) required.add(contract.name());
-        }
-        schema.put("properties", properties);
-        if (!required.isEmpty()) schema.put("required", required);
-        return schema;
     }
 
     private static Method resolveMethod(Object service, String methodName) {
