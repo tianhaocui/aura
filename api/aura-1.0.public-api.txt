@@ -12,25 +12,6 @@ public final class io.aura.contract.ApiParameter extends java.lang.Record {
   public java.lang.String description();
   public java.util.Map<java.lang.String, java.lang.Object> schema();
 }
-### aura-contract:io.aura.contract.ApiRoute
-public final class io.aura.contract.ApiRoute extends java.lang.Record {
-  public io.aura.contract.ApiRoute(java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.util.List<io.aura.contract.ApiParameter>, java.lang.String);
-  public io.aura.contract.ApiRoute(java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.util.List<io.aura.contract.ApiParameter>, java.lang.String, java.util.Map<java.lang.String, java.lang.Object>);
-  public io.aura.contract.ApiRoute(java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.util.List<io.aura.contract.ApiParameter>, java.lang.String, java.util.Map<java.lang.String, java.lang.Object>, boolean, java.lang.String);
-  public static io.aura.contract.ApiRoute from(io.aura.contract.Route);
-  public final java.lang.String toString();
-  public final int hashCode();
-  public final boolean equals(java.lang.Object);
-  public java.lang.String method();
-  public java.lang.String path();
-  public java.lang.String description();
-  public java.lang.String returnType();
-  public java.util.List<io.aura.contract.ApiParameter> params();
-  public java.lang.String example();
-  public java.util.Map<java.lang.String, java.lang.Object> responseSchema();
-  public boolean authenticated();
-  public java.lang.String permission();
-}
 ### aura-contract:io.aura.contract.CancellationToken$Registration
 public interface io.aura.contract.CancellationToken$Registration extends java.lang.AutoCloseable {
   public abstract void close();
@@ -169,8 +150,6 @@ public final class io.aura.contract.Route extends java.lang.Record {
   public io.aura.contract.Route withReturnType(java.lang.String);
   public io.aura.contract.Route withResponseSchema(java.util.Map<java.lang.String, java.lang.Object>);
   public io.aura.contract.Route withStreaming(boolean);
-  public static io.aura.contract.Route fromContribution(io.aura.contract.RouteContribution);
-  public io.aura.contract.ApiRoute toApiRoute();
   public final java.lang.String toString();
   public final int hashCode();
   public final boolean equals(java.lang.Object);
@@ -184,32 +163,6 @@ public final class io.aura.contract.Route extends java.lang.Record {
   public boolean authenticated();
   public java.lang.String permission();
   public boolean streaming();
-}
-### aura-contract:io.aura.contract.RouteContribution
-public final class io.aura.contract.RouteContribution extends java.lang.Record {
-  public static final java.lang.String AUTHENTICATED;
-  public static final java.lang.String PERMISSION;
-  public io.aura.contract.RouteContribution(java.lang.String, java.lang.String, java.lang.Object, java.util.Map<java.lang.String, java.lang.Object>);
-  public io.aura.contract.RouteContribution(java.lang.String, java.lang.String);
-  public io.aura.contract.RouteContribution(java.lang.String, java.lang.String, java.lang.Object);
-  public java.lang.String description();
-  public java.lang.String returnType();
-  public io.aura.contract.RouteContribution authenticated();
-  public io.aura.contract.RouteContribution permission(java.lang.String);
-  public java.util.Map<java.lang.String, java.lang.Object> responseSchema();
-  public java.util.List<io.aura.contract.ApiParameter> parameters();
-  public io.aura.contract.Route toRoute();
-  public final java.lang.String toString();
-  public final int hashCode();
-  public final boolean equals(java.lang.Object);
-  public java.lang.String method();
-  public java.lang.String path();
-  public java.lang.Object handler();
-  public java.util.Map<java.lang.String, java.lang.Object> metadata();
-}
-### aura-contract:io.aura.contract.RouteContributor
-public interface io.aura.contract.RouteContributor {
-  public abstract java.util.Collection<io.aura.contract.RouteContribution> routes();
 }
 ### aura-contract:io.aura.contract.RuntimeState
 public final class io.aura.contract.RuntimeState extends java.lang.Enum<io.aura.contract.RuntimeState> {
@@ -241,8 +194,6 @@ public final class io.aura.contract.StructuredError extends java.lang.Record {
 public final class io.aura.AuraApp implements java.lang.AutoCloseable {
   public static io.aura.AuraApp create();
   public static io.aura.AuraApp create(io.aura.AuraConfig);
-  public static io.aura.AuraApp create(java.nio.file.Path) throws java.io.IOException;
-  public static io.aura.AuraApp create(java.util.Properties);
   public io.aura.AuraApp use(io.aura.AuraModule);
   public io.aura.AuraApp observe(io.aura.AuraEventListener);
   public io.aura.AuraApp healthCheck(io.aura.contract.HealthCheck);
@@ -251,7 +202,6 @@ public final class io.aura.AuraApp implements java.lang.AutoCloseable {
   public io.aura.AuraApp mcpAuthorize(io.aura.contract.McpAuthorizer);
   public io.aura.AuraApp authenticate(java.util.function.Function<io.aura.web.BaseContext, java.lang.String>);
   public io.aura.AuraApp property(java.lang.String, java.lang.String);
-  public io.aura.AuraApp start();
   public io.aura.AuraApp start(java.lang.String...);
   public io.aura.AuraApp prepare();
   public void stop();
@@ -546,8 +496,7 @@ public interface io.aura.ModuleContext extends io.aura.contract.CapabilityLookup
   public abstract void register(java.lang.Object);
   public abstract void register(java.lang.String, java.lang.Object);
   public abstract void service(java.lang.Object);
-  public default void routes(io.aura.contract.RouteContributor);
-  public abstract void route(io.aura.contract.RouteContribution);
+  public abstract void route(io.aura.contract.Route);
   public abstract void webSocket(java.lang.String, java.util.function.Consumer<io.aura.web.WsHandler>);
   public abstract void before(io.aura.web.BaseHandler);
   public abstract void after(io.aura.web.BaseHandler);
@@ -1107,10 +1056,6 @@ public class io.aura.web.ApiException extends java.lang.RuntimeException impleme
   public java.lang.String code();
   public java.lang.String field();
 }
-### aura-web:io.aura.web.ApiRouteCatalog
-public final class io.aura.web.ApiRouteCatalog {
-  public static io.aura.contract.ApiRoute describe(io.aura.web.CompiledRoute, java.lang.String);
-}
 ### aura-web:io.aura.web.CodedException
 public interface io.aura.web.CodedException {
   public abstract java.lang.String code();
@@ -1253,7 +1198,7 @@ public class io.aura.web.MockContext extends io.aura.web.Context {
 }
 ### aura-web:io.aura.web.OpenApiGenerator
 public final class io.aura.web.OpenApiGenerator {
-  public static java.util.Map<java.lang.String, java.lang.Object> generate(java.lang.String, java.lang.String, java.util.List<io.aura.contract.ApiRoute>);
+  public static java.util.Map<java.lang.String, java.lang.Object> generate(java.lang.String, java.lang.String, java.util.List<io.aura.contract.Route>);
 }
 ### aura-web:io.aura.web.ParamResolver$Binder
 public interface io.aura.web.ParamResolver$Binder {
@@ -1294,6 +1239,10 @@ public interface io.aura.web.RequestGuards$RoutePattern {
 public final class io.aura.web.RequestGuards {
   public static io.aura.web.RequestGuards standard(io.aura.AuraWebRuntime, io.aura.web.RequestGuards$RoutePattern);
   public io.aura.web.GuardOutcome evaluate(io.aura.web.GuardedRequest);
+}
+### aura-web:io.aura.web.RouteCatalog
+public final class io.aura.web.RouteCatalog {
+  public static io.aura.contract.Route describe(io.aura.web.CompiledRoute);
 }
 ### aura-web:io.aura.web.Router
 public class io.aura.web.Router extends io.aura.web.BaseRouter {

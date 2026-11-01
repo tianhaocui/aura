@@ -11,7 +11,7 @@ public final class OrderModule implements AuraModule {
     }
 
     @Override public void install(ModuleContext context) {
-        context.route(new RouteContribution("GET", "/orders",
+        context.route(Route.of("GET", "/orders",
                 (BaseHandler) ctx -> ctx.text("ok")));
         context.register(new OrderService());
     }
@@ -30,20 +30,20 @@ AuraApp.create()
 
 - `descriptor().id()` is stable and unique within one application.
 - `descriptor().provides(...)` documents the capabilities contributed by the module for diagnostics and tooling.
-- The shared `ApiRoute` / `ApiParameter` contract is the source for schema adapters, including the dependency-free `OpenApiGenerator` in `aura-web`.
-- Lambda routes can declare parameters explicitly when reflection cannot infer them:
+- `Route` / `ApiParameter` are the source for every adapter, including the dependency-free `OpenApiGenerator` in `aura-web`.
+- A lambda route declares the parameters the compiler cannot see:
 
 ```java
-context.route(new RouteContribution("POST", "/orders", handler, Map.of(
-        "parameters", List.of(
+context.route(Route.of("POST", "/orders", handler)
+        .withParams(List.of(
                 new ApiParameter("customerId", "string", "query", true,
                         "Customer identifier"),
                 new ApiParameter("order", "Order", "body", true,
-                        "Order payload")))));
+                        "Order payload"))));
 ```
 
   These declarations feed `/__schema__`, OpenAPI, and other adapters from the same contract.
-- New transport-neutral modules contribute `RouteContribution` values through
+- New transport-neutral modules contribute `Route` values through
   `context.route(...)`; the Web adapter executes the handler and preserves the
   same metadata. `context.before/after/exception/resultWrapper` and
   `context.webSocket(...)` are explicit optional Web policy contributions.
@@ -71,10 +71,10 @@ AuraApp.create()
 Protect individual routes with the same metadata used by HTTP and AI adapters:
 
 ```java
-context.route(new RouteContribution("GET", "/orders", handler)
-        .permission("orders.read"));
-context.route(new RouteContribution("GET", "/profile", profileHandler)
-        .authenticated());
+context.route(Route.of("GET", "/orders", handler)
+        .requireAuth("orders.read"));
+context.route(Route.of("GET", "/profile", profileHandler)
+        .requireAuth());
 ```
 
 Web runtime settings belong to the same central configuration passed to `AuraApp`:

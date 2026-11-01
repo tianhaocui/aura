@@ -6,7 +6,7 @@ import io.aura.AuraModule;
 import io.aura.AuraWebRuntime;
 import io.aura.ModuleContext;
 import io.aura.contract.ModuleMetadata;
-import io.aura.contract.RouteContribution;
+import io.aura.contract.Route;
 
 final class TestApplications {
     private TestApplications() { }
@@ -27,22 +27,22 @@ final class TestApplications {
         return new TestClient(runtime(config), router);
     }
 
-    static AuraApp app(String moduleId, RouteContribution... routes) {
+    static AuraApp app(String moduleId, Route... routes) {
         return app(new AuraConfig(), moduleId, routes);
     }
 
-    static AuraApp app(AuraConfig config, String moduleId, RouteContribution... routes) {
+    static AuraApp app(AuraConfig config, String moduleId, Route... routes) {
         return AuraApp.create(config).use(routes(moduleId, routes));
     }
 
-    static AuraModule routes(String moduleId, RouteContribution... routes) {
+    static AuraModule routes(String moduleId, Route... routes) {
         return new AuraModule() {
             @Override public ModuleMetadata descriptor() {
                 return ModuleMetadata.of(moduleId, "1.0.0");
             }
 
             @Override public void install(ModuleContext context) {
-                for (RouteContribution route : routes) context.route(route);
+                for (Route route : routes) context.route(route);
             }
         };
     }

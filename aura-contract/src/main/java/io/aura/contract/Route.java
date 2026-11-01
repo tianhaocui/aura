@@ -8,10 +8,9 @@ import java.util.Map;
 import java.util.Objects;
 
 /**
- * Single, immutable description of a route. Replaces the 1.0-era
- * {@link RouteContribution} / {@code io.aura.RouteEntry} / {@link ApiRoute} triple
- * with one record consumed by HTTP dispatch, TestClient, {@code /__schema__},
- * OpenAPI, and MCP. Stage ② of the 0.6-philosophy reset.
+ * Single, immutable description of a route — the only shape a module can
+ * contribute. Consumed directly by HTTP dispatch, TestClient, {@code /__schema__},
+ * OpenAPI, and MCP.
  *
  * <p>{@code handler} is intentionally {@link Object} at the contract layer so
  * aura-contract stays free of {@link io.aura.web.BaseHandler}. Runtime consumers
@@ -52,11 +51,12 @@ public record Route(
         if (permission != null) {
             String trimmed = permission.trim();
             if (trimmed.isEmpty()) {
-                permission = null;
-            } else {
-                permission = trimmed;
-                authenticated = true;
+                // A present-but-blank permission is a mistyped constant. Dropping it
+                // would silently publish an unprotected route, so it fails at startup.
+                throw new IllegalArgumentException("route permission must not be blank");
             }
+            permission = trimmed;
+            authenticated = true;
         }
     }
 
@@ -96,7 +96,7 @@ public record Route(
 
     public Route requireAuth() {
         return new Route(method, path, handler, params, returnType, responseSchema,
-                description, true, permission, true);
+                description, true, permission, streaming);
     }
 
     public Route withParams(List<ApiParameter> newParams) {
@@ -119,61 +119,4 @@ public record Route(
                 description, authenticated, permission, isStreaming);
     }
 
-    /**
-     * Bridges an existing {@link RouteContribution} into the unified {@code Route}.
-     * Reads the metadata keys the old shape smuggled as strings — no silent skips:
-     * any unknown key triggers a hard failure so typos surface at startup.
-     */
-    public static Route fromContribution(RouteContribution contribution) {
-        Map<String, Object> metadata = contribution.metadata();
-        String description = stringMeta(metadata, "description");
-        String returnType = stringMeta(metadata, "returnType");
-        String permission = stringMeta(metadata, RouteContribution.PERMISSION);
-        boolean authenticated = Boolean.TRUE.equals(metadata.get(RouteContribution.AUTHENTICATED))
-                || permission != null;
-        boolean streaming = Boolean.TRUE.equals(metadata.get("streaming"));
-        Map<String, Object> responseSchema = mapMeta(metadata, "responseSchema");
-        List<ApiParameter> parameters = listParamsMeta(metadata, "parameters");
-        return new Route(contribution.method(), contribution.path(), contribution.handler(),
-                parameters, returnType, responseSchema, description,
-                authenticated, permission, streaming);
-    }
-
-    /** Emits the transport-neutral view used by {@code /__schema__} and OpenAPI. */
-    public ApiRoute toApiRoute() {
-        return new ApiRoute(method, path, description, returnType, params, null,
-                responseSchema, authenticated, permission);
-    }
-
-    private static String stringMeta(Map<String, Object> metadata, String key) {
-        Object value = metadata.get(key);
-        return value == null ? null : value.toString();
-    }
-
-    @SuppressWarnings("unchecked")
-    private static Map<String, Object> mapMeta(Map<String, Object> metadata, String key) {
-        Object value = metadata.get(key);
-        if (value == null) return Map.of();
-        if (!(value instanceof Map<?, ?>)) {
-            throw new IllegalArgumentException("route metadata '" + key + "' must be a Map");
-        }
-        return (Map<String, Object>) value;
-    }
-
-    private static List<ApiParameter> listParamsMeta(Map<String, Object> metadata, String key) {
-        Object value = metadata.get(key);
-        if (value == null) return List.of();
-        if (!(value instanceof java.util.Collection<?> values)) {
-            throw new IllegalArgumentException("route metadata '" + key + "' must be a Collection");
-        }
-        java.util.List<ApiParameter> out = new java.util.ArrayList<>(values.size());
-        for (Object item : values) {
-            if (!(item instanceof ApiParameter parameter)) {
-                throw new IllegalArgumentException(
-                        "route metadata '" + key + "' entries must be ApiParameter");
-            }
-            out.add(parameter);
-        }
-        return List.copyOf(out);
-    }
 }

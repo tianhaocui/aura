@@ -5,7 +5,7 @@ import io.aura.AuraModule;
 import io.aura.HealthModule;
 import io.aura.ModuleContext;
 import io.aura.contract.ModuleMetadata;
-import io.aura.contract.RouteContribution;
+import io.aura.contract.Route;
 import io.aura.web.BaseHandler;
 
 public final class App {
@@ -27,8 +27,8 @@ public final class App {
         }
 
         @Override public void install(ModuleContext context) {
-            context.route(new RouteContribution(
-                    "GET", "/hello", (BaseHandler) request -> request.text("hello")));
+            context.route(Route.of("GET", "/hello",
+                    (BaseHandler) request -> request.text("hello")));
         }
     }
 }

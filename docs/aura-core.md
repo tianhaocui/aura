@@ -17,11 +17,12 @@ AuraApp app = AuraApp.create(new AuraConfig()
 app.start();
 ```
 
-Configuration is validated and frozen when `AuraApp` is created. Use
-`AuraApp.create(Path)` or `AuraApp.create(Properties)` for deployment values.
-The no-argument `AuraApp.create()` reads environment and JVM system properties.
-Those sources also override values from a supplied properties object or file;
-passing an explicit `AuraConfig` remains the programmatic, self-contained path.
+Configuration is validated and frozen when `AuraApp` is created, and
+`AuraApp.create(AuraConfig)` is the only configuration-taking entry point. Load
+deployment values with `AuraConfig.fromProperties(path)` or
+`AuraConfig.fromProperties(properties)` and pass the result. The no-argument
+`AuraApp.create()` reads environment and JVM system properties, which also
+override values from a supplied properties object or file.
 
 The public lifecycle is:
 
@@ -54,8 +55,7 @@ public final class OrdersModule implements AuraModule {
     @Override public void install(ModuleContext context) {
         Db db = context.require(Db.class);
         context.register(new OrderService(db));
-        context.route(new RouteContribution(
-                "GET", "/orders/{id}",
+        context.route(Route.of("GET", "/orders/{id}",
                 (BaseHandler) request -> request.json(
                         db.findById("orders", request.pathLong("id")))));
         context.permissions().register("orders.read", "Read orders");

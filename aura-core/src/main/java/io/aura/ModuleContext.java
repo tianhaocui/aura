@@ -16,19 +16,11 @@ public interface ModuleContext extends io.aura.contract.CapabilityLookup {
 
     void service(Object service);
 
-    /** Adds framework-neutral route contributions for an optional transport adapter. */
-    default void routes(io.aura.contract.RouteContributor routes) {
-        if (routes == null) {
-            throw new IllegalArgumentException("route contributor must return routes");
-        }
-        java.util.Collection<io.aura.contract.RouteContribution> contributions = routes.routes();
-        if (contributions == null) {
-            throw new IllegalArgumentException("route contributor must return routes");
-        }
-        contributions.forEach(this::route);
-    }
-
-    void route(io.aura.contract.RouteContribution route);
+    /**
+     * Adds one route. This is the only route contribution entry point: a bundle of
+     * generated routes is installed with {@code routes().forEach(context::route)}.
+     */
+    void route(io.aura.contract.Route route);
 
     /** Adds one WebSocket endpoint owned by the current business module. */
     void webSocket(String path, java.util.function.Consumer<io.aura.web.WsHandler> configure);

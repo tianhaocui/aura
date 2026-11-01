@@ -3,7 +3,7 @@ package io.aura.web;
 import com.alibaba.fastjson2.JSON;
 import io.aura.AuraApp;
 import io.aura.AuraConfig;
-import io.aura.contract.RouteContribution;
+import io.aura.contract.Route;
 import io.aura.snapshot.ExceptionSnapshot;
 import io.aura.snapshot.Snapshot;
 import io.aura.snapshot.SnapshotScope;
@@ -184,7 +184,7 @@ class SnapshotReplayTest {
         Files.writeString(snapshotFile, JSON.toJSONString(snapshot));
 
         AuraApp app = AuraApp.create().use(TestApplications.routes("replay-payment",
-                new RouteContribution("POST", "/pay", (BaseHandler) ctx -> {
+                Route.of("POST", "/pay", (BaseHandler) ctx -> {
             UserDto user = new SnapshotHttpClient("systemX", "https://x.example.com")
                     .get("/users/u1", UserDto.class);
             Snapshot.put("systemX.user", user);
@@ -409,7 +409,7 @@ class SnapshotReplayTest {
         AuraApp app = AuraApp.create(new AuraConfig()
                         .snapshot(s -> s.enabled(true).async(false).dir(tempDir)))
                 .use(TestApplications.routes("replay-dynamic-path",
-                        new RouteContribution("GET", "/users/{id}", (BaseHandler) ctx -> {
+                        Route.of("GET", "/users/{id}", (BaseHandler) ctx -> {
                     throw new ApiException(400, "USER_LOOKUP_FAILED", "user lookup failed");
                 }))).prepare();
 

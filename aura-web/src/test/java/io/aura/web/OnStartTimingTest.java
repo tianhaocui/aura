@@ -1,7 +1,7 @@
 package io.aura.web;
 
 import io.aura.AuraConfig;
-import io.aura.contract.RouteContribution;
+import io.aura.contract.Route;
 import org.junit.jupiter.api.Test;
 
 import java.net.ServerSocket;
@@ -20,7 +20,7 @@ class OnStartTimingTest {
         var app = TestApplications.app(
                 new AuraConfig().port(port),
                 "start-timing",
-                new RouteContribution("GET", "/ping", (BaseHandler) ctx -> ctx.text("pong")));
+                Route.of("GET", "/ping", (BaseHandler) ctx -> ctx.text("pong")));
 
         try {
             app.start();

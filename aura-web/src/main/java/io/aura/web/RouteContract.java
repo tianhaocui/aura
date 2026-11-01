@@ -2,54 +2,68 @@ package io.aura.web;
 
 import io.aura.AuraWebRuntime;
 import io.aura.contract.ApiParameter;
-import io.aura.contract.ApiRoute;
+import io.aura.contract.Route;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-/** Single source for the route descriptions exposed by Web adapters. */
+/** Renders the {@code /__schema__} document from the route contract. */
 final class RouteContract {
     private RouteContract() { }
 
-    static List<ApiRoute> describe(List<CompiledRoute> routes, AuraWebRuntime app) {
-        List<ApiRoute> result = new ArrayList<>();
-        for (CompiledRoute route : routes) result.add(describe(route, app));
+    static List<Route> describe(List<CompiledRoute> routes) {
+        List<Route> result = new ArrayList<>();
+        for (CompiledRoute route : routes) result.add(RouteCatalog.describe(route));
         return List.copyOf(result);
-    }
-
-    static ApiRoute describe(CompiledRoute route, AuraWebRuntime app) {
-        ApiRoute description = ApiRouteCatalog.describe(route, null);
-        return new ApiRoute(description.method(), description.path(), description.description(),
-                description.returnType(), description.params(), buildCurlExample(route, description.params(), app),
-                description.responseSchema(), description.authenticated(), description.permission());
     }
 
     static Map<String, Object> schema(AuraWebRuntime app, List<CompiledRoute> routes) {
         Map<String, Object> schema = new LinkedHashMap<>();
         String name = app.prop("app.name");
         schema.put("name", name == null ? "Aura App" : name);
-        schema.put("routes", describe(routes, app));
+        List<Map<String, Object>> views = new ArrayList<>();
+        for (Route route : describe(routes)) views.add(view(route, app));
+        schema.put("routes", views);
         return schema;
     }
 
     static Map<String, Object> openApi(AuraWebRuntime app, List<CompiledRoute> routes) {
         String name = app.prop("app.name");
-        return OpenApiGenerator.generate(name == null ? "Aura API" : name, "1.0.0", describe(routes, app));
+        return OpenApiGenerator.generate(name == null ? "Aura API" : name, "1.0.0", describe(routes));
     }
 
-    private static String buildCurlExample(CompiledRoute route, List<ApiParameter> params, AuraWebRuntime app) {
+    /**
+     * Explicit field order instead of a second route record: the schema document is
+     * a wire format, and absent metadata stays absent rather than becoming a
+     * {@code null} the reading tools have to special-case.
+     */
+    private static Map<String, Object> view(Route route, AuraWebRuntime app) {
+        Map<String, Object> view = new LinkedHashMap<>();
+        view.put("method", route.method());
+        view.put("path", route.path());
+        if (route.description() != null) view.put("description", route.description());
+        if (route.returnType() != null) view.put("returnType", route.returnType());
+        view.put("params", route.params());
+        view.put("example", curlExample(route, app));
+        view.put("responseSchema", route.responseSchema());
+        view.put("authenticated", route.authenticated());
+        if (route.permission() != null) view.put("permission", route.permission());
+        return view;
+    }
+
+    private static String curlExample(Route route, AuraWebRuntime app) {
         String base = "http://localhost:" + app.port();
-        String path = route.rawPath();
-        for (ApiParameter parameter : params) {
+        String path = route.path();
+        for (ApiParameter parameter : route.params()) {
             if ("path".equals(parameter.source())) {
                 path = path.replace("{" + parameter.name() + "}", exampleValue(parameter.type()));
             }
         }
         if ("GET".equals(route.method())) {
             List<String> queryParts = new ArrayList<>();
-            for (ApiParameter parameter : params) {
+            for (ApiParameter parameter : route.params()) {
                 if ("query".equals(parameter.source())) {
                     queryParts.add(parameter.name() + "=" + exampleValue(parameter.type()));
                 }
@@ -60,7 +74,7 @@ final class RouteContract {
         if (!"GET".equals(route.method())) curl.append(" -X ").append(route.method());
         curl.append(" ").append(base).append(path);
         if ("POST".equals(route.method()) || "PUT".equals(route.method())) {
-            for (ApiParameter parameter : params) {
+            for (ApiParameter parameter : route.params()) {
                 if ("body".equals(parameter.source())) {
                     curl.append(" -H 'Content-Type: application/json' -d '{}'");
                     break;

@@ -4,7 +4,6 @@ import io.aura.contract.McpRouterSpec;
 import io.aura.contract.ModuleMetadata;
 import io.aura.contract.PermissionRegistry;
 import io.aura.contract.Route;
-import io.aura.contract.RouteContribution;
 import io.aura.contract.RuntimeState;
 import io.aura.snapshot.SnapshotOptions;
 import io.aura.web.BaseContext;
@@ -525,13 +524,9 @@ final class ModularRuntime implements AuraWebRuntime {
         @Override public void register(Object value) { ModularRuntime.this.register(value); }
         @Override public void register(String name, Object value) { ModularRuntime.this.register(name, value); }
         @Override public void service(Object service) { ModularRuntime.this.register(service); services.add(service); }
-        @Override public void route(RouteContribution route) {
+        @Override public void route(Route route) {
             if (route == null) throw new ModuleException("AURA_ROUTE_CONTRIBUTION_INVALID", descriptor.id(), "Route contribution must not be null");
-            if (route.handler() == null) throw new ModuleException("AURA_ROUTE_HANDLER_MISSING", descriptor.id(), "Route contribution " + route.method() + " " + route.path() + " has no handler");
-            // Single-source the contribution into the unified Route contract.
-            // fromContribution hard-fails on mistyped metadata, replacing the old
-            // silent Map-key reads performed by RouteAssembler.
-            directRoutes.add(Route.fromContribution(route));
+            directRoutes.add(route);
         }
         @Override public void webSocket(String path, java.util.function.Consumer<io.aura.web.WsHandler> configure) {
             webSocketContributions.add(new WebSocketContribution(path, configure));

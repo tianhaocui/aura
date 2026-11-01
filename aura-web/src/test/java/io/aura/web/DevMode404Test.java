@@ -5,7 +5,7 @@ import io.aura.AuraConfig;
 import io.aura.AuraModule;
 import io.aura.ModuleContext;
 import io.aura.contract.ModuleMetadata;
-import io.aura.contract.RouteContribution;
+import io.aura.contract.Route;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -15,8 +15,8 @@ class DevMode404Test {
     @Test
     void devModeReturnsJsonDiagnostic() {
         AuraApp app = app(
-                new RouteContribution("GET", "/api/users", (BaseHandler) ctx -> ctx.json("ok")),
-                new RouteContribution("POST", "/api/users", (BaseHandler) ctx -> ctx.json("ok")));
+                Route.of("GET", "/api/users", (BaseHandler) ctx -> ctx.json("ok")),
+                Route.of("POST", "/api/users", (BaseHandler) ctx -> ctx.json("ok")));
 
         TestClient client = TestClient.of(app);
         TestClient.Response res = client.get("/api/user").execute();
@@ -30,7 +30,7 @@ class DevMode404Test {
 
     @Test
     void devModeShowsHintForSimilarRoute() {
-        AuraApp app = app(new RouteContribution(
+        AuraApp app = app(Route.of(
                 "POST", "/api/users", (BaseHandler) ctx -> ctx.json("ok")));
 
         TestClient client = TestClient.of(app);
@@ -42,7 +42,7 @@ class DevMode404Test {
 
     @Test
     void devModeIsScopedToOneApplication() {
-        AuraApp development = app(new RouteContribution(
+        AuraApp development = app(Route.of(
                 "GET", "/known", (BaseHandler) ctx -> ctx.text("ok")));
         AuraApp production = AuraApp.create().prepare();
 
@@ -50,14 +50,14 @@ class DevMode404Test {
         assertEquals("Not Found", TestClient.of(production).get("/missing").execute().body());
     }
 
-    private static AuraApp app(RouteContribution... routes) {
+    private static AuraApp app(Route... routes) {
         AuraModule module = new AuraModule() {
             @Override public ModuleMetadata descriptor() {
                 return ModuleMetadata.of("dev-routes", "1.0.0");
             }
 
             @Override public void install(ModuleContext context) {
-                for (RouteContribution route : routes) context.route(route);
+                for (Route route : routes) context.route(route);
             }
         };
         return AuraApp.create(new AuraConfig().devMode(true)).use(module).prepare();

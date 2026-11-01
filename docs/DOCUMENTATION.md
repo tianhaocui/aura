@@ -44,7 +44,7 @@ smoke test and an executable shaded JAR.
 import io.aura.AuraApp;
 import io.aura.AuraModule;
 import io.aura.contract.ModuleMetadata;
-import io.aura.contract.RouteContribution;
+import io.aura.contract.Route;
 import io.aura.web.BaseHandler;
 
 AuraApp app = AuraApp.create()
@@ -54,8 +54,8 @@ AuraApp app = AuraApp.create()
         }
 
         @Override public void install(io.aura.ModuleContext context) {
-            context.route(new RouteContribution(
-                "GET", "/hello", (BaseHandler) ctx -> ctx.text("hello world")));
+            context.route(Route.of("GET", "/hello",
+                    (BaseHandler) ctx -> ctx.text("hello world")));
         }
     });
 
@@ -70,7 +70,7 @@ import io.aura.AuraApp;
 import io.aura.AuraModule;
 import io.aura.ModuleContext;
 import io.aura.contract.ModuleMetadata;
-import io.aura.contract.RouteContribution;
+import io.aura.contract.Route;
 import io.aura.web.BaseHandler;
 
 public final class DocumentationComposition {
@@ -86,8 +86,8 @@ public final class DocumentationComposition {
         }
 
         @Override public void install(ModuleContext context) {
-            context.route(new RouteContribution(
-                    "GET", "/hello", (BaseHandler) ctx -> ctx.text("hello")));
+            context.route(Route.of("GET", "/hello",
+                    (BaseHandler) ctx -> ctx.text("hello")));
         }
     }
 }
@@ -158,7 +158,7 @@ Useful public entry points:
 - `ModuleContext`: explicit module capabilities and contributions.
 - `TestClient`: in-memory contract verification.
 - `AuraConfig`: validated creation-time configuration.
-- `RouteContribution` and `ApiRoute`: shared route metadata.
+- `Route`: one route contract shared by HTTP dispatch, schema, OpenAPI, and MCP.
 - `CancellationToken`: timeout, disconnect, and shutdown cancellation.
 
 ## Optional Modules

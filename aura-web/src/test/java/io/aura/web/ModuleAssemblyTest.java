@@ -6,9 +6,9 @@ import io.aura.AuraWebRuntime;
 import io.aura.AuraConfig;
 import io.aura.AuraModule;
 import io.aura.ModuleContext;
-import io.aura.contract.ModuleMetadata;
 import io.aura.contract.ApiParameter;
-import io.aura.contract.RouteContribution;
+import io.aura.contract.ModuleMetadata;
+import io.aura.contract.Route;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -22,7 +22,7 @@ class ModuleAssemblyTest {
             }
 
             @Override public void install(ModuleContext context) {
-                context.route(new RouteContribution("GET", "/greeting",
+                context.route(Route.of("GET", "/greeting",
                         (BaseHandler) ctx -> ctx.text("hello")));
             }
         });
@@ -32,59 +32,23 @@ class ModuleAssemblyTest {
     }
 
     @Test
-    void frameworkNeutralRouteContributionsRunAndFeedSchemaMetadata() {
+    void frameworkNeutralRoutesRunAndFeedSchemaMetadata() {
         AuraApp app = AuraApp.create().use(new AuraModule() {
             @Override public ModuleMetadata descriptor() {
                 return ModuleMetadata.of("contract-routes", "1.0.0");
             }
 
             @Override public void install(ModuleContext context) {
-                context.routes(() -> java.util.List.of(new RouteContribution(
-                        "GET", "/contract-route", (BaseHandler) ctx -> ctx.text("ok"),
-                        java.util.Map.of("description", "Contract route", "returnType", "string",
-                                "parameters", java.util.List.of(
-                                        new ApiParameter("q", "string", "query", true, "Search query"))))));
+                context.route(Route.of("GET", "/contract-route", (BaseHandler) ctx -> ctx.text("ok"))
+                        .withParams(java.util.List.of(
+                                new ApiParameter("q", "string", "query", true, "Search query")))
+                        .withReturnType("string")
+                        .describedAs("Contract route"));
             }
         });
 
         assertThat(TestClient.of(app).get("/contract-route").query("q", "ready").expect(200).body())
                 .isEqualTo("ok");
-    }
-
-    @Test
-    void routeContributionWithoutHandlerFailsDuringModuleInstallation() {
-        AuraApp app = AuraApp.create().use(new AuraModule() {
-            @Override public ModuleMetadata descriptor() {
-                return ModuleMetadata.of("invalid-routes", "1.0.0");
-            }
-            @Override public void install(ModuleContext context) {
-                context.route(new RouteContribution("GET", "/missing-handler"));
-            }
-        });
-
-        org.assertj.core.api.Assertions.assertThatThrownBy(app::prepare)
-                .isInstanceOf(io.aura.ModuleException.class)
-                .extracting("code").isEqualTo("AURA_ROUTE_HANDLER_MISSING");
-    }
-
-    @Test
-    void routeContributorIsEvaluatedExactlyOnce() {
-        java.util.concurrent.atomic.AtomicInteger calls = new java.util.concurrent.atomic.AtomicInteger();
-        AuraApp app = AuraApp.create().use(new AuraModule() {
-            @Override public ModuleMetadata descriptor() {
-                return ModuleMetadata.of("single-evaluation", "1.0.0");
-            }
-            @Override public void install(ModuleContext context) {
-                context.routes(() -> {
-                    calls.incrementAndGet();
-                    return java.util.List.of(new RouteContribution(
-                            "GET", "/once", (BaseHandler) ctx -> ctx.text("ok")));
-                });
-            }
-        });
-
-        assertThat(TestClient.of(app).get("/once").expect(200).body()).isEqualTo("ok");
-        assertThat(calls).hasValue(1);
     }
 
     @Test
@@ -94,8 +58,7 @@ class ModuleAssemblyTest {
                 return ModuleMetadata.of("runtime-client", "1.0.0");
             }
             @Override public void install(ModuleContext context) {
-                context.routes(() -> java.util.List.of(new RouteContribution(
-                        "GET", "/runtime-client", (BaseHandler) ctx -> ctx.text("ok"))));
+                context.route(Route.of("GET", "/runtime-client", (BaseHandler) ctx -> ctx.text("ok")));
             }
         });
 
@@ -111,7 +74,7 @@ class ModuleAssemblyTest {
                 return ModuleMetadata.of("runtime-proxy", "1.0.0");
             }
             @Override public void install(ModuleContext context) {
-                context.route(new RouteContribution(
+                context.route(Route.of(
                         "GET", "/runtime-proxy", (BaseHandler) ctx -> ctx.text("proxy-ok")));
             }
         });
@@ -133,7 +96,7 @@ class ModuleAssemblyTest {
                 return ModuleMetadata.of("runtime-server", "1.0.0");
             }
             @Override public void install(ModuleContext context) {
-                context.route(new RouteContribution(
+                context.route(Route.of(
                         "GET", "/runtime-server", (BaseHandler) ctx -> ctx.text("running")));
             }
         });
@@ -156,7 +119,7 @@ class ModuleAssemblyTest {
                         return ModuleMetadata.of("authenticated-route", "1.0.0");
                     }
                     @Override public void install(ModuleContext context) {
-                        context.route(new RouteContribution(
+                        context.route(Route.of(
                                 "GET", "/authenticated",
                                 (BaseHandler) ctx -> {
                                     String userId = ctx.app().authFunction().apply(ctx);

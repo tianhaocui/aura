@@ -3,7 +3,7 @@ package io.aura.web;
 import io.aura.AuraApp;
 import io.aura.AuraWebRuntime;
 import io.aura.JwtSupport;
-import io.aura.contract.RouteContribution;
+import io.aura.contract.Route;
 import org.junit.jupiter.api.Test;
 
 import java.util.Map;
@@ -69,7 +69,7 @@ class AuthTest {
     @Test
     void userId_withoutAuth_throws() {
         AuraApp app = TestApplications.app("missing-auth",
-                new RouteContribution("GET", "/test",
+                Route.of("GET", "/test",
                         (BaseHandler) ctx -> ctx.json(Map.of("id", ctx.userId()))));
         TestClient client = TestClient.of(app);
 
@@ -90,7 +90,7 @@ class AuthTest {
                                              String path,
                                              BaseHandler handler) {
         return TestApplications.app(moduleId,
-                        new RouteContribution("GET", path, (BaseHandler) ctx -> {
+                        Route.of("GET", path, (BaseHandler) ctx -> {
                             requireAuth(ctx);
                             if (!ctx.isAborted()) handler.handle(ctx);
                         }))

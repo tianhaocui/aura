@@ -5,7 +5,7 @@ import io.aura.AuraConfig;
 import io.aura.AuraModule;
 import io.aura.ModuleContext;
 import io.aura.contract.ModuleMetadata;
-import io.aura.contract.RouteContribution;
+import io.aura.contract.Route;
 import io.aura.web.BaseHandler;
 
 import java.util.Map;
@@ -51,15 +51,15 @@ public class MonitorApp {
             @Override public void install(ModuleContext context) {
                 context.service(serverService);
                 context.service(alertService);
-                context.route(new RouteContribution("GET", "/health", (BaseHandler) ctx -> ctx.json(Map.of(
+                context.route(Route.of("GET", "/health", (BaseHandler) ctx -> ctx.json(Map.of(
                             "status", "UP",
                             "uptime", formatUptime(System.currentTimeMillis() - localhost.registeredAt())
                     ))));
 
-                context.route(new RouteContribution("GET", "/metrics/current",
+                context.route(Route.of("GET", "/metrics/current",
                         (BaseHandler) ctx -> ctx.json(collector.collect())));
 
-                context.route(new RouteContribution("GET", "/dashboard", (BaseHandler) ctx -> ctx.json(Map.of(
+                context.route(Route.of("GET", "/dashboard", (BaseHandler) ctx -> ctx.json(Map.of(
                             "servers", serverService.summary(),
                             "alerts", alertService.triggeredCount(),
                             "system", collector.collect()

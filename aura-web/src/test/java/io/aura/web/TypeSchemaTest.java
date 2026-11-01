@@ -1,7 +1,7 @@
 package io.aura.web;
 
 import io.aura.contract.ApiParameter;
-import io.aura.contract.ApiRoute;
+import io.aura.contract.Route;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -32,8 +32,10 @@ class TypeSchemaTest {
     @Test
     void openApiUsesBodySchemaFromSharedParameter() {
         Map<String, Object> schema = TypeSchema.describe(CreateUser.class);
-        ApiRoute route = new ApiRoute("POST", "/users", "Create user", "CreateUser",
-                List.of(new ApiParameter("request", "CreateUser", "body", true, null, schema)), null);
+        Route route = Route.of("POST", "/users", (BaseHandler) ctx -> { })
+                .describedAs("Create user")
+                .withReturnType("CreateUser")
+                .withParams(List.of(new ApiParameter("request", "CreateUser", "body", true, null, schema)));
 
         Map<String, Object> document = OpenApiGenerator.generate("Users", "1.0.0", List.of(route));
         Map<?, ?> paths = (Map<?, ?>) document.get("paths");

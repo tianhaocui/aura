@@ -15,8 +15,8 @@ own transport and lifecycle.
 
 `ModuleMetadata` carries a stable module id, version, dependencies, and
 capability names. `CapabilityLookup` exposes optional lookup and a consistent
-required-capability failure. `RouteContributor` returns `RouteContribution`
-descriptors without prescribing an HTTP server implementation.
+required-capability failure. `Route` carries no HTTP server type, so an adapter
+can describe routes without prescribing a transport.
 
 `HealthCheck` reports `UP`, `DOWN`, or `UNKNOWN`. `CancellationToken` is a
 cooperative signal that can be shared by request, AI, and workflow adapters.
@@ -32,15 +32,18 @@ timeout snapshot used by optional database, AI, and observability modules.
 `RuntimeState` defines the stable lifecycle vocabulary used by replaceable Aura
 runtime implementations: `NEW`, `STARTING`, `RUNNING`, `STOPPING`, and `STOPPED`.
 
-`RouteContribution` and `RouteContributor` let optional transport adapters receive
-route descriptions without making `aura-contract` depend on Undertow or a specific
-router implementation. Route metadata can include `ApiParameter` values for
-handlers that cannot be inspected through reflection.
+`Route` is the one description of a route: method, path, handler, declared
+parameters, return type, response schema, description, authentication,
+permission, and whether the response streams. A handler is required by the
+record itself, so a route can no longer be contributed without one, and
+`context.route(Route)` is the only contribution entry point — a generated bundle
+installs with `routes().forEach(context::route)`.
 
-`ApiRoute.authenticated()` and `permission()` preserve the policy declared by
-`RouteContribution` through Schema, OpenAPI, and generated MCP tools. Adapters
-must fail closed when an authenticated route has no caller identity or a
-permissioned route has no authorizer.
+Every consumer — HTTP dispatch, `TestClient`, `/__schema__`, OpenAPI, and
+generated MCP tools — reads that same record, so a fact declared once cannot
+disagree between transports. `authenticated` and `permission` carry through all
+of them; adapters must fail closed when an authenticated route has no caller
+identity or a permissioned route has no authorizer.
 
 `PermissionRegistry` provides an explicit, duplicate-checked list of permission
 ids contributed by modules. Authorization implementations can consume its

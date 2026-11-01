@@ -1,7 +1,6 @@
 package io.aura.web;
 
 import io.aura.contract.ApiParameter;
-import io.aura.contract.ApiRoute;
 import io.aura.contract.Route;
 
 import java.lang.reflect.Method;
@@ -10,11 +9,11 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
-/** Converts compiled routes into the shared contract consumed by schema adapters. */
-public final class ApiRouteCatalog {
-    private ApiRouteCatalog() { }
+/** Completes a compiled route's declared facts so every schema adapter reads one record. */
+public final class RouteCatalog {
+    private RouteCatalog() { }
 
-    public static ApiRoute describe(CompiledRoute route, String example) {
+    public static Route describe(CompiledRoute route) {
         Route contract = route.contract();
         List<ApiParameter> parameters = new ArrayList<>(contract.params());
         if (parameters.isEmpty()) {
@@ -43,9 +42,9 @@ public final class ApiRouteCatalog {
                 }
             }
         }
-        return new ApiRoute(route.method(), route.rawPath(), contract.description(), contract.returnType(),
-                parameters, example, responseSchema(route, contract),
-                contract.authenticated(), contract.permission());
+        return contract.withPath(route.rawPath())
+                .withParams(parameters)
+                .withResponseSchema(responseSchema(route, contract));
     }
 
     private static Map<String, Object> responseSchema(CompiledRoute route, Route contract) {

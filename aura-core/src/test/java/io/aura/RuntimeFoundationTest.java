@@ -54,7 +54,7 @@ class RuntimeFoundationTest {
     @Test void modularAppCanBeCreatedFromDeploymentPropertiesBeforeFreezing() {
         Properties properties = new Properties();
         properties.setProperty("aura.port", "9192");
-        AuraApp app = AuraApp.create(properties);
+        AuraApp app = AuraApp.create(AuraConfig.fromProperties(properties));
         assertThat(app.config().port()).isEqualTo(9192);
         assertThatThrownBy(() -> app.start("--config=ignored.properties"))
                 .isInstanceOf(IllegalArgumentException.class)

@@ -5,7 +5,7 @@ import io.aura.AuraConfig;
 import io.aura.AuraModule;
 import io.aura.ModuleContext;
 import io.aura.contract.ModuleMetadata;
-import io.aura.contract.RouteContribution;
+import io.aura.contract.Route;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -73,8 +73,8 @@ public class AuraDemo {
         app.start();
     }
 
-    private static RouteContribution route(String method, String path, BaseHandler handler) {
-        return new RouteContribution(method, path, (BaseHandler) ctx -> {
+    private static Route route(String method, String path, BaseHandler handler) {
+        return Route.of(method, path, (BaseHandler) ctx -> {
             long start = System.currentTimeMillis();
             try {
                 handler.handle(ctx);

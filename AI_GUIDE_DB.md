@@ -240,10 +240,10 @@ Page<Row> page = db.table("rides")
 // Use Query.delete() instead of raw SQL DELETE
 db.table("tournaments").where("id", id).delete();
 
-// Route-scoped auth and authorization are metadata, not hand-written middleware.
-context.route(new RouteContribution(
-        "GET", "/api/rides", (BaseHandler) ctx -> ctx.json(rideService.list()))
-        .permission("rides.read"));
-context.route(new RouteContribution(
-        "POST", "/auth/login", (BaseHandler) ctx -> ctx.json(authService.login(ctx))));
+// Route-scoped auth is declared on the Route, not in hand-written middleware.
+context.route(Route.of("GET", "/api/rides",
+        (BaseHandler) ctx -> ctx.json(rideService.list()))
+        .requireAuth("rides.read"));
+context.route(Route.of("POST", "/auth/login",
+        (BaseHandler) ctx -> ctx.json(authService.login(ctx))));
 ```

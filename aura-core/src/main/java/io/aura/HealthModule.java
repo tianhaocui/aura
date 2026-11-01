@@ -2,7 +2,7 @@ package io.aura;
 
 import io.aura.contract.HealthStatus;
 import io.aura.contract.ModuleMetadata;
-import io.aura.contract.RouteContribution;
+import io.aura.contract.Route;
 import io.aura.web.BaseContext;
 import io.aura.web.BaseHandler;
 
@@ -25,9 +25,9 @@ public final class HealthModule implements AuraModule {
     }
 
     @Override public void install(ModuleContext context) {
-        context.route(new RouteContribution("GET", "/health/live", (BaseHandler) HealthModule::live));
-        context.route(new RouteContribution("GET", "/health/ready", (BaseHandler) HealthModule::ready));
-        context.route(new RouteContribution("GET", "/health", (BaseHandler) HealthModule::aggregate));
+        context.route(Route.of("GET", "/health/live", (BaseHandler) HealthModule::live));
+        context.route(Route.of("GET", "/health/ready", (BaseHandler) HealthModule::ready));
+        context.route(Route.of("GET", "/health", (BaseHandler) HealthModule::aggregate));
     }
 
     private static void live(BaseContext context) {

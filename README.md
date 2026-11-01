@@ -9,8 +9,9 @@ constraint. The second is making AI development accurate, fast, verifiable,
 token-efficient, and easy to learn.
 
 Aura 1.0 has one application model: reusable capability modules and business
-modules are composed explicitly with `use(...)`. The same route contract drives
-in-memory tests, Undertow, `/__schema__`, OpenAPI, generated bindings, and MCP.
+modules are composed explicitly with `use(...)`. One `Route` record is the route
+contract; it drives in-memory tests, Undertow, `/__schema__`, OpenAPI, generated
+bindings, and MCP.
 
 ## Install
 
@@ -69,9 +70,8 @@ AuraApp app = AuraApp.create(new AuraConfig().port(8080))
         }
 
         @Override public void install(ModuleContext context) {
-            context.route(new RouteContribution(
-                "GET", "/hello",
-                (BaseHandler) request -> request.text("hello world")));
+            context.route(Route.of("GET", "/hello",
+                    (BaseHandler) request -> request.text("hello world")));
         }
     });
 

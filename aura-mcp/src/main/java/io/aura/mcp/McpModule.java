@@ -4,7 +4,7 @@ import io.aura.AuraModule;
 import io.aura.ModuleContext;
 import io.aura.contract.ModuleMetadata;
 import io.aura.contract.McpRouterSpec;
-import io.aura.contract.RouteContribution;
+import io.aura.contract.Route;
 import io.aura.web.BaseHandler;
 
 import java.time.Duration;
@@ -93,17 +93,17 @@ public final class McpModule implements AuraModule {
             context.register(sessions);
             if (sseHub != null) sessions.onSessionRemoved(sseHub::sessionRemoved);
             McpHttpTransport transport = new McpHttpTransport(router, sessions, maxResponseBytes, sseHub, httpPath);
-            context.route(new RouteContribution("POST", httpPath,
-                    (BaseHandler) transport::post,
-                    Map.of("description", "MCP JSON-RPC transport", "returnType", "JsonRpcResponse")));
-            context.route(new RouteContribution("DELETE", httpPath,
-                    (BaseHandler) transport::delete,
-                    Map.of("description", "Close MCP session", "returnType", "void")));
+            context.route(Route.of("POST", httpPath, (BaseHandler) transport::post)
+                    .describedAs("MCP JSON-RPC transport")
+                    .withReturnType("JsonRpcResponse"));
+            context.route(Route.of("DELETE", httpPath, (BaseHandler) transport::delete)
+                    .describedAs("Close MCP session")
+                    .withReturnType("void"));
             if (sseEnabled) {
-                context.route(new RouteContribution("GET", httpPath,
-                        (BaseHandler) transport::get,
-                        Map.of("description", "MCP server-sent events transport",
-                                "returnType", "text/event-stream", "streaming", true)));
+                context.route(Route.of("GET", httpPath, (BaseHandler) transport::get)
+                        .describedAs("MCP server-sent events transport")
+                        .withReturnType("text/event-stream")
+                        .withStreaming(true));
             }
         }
     }

@@ -1,10 +1,10 @@
 # aura-web 1.0
 
-`aura-web` is the optional Undertow adapter. It compiles the route contributions
-installed by `AuraModule`s and uses the same compiled contract for real HTTP,
+`aura-web` is the optional Undertow adapter. It compiles the `Route` values
+contributed by `AuraModule`s and uses that single record for real HTTP,
 `TestClient`, `/__schema__`, OpenAPI, and MCP discovery.
 
-## Route Contributions
+## Routes
 
 ```java
 public final class OrdersModule implements AuraModule {
@@ -13,19 +13,24 @@ public final class OrdersModule implements AuraModule {
     }
 
     @Override public void install(ModuleContext context) {
-        context.route(new RouteContribution(
-                "POST", "/orders",
+        context.route(Route.of("POST", "/orders",
                 (BaseHandler) request -> {
                     CreateOrder body = request.bodyOrThrow(CreateOrder.class);
                     request.status(201).json(orderService.create(body));
-                },
-                "Create an order"));
+                })
+                .describedAs("Create an order"));
     }
 }
 ```
 
-Generated and reflective routes both produce `ApiRoute`/`ApiParameter`
-metadata. Prefer the optional `aura-processor` for production builds and keep
+A handler is required, so a route cannot be contributed without one.
+Description, parameters, return type, response schema, streaming, and auth are
+typed fields on the same `Route`; there is no metadata map, so a misspelled key
+cannot drop a route from the schema.
+
+Generated and reflective routes both contribute `Route` values, and
+`ApiParameter` declarations supply the request metadata the compiler cannot see.
+Prefer the optional `aura-processor` for production builds and keep
 reflection for prototypes.
 
 ## Context
@@ -101,7 +106,8 @@ outside explicit dev mode. Both are generated from the same compiled routes.
 
 `request.sse()` returns an `SseEmitter`. Event names and IDs are sanitized,
 streaming routes are excluded from the normal request timeout and gzip path,
-and application protocols must bound queues and replay history.
+and application protocols must bound queues and replay history. Declare such
+routes with `Route.of(...).withStreaming(true)`.
 
 WebSocket handshakes enforce the configured Origin policy. Missing Origin is
 not implicitly trusted when the application requires browser-origin checks.

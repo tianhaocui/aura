@@ -86,10 +86,10 @@ public final class AuraRouteProcessor extends AbstractProcessor {
         StringBuilder source = new StringBuilder();
         if (!packageName.isEmpty()) source.append("package ").append(packageName).append(";\n\n");
         source.append("public final class ").append(simpleName)
-                .append(" implements io.aura.contract.RouteContributor {\n")
+                .append(" {\n")
                 .append("  private final ").append(service.getQualifiedName()).append(" service;\n")
                 .append("  public ").append(simpleName).append("(").append(service.getQualifiedName()).append(" service) { this.service = service; }\n")
-                .append("  @Override public java.util.List<io.aura.contract.RouteContribution> routes() {\n")
+                .append("  public java.util.List<io.aura.contract.Route> routes() {\n")
                 .append("    return java.util.List.of(\n");
         for (int i = 0; i < methods.size(); i++) {
             if (i > 0) source.append(",\n");
@@ -110,7 +110,7 @@ public final class AuraRouteProcessor extends AbstractProcessor {
         Route route = route(method);
         String path = prefix + route.path;
         if (path.isEmpty()) path = "/";
-        source.append("      new io.aura.contract.RouteContribution(\"").append(route.method).append("\", \"")
+        source.append("      io.aura.contract.Route.of(\"").append(route.method).append("\", \"")
                 .append(escape(path)).append("\", (io.aura.web.BaseHandler) ctx -> {");
 
         List<? extends VariableElement> parameters = method.getParameters();
@@ -142,7 +142,8 @@ public final class AuraRouteProcessor extends AbstractProcessor {
         String invocation = "service." + method.getSimpleName() + "(" + String.join(", ", args) + ")";
         if (method.getReturnType().getKind() == TypeKind.VOID) source.append(invocation).append(";");
         else source.append("io.aura.web.RouteResponse.write(ctx, ").append(invocation).append(");");
-        source.append("}, java.util.Map.of(\"parameters\", java.util.List.of(");
+        source.append("})");
+        source.append(".withParams(java.util.List.of(");
         List<String> contracts = new ArrayList<>();
         for (VariableElement parameter : parameters) {
             if (isContext(parameter.asType())) continue;
@@ -161,16 +162,15 @@ public final class AuraRouteProcessor extends AbstractProcessor {
                     + required + ", "
                     + (description == null ? "null" : "\"" + escape(description) + "\"") + ", " + schema + ")");
         }
-        source.append(String.join(", ", contracts)).append("), \"returnType\", \"")
-                .append(escape(simpleTypeName(method.getReturnType().toString()))).append("\"");
+        source.append(String.join(", ", contracts)).append("))");
+        source.append(".withReturnType(\"").append(escape(simpleTypeName(method.getReturnType().toString()))).append("\")");
         if (method.getReturnType().getKind() != TypeKind.VOID) {
-            source.append(", \"responseSchema\", ").append(bodySchema(method.getReturnType()));
+            source.append(".withResponseSchema(").append(bodySchema(method.getReturnType())).append(")");
         }
         String description = routeDescription(method);
         if (description != null) {
-            source.append(", \"description\", \"").append(escape(description)).append("\"");
+            source.append(".describedAs(\"").append(escape(description)).append("\")");
         }
-        source.append("))");
     }
 
     private boolean hasRoute(ExecutableElement method) {

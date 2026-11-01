@@ -2,7 +2,7 @@ package io.aura.web;
 
 import io.aura.AuraApp;
 import io.aura.AuraConfig;
-import io.aura.contract.RouteContribution;
+import io.aura.contract.Route;
 import org.junit.jupiter.api.Test;
 
 import java.net.ServerSocket;
@@ -125,9 +125,9 @@ class DeploymentSecurityTest {
 
             @Override public void install(io.aura.ModuleContext context) {
                 context.admissionPolicy(policy);
-                context.route(new RouteContribution("GET", "/orders/{id}",
+                context.route(Route.of("GET", "/orders/{id}",
                         (BaseHandler) request -> request.text(request.path("id"))));
-                context.route(new RouteContribution("GET", "/health",
+                context.route(Route.of("GET", "/health",
                         (BaseHandler) request -> request.text("ok")));
             }
         });
@@ -151,12 +151,12 @@ class DeploymentSecurityTest {
 
     private AuraApp app(AuraConfig config, String id) {
         return TestApplications.app(config, id,
-                new RouteContribution("GET", "/ok", (BaseHandler) request -> request.text("ok")));
+                Route.of("GET", "/ok", (BaseHandler) request -> request.text("ok")));
     }
 
     private AuraApp postApp(AuraConfig config, String id) {
         return TestApplications.app(config, id,
-                new RouteContribution("POST", "/orders", (BaseHandler) request -> request.text("ok")));
+                Route.of("POST", "/orders", (BaseHandler) request -> request.text("ok")));
     }
 
     private HttpResponse<String> get(int port) throws Exception {

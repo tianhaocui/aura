@@ -3,23 +3,26 @@
 ## SSE (Server-Sent Events)
 
 ```java
-context.route(new RouteContribution("GET", "/stream", (BaseHandler) ctx -> {
+context.route(Route.of("GET", "/stream", (BaseHandler) ctx -> {
     SseEmitter sse = ctx.sse();
     sse.send("hello");                       // data: hello
     sse.send("message", "payload");          // named event
     sse.send("update", "content", "msg-1"); // with id
     sse.close();
-}, Map.of("streaming", true)));
+}).withStreaming(true));
 
 // AI streaming example
-context.route(new RouteContribution("POST", "/chat", (BaseHandler) ctx -> {
+context.route(Route.of("POST", "/chat", (BaseHandler) ctx -> {
     ChatReq req = ctx.body(ChatReq.class);
     SseEmitter sse = ctx.sse();
     aiClient.streamChat(req.message(), token -> sse.send("token", token));
     sse.send("done", "");
     sse.close();
-}, Map.of("streaming", true)));
+}).withStreaming(true));
 ```
+
+`.withStreaming(true)` is the flag `/__schema__`, OpenAPI, and MCP read. It
+describes the route; it does not change the handler.
 
 ## File Upload
 
@@ -87,13 +90,14 @@ User user = upstream.get("/users/" + id, User.class, ctx.cancellationToken());
 Properties resolution priority (highest to lowest):
 1. Environment variable (`AURA_ORDERS_TIMEOUT` for `aura.orders.timeout`)
 2. JVM system property (`-Daura.orders.timeout=5`)
-3. The `Properties`/file passed to `AuraApp.create(...)`
+3. The `Properties`/file loaded by `AuraConfig.fromProperties(...)`
 4. Explicit `AuraConfig` defaults
 
 `AuraApp.create()` reads environment variables and JVM system properties before
-freezing configuration. To add file values, use
-`AuraApp.create(Path.of("/etc/aura.properties"))`; environment and JVM values
-still take precedence. Aura does not search classpath profiles implicitly.
+freezing configuration. To add file values, pass
+`AuraApp.create(AuraConfig.fromProperties(Path.of("/etc/aura.properties")))`;
+environment and JVM values still take precedence. Aura does not search classpath
+profiles implicitly.
 Startup args support `--dev`, `--mcp-stdio`, and module properties such as
 `--orders.timeout=5`; runtime settings are frozen at application creation.
 
@@ -215,7 +219,8 @@ java -jar target/your-app-1.0.jar --mcp-stdio
 The standard archetype configures Shade with both the executable manifest and
 `ServicesResourceTransformer`; removing the latter breaks runtime adapter
 discovery. Deployment values come from environment/JVM overrides or an explicit
-file passed to `AuraApp.create(Path)`, not implicit classpath profile discovery.
+file loaded by `AuraConfig.fromProperties(path)`, not implicit classpath profile
+discovery.
 
 The repository's canonical deployment verification is:
 

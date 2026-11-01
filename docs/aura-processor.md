@@ -5,9 +5,10 @@ generation. It does not change `aura-core` dependencies or application startup.
 
 For a public service method annotated with `@Get`, `@Post`, `@Put`, `@Delete`,
 `@Patch`, `@Head`, or `@Options`, the processor generates a same-package
-`<ServiceName>AuraRoutes` class implementing `RouteContributor`.
+`<ServiceName>AuraRoutes` class with a `routes()` method that returns `Route`
+values.
 
-The generated contributor contains direct Java calls, explicit route metadata,
+The generated class contains direct Java calls, explicit route metadata,
 and fixed path/query/body binding. Install it explicitly:
 
 ```java

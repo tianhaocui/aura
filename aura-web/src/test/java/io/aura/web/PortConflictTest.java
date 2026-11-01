@@ -1,7 +1,7 @@
 package io.aura.web;
 
 import io.aura.AuraConfig;
-import io.aura.contract.RouteContribution;
+import io.aura.contract.Route;
 import org.junit.jupiter.api.Test;
 
 import java.net.ServerSocket;
@@ -18,7 +18,7 @@ class PortConflictTest {
             var app = TestApplications.app(
                     new AuraConfig().port(port),
                     "port-conflict",
-                    new RouteContribution("GET", "/", (BaseHandler) ctx -> ctx.text("hi")));
+                    Route.of("GET", "/", (BaseHandler) ctx -> ctx.text("hi")));
 
             assertThatThrownBy(app::start)
                 .isInstanceOf(RuntimeException.class)

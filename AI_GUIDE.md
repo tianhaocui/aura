@@ -63,7 +63,7 @@ public final class OrderModule implements AuraModule {
 
     @Override public void install(ModuleContext context) {
         Db db = context.require(Db.class);
-        context.route(new RouteContribution("GET", "/orders",
+        context.route(Route.of("GET", "/orders",
                 (BaseHandler) ctx -> ctx.json(db.find("SELECT * FROM orders"))));
     }
 }
@@ -77,7 +77,7 @@ import io.aura.AuraApp;
 import io.aura.AuraModule;
 import io.aura.ModuleContext;
 import io.aura.contract.ModuleMetadata;
-import io.aura.contract.RouteContribution;
+import io.aura.contract.Route;
 import io.aura.web.BaseHandler;
 
 public final class AiModuleComposition {
@@ -93,8 +93,8 @@ public final class AiModuleComposition {
         }
 
         @Override public void install(ModuleContext context) {
-            context.route(new RouteContribution(
-                    "GET", "/orders", (BaseHandler) ctx -> ctx.text("ready")));
+            context.route(Route.of("GET", "/orders",
+                    (BaseHandler) ctx -> ctx.text("ready")));
         }
     }
 }
@@ -192,9 +192,10 @@ Framework keys use the `aura.*` namespace; environment variables and JVM system
 properties override file values. Invalid values fail while creating the config,
 before modules or listeners are started.
 
-The equivalent application entry point is `AuraApp.create(Path.of("aura.properties"))`
-or `AuraApp.create(properties)`. Configuration is frozen when the app is created;
-do not load or mutate configuration after module preparation.
+`AuraApp.create(AuraConfig)` is the only configuration-taking entry point: load a
+deployment file or `Properties` with `AuraConfig.fromProperties(...)` and pass the
+result. Configuration is frozen when the app is created; do not load or mutate it
+after module preparation.
 
 Call `start()` after all modules and properties are configured. `app.config()`
 returns an immutable `AuraConfigSnapshot`; changing the builder or nested
@@ -215,18 +216,20 @@ OrderConfig cfg = context.config(OrderConfig.class);
 ## Routes and Errors
 
 ```java
-context.route(new RouteContribution("GET", "/orders/{id}",
+context.route(Route.of("GET", "/orders/{id}",
         (BaseHandler) ctx -> ctx.json(orderService.get(ctx.pathLong("id")))));
 ```
 
-For lambda routes, declare metadata explicitly when reflection cannot infer it:
+A lambda route declares what the compiler cannot see — description, parameters,
+permission — as typed fields on the same `Route`. There is no metadata map, so a
+misspelled key cannot silently drop a route from the schema:
 
 ```java
-context.route(new RouteContribution("GET", "/orders/{id}", handler, Map.of(
-        "description", "Get one order",
-        "parameters", List.of(new ApiParameter(
-                "id", "long", "path", true, "Order identifier"))))
-        .permission("orders.read"));
+context.route(Route.of("GET", "/orders/{id}", handler)
+        .describedAs("Get one order")
+        .withParams(List.of(new ApiParameter(
+                "id", "long", "path", true, "Order identifier")))
+        .requireAuth("orders.read"));
 ```
 
 Binding is fixed: `int`/`long`/`String` use path then query parameters;

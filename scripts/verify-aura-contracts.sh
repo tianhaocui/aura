@@ -166,7 +166,7 @@ rg -q 'public Map<String, Object> schema\(\)' \
   "$repo_root/aura-web/src/main/java/io/aura/web/TestClient.java"
 rg -q 'public Map<String, Object> openApi\(\)' \
   "$repo_root/aura-web/src/main/java/io/aura/web/TestClient.java"
-rg -q 'tool\(io\.aura\.contract\.ApiRoute route' \
+rg -q 'tool\(io\.aura\.contract\.Route route' \
   "$repo_root/aura-mcp/src/main/java/io/aura/mcp/McpRouter.java"
 
 if rg -n '<version>0\.3\.0</version>|<version>0\.5\.1</version>|No classpath scanning' \
@@ -218,8 +218,31 @@ if rg -n 'app\.(register|onStart|onStop|set|getBean)\(|WorkflowDefinition[[:spac
   echo "non-compiling pre-1.0 example found in canonical AI documentation" >&2
   exit 1
 fi
-rg -q 'permission\(String permission\)' \
-  "$repo_root/aura-contract/src/main/java/io/aura/contract/RouteContribution.java"
+rg -q 'requireAuth\(String permission\)' \
+  "$repo_root/aura-contract/src/main/java/io/aura/contract/Route.java"
+if rg -n '\b(RouteContribution|RouteEntry|RouteContributor|PackageScanner|ApiRoute)\b' --glob '*.java' \
+    "$repo_root/aura-"*/src "$repo_root/examples"; then
+  echo "removed route shape found in first-party code" >&2
+  exit 1
+fi
+if ! rg -q 'RequestGuards\.standard\(app' \
+    "$repo_root/aura-web/src/main/java/io/aura/web/UndertowStarter.java" \
+    "$repo_root/aura-web/src/main/java/io/aura/web/TestClient.java"; then
+  echo "a transport bypasses the shared request guard chain" >&2
+  exit 1
+fi
+
+# Application entry points: configuration loading belongs to AuraConfig, so the
+# facade must not grow a second way in.
+if [ "$(rg -c 'public static AuraApp create\(' \
+        "$repo_root/aura-core/src/main/java/io/aura/AuraApp.java")" != "2" ]; then
+  echo "AuraApp must expose exactly create() and create(AuraConfig)" >&2
+  exit 1
+fi
+if rg -q 'public AuraApp start\(\)' "$repo_root/aura-core/src/main/java/io/aura/AuraApp.java"; then
+  echo "AuraApp.start() must stay a single varargs entry point" >&2
+  exit 1
+fi
 
 if rg -n 'context\.routes\(' \
     "$repo_root/aura-"*/src/main "$repo_root/examples"; then
@@ -276,16 +299,22 @@ rg -q 'BoundedJson\.encode' \
 rg -q 'BoundedJson\.encode' \
   "$repo_root/aura-mcp/src/main/java/io/aura/mcp/McpSseHub.java"
 rg -q 'annotationProcessorPaths' "$repo_root/examples/aura-generated/pom.xml"
-rg -q 'responseSchema' "$repo_root/aura-contract/src/main/java/io/aura/contract/ApiRoute.java"
-rg -q 'boolean authenticated, String permission' \
-  "$repo_root/aura-contract/src/main/java/io/aura/contract/ApiRoute.java"
+rg -q 'Map<String, Object> responseSchema,' \
+  "$repo_root/aura-contract/src/main/java/io/aura/contract/Route.java"
+rg -q 'String permission,' \
+  "$repo_root/aura-contract/src/main/java/io/aura/contract/Route.java"
+# The schema document is a wire format: auth metadata has to survive the projection.
+rg -q 'view.put\("authenticated", route.authenticated\(\)\)' \
+  "$repo_root/aura-web/src/main/java/io/aura/web/RouteContract.java"
+rg -q 'view.put\("permission", route.permission\(\)\)' \
+  "$repo_root/aura-web/src/main/java/io/aura/web/RouteContract.java"
 rg -q 'route\.permission\(\), route\.authenticated\(\)' \
   "$repo_root/aura-mcp/src/main/java/io/aura/mcp/McpRouter.java"
 rg -q 'rateLimitMaxKeys' "$repo_root/aura-core/src/main/java/io/aura/AuraConfig.java"
 rg -q 'trustedProxies' "$repo_root/aura-core/src/main/java/io/aura/AuraConfig.java"
 rg -q 'aura.tls.keystore-path' "$repo_root/aura-core/src/main/java/io/aura/AuraConfig.java"
 rg -q 'maxWebSocketMessageSize' "$repo_root/aura-core/src/main/java/io/aura/AuraConfig.java"
-rg -q 'FixedWindowRateLimiter' "$repo_root/aura-web/src/main/java/io/aura/web/UndertowStarter.java"
+rg -q 'FixedWindowRateLimiter' "$repo_root/aura-web/src/main/java/io/aura/web/RequestGuards.java"
 rg -q 'context.admissionPolicy' "$repo_root/docs/aura-web.md"
 rg -q 'matchedRoutePattern' "$repo_root/aura-web/src/main/java/io/aura/web/UndertowStarter.java"
 rg -q 'void webSocket' "$repo_root/aura-core/src/main/java/io/aura/ModuleContext.java"

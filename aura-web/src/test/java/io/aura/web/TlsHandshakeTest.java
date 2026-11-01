@@ -2,7 +2,7 @@ package io.aura.web;
 
 import io.aura.AuraApp;
 import io.aura.AuraConfig;
-import io.aura.contract.RouteContribution;
+import io.aura.contract.Route;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -49,7 +49,7 @@ class TlsHandshakeTest {
         AuraApp app = TestApplications.app(
                 new AuraConfig().port(port).tls(keyStorePath.toString(), PASSWORD),
                 "tls-handshake",
-                new RouteContribution("GET", "/ok", (BaseHandler) request -> request.text("ok")));
+                Route.of("GET", "/ok", (BaseHandler) request -> request.text("ok")));
 
         try {
             app.start();

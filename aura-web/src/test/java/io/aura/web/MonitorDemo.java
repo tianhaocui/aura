@@ -1,7 +1,7 @@
 package io.aura.web;
 
 import io.aura.AuraConfig;
-import io.aura.contract.RouteContribution;
+import io.aura.contract.Route;
 
 import java.lang.management.ManagementFactory;
 import java.lang.management.MemoryMXBean;
@@ -84,11 +84,11 @@ public class MonitorDemo {
         var app = TestApplications.app(
                 new AuraConfig().port(8080).cors(true),
                 "monitor-demo",
-                new RouteContribution("GET", "/health", health),
-                new RouteContribution("GET", "/status", status),
-                new RouteContribution("GET", "/errors", errors),
-                new RouteContribution("POST", "/gc", gc),
-                new RouteContribution("GET", "/fail", failure));
+                Route.of("GET", "/health", health),
+                Route.of("GET", "/status", status),
+                Route.of("GET", "/errors", errors),
+                Route.of("POST", "/gc", gc),
+                Route.of("GET", "/fail", failure));
 
         app.start();
         System.out.println("Monitor API running on http://localhost:8080");

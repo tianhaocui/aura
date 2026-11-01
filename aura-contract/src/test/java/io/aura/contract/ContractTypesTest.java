@@ -41,16 +41,13 @@ class ContractTypesTest {
     }
 
     @Test
-    void routeSecurityMetadataIsExplicitAndImmutable() {
-        RouteContribution route = new RouteContribution("get", "/orders", new Object())
-                .permission("orders.read");
+    void routeSecurityMetadataIsExplicit() {
+        Route route = Route.of("get", "/orders", new Object()).requireAuth("orders.read");
 
         assertThat(route.method()).isEqualTo("GET");
-        assertThat(route.metadata()).containsEntry(RouteContribution.AUTHENTICATED, true)
-                .containsEntry(RouteContribution.PERMISSION, "orders.read");
-        assertThatThrownBy(() -> route.metadata().put("other", true))
-                .isInstanceOf(UnsupportedOperationException.class);
-        assertThatThrownBy(() -> route.permission(" "))
+        assertThat(route.authenticated()).isTrue();
+        assertThat(route.permission()).isEqualTo("orders.read");
+        assertThatThrownBy(() -> route.requireAuth(" "))
                 .isInstanceOf(IllegalArgumentException.class);
     }
     @Test
@@ -86,11 +83,11 @@ class ContractTypesTest {
     }
 
     @Test
-    void routeContributionAndErrorsDefensivelyCopyMetadata() {
-        var routeMetadata = new HashMap<String, Object>();
-        routeMetadata.put("auth", true);
-        var route = new RouteContribution(" get ", "/orders", "handler", routeMetadata);
-        routeMetadata.put("changed", true);
+    void routeAndErrorsDefensivelyCopyTheirState() {
+        var routeParameters = new ArrayList<>(List.of(
+                new ApiParameter("id", "long", "path", true, "Order identifier")));
+        var route = Route.of("get", "/orders", "handler").withParams(routeParameters);
+        routeParameters.add(new ApiParameter("other", "string", "query", false, "Another"));
 
         var details = new HashMap<String, Object>();
         details.put("module", "orders");
@@ -98,7 +95,10 @@ class ContractTypesTest {
         details.put("changed", true);
 
         assertThat(route.method()).isEqualTo("GET");
-        assertThat(route.metadata()).containsEntry("auth", true).doesNotContainKey("changed");
+        assertThat(route.params()).singleElement()
+                .extracting(ApiParameter::name).isEqualTo("id");
+        assertThatThrownBy(() -> route.params().clear())
+                .isInstanceOf(UnsupportedOperationException.class);
         assertThat(error.code()).isEqualTo("AURA_ROUTE_FAILED");
         assertThat(error.details()).containsEntry("module", "orders").doesNotContainKey("changed");
         assertThat(new ContractException(error).error()).isEqualTo(error);
@@ -151,10 +151,13 @@ class ContractTypesTest {
     }
 
     @Test
-    void apiRouteContractsAreImmutableAndNormalized() {
-        var route = new ApiRoute(" get ", "/orders", "List orders", "List<Order>",
-                List.of(new ApiParameter("page", "int", "query", false, "Page number")), "curl /orders");
+    void routeContractsAreImmutableAndNormalized() {
+        var route = Route.of(" get ", " /orders ", new Object())
+                .describedAs("List orders")
+                .withReturnType("List<Order>")
+                .withParams(List.of(new ApiParameter("page", "int", "query", false, "Page number")));
         assertThat(route.method()).isEqualTo("GET");
+        assertThat(route.path()).isEqualTo("/orders");
         assertThat(route.params()).singleElement().extracting(ApiParameter::name).isEqualTo("page");
     }
 

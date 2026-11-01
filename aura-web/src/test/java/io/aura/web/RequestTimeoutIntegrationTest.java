@@ -2,7 +2,7 @@ package io.aura.web;
 
 import io.aura.AuraApp;
 import io.aura.AuraConfig;
-import io.aura.contract.RouteContribution;
+import io.aura.contract.Route;
 import org.junit.jupiter.api.Test;
 
 import java.net.ServerSocket;
@@ -28,7 +28,7 @@ class RequestTimeoutIntegrationTest {
         AuraApp app = TestApplications.app(
                 new AuraConfig().port(port).requestTimeout(1),
                 "request-timeout-integration",
-                new RouteContribution("GET", "/slow", (BaseHandler) request -> {
+                Route.of("GET", "/slow", (BaseHandler) request -> {
                     request.cancellationToken().onCancel(cancelled::countDown);
                     started.countDown();
                     try {
@@ -68,7 +68,7 @@ class RequestTimeoutIntegrationTest {
         AuraApp app = TestApplications.app(
                 new AuraConfig().port(port).requestTimeout(5),
                 "request-timeout-fast",
-                new RouteContribution("GET", "/fast", (BaseHandler) request -> {
+                Route.of("GET", "/fast", (BaseHandler) request -> {
                     request.text("ok");
                 }));
 
@@ -95,7 +95,7 @@ class RequestTimeoutIntegrationTest {
         AuraApp app = TestApplications.app(
                 new AuraConfig().port(port).requestTimeout(0),
                 "request-timeout-disabled",
-                new RouteContribution("GET", "/slow", (BaseHandler) request -> {
+                Route.of("GET", "/slow", (BaseHandler) request -> {
                     Thread.sleep(100);
                     request.text("completed");
                 }));

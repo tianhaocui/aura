@@ -1,7 +1,7 @@
 package io.aura.web;
 
 import io.aura.contract.ApiParameter;
-import io.aura.contract.ApiRoute;
+import io.aura.contract.Route;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -12,13 +12,13 @@ import java.util.Map;
 public final class OpenApiGenerator {
     private OpenApiGenerator() { }
 
-    public static Map<String, Object> generate(String title, String version, List<ApiRoute> routes) {
+    public static Map<String, Object> generate(String title, String version, List<Route> routes) {
         Map<String, Object> info = new LinkedHashMap<>();
         info.put("title", title == null || title.isBlank() ? "Aura API" : title);
         info.put("version", version == null || version.isBlank() ? "1.0.0" : version);
 
         Map<String, Map<String, Object>> paths = new LinkedHashMap<>();
-        if (routes != null) for (ApiRoute route : routes) {
+        if (routes != null) for (Route route : routes) {
             Map<String, Object> operation = new LinkedHashMap<>();
             if (route.description() != null) operation.put("description", route.description());
             operation.put("operationId", operationId(route));
@@ -64,7 +64,7 @@ public final class OpenApiGenerator {
         return document;
     }
 
-    private static String operationId(ApiRoute route) {
+    private static String operationId(Route route) {
         return route.method().toLowerCase(java.util.Locale.ROOT) + "_" + route.path()
                 .replaceAll("[^A-Za-z0-9]+", "_")
                 .replaceAll("^_+|_+$", "");

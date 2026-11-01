@@ -2,7 +2,7 @@ package io.aura.web;
 
 import io.aura.AuraApp;
 import io.aura.AuraConfig;
-import io.aura.contract.RouteContribution;
+import io.aura.contract.Route;
 import org.junit.jupiter.api.Test;
 
 import java.net.ServerSocket;
@@ -30,13 +30,13 @@ class ShutdownCancellationTest {
         AuraApp app = TestApplications.app(
                 new AuraConfig().port(port).shutdownTimeout(5),
                 "shutdown-admission",
-                new RouteContribution("GET", "/wait", (BaseHandler) request -> {
+                Route.of("GET", "/wait", (BaseHandler) request -> {
                     request.cancellationToken().onCancel(cancelled::countDown);
                     started.countDown();
                     release.await(3, TimeUnit.SECONDS);
                     request.text("done");
                 }),
-                new RouteContribution("GET", "/new", (BaseHandler) request -> {
+                Route.of("GET", "/new", (BaseHandler) request -> {
                     newRequests.incrementAndGet();
                     request.text("unexpected");
                 }));
@@ -76,7 +76,7 @@ class ShutdownCancellationTest {
         AuraApp app = TestApplications.app(
                 new AuraConfig().port(port).shutdownTimeout(2),
                 "disconnect-cancellation",
-                new RouteContribution("GET", "/wait", (BaseHandler) request -> {
+                Route.of("GET", "/wait", (BaseHandler) request -> {
                     request.cancellationToken().onCancel(cancelled::countDown);
                     SseEmitter events = request.sse();
                     started.countDown();
@@ -111,7 +111,7 @@ class ShutdownCancellationTest {
         AuraApp app = TestApplications.app(
                 new AuraConfig().port(port),
                 "completed-request-cancellation",
-                new RouteContribution("GET", "/ok",
+                Route.of("GET", "/ok",
                         (BaseHandler) request -> request.text("ok")));
         app.start();
         try {
@@ -138,7 +138,7 @@ class ShutdownCancellationTest {
         AuraApp app = TestApplications.app(
                 new AuraConfig().port(port).shutdownTimeout(5),
                 "shutdown-cancellation",
-                new RouteContribution("GET", "/wait", (BaseHandler) request -> {
+                Route.of("GET", "/wait", (BaseHandler) request -> {
                     request.cancellationToken().onCancel(cancelled::countDown);
                     started.countDown();
                     while (!request.cancellationToken().isCancelled()) {

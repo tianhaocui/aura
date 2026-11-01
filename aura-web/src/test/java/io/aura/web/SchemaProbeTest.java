@@ -9,7 +9,7 @@ import io.aura.annotation.Path;
 import io.aura.annotation.Post;
 import io.aura.contract.ApiParameter;
 import io.aura.contract.ModuleMetadata;
-import io.aura.contract.RouteContribution;
+import io.aura.contract.Route;
 import com.alibaba.fastjson2.JSON;
 import org.junit.jupiter.api.Test;
 
@@ -28,22 +28,19 @@ class SchemaProbeTest {
             }
 
             @Override public void install(ModuleContext context) {
-                context.route(new RouteContribution("GET", "/probe/orders/{id}",
-                        (BaseHandler) ctx -> ctx.text("ok"),
-                        java.util.Map.of(
-                                "description", "Get an order",
-                                "returnType", "Order",
-                                "streaming", true,
-                                RouteContribution.AUTHENTICATED, true,
-                                RouteContribution.PERMISSION, "orders.read",
-                                "responseSchema", java.util.Map.of("type", "object"),
-                                "parameters", java.util.List.of(
-                                        new ApiParameter("id", "long", "path", true, "Order id"),
-                                        new ApiParameter("q", "string", "query", false, "Search")))));
-                context.route(new RouteContribution("POST", "/probe/orders",
-                        (BaseHandler) ctx -> ctx.text("created"),
-                        java.util.Map.of("description", "Create an order")));
-                context.route(new RouteContribution("DELETE", "/probe/minimal",
+                context.route(Route.of("GET", "/probe/orders/{id}",
+                        (BaseHandler) ctx -> ctx.text("ok"))
+                        .withParams(java.util.List.of(
+                                new ApiParameter("id", "long", "path", true, "Order id"),
+                                new ApiParameter("q", "string", "query", false, "Search")))
+                        .withReturnType("Order")
+                        .withResponseSchema(java.util.Map.of("type", "object"))
+                        .describedAs("Get an order")
+                        .requireAuth("orders.read")
+                        .withStreaming(true));
+                context.route(Route.of("POST", "/probe/orders",
+                        (BaseHandler) ctx -> ctx.text("created")).describedAs("Create an order"));
+                context.route(Route.of("DELETE", "/probe/minimal",
                         (BaseHandler) ctx -> ctx.text("gone")));
             }
         });

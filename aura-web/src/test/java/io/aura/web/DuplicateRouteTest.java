@@ -2,7 +2,7 @@ package io.aura.web;
 
 import io.aura.AuraApp;
 import io.aura.AuraConfig;
-import io.aura.contract.RouteContribution;
+import io.aura.contract.Route;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.*;
@@ -87,11 +87,11 @@ class DuplicateRouteTest {
                 .hasMessageContaining("Duplicate route: GET /api/users");
     }
 
-    private static AuraApp app(String moduleId, RouteContribution... routes) {
+    private static AuraApp app(String moduleId, Route... routes) {
         return TestApplications.app(new AuraConfig().port(0), moduleId, routes);
     }
 
-    private static RouteContribution route(String method, String path, String response) {
-        return new RouteContribution(method, path, (BaseHandler) ctx -> ctx.text(response));
+    private static Route route(String method, String path, String response) {
+        return Route.of(method, path, (BaseHandler) ctx -> ctx.text(response));
     }
 }

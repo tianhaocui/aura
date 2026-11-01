@@ -2,7 +2,7 @@ package io.aura.web;
 
 import io.aura.AuraApp;
 import io.aura.AuraConfig;
-import io.aura.contract.RouteContribution;
+import io.aura.contract.Route;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -18,7 +18,7 @@ class SnapshotMetricsTest {
         AuraApp app = TestApplications.app(new AuraConfig().snapshot(options -> options
                         .enabled(true).async(false).dir(directory).maxSnapshotFileSize(1)),
                 "snapshot-metrics",
-                new RouteContribution("GET", "/fail", (BaseHandler) request -> {
+                Route.of("GET", "/fail", (BaseHandler) request -> {
                     throw new IllegalStateException("failure");
                 }));
 

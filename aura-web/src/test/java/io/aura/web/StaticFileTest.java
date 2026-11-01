@@ -2,13 +2,13 @@ package io.aura.web;
 
 import io.aura.AuraApp;
 import io.aura.AuraConfig;
-import io.aura.contract.RouteContribution;
+import io.aura.contract.Route;
 
 public class StaticFileTest {
     public static void main(String[] args) throws Exception {
         AuraConfig config = new AuraConfig().port(9090).staticFiles("/public");
         AuraApp app = TestApplications.app(config, "static-file-demo",
-                new RouteContribution("GET", "/api/hello",
+                Route.of("GET", "/api/hello",
                         (BaseHandler) ctx -> ctx.text("api response")));
         app.start();
 

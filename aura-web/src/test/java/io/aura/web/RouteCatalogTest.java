@@ -1,14 +1,13 @@
 package io.aura.web;
 
 import io.aura.contract.ApiParameter;
-import io.aura.contract.ApiRoute;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-class ApiRouteCatalogTest {
+class RouteCatalogTest {
     record User(long id, String name) { }
 
     static class UserService {
@@ -22,7 +21,7 @@ class ApiRouteCatalogTest {
                 .param("order", "Order", "body", true, "Order payload");
 
         CompiledRoute route = UndertowStarter.compileRoutes(router).get(0);
-        ApiRoute description = ApiRouteCatalog.describe(route, "curl");
+        io.aura.contract.Route description = RouteCatalog.describe(route);
 
         assertThat(description.params())
                 .extracting(ApiParameter::name)
@@ -56,7 +55,7 @@ class ApiRouteCatalogTest {
         router.post("/search", new SearchService(), "search");
 
         CompiledRoute route = UndertowStarter.compileRoutes(router).get(0);
-        ApiRoute description = ApiRouteCatalog.describe(route, null);
+        io.aura.contract.Route description = RouteCatalog.describe(route);
 
         // A List is never a query string: the binder reads it from the body, so the
         // contract has to say body too.
@@ -76,7 +75,7 @@ class ApiRouteCatalogTest {
         router.get("/users/{id}", new UserService(), "get");
 
         CompiledRoute route = UndertowStarter.compileRoutes(router).get(0);
-        ApiRoute description = ApiRouteCatalog.describe(route, null);
+        io.aura.contract.Route description = RouteCatalog.describe(route);
 
         assertThat(description.responseSchema().get("type")).isEqualTo("object");
         @SuppressWarnings("unchecked")

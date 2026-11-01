@@ -2,7 +2,7 @@ package io.aura.web;
 
 import io.aura.AuraApp;
 import io.aura.AuraConfig;
-import io.aura.contract.RouteContribution;
+import io.aura.contract.Route;
 import org.junit.jupiter.api.Test;
 
 import java.net.ServerSocket;
@@ -20,7 +20,7 @@ class FormParsingSecurityTest {
     void parsesUrlEncodedFormsWithExplicitParserConfiguration() throws Exception {
         int port = freePort();
         AuraApp app = TestApplications.app(new AuraConfig().port(port), "form-parser",
-                new RouteContribution("POST", "/form",
+                Route.of("POST", "/form",
                         (BaseHandler) ctx -> ctx.text(ctx.formField("name"))));
         app.start();
         try {
@@ -47,7 +47,7 @@ class FormParsingSecurityTest {
         AuraConfig config = new AuraConfig().port(port).env("prod")
                 .maxUploadSize(4).maxBodySize(1024 * 1024);
         AuraApp app = TestApplications.app(config, "upload-limit",
-                new RouteContribution("POST", "/upload",
+                Route.of("POST", "/upload",
                         (BaseHandler) ctx -> ctx.text(String.valueOf(ctx.file("upload").size()))));
         app.start();
         try {

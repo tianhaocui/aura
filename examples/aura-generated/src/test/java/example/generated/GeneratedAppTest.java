@@ -20,10 +20,12 @@ class GeneratedAppTest {
         assertThat(client.schema().toString())
                 .contains("Get one generated order", "Order identifier", "/generated/orders/{id}");
         @SuppressWarnings("unchecked")
-        var routes = (java.util.List<io.aura.contract.ApiRoute>) client.schema().get("routes");
-        var create = routes.stream().filter(route -> route.path().equals("/generated/orders")
-                && route.method().equals("POST")).findFirst().orElseThrow();
-        assertThat(create.params()).singleElement()
+        var routes = (java.util.List<java.util.Map<String, Object>>) client.schema().get("routes");
+        var create = routes.stream().filter(route -> route.get("path").equals("/generated/orders")
+                && route.get("method").equals("POST")).findFirst().orElseThrow();
+        @SuppressWarnings("unchecked")
+        var createParams = (java.util.List<io.aura.contract.ApiParameter>) create.get("params");
+        assertThat(createParams).singleElement()
                 .satisfies(parameter -> {
                     assertThat(parameter.schema()).containsEntry("type", "object");
                     @SuppressWarnings("unchecked")
@@ -32,11 +34,13 @@ class GeneratedAppTest {
                     var status = (java.util.Map<String, Object>) properties.get("status");
                     assertThat(status).containsEntry("minLength", 1);
                 });
-        var get = routes.stream().filter(route -> route.path().equals("/generated/orders/{id}")
-                && route.method().equals("GET")).findFirst().orElseThrow();
-        assertThat(get.responseSchema()).containsEntry("type", "object");
+        var get = routes.stream().filter(route -> route.get("path").equals("/generated/orders/{id}")
+                && route.get("method").equals("GET")).findFirst().orElseThrow();
         @SuppressWarnings("unchecked")
-        var responseProperties = (java.util.Map<String, Object>) get.responseSchema().get("properties");
+        var responseSchema = (java.util.Map<String, Object>) get.get("responseSchema");
+        assertThat(responseSchema).containsEntry("type", "object");
+        @SuppressWarnings("unchecked")
+        var responseProperties = (java.util.Map<String, Object>) responseSchema.get("properties");
         assertThat(responseProperties.keySet()).contains("id", "status");
     }
 
@@ -48,20 +52,24 @@ class GeneratedAppTest {
                 .query("direction", "UP").query("minId", "1")
                 .expect(200).body()).contains("ready");
 
-        var search = ((java.util.List<io.aura.contract.ApiRoute>) client.schema().get("routes")).stream()
-                .filter(route -> route.path().equals("/generated/orders/search"))
+        @SuppressWarnings("unchecked")
+        var searchRoutes = (java.util.List<java.util.Map<String, Object>>) client.schema().get("routes");
+        var search = searchRoutes.stream()
+                .filter(route -> route.get("path").equals("/generated/orders/search"))
                 .findFirst().orElseThrow();
-        assertThat(search.params())
+        @SuppressWarnings("unchecked")
+        var searchParams = (java.util.List<io.aura.contract.ApiParameter>) search.get("params");
+        assertThat(searchParams)
                 .extracting(io.aura.contract.ApiParameter::name, io.aura.contract.ApiParameter::source)
                 .containsExactly(
                         org.assertj.core.groups.Tuple.tuple("direction", "query"),
                         org.assertj.core.groups.Tuple.tuple("minId", "query"));
-        assertThat(search.params().get(0).schema())
+        assertThat(searchParams.get(0).schema())
                 .containsEntry("type", "string")
                 .containsEntry("enum", java.util.List.of("UP", "DOWN"));
         // A plain scalar publishes no schema on either path and spells its type the way
         // the reflective catalog does, so consumers infer the JSON type from one name.
-        assertThat(search.params().get(1).schema()).isEmpty();
-        assertThat(search.params().get(1).type()).isEqualTo("BigDecimal");
+        assertThat(searchParams.get(1).schema()).isEmpty();
+        assertThat(searchParams.get(1).type()).isEqualTo("BigDecimal");
     }
 }

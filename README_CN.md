@@ -7,9 +7,9 @@
 Aura 是面向 AI 开发的 Java 17+ 后端运行时。稳定性是第一条红线；第二条红线是让 AI
 开发更准确、更快、更少出错、可验证、省 Token、易学习。
 
-Aura 1.0 只有一种应用模型：能力模块与业务模块通过 `use(...)` 显式组装。同一份路由
-契约同时驱动内存测试、Undertow、`/__schema__`、OpenAPI、生成代码和 MCP，避免多套
-定义漂移。
+Aura 1.0 只有一种应用模型：能力模块与业务模块通过 `use(...)` 显式组装。唯一的
+`Route` 记录就是路由契约，它同时驱动内存测试、Undertow、`/__schema__`、OpenAPI、
+生成代码和 MCP，避免多套定义漂移。
 
 ## 安装
 
@@ -65,9 +65,8 @@ AuraApp app = AuraApp.create(new AuraConfig().port(8080))
         }
 
         @Override public void install(ModuleContext context) {
-            context.route(new RouteContribution(
-                "GET", "/hello",
-                (BaseHandler) request -> request.text("hello world")));
+            context.route(Route.of("GET", "/hello",
+                    (BaseHandler) request -> request.text("hello world")));
         }
     });
 

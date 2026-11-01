@@ -3,8 +3,6 @@ package io.aura;
 import java.util.List;
 import java.util.Optional;
 import java.util.Properties;
-import java.nio.file.Path;
-import java.io.IOException;
 
 /** Canonical Aura 1.0 application facade for explicit module composition. */
 public final class AuraApp implements AutoCloseable {
@@ -16,18 +14,17 @@ public final class AuraApp implements AutoCloseable {
 
     /** Creates an application from validated environment and JVM deployment overrides. */
     public static AuraApp create() {
-        return new AuraApp(AuraConfig.fromProperties(new Properties()));
-    }
-    public static AuraApp create(AuraConfig config) { return new AuraApp(config); }
-
-    /** Creates an application from a deployment properties file before runtime freezing. */
-    public static AuraApp create(Path propertiesFile) throws IOException {
-        return new AuraApp(AuraConfig.fromProperties(propertiesFile));
+        return create(AuraConfig.fromProperties(new Properties()));
     }
 
-    /** Creates an application from already loaded deployment properties. */
-    public static AuraApp create(Properties properties) {
-        return new AuraApp(AuraConfig.fromProperties(properties));
+    /**
+     * Creates an application from a finished configuration. Deployment files and
+     * loaded properties are {@link AuraConfig} concerns: {@code
+     * AuraConfig.fromProperties(path)} produces the value this method takes, so
+     * loading configuration and starting an app stay two separate decisions.
+     */
+    public static AuraApp create(AuraConfig config) {
+        return new AuraApp(config);
     }
 
     public AuraApp use(AuraModule module) {
@@ -71,11 +68,6 @@ public final class AuraApp implements AutoCloseable {
             throw new IllegalArgumentException("AuraApp properties must use the aura.<module>.* namespace");
         }
         runtime.property(key, value);
-        return this;
-    }
-
-    public AuraApp start() {
-        runtime.start();
         return this;
     }
 

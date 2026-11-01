@@ -2,7 +2,7 @@ package io.aura.web;
 
 import io.aura.AuraApp;
 import io.aura.AuraConfig;
-import io.aura.contract.RouteContribution;
+import io.aura.contract.Route;
 import org.junit.jupiter.api.Test;
 
 import java.net.ServerSocket;
@@ -54,7 +54,7 @@ class CorsConfigTest2 {
         AuraConfig config = new AuraConfig().port(port)
                 .cors(c -> c.origins("https://app.example.com").credentials(true));
         AuraApp app = TestApplications.app(config, "cors-config",
-                new RouteContribution("GET", "/data", (BaseHandler) ctx -> ctx.text("ok")));
+                Route.of("GET", "/data", (BaseHandler) ctx -> ctx.text("ok")));
         app.start();
         try {
             HttpClient client = HttpClient.newHttpClient();

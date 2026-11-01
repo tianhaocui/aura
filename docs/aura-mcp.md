@@ -150,7 +150,7 @@ The generated tool schema includes `x-aura-permission`. The four-argument
 `invoke` overload is the authenticated transport boundary; the two-argument
 overload does not bypass a declared permission.
 
-When a tool is generated from an `ApiRoute`, its authentication and permission
+When a tool is registered from a `Route`, its authentication and permission
 metadata are copied automatically. A protected HTTP route therefore cannot
 silently become an anonymous MCP tool.
 

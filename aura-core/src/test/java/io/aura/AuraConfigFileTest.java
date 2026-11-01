@@ -30,7 +30,7 @@ class AuraConfigFileTest {
                 aura.rate-limit-max-keys=4096
                 """);
 
-        AuraConfigSnapshot config = AuraApp.create(file).config();
+        AuraConfigSnapshot config = AuraApp.create(AuraConfig.fromProperties(file)).config();
 
         assertThat(config.port()).isEqualTo(9999);
         assertThat(config.env()).isEqualTo("production");
@@ -48,14 +48,14 @@ class AuraConfigFileTest {
         Path file = tempDir.resolve("invalid.properties");
         Files.writeString(file, "aura.request-timeout=-5\n");
 
-        assertThatThrownBy(() -> AuraApp.create(file))
+        assertThatThrownBy(() -> AuraApp.create(AuraConfig.fromProperties(file)))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("requestTimeout");
     }
 
     @Test
     void missingConfigurationFileFailsAtCreation() {
-        assertThatThrownBy(() -> AuraApp.create(tempDir.resolve("missing.properties")))
+        assertThatThrownBy(() -> AuraApp.create(AuraConfig.fromProperties(tempDir.resolve("missing.properties"))))
                 .isInstanceOf(IOException.class);
     }
 

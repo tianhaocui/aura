@@ -31,10 +31,9 @@ public final class OrdersModule implements AuraModule {
     }
 
     @Override public void install(ModuleContext context) {
-        context.route(new RouteContribution(
-                "GET", "/orders/{id}",
-                (BaseHandler) request -> request.json(find(request.pathLong("id"))),
-                "Get an order"));
+        context.route(Route.of("GET", "/orders/{id}",
+                (BaseHandler) request -> request.json(find(request.pathLong("id"))))
+                .describedAs("Get an order"));
     }
 }
 
@@ -57,9 +56,14 @@ record bound with `context.config(RecordType.class)` for module settings under
 ## Routes And Errors
 
 - Path parameters use `{id}`.
+- `Route.of(method, path, handler)` is the only route shape, and the handler is
+  required. Lambdas and method references still need the `(BaseHandler)` cast.
+- Declare everything else with the typed setters on the same `Route`:
+  `describedAs`, `withParams`, `withReturnType`, `withResponseSchema`,
+  `withStreaming`, `requireAuth()`, `requireAuth(permission)`. Schema, OpenAPI,
+  and MCP read that one record, so a fact is declared once.
 - Use `bodyOrThrow` for required validated JSON bodies.
 - Use `ApiException`/`CodedException` for expected structured errors.
-- Add descriptions and parameter metadata needed by schema/OpenAPI/MCP.
 - Never expose raw exception messages or stacks in production responses.
 
 ## Verification

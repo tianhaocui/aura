@@ -64,12 +64,18 @@ class TestClientTest {
         TestClient client = TestApplications.client(router);
 
         @SuppressWarnings("unchecked")
-        var routes = (java.util.List<io.aura.contract.ApiRoute>) client.schema().get("routes");
+        var routes = (java.util.List<java.util.Map<String, Object>>) client.schema().get("routes");
         assertThat(routes).singleElement().satisfies(route -> {
-            assertThat(route.method()).isEqualTo("GET");
-            assertThat(route.params()).singleElement().extracting(io.aura.contract.ApiParameter::name)
+            assertThat(route).containsEntry("method", "GET")
+                    .containsEntry("description", "Get order")
+                    // A lambda route declares no return type, and undeclared metadata
+                    // stays out of the document instead of arriving as a null.
+                    .doesNotContainKey("returnType");
+            @SuppressWarnings("unchecked")
+            var params = (java.util.List<io.aura.contract.ApiParameter>) route.get("params");
+            assertThat(params).singleElement().extracting(io.aura.contract.ApiParameter::name)
                     .isEqualTo("id");
-            assertThat(route.example()).contains("/orders/1");
+            assertThat((String) route.get("example")).contains("/orders/1");
         });
 
         var paths = (java.util.Map<?, ?>) client.openApi().get("paths");

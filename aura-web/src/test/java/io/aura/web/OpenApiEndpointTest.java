@@ -2,7 +2,7 @@ package io.aura.web;
 
 import io.aura.AuraApp;
 import io.aura.AuraConfig;
-import io.aura.contract.RouteContribution;
+import io.aura.contract.Route;
 import org.junit.jupiter.api.Test;
 
 import java.net.ServerSocket;
@@ -21,11 +21,11 @@ class OpenApiEndpointTest {
         AuraApp app = TestApplications.app(
                 new AuraConfig().port(port).env("prod").openApi(true),
                 "openapi-endpoint",
-                new RouteContribution(
+                Route.of(
                         "GET",
                         "/orders/{id}",
-                        (BaseHandler) ctx -> ctx.text("ok"),
-                        java.util.Map.of("description", "Get order")));
+                        (BaseHandler) ctx -> ctx.text("ok"))
+                        .describedAs("Get order"));
         app.start();
         try {
             HttpResponse<String> response = HttpClient.newHttpClient().send(

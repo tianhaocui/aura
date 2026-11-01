@@ -5,7 +5,7 @@ import io.aura.AuraConfig;
 import io.aura.AuraModule;
 import io.aura.ModuleContext;
 import io.aura.contract.ModuleMetadata;
-import io.aura.contract.RouteContribution;
+import io.aura.contract.Route;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -22,13 +22,13 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  */
 class GuardChainTest {
 
-    private static final RouteContribution GET_OK =
-            new RouteContribution("GET", "/ok", (BaseHandler) ctx -> ctx.text("ok"));
+    private static final Route GET_OK =
+            Route.of("GET", "/ok", (BaseHandler) ctx -> ctx.text("ok"));
 
-    private static final RouteContribution POST_ORDERS =
-            new RouteContribution("POST", "/orders", (BaseHandler) ctx -> ctx.text("placed"));
+    private static final Route POST_ORDERS =
+            Route.of("POST", "/orders", (BaseHandler) ctx -> ctx.text("placed"));
 
-    private static TestClient client(AuraConfig config, RouteContribution... routes) {
+    private static TestClient client(AuraConfig config, Route... routes) {
         return TestClient.of(TestApplications.app(config, "guard-chain", routes));
     }
 
@@ -253,7 +253,7 @@ class GuardChainTest {
 
             @Override public void install(ModuleContext context) {
                 context.admissionPolicy(policy);
-                context.route(new RouteContribution("GET", "/orders/{id}",
+                context.route(Route.of("GET", "/orders/{id}",
                         (BaseHandler) ctx -> ctx.text(ctx.path("id"))));
             }
         });
@@ -284,7 +284,7 @@ class GuardChainTest {
                 context.admissionPolicy(request -> {
                     throw new IllegalStateException("authorizer offline");
                 });
-                context.route(new RouteContribution("GET", "/ok", (BaseHandler) ctx -> ctx.text("ok")));
+                context.route(Route.of("GET", "/ok", (BaseHandler) ctx -> ctx.text("ok")));
             }
         });
 

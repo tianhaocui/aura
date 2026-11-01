@@ -2,7 +2,7 @@ package io.aura.web;
 
 import io.aura.AuraApp;
 import io.aura.AuraConfig;
-import io.aura.contract.RouteContribution;
+import io.aura.contract.Route;
 
 public class MethodRefTest {
 
@@ -29,13 +29,13 @@ public class MethodRefTest {
         AuraApp app = TestApplications.app(
                 new AuraConfig().port(9173),
                 "method-ref-demo",
-                new RouteContribution("GET", "/user/search",
+                Route.of("GET", "/user/search",
                         new MethodRefHandler(userService, "search")),
-                new RouteContribution("GET", "/user/{id}",
+                Route.of("GET", "/user/{id}",
                         new MethodRefHandler(userService, "get")),
-                new RouteContribution("POST", "/user",
+                Route.of("POST", "/user",
                         new MethodRefHandler(userService, "create")),
-                new RouteContribution("GET", "/health", (BaseHandler) ctx -> ctx.text("ok")));
+                Route.of("GET", "/health", (BaseHandler) ctx -> ctx.text("ok")));
 
         try {
             app.start();

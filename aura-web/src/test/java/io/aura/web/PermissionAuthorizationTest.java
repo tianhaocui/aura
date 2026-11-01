@@ -1,7 +1,7 @@
 package io.aura.web;
 
 import io.aura.AuraApp;
-import io.aura.contract.RouteContribution;
+import io.aura.contract.Route;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -11,8 +11,8 @@ class PermissionAuthorizationTest {
     void routeAuthorizationUsesSharedFunctions() {
         AuraApp app = TestApplications.app(
                         "permission-allowed",
-                        new RouteContribution("GET", "/orders/list",
-                                (BaseHandler) ctx -> ctx.text("ok")).permission("orders.read"))
+                        Route.of("GET", "/orders/list",
+                                (BaseHandler) ctx -> ctx.text("ok")).requireAuth("orders.read"))
                 .authenticate(ctx -> "user-1")
                 .authorize((user, permission) -> user.equals("user-1") && permission.equals("orders.read"));
 
@@ -20,10 +20,10 @@ class PermissionAuthorizationTest {
         assertThat(response.status()).isEqualTo(200);
         assertThat(response.body()).isEqualTo("ok");
         @SuppressWarnings("unchecked")
-        java.util.List<io.aura.contract.ApiRoute> routes =
-                (java.util.List<io.aura.contract.ApiRoute>) TestClient.of(app).schema().get("routes");
-        assertThat(routes.get(0).authenticated()).isTrue();
-        assertThat(routes.get(0).permission()).isEqualTo("orders.read");
+        java.util.List<java.util.Map<String, Object>> routes =
+                (java.util.List<java.util.Map<String, Object>>) TestClient.of(app).schema().get("routes");
+        assertThat(routes.get(0)).containsEntry("authenticated", true)
+                .containsEntry("permission", "orders.read");
         assertThat(TestClient.of(app).openApi().toString())
                 .contains("x-aura-authenticated", "x-aura-permission", "orders.read");
     }
@@ -32,9 +32,9 @@ class PermissionAuthorizationTest {
     void deniedPermissionAbortsWithForbidden() {
         AuraApp app = TestApplications.app(
                         "permission-denied",
-                        new RouteContribution("GET", "/orders/list",
+                        Route.of("GET", "/orders/list",
                                 (BaseHandler) ctx -> ctx.text("must-not-run"))
-                                .permission("orders.read"))
+                                .requireAuth("orders.read"))
                 .authenticate(ctx -> "user-1")
                 .authorize((user, permission) -> false);
 
@@ -46,8 +46,8 @@ class PermissionAuthorizationTest {
     @Test
     void authenticatedRouteRejectsMissingIdentity() {
         AuraApp app = TestApplications.app("auth-required",
-                new RouteContribution("GET", "/me",
-                        (BaseHandler) ctx -> ctx.text(ctx.userId())).authenticated());
+                Route.of("GET", "/me",
+                        (BaseHandler) ctx -> ctx.text(ctx.userId())).requireAuth());
 
         TestClient.Response response = TestClient.of(app).get("/me").execute();
 

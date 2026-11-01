@@ -4,7 +4,7 @@ import io.aura.AuraApp;
 import io.aura.AuraModule;
 import io.aura.ModuleContext;
 import io.aura.contract.ModuleMetadata;
-import io.aura.contract.RouteContribution;
+import io.aura.contract.Route;
 import org.junit.jupiter.api.Test;
 
 import java.util.Map;
@@ -29,12 +29,12 @@ class ModuleWebContributionsTest {
                         (error, request) -> request.status(409).json(Map.of(
                                 "code", "ORDER_STATE_INVALID", "error", "invalid state")));
                 context.resultWrapper(value -> Map.of("data", value));
-                context.route(new RouteContribution("GET", "/middleware", (BaseHandler) request ->
+                context.route(Route.of("GET", "/middleware", (BaseHandler) request ->
                         request.text(request.get("before", String.class))));
-                context.route(new RouteContribution("GET", "/failure", (BaseHandler) request -> {
+                context.route(Route.of("GET", "/failure", (BaseHandler) request -> {
                     throw new IllegalStateException("secret internal state");
                 }));
-                context.route(new RouteContribution(
+                context.route(Route.of(
                         "GET", "/wrapped", (Supplier<String>) () -> "value"));
             }
         }).prepare();

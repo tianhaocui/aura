@@ -49,7 +49,7 @@ TestClient.of(app).get("/orders").expect(200);
 | implicit package discovery | explicit `.use(new BusinessModule())` |
 | numeric workflow positions | named steps plus `.before(...)` / `.after(...)` |
 | customer-specific branching in handlers | `WorkflowDefinition.variant(...)` and `WorkflowSelector` |
-| ad-hoc API descriptions | shared `ApiRoute` / `ApiParameter` metadata |
+| ad-hoc API descriptions | one `Route` contract, with `ApiParameter` declarations |
 | external HTTP tests | `TestClient.of(app)` plus real Undertow smoke tests |
 | string-parsed errors | stable error `code`, field, reason, and remediation details |
 | unordered `Query.paginate(page, size)` | `.orderBy(..., uniqueTieBreaker).paginate(page, size, strategy)` |
@@ -74,11 +74,16 @@ public final class OrderModule implements AuraModule {
 
     @Override public void install(ModuleContext context) {
         WorkflowRegistry workflows = context.require(WorkflowRegistry.class);
-        context.route(new RouteContribution("GET", "/orders",
+        context.route(Route.of("GET", "/orders",
                 (BaseHandler) request -> request.text("ok")));
     }
 }
 ```
+
+`Route.of(method, path, handler)` is the only route shape; a handler is required.
+Typed setters carry everything else — `describedAs`, `withParams`,
+`withReturnType`, `withResponseSchema`, `withStreaming`, `requireAuth` — and HTTP
+dispatch, `TestClient`, `/__schema__`, OpenAPI, and MCP all read that same record.
 
 `install(...)` registers deterministic contributions. `start(...)` opens external resources and
 `stop(...)` releases them. Dependencies are checked and topologically ordered before installation.

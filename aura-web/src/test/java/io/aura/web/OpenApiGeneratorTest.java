@@ -1,7 +1,7 @@
 package io.aura.web;
 
 import io.aura.contract.ApiParameter;
-import io.aura.contract.ApiRoute;
+import io.aura.contract.Route;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -12,8 +12,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 class OpenApiGeneratorTest {
     @Test
     void generatesOpenApiFromSharedRouteContract() {
-        ApiRoute route = new ApiRoute("GET", "/orders/{id}", "Get order", "Order",
-                List.of(new ApiParameter("id", "long", "path", true, "Order ID")), "curl");
+        Route route = Route.of("GET", "/orders/{id}", (BaseHandler) ctx -> { })
+                .describedAs("Get order")
+                .withReturnType("Order")
+                .withParams(List.of(new ApiParameter("id", "long", "path", true, "Order ID")));
 
         Map<String, Object> document = OpenApiGenerator.generate("Orders", "1.0.0", List.of(route));
         assertThat(document).containsEntry("openapi", "3.0.3");
@@ -26,8 +28,11 @@ class OpenApiGeneratorTest {
 
     @Test
     void generatesResponseSchemaFromSharedRouteContract() {
-        ApiRoute route = new ApiRoute("GET", "/orders/1", "Get order", "Order", List.of(), "curl",
-                Map.of("type", "object", "properties", Map.of("id", Map.of("type", "integer"))));
+        Route route = Route.of("GET", "/orders/1", (BaseHandler) ctx -> { })
+                .describedAs("Get order")
+                .withReturnType("Order")
+                .withResponseSchema(Map.of("type", "object",
+                        "properties", Map.of("id", Map.of("type", "integer"))));
 
         Map<String, Object> document = OpenApiGenerator.generate("Orders", "1.0.0", List.of(route));
         Map<?, ?> paths = (Map<?, ?>) document.get("paths");

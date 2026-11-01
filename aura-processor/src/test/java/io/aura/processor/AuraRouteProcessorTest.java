@@ -13,7 +13,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class AuraRouteProcessorTest {
     @Test
-    void generatesInspectableRouteContributorForAnnotatedService() throws Exception {
+    void generatesInspectableRouteBundleForAnnotatedService() throws Exception {
         JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
         assertThat(compiler).as("JDK compiler is required for processor verification").isNotNull();
         Path root = Files.createTempDirectory("aura-processor-test");
@@ -49,7 +49,7 @@ class AuraRouteProcessorTest {
         Path generatedSource = generated.resolve("sample/ExampleServiceAuraRoutes.java");
         assertThat(generatedSource).exists();
         String text = Files.readString(generatedSource);
-        assertThat(text).contains("implements io.aura.contract.RouteContributor")
+        assertThat(text).contains("java.util.List<io.aura.contract.Route> routes()")
                 .contains("GET", "/orders/{id}")
                 .contains("ctx.path(\"id\")")
                 .contains("ctx.body(sample.CreateRequest.class)")
