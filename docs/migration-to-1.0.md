@@ -88,6 +88,23 @@ dispatch, `TestClient`, `/__schema__`, OpenAPI, and MCP all read that same recor
 `install(...)` registers deterministic contributions. `start(...)` opens external resources and
 `stop(...)` releases them. Dependencies are checked and topologically ordered before installation.
 
+## Routes after 1.0.0
+
+Applications written against the released 1.0.0 API move with the route collapse.
+`docs/REFACTOR_LOG.md` records why each shape disappeared.
+
+| 1.0.0 | post-1.0.0 |
+|---|---|
+| `context.route(new RouteContribution(...))` | `context.route(Route.of(method, path, handler))` |
+| `Map.of("description", ..., "returnType", ...)` metadata keys | `describedAs(...)`, `withReturnType(...)`, and the other typed setters |
+| `context.routes(new OrderServiceAuraRoutes(service))` | `new OrderServiceAuraRoutes(service).routes().forEach(context::route)` |
+| `ApiRoute`, `ApiRouteCatalog` | `Route`, `io.aura.web.RouteCatalog`; the `/__schema__` JSON keys are unchanged |
+| `AuraApp.create(path)` / `AuraApp.create(properties)` | `AuraApp.create(AuraConfig.fromProperties(path))` |
+| `AuraApp.start()` | `start(String...)` |
+| `io.aura.HealthModule` | `io.aura.web.HealthModule` |
+| `McpRouter.tool(service, "name")` reflection | `McpRouter.tool(route, handler)` |
+| a blank `permission` string dropped silently | fails at startup, because dropping it would publish an unprotected route |
+
 ## Configuration and permissions
 
 Module properties are scoped to `aura.<module-id>.*` and can be bound to a record:
@@ -187,7 +204,7 @@ linearized with request admission, so no new business call starts after close.
 1. Run `app.prepare()` or `TestClient.of(app)` to validate module installation without opening a listener.
 2. Assert route behavior and structured errors with `TestClient`.
 3. Inspect `/__schema__`; enable `/openapi.json` explicitly in production.
-4. Run `mvn test`, `mvn -DskipTests package`, and `bash scripts/verify-aura-contracts.sh`.
+4. Run `mvn verify` (it includes `ArchitectureTest` and the coverage checks), then `bash scripts/verify-aura-contracts.sh`.
 5. Keep provider, database, MCP transport, TLS, metrics, and migration implementations in optional modules.
 
 The migration is intentionally direct: remove deprecated API usage rather than adding an adapter

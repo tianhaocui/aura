@@ -5,6 +5,52 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+The 0.6 return: one route contract, one entry point per decision, and a layering
+gate that runs in the normal build. `docs/REFACTOR_LOG.md` carries the decision
+record, the stage-by-stage log, and the migration table.
+
+### Breaking
+
+- `RouteContribution`, `RouteEntry`, `ApiRoute`, `RouteContributor` and the
+  package-scan route entry are removed. `context.route(Route.of(method, path,
+  handler))` is the only contribution, with `describedAs`, `withParams`,
+  `withReturnType`, `withResponseSchema`, `withStreaming` and `requireAuth` as
+  typed setters.
+- `ModuleContext.routes(RouteContributor)` is removed; install a generated bundle
+  with `routes().forEach(context::route)`.
+- `AuraApp.create(Path)` and `AuraApp.create(Properties)` are removed. Load with
+  `AuraConfig.fromProperties(...)` and pass the result to `AuraApp.create(...)`.
+- `AuraApp.start()` collapses into the `start(String...)` overload.
+- `io.aura.HealthModule` moved to `io.aura.web.HealthModule`.
+- The reflective MCP tool binding is removed; register
+  `McpRouter.tool(Route, McpHandler)` or the `tool(name, description)` builder.
+- A present-but-blank route permission now fails at startup instead of publishing
+  an unprotected route.
+
+### Changed
+
+- `/__schema__` and OpenAPI project the same `Route` record. The JSON keys stay
+  as they were; absent metadata stays absent.
+- HTTP parameter binding and MCP tool arguments share `ParamResolver`, so a
+  malformed number is a `NumberFormatException` on both transports instead of a
+  400 on one and a silent zero on the other.
+- Java-to-JSON types and accepted enum values come from one table.
+- Host, admission, security-header, CSRF and CORS checks run as one chain built
+  by `RequestGuards.standard(app, routePattern)`, used by Undertow and
+  `TestClient` alike, so in-memory verification covers the security layer.
+
+### Fixed
+
+- Snapshot capture redacts URLs, query parameters, bodies and stack traces before
+  they leave the request thread, and bounded external calls share one `IpSafety`
+  SSRF check.
+- The annotation processor no longer references itself while compiling.
+- `CorsConfigTest2` matched no Surefire include pattern and never ran in a normal
+  build; renamed to `CorsEnforcementTest`, and `mvn verify` runs
+  `ArchitectureTest` instead of excluding it.
+
 ## [1.0.0] - 2026-10-11
 
 Aura 1.0 is the first stable release with a complete AI-native application model.

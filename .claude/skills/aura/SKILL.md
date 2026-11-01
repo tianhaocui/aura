@@ -78,8 +78,8 @@ client.schema();
 client.openApi();
 ```
 
-Run the narrow test first, then `mvn test`, `mvn -DskipTests package`,
-`bash scripts/verify-aura-contracts.sh`, and `git diff --check`.
+Run the narrow test first, then `mvn verify` (it includes `ArchitectureTest`
+and the coverage checks), and `bash scripts/verify-aura-contracts.sh`.
 
 ## Capability Guides
 
@@ -92,3 +92,4 @@ Read only the guide needed for the task:
 - `docs/aura-ai.md`
 - `docs/aura-mcp.md`
 - `docs/aura-processor.md`
+- `docs/REFACTOR_LOG.md` — why each single-entry-point decision was made

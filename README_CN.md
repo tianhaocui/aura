@@ -163,6 +163,7 @@ Map<String, Object> openApi = test.openApi();
 - [1.0 总文档](docs/DOCUMENTATION.md)
 - [模块开发](docs/aura-module.md)
 - [从旧版本迁移](docs/migration-to-1.0.md)
+- [重构记录](docs/REFACTOR_LOG.md)
 - [运维与发布门禁](AI_GUIDE_OPS.md)
 - [更新日志](CHANGELOG.md)
 - [1.0 重构完成度清单](docs/1.0-readiness.md)

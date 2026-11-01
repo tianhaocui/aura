@@ -173,6 +173,7 @@ Read the focused guide only when the capability is installed:
 - [MCP](aura-mcp.md)
 - [Annotation processor](aura-processor.md)
 - [Migration from pre-1.0](migration-to-1.0.md)
+- [Refactor log](REFACTOR_LOG.md)
 
 The former 0.6 document is retained at
 [legacy-documentation-0.6.md](legacy-documentation-0.6.md) for migration
