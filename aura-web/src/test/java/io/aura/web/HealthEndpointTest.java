@@ -1,7 +1,6 @@
 package io.aura.web;
 
 import io.aura.AuraApp;
-import io.aura.HealthModule;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.*;

@@ -1,16 +1,19 @@
-package io.aura;
+package io.aura.web;
 
+import io.aura.AuraModule;
+import io.aura.AuraWebRuntime;
+import io.aura.ModuleContext;
 import io.aura.contract.HealthStatus;
 import io.aura.contract.ModuleMetadata;
 import io.aura.contract.Route;
-import io.aura.web.BaseContext;
-import io.aura.web.BaseHandler;
 
 /**
  * Optional health endpoints for explicitly composed applications.
  *
  * <p>The module keeps the endpoint contract in one place while the runtime
- * supplies the actual liveness, readiness, and dependency status.</p>
+ * supplies the actual liveness, readiness, and dependency status. It lives in the
+ * Web adapter because publishing HTTP paths is a mechanism; what {@code UP} means
+ * stays policy in core and contract.</p>
  */
 public final class HealthModule implements AuraModule {
     private static final String STATUS = "status";

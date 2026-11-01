@@ -1,7 +1,6 @@
 package io.aura.web;
 
 import io.aura.AuraApp;
-import io.aura.HealthModule;
 import io.aura.contract.HealthStatus;
 import org.junit.jupiter.api.Test;
 
@@ -18,5 +17,7 @@ class HealthModuleTest {
         assertThat(client.get("/health/live").expect(200).body()).contains("\"UP\"");
         assertThat(client.get("/health/ready").expect(503).body()).contains("\"DOWN\"");
         assertThat(client.get("/health").expect(503).body()).contains("\"DOWN\"");
+        assertThat(app.modules()).extracting(io.aura.contract.ModuleMetadata::id)
+                .containsExactly("health");
     }
 }

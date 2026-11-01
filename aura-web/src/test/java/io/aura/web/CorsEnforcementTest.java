@@ -12,7 +12,7 @@ import java.net.http.HttpRequest;
 
 import static org.assertj.core.api.Assertions.*;
 
-class CorsConfigTest2 {
+class CorsEnforcementTest {
 
     @Test
     void corsConfig_multipleOrigins_matchesRequest() {

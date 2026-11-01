@@ -132,17 +132,14 @@ public class ArchitectureTest {
 
     /**
      * R5: core declares {@link AuraModule}; only mechanisms/examples implement it.
-     * KNOWN VIOLATION, intentionally left FAILING for the parent orchestrator to see:
-     * {@code io.aura.HealthModule} is a concrete AuraModule implementation living in
-     * aura-core. Stage ②/④ should move it (e.g. to aura-web or examples) or absorb it
-     * into the simplified module API; do NOT @ArchIgnore this in Stage ①.
+     * Stage ④ resolved the flagged violation by moving the built-in health module into
+     * the Web adapter, so this is an enforced boundary now: a concrete module in core
+     * would mean the policy layer shipping its own transport assumptions.
      */
     @ArchTest
     static final ArchRule noConcreteModulesInCore =
             noClasses().that().resideInAnyPackage("io.aura", "io.aura.annotation..", "io.aura.snapshot..")
                     .should().implement(AuraModule.class)
-                    .as("Stage① known violation: io.aura.HealthModule implements AuraModule inside aura-core "
-                            + "(core may declare AuraModule but must not implement it) — cleanup scheduled for Stage②/④")
                     .because("Core declares AuraModule; only mechanisms/examples implement it");
 
     /**

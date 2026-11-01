@@ -461,12 +461,6 @@ public class io.aura.CorsConfig {
   public java.lang.String resolveOrigin(java.lang.String);
   public boolean hasWildcardOrigin();
 }
-### aura-core:io.aura.HealthModule
-public final class io.aura.HealthModule implements io.aura.AuraModule {
-  public static io.aura.HealthModule create();
-  public io.aura.contract.ModuleMetadata descriptor();
-  public void install(io.aura.ModuleContext);
-}
 ### aura-core:io.aura.JsonConfig
 public class io.aura.JsonConfig {
   public io.aura.JsonConfig();
@@ -1147,6 +1141,12 @@ public interface io.aura.web.GuardedRequest {
   public abstract void responseHeader(java.lang.String, java.lang.String);
   public abstract void addResponseHeader(java.lang.String, java.lang.String);
   public abstract void onComplete(java.lang.Runnable);
+}
+### aura-web:io.aura.web.HealthModule
+public final class io.aura.web.HealthModule implements io.aura.AuraModule {
+  public static io.aura.web.HealthModule create();
+  public io.aura.contract.ModuleMetadata descriptor();
+  public void install(io.aura.ModuleContext);
 }
 ### aura-web:io.aura.web.LambdaHandler
 public final class io.aura.web.LambdaHandler implements io.aura.web.BaseHandler {

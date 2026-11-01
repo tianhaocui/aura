@@ -2,7 +2,7 @@ package ${package};
 
 import io.aura.AuraApp;
 import io.aura.AuraModule;
-import io.aura.HealthModule;
+import io.aura.web.HealthModule;
 import io.aura.ModuleContext;
 import io.aura.contract.ModuleMetadata;
 import io.aura.contract.Route;

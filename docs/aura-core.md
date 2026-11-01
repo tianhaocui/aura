@@ -138,7 +138,7 @@ Cancellation listeners run once. Linked tokens propagate parent cancellation.
 
 ## Health
 
-Install `HealthModule.create()` to contribute:
+Install the Web adapter's `io.aura.web.HealthModule.create()` to contribute:
 
 - `GET /health/live`
 - `GET /health/ready`
