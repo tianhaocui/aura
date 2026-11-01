@@ -11,6 +11,19 @@
     <artifactId>aura-processor</artifactId>
     <name>aura-processor</name>
     <description>Optional compile-time route and binding generator for Aura</description>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <proc>none</proc>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+
     <dependencies>
         <dependency>
             <groupId>io.github.tianhaocui</groupId>

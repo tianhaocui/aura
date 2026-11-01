@@ -31,7 +31,8 @@ public class SnapshotOptions {
     private final Set<String> redactHeaders = new LinkedHashSet<>(Set.of(
             "authorization", "cookie", "set-cookie", "x-api-key"));
     private final Set<String> redactFields = new LinkedHashSet<>(Set.of(
-            "password", "token", "secret", "accessToken", "refreshToken", "paymentToken"));
+            "password", "token", "secret", "accessToken", "refreshToken", "paymentToken",
+            "api_key", "apikey", "key", "credential", "bearer"));
     private final Set<String> envAllowlist = new LinkedHashSet<>(Set.of("AURA_ENV", "AURA_PORT"));
 
     public boolean enabled() { return enabled; }

@@ -19,6 +19,17 @@ import java.util.regex.Pattern;
 class SnapshotRedactor {
 
     private static final Pattern URL_PATTERN = Pattern.compile("(?i)https?://[^\\s]+");
+    /** Fuzzy fragments; a header whose lowercased name contains any of these is treated as sensitive. */
+    private static final List<String> SENSITIVE_HEADER_FRAGMENTS = List.of(
+            "authorization", "cookie", "token", "secret", "key", "credential", "bearer", "apikey");
+    /** Absolute filesystem paths (unix two-or-more segments, windows drive paths) leaking through stack traces. */
+    private static final Pattern ABSOLUTE_PATH_PATTERN =
+            Pattern.compile("(?<![\\w./:-])(?:/[A-Za-z0-9._~-]+){2,}");
+    private static final Pattern WINDOWS_PATH_PATTERN = Pattern.compile("[A-Za-z]:\\\\(?:[^\\\\\\s\"'()]+)(?:\\\\[^\\\\\\s\"'()]+)*\\\\?");
+    /** Matches the leading "at <class>" / "Caused by: <class>" token of a stack frame line. */
+    private static final Pattern FRAME_CLASS_PATTERN =
+            Pattern.compile("(?m)^([ \\t]*(?:\\\\t)?(?:at\\s+|Caused by:\\s+))([\\w.$/]+)");
+    private static final List<String> FRAME_ALLOWLIST_PREFIXES = List.of("java.", "javax.", "jdk.", "sun.", "io.aura.");
     private final SnapshotOptions options;
 
     SnapshotRedactor(SnapshotOptions options) {
@@ -30,13 +41,22 @@ class SnapshotRedactor {
         if (headers == null) return result;
         for (var entry : headers.entrySet()) {
             String key = entry.getKey();
-            if (key != null && options.redactHeaders().contains(key.toLowerCase(Locale.ROOT))) {
+            if (key != null && isSensitiveHeader(key)) {
                 result.put(key, "<redacted>");
             } else {
                 result.put(key, truncate(redactText(entry.getValue()), options.maxBodySize()));
             }
         }
         return result;
+    }
+
+    boolean isSensitiveHeader(String name) {
+        String normalized = name.toLowerCase(Locale.ROOT);
+        if (options.redactHeaders().contains(normalized)) return true;
+        for (String fragment : SENSITIVE_HEADER_FRAGMENTS) {
+            if (normalized.contains(fragment)) return true;
+        }
+        return false;
     }
 
     Map<String, String> query(Map<String, String> query) {
@@ -83,6 +103,49 @@ class SnapshotRedactor {
     String exceptionText(String value) {
         if (value == null) return null;
         return truncate(redactText(value), options.maxStackTraceSize());
+    }
+
+    /**
+     * Redacts a recorded stack trace: field/URL secrets plus absolute filesystem paths and
+     * frame classes outside the framework allowlist, then re-applies the configured size cap.
+     */
+    String stackText(String value) {
+        if (value == null) return null;
+        String sanitized = redactText(value);
+        sanitized = scrubMatches(ABSOLUTE_PATH_PATTERN.matcher(sanitized), "<redacted-path>");
+        sanitized = scrubMatches(WINDOWS_PATH_PATTERN.matcher(sanitized), "<redacted-path>");
+        sanitized = scrubFrames(sanitized);
+        return truncate(sanitized, options.maxStackTraceSize());
+    }
+
+    private static String scrubMatches(Matcher matcher, String replacement) {
+        StringBuffer out = new StringBuffer();
+        while (matcher.find()) {
+            matcher.appendReplacement(out, Matcher.quoteReplacement(replacement));
+        }
+        matcher.appendTail(out);
+        return out.toString();
+    }
+
+    private String scrubFrames(String text) {
+        Matcher matcher = FRAME_CLASS_PATTERN.matcher(text);
+        StringBuffer out = new StringBuffer();
+        while (matcher.find()) {
+            String className = matcher.group(2);
+            String replacement = isAllowedFrame(className)
+                    ? matcher.group()
+                    : matcher.group(1) + "<redacted-frame>";
+            matcher.appendReplacement(out, Matcher.quoteReplacement(replacement));
+        }
+        matcher.appendTail(out);
+        return out.toString();
+    }
+
+    private static boolean isAllowedFrame(String className) {
+        for (String prefix : FRAME_ALLOWLIST_PREFIXES) {
+            if (className.startsWith(prefix)) return true;
+        }
+        return false;
     }
 
     Object body(Object body, int maxSize) {

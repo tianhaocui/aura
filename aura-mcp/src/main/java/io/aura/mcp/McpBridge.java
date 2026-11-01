@@ -3,23 +3,46 @@ package io.aura.mcp;
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
+import io.aura.security.IpSafety;
 
 import java.io.*;
-import java.net.HttpURLConnection;
 import java.net.InetAddress;
 import java.net.URI;
 import java.net.URLEncoder;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.*;
 
 public class McpBridge {
 
     private static final int MAX_RESPONSE_BYTES = 1024 * 1024;
 
+    /** Seam that lets tests script DNS answers to prove the DNS-rebinding defence. */
+    @FunctionalInterface
+    interface DnsResolver {
+        List<InetAddress> resolve(String host) throws java.net.UnknownHostException;
+    }
+
+    private static final DnsResolver SYSTEM_DNS =
+            host -> List.of(InetAddress.getAllByName(host));
+
     private final String baseUrl;
     private final URI baseUri;
     private final PrintStream out;
     private final String schemaToken;
+    /**
+     * True when every outbound connection must terminate on a publicly routable address.
+     * The constructor performs the first fail-fast validation; {@link #requirePublicAtConnect}
+     * re-validates immediately before each request so a short-TTL rebinding answer that
+     * appears after construction is still caught at connection time (see method javadoc
+     * for the residual window).
+     */
+    private final boolean enforcePublic;
+    private final DnsResolver dnsResolver;
+    private volatile HttpClient httpClient;
     private JSONArray routes;
 
     public McpBridge(String baseUrl) {
@@ -36,6 +59,11 @@ public class McpBridge {
 
     /** Creates a bridge with an explicit private/local target policy. */
     public McpBridge(String baseUrl, PrintStream out, String schemaToken, boolean allowPrivateUrl) {
+        this(baseUrl, out, schemaToken, allowPrivateUrl, SYSTEM_DNS);
+    }
+
+    McpBridge(String baseUrl, PrintStream out, String schemaToken, boolean allowPrivateUrl,
+              DnsResolver dnsResolver) {
         URI parsed = URI.create(Objects.requireNonNull(baseUrl, "baseUrl"));
         if (!("http".equalsIgnoreCase(parsed.getScheme()) || "https".equalsIgnoreCase(parsed.getScheme()))
                 || parsed.getHost() == null || parsed.getUserInfo() != null
@@ -43,13 +71,15 @@ public class McpBridge {
             throw new IllegalArgumentException(
                     "baseUrl must be an absolute HTTP(S) URL without userinfo, query, or fragment");
         }
-        if (!allowPrivateUrl) {
+        this.enforcePublic = !allowPrivateUrl;
+        this.dnsResolver = dnsResolver;
+        if (enforcePublic) {
+            // Fail-fast first validation; the binding enforcement happens per request in
+            // requirePublicAtConnect, close enough to the socket call to defeat rebinding.
             try {
-                for (InetAddress address : InetAddress.getAllByName(parsed.getHost())) {
-                    if (isNonPublicAddress(address)) {
-                        throw new IllegalArgumentException("baseUrl resolves to a private or local address");
-                    }
-                }
+                IpSafety.pinToPublic(dnsResolver.resolve(parsed.getHost()));
+            } catch (SecurityException error) {
+                throw new IllegalArgumentException("baseUrl resolves to a private or local address", error);
             } catch (java.net.UnknownHostException error) {
                 throw new IllegalArgumentException("baseUrl host cannot be resolved", error);
             }
@@ -67,11 +97,45 @@ public class McpBridge {
                 System.getenv().getOrDefault(McpPackager.ALLOW_PRIVATE_URL_ENV, "false")));
     }
 
-    private static boolean isNonPublicAddress(InetAddress address) {
-        return address.isAnyLocalAddress() || address.isLoopbackAddress()
-                || address.isLinkLocalAddress() || address.isSiteLocalAddress()
-                || address.isMulticastAddress()
-                || (address.getAddress().length == 16 && (address.getAddress()[0] & 0xfe) == 0xfc);
+    /**
+     * Connection-time SSRF gate. Re-resolves the target host and rejects the request unless
+     * every returned address is public, immediately before the HTTP send.
+     *
+     * <p>Why not true socket pinning: the JDK (11 through 21) exposes no supported per-client
+     * hook to force {@code java.net.http.HttpClient} onto a specific resolved address —
+     * {@code HttpClient.Builder.socketResolver(...)} was a rejected proposal and has never
+     * shipped. Rewriting the URI to an IP literal would break TLS hostname verification for
+     * HTTPS targets. This re-resolve-and-validate-at-connect approach is the strongest
+     * publicly supported option: the JDK caches DNS answers (default policy caches positive
+     * results for at least 30s regardless of record TTL), so the check and the socket's own
+     * lookup almost always observe the same answer. Residual risk: a sub-millisecond race in
+     * the rare case the cache expires between this call and the socket connect.</p>
+     *
+     * @throws SecurityException if any resolved address is private/local (fail-closed)
+     */
+    List<InetAddress> requirePublicAtConnect(String host) throws java.io.IOException {
+        if (!enforcePublic) {
+            return List.of();
+        }
+        List<InetAddress> resolved = dnsResolver.resolve(host);
+        IpSafety.pinToPublic(resolved); // validates the full set; first entry is representative
+        return resolved;
+    }
+
+    /**
+     * Lazily-built shared client. Redirect following is disabled so a hostile response cannot
+     * bounce the bridge to another origin; each request still passes the connect-time gate.
+     */
+    private HttpClient http() {
+        HttpClient client = httpClient;
+        if (client == null) {
+            client = HttpClient.newBuilder()
+                    .followRedirects(HttpClient.Redirect.NEVER)
+                    .connectTimeout(Duration.ofSeconds(10))
+                    .build();
+            httpClient = client;
+        }
+        return client;
     }
 
     public void run() throws Exception {
@@ -155,21 +219,17 @@ public class McpBridge {
         }
 
         URI target = resolveRouteUri(path, query.toString());
-        HttpURLConnection conn = (HttpURLConnection) target.toURL().openConnection();
-        conn.setInstanceFollowRedirects(false);
-        conn.setRequestMethod(httpMethod);
-        conn.setConnectTimeout(10000);
-        conn.setReadTimeout(30000);
+        requirePublicAtConnect(target.getHost());
+        HttpRequest.Builder request = HttpRequest.newBuilder(target)
+                .timeout(Duration.ofSeconds(30));
+        request.method(httpMethod, body == null
+                ? HttpRequest.BodyPublishers.noBody()
+                : HttpRequest.BodyPublishers.ofString(body, StandardCharsets.UTF_8));
+        if (body != null) request.header("Content-Type", "application/json");
 
-        if (body != null) {
-            conn.setRequestProperty("Content-Type", "application/json");
-            conn.setDoOutput(true);
-            try (OutputStream os = conn.getOutputStream()) {
-                os.write(body.getBytes(StandardCharsets.UTF_8));
-            }
-        }
-
-        try (InputStream is = conn.getResponseCode() < 400 ? conn.getInputStream() : conn.getErrorStream()) {
+        HttpResponse<InputStream> response = http().send(request.build(),
+                HttpResponse.BodyHandlers.ofInputStream());
+        try (InputStream is = response.body()) {
             return is != null ? readBounded(is, MAX_RESPONSE_BYTES) : "";
         }
     }
@@ -205,13 +265,19 @@ public class McpBridge {
     }
 
     private void loadSchema() throws Exception {
-        String url = baseUrl + "/__schema__";
-        HttpURLConnection conn = (HttpURLConnection) URI.create(url).toURL().openConnection();
-        conn.setInstanceFollowRedirects(false);
-        conn.setConnectTimeout(5000);
-        conn.setReadTimeout(5000);
-        if (schemaToken != null) conn.setRequestProperty("X-Aura-Schema-Token", schemaToken);
-        try (InputStream is = conn.getInputStream()) {
+        URI target = URI.create(baseUrl + "/__schema__");
+        requirePublicAtConnect(target.getHost());
+        HttpRequest.Builder request = HttpRequest.newBuilder(target)
+                .timeout(Duration.ofSeconds(10))
+                .GET();
+        if (schemaToken != null) request.header("X-Aura-Schema-Token", schemaToken);
+        HttpResponse<InputStream> response = http().send(request.build(),
+                HttpResponse.BodyHandlers.ofInputStream());
+        if (response.statusCode() >= 400) {
+            try (InputStream ignored = response.body()) { /* drain */ }
+            throw new IOException("Schema request failed with HTTP " + response.statusCode());
+        }
+        try (InputStream is = response.body()) {
             String json = readBounded(is, MAX_RESPONSE_BYTES);
             JSONObject schema = JSON.parseObject(json);
             this.routes = schema.getJSONArray("routes");

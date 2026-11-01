@@ -2,13 +2,16 @@ package io.aura.mcp;
 
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONObject;
+import io.aura.security.IpSafety;
 
 import java.io.*;
-import java.net.HttpURLConnection;
-import java.net.InetAddress;
 import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
+import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -61,7 +64,7 @@ public class McpPackager {
         String appName = binName;
         if (router == null) {
             try {
-                String schema = fetchSchema(validatedAppUrl);
+                String schema = fetchSchema(validatedAppUrl, allowPrivateUrl);
                 JSONObject obj = JSON.parseObject(schema);
                 if (obj.getString("name") != null) appName = obj.getString("name");
             } catch (Exception e) {
@@ -105,21 +108,37 @@ public class McpPackager {
         System.out.println("  { \"command\": \"npx\", \"args\": [\"" + npmName + "\"] }");
     }
 
-    private static String fetchSchema(URI appUrl) throws IOException {
+    private static String fetchSchema(URI appUrl, boolean allowPrivate) throws IOException, InterruptedException {
         URI schemaUri = URI.create(appUrl.toString() + (appUrl.toString().endsWith("/") ? "" : "/"))
                 .resolve("__schema__");
-        HttpURLConnection conn = (HttpURLConnection) schemaUri.toURL().openConnection();
-        conn.setConnectTimeout(CONNECT_TIMEOUT_MS);
-        conn.setReadTimeout(READ_TIMEOUT_MS);
-        conn.setInstanceFollowRedirects(false);
-        int status = conn.getResponseCode();
-        if (status < 200 || status >= 300) throw new IOException("Schema request failed with HTTP " + status);
-        try (InputStream input = conn.getInputStream()) {
+        if (!allowPrivate) {
+            // DNS-rebinding defence: re-validate immediately before connecting, fail-closed on
+            // any private answer. Note: HttpClient.Builder.socketResolver(...) referenced in the
+            // original hardening brief never shipped in any JDK (11-21), so true IP pinning is
+            // not publicly supported; this at-connect re-resolve rides on the JDK's DNS cache
+            // (>=30s positive caching by default) and leaves only a sub-millisecond residual
+            // race when the cache expires exactly between this check and the socket lookup.
+            IpSafety.resolvePublic(schemaUri.getHost());
+        }
+        HttpClient client = HttpClient.newBuilder()
+                .followRedirects(HttpClient.Redirect.NEVER)
+                .connectTimeout(Duration.ofMillis(CONNECT_TIMEOUT_MS))
+                .build();
+        HttpRequest request = HttpRequest.newBuilder(schemaUri)
+                .timeout(Duration.ofMillis(READ_TIMEOUT_MS))
+                .GET()
+                .build();
+        HttpResponse<InputStream> response =
+                client.send(request, HttpResponse.BodyHandlers.ofInputStream());
+        int status = response.statusCode();
+        if (status < 200 || status >= 300) {
+            try (InputStream ignored = response.body()) { /* drain */ }
+            throw new IOException("Schema request failed with HTTP " + status);
+        }
+        try (InputStream input = response.body()) {
             byte[] bytes = input.readNBytes(MAX_SCHEMA_BYTES + 1);
             if (bytes.length > MAX_SCHEMA_BYTES) throw new IOException("Schema response exceeds maximum size");
             return new String(bytes, StandardCharsets.UTF_8);
-        } finally {
-            conn.disconnect();
         }
     }
 
@@ -144,27 +163,15 @@ public class McpPackager {
             throw new IllegalArgumentException("appUrl must be an absolute HTTP(S) URL without userinfo");
         }
         if (!allowPrivate) {
-            for (InetAddress address : InetAddress.getAllByName(uri.getHost())) {
-                if (isNonPublicAddress(address)) {
-                    throw new IllegalArgumentException("appUrl resolves to a private or local address");
-                }
+            // Fail-fast advisory check only. The DNS-rebinding defence is enforced again in
+            // fetchSchema, which re-resolves and re-validates immediately before connecting.
+            try {
+                IpSafety.resolvePublic(uri.getHost());
+            } catch (SecurityException error) {
+                throw new IllegalArgumentException("appUrl resolves to a private or local address", error);
             }
         }
         return uri;
-    }
-
-    private static boolean isNonPublicAddress(InetAddress address) {
-        return address.isAnyLocalAddress()
-                || address.isLoopbackAddress()
-                || address.isLinkLocalAddress()
-                || address.isSiteLocalAddress()
-                || isUniqueLocalAddress(address)
-                || address.isMulticastAddress();
-    }
-
-    private static boolean isUniqueLocalAddress(InetAddress address) {
-        byte[] bytes = address.getAddress();
-        return bytes.length == 16 && (bytes[0] & 0xfe) == 0xfc;
     }
 
     static Path validateOutputDir(String outputDir) throws IOException {

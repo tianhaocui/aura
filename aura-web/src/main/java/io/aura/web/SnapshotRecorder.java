@@ -150,7 +150,7 @@ class SnapshotRecorder {
                 new ExceptionSnapshot.ExceptionInfo(cause.getClass().getName(), null,
                         redactor.exceptionText(ExceptionResolver.code(cause)),
                         redactor.exceptionText(ExceptionResolver.field(cause)), ExceptionResolver.status(cause),
-                        rootType(cause), null, stackTrace(cause)),
+                        rootType(cause), null, redactor.stackText(stackTrace(cause))),
                 response(status, scope),
                 env,
                 scope != null ? scope.externalCalls().stream().map(this::redactExternalCall).toList() : List.of(),
@@ -241,7 +241,7 @@ class SnapshotRecorder {
 
     private void writeNow(ExceptionSnapshot snapshot) {
         try {
-            String json = JSON.toJSONString(snapshot, JSONWriter.Feature.PrettyFormat);
+            String json = JSON.toJSONString(redactStoredStack(snapshot), JSONWriter.Feature.PrettyFormat);
             byte[] bytes = json.getBytes(StandardCharsets.UTF_8);
             if (options.maxSnapshotFileSize() <= 0 || bytes.length > options.maxSnapshotFileSize()) {
                 drop("file-too-large");
@@ -269,6 +269,74 @@ class SnapshotRecorder {
             try { options.writeFailureCallback().accept(error); }
             catch (RuntimeException callbackError) { log.warn("Snapshot write failure callback failed", callbackError); }
         }
+    }
+
+    /** Second-pass scan: guarantees any stack trace reaching disk has been through the redactor. */
+    private ExceptionSnapshot redactStoredStack(ExceptionSnapshot snapshot) {
+        ExceptionSnapshot.ExceptionInfo safeException = null;
+        ExceptionSnapshot.ExceptionInfo exception = snapshot.exception();
+        if (exception != null && exception.stackTrace() != null) {
+            String redacted = redactor.stackText(exception.stackTrace());
+            if (!redacted.equals(exception.stackTrace())) {
+                safeException = new ExceptionSnapshot.ExceptionInfo(
+                        exception.type(), exception.message(), exception.code(), exception.field(), exception.status(),
+                        exception.rootCauseType(), exception.rootCauseMessage(), redacted);
+            }
+        }
+        ExceptionSnapshot.ResponseSnapshot safeResponse = null;
+        ExceptionSnapshot.ResponseSnapshot response = snapshot.response();
+        if (response != null) {
+            Object scrubbedBody = scrubStackFields(response.body());
+            if (scrubbedBody != response.body()) {
+                safeResponse = new ExceptionSnapshot.ResponseSnapshot(
+                        response.status(), response.headers(), response.contentType(), scrubbedBody);
+            }
+        }
+        if (safeException == null && safeResponse == null) return snapshot;
+        return new ExceptionSnapshot(snapshot.schemaVersion(), snapshot.snapshotId(), snapshot.createdAt(),
+                snapshot.request(), snapshot.route(),
+                safeException != null ? safeException : exception,
+                safeResponse != null ? safeResponse : response,
+                snapshot.environment(), snapshot.externalCalls(), snapshot.artifacts());
+    }
+
+    /**
+     * Recursively walks response/artifact bodies and applies stack-text redaction to any
+     * string value under a trace-shaped key (`trace`, `stackTrace`, `stack`, `cause`).
+     * Dev-mode responses embed the raw trace in the JSON body; the recorder already redacts
+     * exception.stackTrace but not this second copy.
+     */
+    private Object scrubStackFields(Object value) {
+        if (value instanceof Map<?, ?> map) {
+            Map<Object, Object> out = new LinkedHashMap<>(map.size());
+            boolean changed = false;
+            for (var e : map.entrySet()) {
+                Object k = e.getKey();
+                Object v = e.getValue();
+                Object scrubbed = (k instanceof String key && isTraceKey(key) && v instanceof String s)
+                        ? redactor.stackText(s)
+                        : scrubStackFields(v);
+                if (scrubbed != v) changed = true;
+                out.put(k, scrubbed);
+            }
+            return changed ? out : value;
+        }
+        if (value instanceof List<?> list) {
+            List<Object> out = new java.util.ArrayList<>(list.size());
+            boolean changed = false;
+            for (Object item : list) {
+                Object scrubbed = scrubStackFields(item);
+                if (scrubbed != item) changed = true;
+                out.add(scrubbed);
+            }
+            return changed ? out : value;
+        }
+        return value;
+    }
+
+    private static boolean isTraceKey(String key) {
+        String k = key.toLowerCase(java.util.Locale.ROOT);
+        return k.equals("trace") || k.equals("stacktrace") || k.equals("stack") || k.equals("cause");
     }
 
     private void evictExpired(Path dir) {
