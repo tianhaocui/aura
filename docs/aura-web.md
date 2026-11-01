@@ -84,11 +84,15 @@ is in production.
 
 `TestClient` installs the same modules, compiles the same routes, runs the same
 pre-route guard chain (Host allow-list, admission and rate limits, security
-headers, CSRF, CORS), applies the same binding and exception resolution, and
-returns the same structured errors as Undertow. It can only observe one request
-at a time, so concurrency bulkheads still need a socket test. Use a real Undertow
-socket test for transport behavior such as TLS, compression, multipart parsing,
-SSE, WebSocket, and disconnects.
+headers, CSRF, CORS, and the gates on `/__schema__`, `/openapi.json` and a
+WebSocket `Origin`), applies the same binding and exception resolution, and
+returns the same structured errors as Undertow. Asking it for `GET /__schema__`
+reads the route map through the same projection a socket serves, so a schema
+token is testable in milliseconds; asking for `GET /openapi.json` honours the
+`openApi` switch. It can only observe one request at a time, so concurrency
+bulkheads still need a socket test. Use a real Undertow socket test for transport
+behavior such as TLS, compression, multipart parsing, SSE, WebSocket, and
+disconnects.
 
 ## Structured Errors
 

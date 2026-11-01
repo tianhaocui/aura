@@ -87,6 +87,18 @@ public class TestClient {
         return webSockets.stream().map(CompiledWsRoute::contract).toList();
     }
 
+    /**
+     * The body Aura's HTTP adapter serves for its own endpoints, or null for anything the
+     * application's routes must answer. Admission -- token, OpenAPI switch -- is the guard
+     * chain's decision; reaching this point means the request was allowed.
+     */
+    private String builtinDocument(String method, String path) {
+        if (!"GET".equals(method)) return null;
+        if ("/__schema__".equals(path)) return JSON.toJSONString(schema());
+        if ("/openapi.json".equals(path)) return JSON.toJSONString(openApi());
+        return null;
+    }
+
     public class Request {
         private final String method;
         private String path;
@@ -163,6 +175,14 @@ public class TestClient {
 
         private Response handle(MockGuardedRequest guarded, String routePath,
                                 Map<String, String> queryParams) {
+            String builtin = builtinDocument(method, routePath);
+            if (builtin != null) {
+                Map<String, String> headers = new LinkedHashMap<>(guarded.responseHeaders());
+                headers.put("Content-Type", "application/json; charset=utf-8");
+                headers.put("Cache-Control", "no-store");
+                return new Response(200, builtin, headers);
+            }
+
             SnapshotScope snapshotScope = Snapshot.currentOrNull();
             boolean snapshotBound = false;
             if (snapshotScope == null && SnapshotRecorder.shouldCapture(app)) {

@@ -326,5 +326,15 @@ rg -q 'void webSocket' "$repo_root/aura-core/src/main/java/io/aura/ModuleContext
 rg -q 'if \(entry\.isWebSocket\(\)\) registerWebSocket' "$repo_root/aura-web/src/main/java/io/aura/web/RouteAssembler.java"
 rg -q 'RouteAssembler.secure\(app, contract' "$repo_root/aura-web/src/main/java/io/aura/web/UndertowStarter.java"
 rg -q 'if \(route.isWebSocket\(\)\) continue;' "$repo_root/aura-web/src/main/java/io/aura/web/OpenApiGenerator.java"
+# Aura's own endpoints are gated in the shared chain, and nowhere else: a second copy in the
+# transport is what let the in-memory client claim a protection it did not run.
+rg -q 'chain\.add\(new BuiltinEndpointsGuard\(app\)\)' "$repo_root/aura-web/src/main/java/io/aura/web/RequestGuards.java"
+for transport in UndertowStarter TestClient; do
+  if rg -q 'private boolean (schemaAllowed|originAllowed)\(|aura\.schema\.auth-token' \
+      "$repo_root/aura-web/src/main/java/io/aura/web/$transport.java"; then
+    echo "built-in endpoint gate duplicated in $transport" >&2
+    exit 1
+  fi
+done
 
 echo "Aura module and documentation contracts passed (version $root_version)"

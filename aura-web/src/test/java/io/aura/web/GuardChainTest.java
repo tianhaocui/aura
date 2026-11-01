@@ -329,4 +329,71 @@ class GuardChainTest {
                 .expect(503)
                 .bodyContains("AURA_ADMISSION_POLICY_ERROR");
     }
+
+    // --- Aura's own endpoints ---
+
+    @Test
+    void schemaEndpoint_demandsTheConfiguredTokenOverEitherHeader() {
+        TestClient client = client(new AuraConfig().property("aura.schema.auth-token", "s3cret"), GET_OK);
+
+        client.get("/__schema__").expect(401);
+        client.get("/__schema__").header("X-Aura-Schema-Token", "wrong").expect(401);
+        client.get("/__schema__").header("Authorization", "Bearer wrong").expect(401);
+        client.get("/__schema__").header("X-Aura-Schema-Token", "s3cret")
+                .execute().expect(200).bodyContains("/ok");
+        client.get("/__schema__").header("Authorization", "Bearer s3cret").expect(200);
+    }
+
+    @Test
+    void schemaEndpoint_isAbsentWhenUnconfiguredOutsideDev() {
+        TestClient.Response resp = client(new AuraConfig().env("prod"), GET_OK)
+                .get("/__schema__").execute();
+
+        // 404, not 401: an endpoint that cannot be unlocked is indistinguishable from one
+        // that does not exist, so a scanner learns nothing about what this app exposes.
+        resp.expect(404);
+        assertThat(resp.body()).isNull();
+
+        // The switch alone opens it; a token is not a hidden second requirement.
+        client(new AuraConfig().env("prod").property("aura.schema.enabled", "true"), GET_OK)
+                .get("/__schema__").execute().expect(200).bodyContains("/ok");
+    }
+
+    @Test
+    void openApiEndpoint_isAbsentUntilEnabledOutsideDev() {
+        client(new AuraConfig().env("prod"), GET_OK).get("/openapi.json").expect(404);
+
+        client(new AuraConfig().env("prod").openApi(true), GET_OK)
+                .get("/openapi.json").execute()
+                .expect(200).bodyContains("\"openapi\":\"3.0.3\"");
+    }
+
+    @Test
+    void webSocketUpgrade_needsAnOriginTheCorsPolicyLists() {
+        TestClient listed = client(new AuraConfig().env("prod")
+                .cors(cors -> cors.origins("https://allowed.example")), GET_OK);
+
+        assertThat(listed.get("/ws").header("Upgrade", "websocket")
+                .header("Origin", "https://evil.example").execute().status()).isEqualTo(403);
+        assertThat(listed.get("/ws").header("Upgrade", "websocket")
+                .header("Origin", "https://allowed.example").execute().status()).isNotEqualTo(403);
+        assertThat(listed.get("/ws").header("Upgrade", "websocket").execute().status())
+                .as("a browser-origin handshake with no Origin is not trusted in prod")
+                .isEqualTo(403);
+
+        TestClient wildcard = client(new AuraConfig()
+                .cors("*"), GET_OK);
+        assertThat(wildcard.get("/ws").header("Upgrade", "websocket")
+                .header("Origin", "https://any.example").execute().status())
+                .as("a wildcard CORS origin says nothing about who may hold a socket open")
+                .isEqualTo(403);
+    }
+
+    @Test
+    void webSocketUpgrade_isLeftAloneWithoutAnUpgradeHeader() {
+        // The guard judges handshakes, not ordinary GETs: a route named by a header-less
+        // request must still reach its handler.
+        client(new AuraConfig().env("prod").cors(cors -> cors.origins("https://allowed.example")), GET_OK)
+                .get("/ok").execute().expect(200).bodyContains("ok");
+    }
 }

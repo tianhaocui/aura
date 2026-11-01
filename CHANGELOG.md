@@ -57,9 +57,17 @@ record, the stage-by-stage log, and the migration table.
   same `requireAuth`/permission door before the protocol changes.
 - `/__schema__` publishes `streaming`, so a request/response consumer can decline
   an endpoint instead of discovering it at call time.
+- The gates on Aura's own endpoints — the schema token, the OpenAPI switch, and
+  the WebSocket Origin allow-list — moved from the Undertow dispatch into the
+  shared chain. `TestClient` now answers `/__schema__` and `/openapi.json` itself
+  and rejects exactly what a socket rejects, so the protection around the route
+  map is verifiable in milliseconds instead of only over a real port.
 
 ### Fixed
 
+- `aura.schema.enabled=true` in a non-dev environment used to be a flag that did
+  nothing: without a token the endpoint answered 404 forever. The switch and the
+  token are now independent doors, either of which opens the schema.
 - The MCP bridge stopped handing a model choices it cannot serve: authenticated,
   streaming, `WS` and untransmittable-parameter routes are no longer advertised,
   a guessed tool name for one stays refused, an upstream status at or above 400

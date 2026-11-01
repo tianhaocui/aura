@@ -11,12 +11,14 @@ import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * The pre-route policy chain: host allow-list, admission, security headers, CSRF, CORS.
+ * The pre-route policy chain: host allow-list, admission, security headers, CSRF, CORS, and the
+ * gates on Aura's own endpoints.
  *
  * <p>Both entry points build it from {@link #standard}, so {@code TestClient} rejects exactly what
  * a real socket rejects instead of skipping straight to the handler.</p>
@@ -49,6 +51,7 @@ public final class RequestGuards {
         chain.add(new SecurityHeadersGuard(app));
         chain.add(new CsrfGuard(app));
         chain.add(new CorsGuard(app));
+        chain.add(new BuiltinEndpointsGuard(app));
         return new RequestGuards(List.copyOf(chain));
     }
 
@@ -227,6 +230,10 @@ public final class RequestGuards {
                     : rejected();
         }
 
+        private static GuardOutcome rejected() {
+            return GuardOutcome.payload(403, "{\"error\":\"CSRF validation failed\"}");
+        }
+
         private String expectedOrigin(GuardedRequest request) {
             String configured = app.publicOrigin();
             if (configured == null) configured = app.prop("aura.public-origin");
@@ -247,9 +254,93 @@ public final class RequestGuards {
             }
             return scheme + "://" + host;
         }
+    }
 
-        private static GuardOutcome rejected() {
-            return GuardOutcome.payload(403, "{\"error\":\"CSRF validation failed\"}");
+    /**
+     * The decisions about Aura's own endpoints: who may read the schema, whether OpenAPI exists
+     * at all, and whether a browser origin may upgrade to WebSocket. They used to sit inside the
+     * Undertow dispatch, which left the in-memory client verifying a security layer that stopped
+     * at the edge of the application's own routes.
+     *
+     * <p>Each rejection is bodyless on purpose. A 404 and a 401 are the whole signal for the
+     * schema endpoint, and an error document that names the reason discloses more than the
+     * status code does.</p>
+     */
+    private record BuiltinEndpointsGuard(AuraWebRuntime app) implements RequestGuard {
+
+        @Override
+        public GuardOutcome evaluate(GuardedRequest request) {
+            if (!"GET".equals(request.method())) return GuardOutcome.next();
+            String path = request.path();
+            if ("/__schema__".equals(path)) return schemaDecision(request);
+            if ("/openapi.json".equals(path)) {
+                return app.openApiEnabled() || app.devMode()
+                        ? GuardOutcome.next() : GuardOutcome.stop(404);
+            }
+            if ("websocket".equalsIgnoreCase(request.header("Upgrade"))) return wsOriginDecision(request);
+            return GuardOutcome.next();
+        }
+
+        private GuardOutcome schemaDecision(GuardedRequest request) {
+            if (schemaAllowed(request)) return GuardOutcome.next();
+            return GuardOutcome.stop(schemaToken() == null ? 404 : 401);
+        }
+
+        private boolean schemaAllowed(GuardedRequest request) {
+            boolean enabled = Boolean.parseBoolean(app.prop("aura.schema.enabled"));
+            boolean dev = "dev".equalsIgnoreCase(app.env());
+            if (!dev && !enabled) return false;
+            String token = schemaToken();
+            if (token == null || token.isBlank()) {
+                // The switch and the token are independent doors: either one alone opens the
+                // endpoint. Before this chain, a production app that set aura.schema.enabled
+                // without a token was told the schema did not exist -- a flag that silently
+                // did nothing is worse than a flag that refuses to be set.
+                return dev || enabled;
+            }
+            String supplied = request.header("X-Aura-Schema-Token");
+            if (supplied == null) {
+                String authorization = request.header("Authorization");
+                if (authorization != null && authorization.regionMatches(true, 0, "Bearer ", 0, 7)) {
+                    supplied = authorization.substring(7).trim();
+                }
+            }
+            return MessageDigest.isEqual(token.getBytes(StandardCharsets.UTF_8),
+                    (supplied == null ? "" : supplied).getBytes(StandardCharsets.UTF_8));
+        }
+
+        private String schemaToken() {
+            String token = app.prop("aura.schema.auth-token");
+            return token != null ? token : app.prop("aura.schema-token");
+        }
+
+        private GuardOutcome wsOriginDecision(GuardedRequest request) {
+            return originAllowed(request.header("Origin"))
+                    ? GuardOutcome.next() : GuardOutcome.stop(403);
+        }
+
+        private boolean originAllowed(String origin) {
+            if (origin == null || origin.isBlank()) {
+                // Non-browser clients commonly omit Origin. Keep that compatibility only
+                // for development or an explicit opt-in; production browser handshakes
+                // must carry an allowlisted Origin.
+                return "dev".equalsIgnoreCase(app.env())
+                        || Boolean.parseBoolean(app.prop("aura.websocket.allow-missing-origin"));
+            }
+            String explicit = app.prop("aura.websocket.origins");
+            if (explicit != null && !explicit.isBlank()) {
+                return Arrays.stream(explicit.split(","))
+                        .map(String::trim).anyMatch(origin::equals);
+            }
+            CorsConfig corsConfig = app.corsConfig();
+            if (corsConfig != null) {
+                if (corsConfig.hasWildcardOrigin()) return false;
+                return corsConfig.resolveOrigin(origin) != null;
+            }
+            String corsOrigin = app.corsOrigin();
+            if (corsOrigin == null) return "dev".equalsIgnoreCase(app.env());
+            if ("*".equals(corsOrigin)) return false;
+            return corsOrigin.equals(origin);
         }
     }
 

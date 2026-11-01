@@ -29,6 +29,9 @@ verifiable in memory in milliseconds. Every stage below is a commit on
 | ④-g | `5994f96` | `HealthModule` moved to `io.aura.web`; `ArchitectureTest` R5 turned from a recorded failure into a boundary |
 | ⑤-ai | `ab7622c` | in-memory AI providers for self-verification without a model endpoint |
 | ⑤-workflow | `2f15688` | injectable, virtual workflow clock |
+| review-A/B | `d88ab00`, `fb06686` | guarded requests match route templates on the path alone; one mock request resolves one client IP |
+| review-C | `a14410e` | the MCP bridge stopped offering and calling routes it cannot serve |
+| review-D | `2b63207` | a WebSocket endpoint became a `Route` |
 
 ## Decisions that differed from the plan
 
@@ -80,6 +83,21 @@ request/response consumer, publishes its path parameters, and appends the same
 `context.webSocket(...)` survived as sugar over `context.route(...)` because the
 callback shape is the ergonomics; the parallel record and the
 `webSocketContributions()` accessor did not.
+
+**The built-in endpoint gates joined the chain rather than staying in the
+dispatch.** Review found three decisions living inside
+`UndertowStarter.dispatch` — the schema token, the OpenAPI switch, and the
+WebSocket Origin allow-list — after the shared chain had already run. Their
+consequence was that Stage ③'s promise held only up to the application's own
+routes: `TestClient` could prove a CSRF rejection but could not prove whether the
+route map was readable, and the only way to test that was to bind a port. Moving
+them into `RequestGuards` as `BuiltinEndpointsGuard` keeps the order the server
+already used (chain, then built-in decision, then dispatch), keeps the rejections
+bodyless so a 404 says no more than a 404, and lets `TestClient` serve
+`/__schema__` and `/openapi.json` from the same projection the socket does. One
+behaviour changed on purpose: a production app that set `aura.schema.enabled`
+without a token previously got a permanent 404, so the switch and the token are
+now independent doors instead of a flag that silently did nothing.
 
 ## Deleted or moved public surface
 

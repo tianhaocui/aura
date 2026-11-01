@@ -228,34 +228,19 @@ public class UndertowStarter implements AuraStarter {
             return;
         }
 
-        // built-in schema endpoint
+        // built-in schema endpoint; who may read it is decided in the shared guard chain
         if ("GET".equals(method) && "/__schema__".equals(path)) {
-            if (!schemaAllowed(exchange)) {
-                exchange.setStatusCode(schemaTokenConfigured() ? 401 : 404);
-                exchange.endExchange();
-                return;
-            }
             serveSchema(exchange);
             return;
         }
 
         if ("GET".equals(method) && "/openapi.json".equals(path)) {
-            if (!app.openApiEnabled() && !app.devMode()) {
-                exchange.setStatusCode(404);
-                exchange.endExchange();
-                return;
-            }
             serveOpenApi(exchange);
             return;
         }
 
         // WebSocket upgrade
         if ("GET".equals(method) && isWebSocketUpgrade(exchange)) {
-            if (!checkWsOrigin(exchange)) {
-                exchange.setStatusCode(403);
-                exchange.endExchange();
-                return;
-            }
             for (CompiledWsRoute wsRoute : compiledWsRoutes) {
                 Map<String, String> params = wsRoute.match(path);
                 if (params == null) continue;
@@ -538,57 +523,6 @@ public class UndertowStarter implements AuraStarter {
         return "websocket".equalsIgnoreCase(upgrade);
     }
 
-    private boolean checkWsOrigin(HttpServerExchange exchange) {
-        String origin = exchange.getRequestHeaders().getFirst("Origin");
-        if (origin == null || origin.isBlank()) {
-            // Non-browser clients commonly omit Origin. Keep that compatibility only
-            // for development or an explicit opt-in; production browser handshakes
-            // must carry an allowlisted Origin.
-            return "dev".equalsIgnoreCase(app.env())
-                    || Boolean.parseBoolean(property("aura.websocket.allow-missing-origin"));
-        }
-        String explicit = property("aura.websocket.origins");
-        if (explicit != null && !explicit.isBlank()) {
-            return java.util.Arrays.stream(explicit.split(","))
-                    .map(String::trim).anyMatch(origin::equals);
-        }
-        io.aura.CorsConfig corsConfig = app.corsConfig();
-        if (corsConfig != null) {
-            if (corsConfig.hasWildcardOrigin()) return false;
-            return corsConfig.resolveOrigin(origin) != null;
-        }
-        String corsOrigin = app.corsOrigin();
-        if (corsOrigin == null) return "dev".equalsIgnoreCase(app.env());
-        if ("*".equals(corsOrigin)) return false;
-        return corsOrigin.equals(origin);
-    }
-
-    private boolean schemaAllowed(HttpServerExchange exchange) {
-        boolean enabled = Boolean.parseBoolean(property("aura.schema.enabled"));
-        if (!"dev".equalsIgnoreCase(app.env()) && !enabled) return false;
-        String token = schemaToken();
-        if (token == null || token.isBlank()) return "dev".equalsIgnoreCase(app.env());
-        String supplied = exchange.getRequestHeaders().getFirst("X-Aura-Schema-Token");
-        if (supplied == null) {
-            String authorization = exchange.getRequestHeaders().getFirst(Headers.AUTHORIZATION);
-            if (authorization != null && authorization.regionMatches(true, 0, "Bearer ", 0, 7)) {
-                supplied = authorization.substring(7).trim();
-            }
-        }
-        return java.security.MessageDigest.isEqual(token.getBytes(java.nio.charset.StandardCharsets.UTF_8),
-                (supplied == null ? "" : supplied).getBytes(java.nio.charset.StandardCharsets.UTF_8));
-    }
-
-    private boolean schemaTokenConfigured() {
-        return schemaToken() != null;
-    }
-
-    private String schemaToken() {
-        String token = property("aura.schema.auth-token");
-        if (token == null) token = property("aura.schema-token");
-        return token;
-    }
-
     private String matchedRoutePattern(String method, String path) {
         for (CompiledRoute route : compiledRoutes) {
             if ((route.method().equals(method)
@@ -601,11 +535,6 @@ public class UndertowStarter implements AuraStarter {
             }
         }
         return path;
-    }
-
-    /** Configuration lookup uses the runtime's single env/system-property/properties chain. */
-    private String property(String key) {
-        return app.prop(key);
     }
 
     static String safeLog(String value, int maxLength) {

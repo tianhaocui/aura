@@ -59,6 +59,30 @@ class DeploymentSecurityTest {
     }
 
     @Test
+    void schemaTokenGateIsOneDecisionForBothTransports() throws Exception {
+        int port = availablePort();
+        AuraApp app = app(new AuraConfig().port(port)
+                .property("aura.schema.auth-token", "s3cret"), "schema-token");
+        TestClient inMemory = TestClient.of(app);
+        try {
+            app.start();
+            assertThat(schema(port, null).statusCode()).isEqualTo(401);
+            assertThat(schema(port, "wrong").statusCode()).isEqualTo(401);
+            HttpResponse<String> allowed = schema(port, "s3cret");
+            assertThat(allowed.statusCode()).isEqualTo(200);
+            assertThat(allowed.body()).contains("/ok");
+
+            assertThat(inMemory.get("/__schema__").execute().status()).isEqualTo(401);
+            assertThat(inMemory.get("/__schema__").header("X-Aura-Schema-Token", "wrong")
+                    .execute().status()).isEqualTo(401);
+            assertThat(inMemory.get("/__schema__").header("X-Aura-Schema-Token", "s3cret")
+                    .execute().status()).isEqualTo(200);
+        } finally {
+            app.stop();
+        }
+    }
+
+    @Test
     void forwardedOriginIsUsedOnlyForExplicitlyTrustedPeer() throws Exception {
         int trustedPort = availablePort();
         AuraApp trusted = postApp(new AuraConfig().port(trustedPort).env("prod")
@@ -183,6 +207,12 @@ class DeploymentSecurityTest {
         return http.send(HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port + path))
                         .header("X-API-Key", apiKey)
                         .GET().build(), HttpResponse.BodyHandlers.ofString());
+    }
+
+    private HttpResponse<String> schema(int port, String token) throws Exception {
+        HttpRequest.Builder request = HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port + "/__schema__")).GET();
+        if (token != null) request.header("X-Aura-Schema-Token", token);
+        return http.send(request.build(), HttpResponse.BodyHandlers.ofString());
     }
 
     private static int availablePort() throws Exception {
