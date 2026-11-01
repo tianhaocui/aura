@@ -32,11 +32,16 @@ class ApiRouteCatalogTest {
     }
 
     @Test
-    void routeMetadataDefensivelyCopiesExplicitParameters() {
+    void routeContractDefensivelyCopiesExplicitParameters() {
         var parameter = new ApiParameter("id", "long", "path", true, "Order id");
-        var meta = new CompiledRoute.RouteMeta("Order", "Order", null, List.of(parameter));
+        var source = new java.util.ArrayList<>(List.of(parameter));
 
-        assertThat(meta.parameters()).containsExactly(parameter);
+        io.aura.contract.Route route = io.aura.contract.Route
+                .of("POST", "/orders", (BaseHandler) ctx -> { })
+                .withParams(source);
+        source.clear();
+
+        assertThat(route.params()).containsExactly(parameter);
     }
 
     @Test

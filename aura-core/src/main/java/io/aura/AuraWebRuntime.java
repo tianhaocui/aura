@@ -1,6 +1,7 @@
 package io.aura;
 
 import io.aura.contract.McpRouterSpec;
+import io.aura.contract.Route;
 import io.aura.snapshot.SnapshotOptions;
 import io.aura.web.BaseExceptionHandler;
 import io.aura.web.BaseHandler;
@@ -9,7 +10,6 @@ import java.io.PrintStream;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.function.Consumer;
 import java.util.function.Function;
 
 /**
@@ -27,9 +27,13 @@ public interface AuraWebRuntime extends AuraMcpRuntime {
     int port();
     String env();
     int workers();
-    Consumer<?> routeConfig();
     List<Object> services();
-    List<RouteEntry> directRoutes();
+    /**
+     * Routes contributed directly by modules, in the unified {@link Route} shape.
+     * Stage ②-B made this the single metadata source for HTTP dispatch, TestClient,
+     * {@code /__schema__} and OpenAPI; every field is typed — no {@code Map} keys.
+     */
+    List<Route> directRoutes();
     List<WebSocketContribution> webSocketContributions();
     List<String> scanPackages();
     List<Class<?>> serviceClasses();

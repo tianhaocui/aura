@@ -2,6 +2,7 @@ package io.aura.web;
 
 import io.aura.contract.ApiParameter;
 import io.aura.contract.ApiRoute;
+import io.aura.contract.Route;
 
 import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
@@ -14,38 +15,34 @@ public final class ApiRouteCatalog {
     private ApiRouteCatalog() { }
 
     public static ApiRoute describe(CompiledRoute route, String example) {
-        List<ApiParameter> parameters = new ArrayList<>();
-        Map<String, String> metadata = route.meta() == null ? Map.of() : route.meta().params();
-        if (route.meta() != null && !route.meta().parameters().isEmpty()) {
-            parameters.addAll(route.meta().parameters());
-        } else if (route.handler() instanceof MethodRefHandler methodHandler) {
-            Method method = methodHandler.resolvedMethod();
-            for (Parameter parameter : method.getParameters()) {
-                if (parameter.getType() == Context.class || parameter.getType() == BaseContext.class) continue;
-                String source = parameter.getType().isRecord() || TypeUtil.isPojo(parameter.getType())
-                        ? "body" : route.paramNames().contains(parameter.getName()) ? "path" : "query";
-                boolean required = parameter.getType().isPrimitive() || "path".equals(source);
-                parameters.add(new ApiParameter(parameter.getName(), parameter.getType().getSimpleName(), source,
-                        required, metadata.get(parameter.getName()),
-                        "body".equals(source) ? TypeSchema.describe(parameter.getType()) : Map.of()));
-            }
-        } else {
-            for (String name : route.paramNames()) {
-                parameters.add(new ApiParameter(name, "String", "path", true, metadata.get(name)));
+        Route contract = route.contract();
+        List<ApiParameter> parameters = new ArrayList<>(contract.params());
+        if (parameters.isEmpty()) {
+            if (route.handler() instanceof MethodRefHandler methodHandler) {
+                Method method = methodHandler.resolvedMethod();
+                for (Parameter parameter : method.getParameters()) {
+                    if (parameter.getType() == Context.class || parameter.getType() == BaseContext.class) continue;
+                    String source = parameter.getType().isRecord() || TypeUtil.isPojo(parameter.getType())
+                            ? "body" : route.paramNames().contains(parameter.getName()) ? "path" : "query";
+                    boolean required = parameter.getType().isPrimitive() || "path".equals(source);
+                    parameters.add(new ApiParameter(parameter.getName(), parameter.getType().getSimpleName(), source,
+                            required, route.paramDescriptions().get(parameter.getName()),
+                            "body".equals(source) ? TypeSchema.describe(parameter.getType()) : Map.of()));
+                }
+            } else {
+                for (String name : route.paramNames()) {
+                    parameters.add(new ApiParameter(name, "String", "path", true,
+                            route.paramDescriptions().get(name)));
+                }
             }
         }
-        Map<String, Object> responseSchema = responseSchema(route);
-        return new ApiRoute(route.method(), route.rawPath(),
-                route.meta() == null ? null : route.meta().description(),
-                route.meta() == null ? null : route.meta().returnType(), parameters, example, responseSchema,
-                route.meta() != null && route.meta().authenticated(),
-                route.meta() == null ? null : route.meta().permission());
+        return new ApiRoute(route.method(), route.rawPath(), contract.description(), contract.returnType(),
+                parameters, example, responseSchema(route, contract),
+                contract.authenticated(), contract.permission());
     }
 
-    private static Map<String, Object> responseSchema(CompiledRoute route) {
-        if (route.meta() != null && !route.meta().responseSchema().isEmpty()) {
-            return route.meta().responseSchema();
-        }
+    private static Map<String, Object> responseSchema(CompiledRoute route, Route contract) {
+        if (!contract.responseSchema().isEmpty()) return contract.responseSchema();
         if (!(route.handler() instanceof MethodRefHandler methodHandler)) return Map.of();
         Method method = methodHandler.resolvedMethod();
         if (method.getReturnType() == void.class || method.getReturnType() == Void.class

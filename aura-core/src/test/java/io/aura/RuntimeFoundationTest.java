@@ -234,7 +234,7 @@ class RuntimeFoundationTest {
         assertThat(app.modules()).extracting("id").containsExactly("health");
         assertThat(app.find(ModularRuntime.class)).isPresent();
         assertThat(((AuraWebRuntime) app.runtimeView()).directRoutes())
-                .extracting(RouteEntry::method, RouteEntry::path)
+                .extracting(io.aura.contract.Route::method, io.aura.contract.Route::path)
                 .containsExactlyInAnyOrder(
                         org.assertj.core.api.Assertions.tuple("GET", "/health/live"),
                         org.assertj.core.api.Assertions.tuple("GET", "/health/ready"),

@@ -362,7 +362,7 @@ public class UndertowStarter implements AuraStarter {
             final Thread handlerThread = Thread.currentThread();
 
             if (app.requestTimeout() > 0 && timeoutScheduler != null
-                    && (route.meta() == null || !route.meta().streaming())) {
+                    && !route.contract().streaming()) {
                 timeoutFuture = timeoutScheduler.schedule(() -> {
                     try {
                         boolean timeoutWon;
@@ -561,11 +561,8 @@ public class UndertowStarter implements AuraStarter {
 
         for (BaseRouteBuilder rb : router.routeBuilders) {
             var route = rb.route;
-            var meta = new CompiledRoute.RouteMeta(
-                    rb.description, rb.returnType, rb.paramDescriptions, rb.parameters(), rb.responseSchema,
-                    rb.streaming, rb.authenticated, rb.permission);
-            result.add(CompiledRoute.compile(route.method(), prefix, route.path(),
-                    before, route.handler(), after, meta));
+            result.add(CompiledRoute.compile(prefix, route, before,
+                    (BaseHandler) route.handler(), after, rb.paramDescriptions));
         }
 
         for (BaseRouter.Group group : router.groups) {

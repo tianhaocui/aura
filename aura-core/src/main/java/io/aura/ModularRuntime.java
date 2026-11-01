@@ -3,6 +3,7 @@ package io.aura;
 import io.aura.contract.McpRouterSpec;
 import io.aura.contract.ModuleMetadata;
 import io.aura.contract.PermissionRegistry;
+import io.aura.contract.Route;
 import io.aura.contract.RouteContribution;
 import io.aura.contract.RuntimeState;
 import io.aura.snapshot.SnapshotOptions;
@@ -20,7 +21,6 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiPredicate;
-import java.util.function.Consumer;
 import java.util.function.Function;
 
 /**
@@ -38,7 +38,7 @@ final class ModularRuntime implements AuraWebRuntime {
     private final Map<Class<?>, Object> registry = new ConcurrentHashMap<>();
     private final Map<String, Object> namedRegistry = new ConcurrentHashMap<>();
     private final List<Object> services = new CopyOnWriteArrayList<>();
-    private final List<RouteEntry> directRoutes = new CopyOnWriteArrayList<>();
+    private final List<Route> directRoutes = new CopyOnWriteArrayList<>();
     private final List<WebSocketContribution> webSocketContributions = new CopyOnWriteArrayList<>();
     private final List<AutoCloseable> closeables = new CopyOnWriteArrayList<>();
     private final List<io.aura.contract.HealthCheck> healthChecks = new CopyOnWriteArrayList<>();
@@ -310,9 +310,8 @@ final class ModularRuntime implements AuraWebRuntime {
     @Override public int port() { return config.port(); }
     @Override public String env() { return config.env(); }
     @Override public int workers() { return config.workers(); }
-    @Override public Consumer<?> routeConfig() { return null; }
     @Override public List<Object> services() { return List.copyOf(services); }
-    @Override public List<RouteEntry> directRoutes() { return List.copyOf(directRoutes); }
+    @Override public List<Route> directRoutes() { return List.copyOf(directRoutes); }
     @Override public List<WebSocketContribution> webSocketContributions() { return List.copyOf(webSocketContributions); }
     @Override public List<String> scanPackages() { return List.of(); }
     @Override public List<Class<?>> serviceClasses() { return List.of(); }
@@ -531,8 +530,10 @@ final class ModularRuntime implements AuraWebRuntime {
         @Override public void route(RouteContribution route) {
             if (route == null) throw new ModuleException("AURA_ROUTE_CONTRIBUTION_INVALID", descriptor.id(), "Route contribution must not be null");
             if (route.handler() == null) throw new ModuleException("AURA_ROUTE_HANDLER_MISSING", descriptor.id(), "Route contribution " + route.method() + " " + route.path() + " has no handler");
-            route.parameters();
-            directRoutes.add(new RouteEntry(route.method(), route.path(), route.handler(), route.description(), route.metadata()));
+            // Single-source the contribution into the unified Route contract.
+            // fromContribution hard-fails on mistyped metadata, replacing the old
+            // silent Map-key reads performed by RouteAssembler.
+            directRoutes.add(Route.fromContribution(route));
         }
         @Override public void webSocket(String path, java.util.function.Consumer<io.aura.web.WsHandler> configure) {
             webSocketContributions.add(new WebSocketContribution(path, configure));

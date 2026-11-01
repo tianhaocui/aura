@@ -113,7 +113,7 @@ class BaseRouterTest {
         BaseRouter router = new BaseRouter();
         BaseRouteBuilder rb = router.addRoute("GET", "/test", ctx -> {});
         rb.describe("A test route").param("id", "The ID");
-        assertThat(rb.description).isEqualTo("A test route");
+        assertThat(rb.route.description()).isEqualTo("A test route");
         assertThat(rb.paramDescriptions).containsEntry("id", "The ID");
     }
 

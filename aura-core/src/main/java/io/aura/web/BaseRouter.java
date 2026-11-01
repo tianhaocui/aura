@@ -1,5 +1,7 @@
 package io.aura.web;
 
+import io.aura.contract.Route;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Consumer;
@@ -101,12 +103,11 @@ public class BaseRouter {
     }
 
     public BaseRouteBuilder addRoute(String method, String path, BaseHandler handler) {
-        var rb = new BaseRouteBuilder(new Route(method, path, handler));
+        var rb = new BaseRouteBuilder(Route.of(method, path, handler));
         routeBuilders.add(rb);
         return rb;
     }
 
-    public record Route(String method, String path, BaseHandler handler) {}
     public record Group(String prefix, BaseRouter router) {}
     public record WsRoute(String path, WsHandler handler) {}
 }

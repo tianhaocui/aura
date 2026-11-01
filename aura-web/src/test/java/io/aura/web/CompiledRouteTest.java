@@ -1,5 +1,6 @@
 package io.aura.web;
 
+import io.aura.contract.Route;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -9,8 +10,10 @@ import static org.assertj.core.api.Assertions.*;
 
 class CompiledRouteTest {
 
+    private static final BaseHandler NOOP = ctx -> { };
+
     private static CompiledRoute compile(String method, String path) {
-        return CompiledRoute.compile(method, "", path, List.of(), ctx -> {}, List.of(), null);
+        return CompiledRoute.compile("", Route.of(method, path, NOOP), List.of(), NOOP, List.of(), Map.of());
     }
 
     @Test
@@ -64,8 +67,8 @@ class CompiledRouteTest {
 
     @Test
     void prefixIsIncludedInRawPath() {
-        CompiledRoute route = CompiledRoute.compile("GET", "/api", "/user/{id}",
-                List.of(), ctx -> {}, List.of(), null);
+        CompiledRoute route = CompiledRoute.compile("/api", Route.of("GET", "/user/{id}", NOOP),
+                List.of(), NOOP, List.of(), Map.of());
         assertThat(route.rawPath()).isEqualTo("/api/user/{id}");
     }
 }

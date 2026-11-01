@@ -69,7 +69,7 @@ public class Router extends BaseRouter {
         BaseRouteBuilder rb = addRoute(method, path, handler);
         var m = handler.resolvedMethod();
         if (m.getReturnType() != void.class) {
-            rb.returnType = m.getReturnType().getSimpleName();
+            rb.route = rb.route.withReturnType(m.getReturnType().getSimpleName());
         }
         return rb;
     }

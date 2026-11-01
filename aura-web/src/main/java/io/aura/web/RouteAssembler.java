@@ -1,10 +1,7 @@
 package io.aura.web;
 
 import io.aura.AuraWebRuntime;
-import io.aura.contract.ApiParameter;
-
-import java.util.Collection;
-import java.util.function.Consumer;
+import io.aura.contract.Route;
 
 /** Builds the adapter router from the runtime's complete route contribution set. */
 final class RouteAssembler {
@@ -18,10 +15,6 @@ final class RouteAssembler {
             router.ws(contribution.path(), contribution.configure());
         }
 
-        @SuppressWarnings("unchecked")
-        Consumer<BaseRouter> configuredRoutes = (Consumer<BaseRouter>) app.routeConfig();
-        if (configuredRoutes != null) configuredRoutes.accept(router);
-
         for (Object service : app.services()) {
             ServiceRegistrar.register(service, router);
         }
@@ -32,7 +25,7 @@ final class RouteAssembler {
     }
 
     private static void registerDirectRoutes(AuraWebRuntime app, Router router) {
-        for (var entry : app.directRoutes()) {
+        for (Route entry : app.directRoutes()) {
             BaseHandler handler = entry.handler() instanceof BaseHandler h
                     ? h : new LambdaHandler(entry.handler());
             handler = secure(app, entry, handler);
@@ -46,34 +39,16 @@ final class RouteAssembler {
                 case "OPTIONS" -> router.options(entry.path(), handler);
                 default -> throw new IllegalArgumentException("Unsupported route method: " + entry.method());
             };
-            if (entry.description() != null) builder.describe(entry.description());
-            if (Boolean.TRUE.equals(entry.metadata().get("streaming"))) builder.streaming();
-            builder.authenticated = Boolean.TRUE.equals(entry.metadata().get(
-                    io.aura.contract.RouteContribution.AUTHENTICATED));
-            Object permission = entry.metadata().get(io.aura.contract.RouteContribution.PERMISSION);
-            builder.permission = permission == null ? null : permission.toString();
-            Object returnType = entry.metadata().get("returnType");
-            if (returnType != null) builder.returnType = returnType.toString();
-            builder.responseSchema = entry.responseSchema();
-            Object parameters = entry.metadata().get("parameters");
-            if (parameters instanceof Collection<?> values) {
-                for (Object value : values) {
-                    if (value instanceof ApiParameter parameter) {
-                        builder.param(parameter);
-                    }
-                }
-            }
+            // One assignment instead of copying seven fields in lockstep: the declared Route already
+            // carries every fact, only the dispatch handler changes to the auth-wrapped one.
+            builder.route = entry.withHandler(handler);
         }
     }
 
-    private static BaseHandler secure(AuraWebRuntime app, io.aura.RouteEntry entry,
+    private static BaseHandler secure(AuraWebRuntime app, Route entry,
                                       BaseHandler next) {
-        Object permissionValue = entry.metadata().get(io.aura.contract.RouteContribution.PERMISSION);
-        boolean authenticated = Boolean.TRUE.equals(
-                entry.metadata().get(io.aura.contract.RouteContribution.AUTHENTICATED))
-                || permissionValue != null;
-        if (!authenticated) return next;
-        String permission = permissionValue == null ? null : permissionValue.toString();
+        String permission = entry.permission();
+        if (!entry.authenticated()) return next;
         return request -> {
             String userId = app.authFunction() == null ? null : app.authFunction().apply(request);
             if (userId == null || userId.isBlank()) {

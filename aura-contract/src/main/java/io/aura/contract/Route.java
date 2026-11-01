@@ -77,6 +77,18 @@ public record Route(
                 newDescription, authenticated, permission, streaming);
     }
 
+    /** Rebinds the dispatch handler, keeping every declared fact (auth wrapping). */
+    public Route withHandler(Object newHandler) {
+        return new Route(method, path, newHandler, params, returnType, responseSchema,
+                description, authenticated, permission, streaming);
+    }
+
+    /** Re-expresses the route under a router-group prefix. */
+    public Route withPath(String newPath) {
+        return new Route(method, newPath, handler, params, returnType, responseSchema,
+                description, authenticated, permission, streaming);
+    }
+
     public Route requireAuth(String permission) {
         return new Route(method, path, handler, params, returnType, responseSchema,
                 description, true, permission, streaming);

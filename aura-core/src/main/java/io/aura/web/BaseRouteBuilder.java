@@ -1,36 +1,31 @@
 package io.aura.web;
 
 import io.aura.contract.ApiParameter;
+import io.aura.contract.Route;
 
 import java.util.ArrayList;
-import java.util.List;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 public class BaseRouteBuilder {
 
-    public final BaseRouter.Route route;
-    public String description;
-    public String returnType;
-    public Map<String, Object> responseSchema = Map.of();
-    /** Marks a route as long-lived so the normal request timeout is not applied. */
-    public boolean streaming;
-    public boolean authenticated;
-    public String permission;
+    /** The one route contract; every declaration below is a typed field of it. */
+    public Route route;
+    /** Name-to-description overlay for reflection-derived parameters. */
     public final Map<String, String> paramDescriptions = new LinkedHashMap<>();
-    private final List<ApiParameter> parameters = new ArrayList<>();
 
-    public BaseRouteBuilder(BaseRouter.Route route) {
+    public BaseRouteBuilder(Route route) {
         this.route = route;
     }
 
     public BaseRouteBuilder describe(String description) {
-        this.description = description;
+        route = route.describedAs(description);
         return this;
     }
 
     public BaseRouteBuilder streaming() {
-        this.streaming = true;
+        route = route.withStreaming(true);
         return this;
     }
 
@@ -42,17 +37,19 @@ public class BaseRouteBuilder {
     /** Declares an AI-facing parameter for lambda routes without relying on reflection. */
     public BaseRouteBuilder param(String name, String type, String source,
                                   boolean required, String description) {
-        parameters.add(new ApiParameter(name, type, source, required, description));
-        return this;
+        return param(new ApiParameter(name, type, source, required, description));
     }
 
     /** Preserves a generated structured schema when assembling a route. */
     public BaseRouteBuilder param(ApiParameter parameter) {
-        parameters.add(java.util.Objects.requireNonNull(parameter, "parameter"));
+        java.util.Objects.requireNonNull(parameter, "parameter");
+        List<ApiParameter> parameters = new ArrayList<>(route.params());
+        parameters.add(parameter);
+        route = route.withParams(parameters);
         return this;
     }
 
     public List<ApiParameter> parameters() {
-        return List.copyOf(parameters);
+        return route.params();
     }
 }

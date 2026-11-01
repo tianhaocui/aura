@@ -80,11 +80,12 @@ class ServiceRegistrarTest {
     }
 
     @Test
-    void noPathAnnotation_emptyPrefix() {
+    void noPathAnnotation_mountsAtRoot() {
         Router router = new Router();
         ServiceRegistrar.register(new NoPrefixService(), router);
         List<CompiledRoute> routes = UndertowStarter.compileRoutes(router);
-        assertThat(routes).anyMatch(r -> r.method().equals("GET") && r.rawPath().equals(""));
+        assertThat(routes).anyMatch(r -> r.method().equals("GET") && r.rawPath().equals("/"));
+        assertThat(routes).noneMatch(r -> r.rawPath().isEmpty());
     }
 
     // --- Put / Delete annotations ---

@@ -121,5 +121,13 @@ final class ServiceRegistrar {
         return "{id}";
     }
 
-    private record RouteInfo(String httpMethod, String path) {}
+    private record RouteInfo(String httpMethod, String path) {
+        /**
+         * A service without {@code @Path} contributes an empty path, which used to compile to the
+         * regex {@code ^$} and so could never match a request; mounting at {@code /} makes it live.
+         */
+        RouteInfo {
+            path = path.isEmpty() ? "/" : path;
+        }
+    }
 }
