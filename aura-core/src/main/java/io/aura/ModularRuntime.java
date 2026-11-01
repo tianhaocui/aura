@@ -313,8 +313,6 @@ final class ModularRuntime implements AuraWebRuntime {
     @Override public List<Object> services() { return List.copyOf(services); }
     @Override public List<Route> directRoutes() { return List.copyOf(directRoutes); }
     @Override public List<WebSocketContribution> webSocketContributions() { return List.copyOf(webSocketContributions); }
-    @Override public List<String> scanPackages() { return List.of(); }
-    @Override public List<Class<?>> serviceClasses() { return List.of(); }
     @Override public String staticFilesPath() { return config.staticFilesPath(); }
     @Override public boolean spa() { return config.spa(); }
     @Override public String corsOrigin() { return config.corsOrigin(); }

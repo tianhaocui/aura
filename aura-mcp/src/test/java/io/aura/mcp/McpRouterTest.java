@@ -24,10 +24,12 @@ class McpRouterTest {
     }
 
     @Test
-    void tool_serviceMethod_registersCorrectly() {
+    void tool_registersDeclaredParams() {
         McpRouter mcp = new McpRouter();
         var svc = new UserService();
-        mcp.tool("get_user", svc, "get", "获取用户");
+        mcp.tool("get_user", "获取用户")
+           .param("id", int.class, "用户号")
+           .handler(ctx -> svc.get(ctx.getInt("id")));
 
         assertThat(mcp.tools()).hasSize(1);
         McpTool tool = mcp.tools().get(0);
@@ -38,10 +40,12 @@ class McpRouterTest {
     }
 
     @Test
-    void tool_serviceMethod_invokesCorrectly() throws Exception {
+    void tool_invokesDeclaredHandler() throws Exception {
         McpRouter mcp = new McpRouter();
         var svc = new UserService();
-        mcp.tool("get_user", svc, "get", "获取用户");
+        mcp.tool("get_user", "获取用户")
+           .param("id", int.class, "用户号")
+           .handler(ctx -> svc.get(ctx.getInt("id")));
 
         Object result = mcp.invoke("get_user", Map.of("id", "42"));
         assertThat(result).isEqualTo("user-42");
@@ -60,8 +64,11 @@ class McpRouterTest {
 
     @Test
     void tool_sharedRouteContract_reusesNameAndParameterMetadata() throws Exception {
-        var route = new io.aura.contract.ApiRoute("GET", "/orders/{id}", "Get order", "Order",
-                List.of(new io.aura.contract.ApiParameter("id", "long", "path", true, "Order ID")), null);
+        var route = io.aura.contract.Route.of("GET", "/orders/{id}", new Object())
+                .describedAs("Get order")
+                .withReturnType("Order")
+                .withParams(List.of(new io.aura.contract.ApiParameter(
+                        "id", "long", "path", true, "Order ID")));
         McpRouter mcp = new McpRouter()
                 .tool(route, ctx -> "order-" + ctx.getLong("id"));
 
@@ -85,9 +92,11 @@ class McpRouterTest {
     void tool_sharedRouteContract_keepsBodySchemaIntact() throws Exception {
         Map<String, Object> body = Map.of("type", "object",
                 "properties", Map.of("name", Map.of("type", "string")));
-        var route = new io.aura.contract.ApiRoute("POST", "/orders", "Create order", "Order",
-                List.of(new io.aura.contract.ApiParameter("request", "CreateOrderRequest", "body",
-                        true, "Order fields", body)), null);
+        var route = io.aura.contract.Route.of("POST", "/orders", new Object())
+                .describedAs("Create order")
+                .withReturnType("Order")
+                .withParams(List.of(new io.aura.contract.ApiParameter("request", "CreateOrderRequest", "body",
+                        true, "Order fields", body)));
         McpRouter mcp = new McpRouter().tool(route, ctx -> "created");
 
         @SuppressWarnings("unchecked")
@@ -193,21 +202,16 @@ class McpRouterTest {
     void tool_multipleRegistrations_allPresent() {
         McpRouter mcp = new McpRouter();
         var svc = new UserService();
-        mcp.tool("get_user", svc, "get", "获取用户");
-        mcp.tool("list_users", svc, "list", "用户列表");
+        mcp.tool("get_user", "获取用户")
+           .param("id", int.class, "用户号")
+           .handler(ctx -> svc.get(ctx.getInt("id")));
+        mcp.tool("list_users", "用户列表")
+           .handler(ctx -> svc.list());
 
         assertThat(mcp.tools()).hasSize(2);
     }
 
     // --- 边界场景 ---
-
-    @Test
-    void tool_serviceMethod_notFound_throws() {
-        McpRouter mcp = new McpRouter();
-        assertThatThrownBy(() -> mcp.tool("x", new UserService(), "nonexistent", "desc"))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("nonexistent");
-    }
 
     @Test
     void tool_enumParam_invokeWithEnumName_resolvesCorrectly() throws Exception {
@@ -255,18 +259,24 @@ class McpRouterTest {
     }
 
     @Test
-    void tool_serviceMethod_missingBooleanParam_returnsFalse() throws Exception {
+    void tool_missingBooleanParam_returnsFalse() throws Exception {
         McpRouter mcp = new McpRouter();
-        mcp.tool("check", new UserService(), "check", "检查");
+        var svc = new UserService();
+        mcp.tool("check", "检查")
+           .param("active", boolean.class, "是否激活")
+           .handler(ctx -> svc.check(ctx.getBoolean("active")));
 
         Object result = mcp.invoke("check", Map.of());
         assertThat(result).isEqualTo("active=false");
     }
 
     @Test
-    void tool_serviceMethod_missingDoubleParam_returnsZero() throws Exception {
+    void tool_missingDoubleParam_returnsZero() throws Exception {
         McpRouter mcp = new McpRouter();
-        mcp.tool("rate", new UserService(), "rate", "费率");
+        var svc = new UserService();
+        mcp.tool("rate", "费率")
+           .param("value", double.class, "金额")
+           .handler(ctx -> svc.rate(ctx.getDouble("value")));
 
         Object result = mcp.invoke("rate", Map.of());
         assertThat(result).isEqualTo("rate=0.0");
@@ -287,8 +297,11 @@ class McpRouterTest {
     void buildSchema_multipleTools_allPresent() {
         McpRouter mcp = new McpRouter();
         var svc = new UserService();
-        mcp.tool("get_user", svc, "get", "获取用户");
-        mcp.tool("list_users", svc, "list", "用户列表");
+        mcp.tool("get_user", "获取用户")
+           .param("id", int.class, "用户号")
+           .handler(ctx -> svc.get(ctx.getInt("id")));
+        mcp.tool("list_users", "用户列表")
+           .handler(ctx -> svc.list());
 
         Map<String, Object> schema = mcp.buildSchema();
         @SuppressWarnings("unchecked")
@@ -317,7 +330,9 @@ class McpRouterTest {
     void unregisteredRoutes_notInTools() {
         McpRouter mcp = new McpRouter();
         var svc = new UserService();
-        mcp.tool("get_user", svc, "get", "获取用户");
+        mcp.tool("get_user", "获取用户")
+           .param("id", int.class, "用户号")
+           .handler(ctx -> svc.get(ctx.getInt("id")));
 
         List<String> names = mcp.tools().stream().map(McpTool::name).toList();
         assertThat(names).containsExactly("get_user");
@@ -325,9 +340,10 @@ class McpRouterTest {
     }
 
     @Test
-    void tool_serviceMethod_listReturnsCollection() throws Exception {
+    void tool_listReturnsCollection() throws Exception {
         McpRouter mcp = new McpRouter();
-        mcp.tool("list_users", new UserService(), "list", "用户列表");
+        var svc = new UserService();
+        mcp.tool("list_users", "用户列表").handler(ctx -> svc.list());
 
         Object result = mcp.invoke("list_users", Map.of());
         assertThat(result).isEqualTo(List.of("alice", "bob"));
@@ -371,12 +387,13 @@ class McpRouterTest {
 
     @Test
     @SuppressWarnings("unchecked")
-    void apiRouteSecurityMetadataProtectsGeneratedTool() throws Exception {
-        var route = new io.aura.contract.ApiRoute(
-                "DELETE", "/orders/{id}", "Delete order", "void",
-                List.of(new io.aura.contract.ApiParameter(
-                        "id", "long", "path", true, "Order ID")),
-                null, Map.of(), true, "orders.delete");
+    void routeSecurityMetadataProtectsGeneratedTool() throws Exception {
+        var route = io.aura.contract.Route.of("DELETE", "/orders/{id}", new Object())
+                .describedAs("Delete order")
+                .withReturnType("void")
+                .withParams(List.of(new io.aura.contract.ApiParameter(
+                        "id", "long", "path", true, "Order ID")))
+                .requireAuth("orders.delete");
         McpRouter mcp = new McpRouter().tool(route, ctx -> "deleted");
 
         Map<String, Object> schema = mcp.buildSchema();

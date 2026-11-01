@@ -9,6 +9,16 @@ import java.lang.reflect.Parameter;
 
 public final class ParamResolver {
 
+    /**
+     * The one string→value binder: HTTP query/path parameters and MCP tool arguments
+     * both go through these parse methods, so a malformed value cannot mean 400 on one
+     * transport and a silent 0 on the other.
+     *
+     * <p>Failures throw {@link NumberFormatException}, which is an
+     * {@link IllegalArgumentException}: the web layer's 400 mapping still catches it and
+     * MCP callers that historically saw a parse failure keep seeing one.
+     */
+
     @FunctionalInterface
     public interface Binder {
         Object resolve(BaseContext ctx) throws Exception;
@@ -85,7 +95,7 @@ public final class ParamResolver {
         try {
             return parser.apply(value);
         } catch (NumberFormatException e) {
-            throw new IllegalArgumentException("Invalid number: " + value);
+            throw new NumberFormatException("Invalid number: " + value);
         }
     }
 
@@ -101,25 +111,25 @@ public final class ParamResolver {
     public static int parseInt(String val) {
         if (val == null) return 0;
         try { return Integer.parseInt(val); }
-        catch (NumberFormatException e) { throw new IllegalArgumentException("Invalid integer: " + val); }
+        catch (NumberFormatException e) { throw new NumberFormatException("Invalid integer: " + val); }
     }
 
     public static Integer parseIntBoxed(String val) {
         if (val == null) return null;
         try { return Integer.parseInt(val); }
-        catch (NumberFormatException e) { throw new IllegalArgumentException("Invalid integer: " + val); }
+        catch (NumberFormatException e) { throw new NumberFormatException("Invalid integer: " + val); }
     }
 
     public static long parseLong(String val) {
         if (val == null) return 0L;
         try { return Long.parseLong(val); }
-        catch (NumberFormatException e) { throw new IllegalArgumentException("Invalid long: " + val); }
+        catch (NumberFormatException e) { throw new NumberFormatException("Invalid long: " + val); }
     }
 
     public static Long parseLongBoxed(String val) {
         if (val == null) return null;
         try { return Long.parseLong(val); }
-        catch (NumberFormatException e) { throw new IllegalArgumentException("Invalid long: " + val); }
+        catch (NumberFormatException e) { throw new NumberFormatException("Invalid long: " + val); }
     }
 
     public static boolean parseBool(String val) {
@@ -134,49 +144,49 @@ public final class ParamResolver {
     public static double parseDouble(String val) {
         if (val == null) return 0.0;
         try { return Double.parseDouble(val); }
-        catch (NumberFormatException e) { throw new IllegalArgumentException("Invalid number: " + val); }
+        catch (NumberFormatException e) { throw new NumberFormatException("Invalid number: " + val); }
     }
 
     public static Double parseDoubleBoxed(String val) {
         if (val == null) return null;
         try { return Double.parseDouble(val); }
-        catch (NumberFormatException e) { throw new IllegalArgumentException("Invalid number: " + val); }
+        catch (NumberFormatException e) { throw new NumberFormatException("Invalid number: " + val); }
     }
 
     public static float parseFloat(String val) {
         if (val == null) return 0.0f;
         try { return Float.parseFloat(val); }
-        catch (NumberFormatException e) { throw new IllegalArgumentException("Invalid number: " + val); }
+        catch (NumberFormatException e) { throw new NumberFormatException("Invalid number: " + val); }
     }
 
     public static Float parseFloatBoxed(String val) {
         if (val == null) return null;
         try { return Float.parseFloat(val); }
-        catch (NumberFormatException e) { throw new IllegalArgumentException("Invalid number: " + val); }
+        catch (NumberFormatException e) { throw new NumberFormatException("Invalid number: " + val); }
     }
 
     public static short parseShort(String val) {
         if (val == null) return 0;
         try { return Short.parseShort(val); }
-        catch (NumberFormatException e) { throw new IllegalArgumentException("Invalid short: " + val); }
+        catch (NumberFormatException e) { throw new NumberFormatException("Invalid short: " + val); }
     }
 
     public static Short parseShortBoxed(String val) {
         if (val == null) return null;
         try { return Short.parseShort(val); }
-        catch (NumberFormatException e) { throw new IllegalArgumentException("Invalid short: " + val); }
+        catch (NumberFormatException e) { throw new NumberFormatException("Invalid short: " + val); }
     }
 
     public static byte parseByte(String val) {
         if (val == null) return 0;
         try { return Byte.parseByte(val); }
-        catch (NumberFormatException e) { throw new IllegalArgumentException("Invalid byte: " + val); }
+        catch (NumberFormatException e) { throw new NumberFormatException("Invalid byte: " + val); }
     }
 
     public static Byte parseByteBoxed(String val) {
         if (val == null) return null;
         try { return Byte.parseByte(val); }
-        catch (NumberFormatException e) { throw new IllegalArgumentException("Invalid byte: " + val); }
+        catch (NumberFormatException e) { throw new NumberFormatException("Invalid byte: " + val); }
     }
 
     public static char parseChar(String val) {

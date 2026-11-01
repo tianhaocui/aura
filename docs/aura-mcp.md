@@ -104,7 +104,7 @@ HTTP response budget 控制；超过 retention byte limit 的事件会触发 ove
 
 ## McpRouter (Selective Tool Exposure)
 
-For a route already described by the shared `ApiRoute` contract, use
+For a route already described by the shared `Route` contract, use
 `McpRouter.tool(route, handler)`. Every declared parameter fact transfers
 unchanged — name, type, required flag, description, source, and the JSON Schema
 of a structured body — so the tool stays aligned with HTTP Schema and OpenAPI
@@ -115,20 +115,23 @@ Not all APIs should be MCP tools. McpRouter lets you explicitly choose which ope
 ```java
 McpRouter mcp = new McpRouter();
 
-// Expose a service method directly
-mcp.tool("get_user", userService, "get", "Get user by ID");
-mcp.tool("list_users", userService, "list", "List all users");
-
-// Custom handler with explicit parameters
+// MCP-only tool: declare each parameter the model has to fill in
 mcp.tool("create_order", "Create a new order")
    .param("product", String.class, "Product name")
    .param("quantity", int.class, "Quantity")
    .handler(ctx -> orderService.create(ctx.getString("product"), ctx.getInt("quantity")));
 
+// Route already exported over HTTP: reuse the contract instead of re-declaring it
+mcp.tool(getUserRoute, ctx -> userService.get(ctx.getLong("id")));
+
 AuraApp.create()
     .use(McpModule.create(mcp))
     .start(args);
 ```
+
+Binding a tool to a service method by reflection is not an entry point: parameter
+names are erased without `-parameters`, the declared types arrive as `string`, and
+the tool silently disagrees with the same route's HTTP schema.
 
 Declare a permission for tools that mutate protected state. Permissioned tools
 fail closed when invoked without an authenticated identity:

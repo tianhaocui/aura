@@ -18,9 +18,6 @@ final class RouteAssembler {
         for (Object service : app.services()) {
             ServiceRegistrar.register(service, router);
         }
-        if (!app.scanPackages().isEmpty()) {
-            PackageScanner.scan(app.scanPackages(), router, app);
-        }
         return router;
     }
 

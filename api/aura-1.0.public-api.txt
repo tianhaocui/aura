@@ -17,6 +17,7 @@ public final class io.aura.contract.ApiRoute extends java.lang.Record {
   public io.aura.contract.ApiRoute(java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.util.List<io.aura.contract.ApiParameter>, java.lang.String);
   public io.aura.contract.ApiRoute(java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.util.List<io.aura.contract.ApiParameter>, java.lang.String, java.util.Map<java.lang.String, java.lang.Object>);
   public io.aura.contract.ApiRoute(java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.util.List<io.aura.contract.ApiParameter>, java.lang.String, java.util.Map<java.lang.String, java.lang.Object>, boolean, java.lang.String);
+  public static io.aura.contract.ApiRoute from(io.aura.contract.Route);
   public final java.lang.String toString();
   public final int hashCode();
   public final boolean equals(java.lang.Object);
@@ -154,6 +155,36 @@ public final class io.aura.contract.PermissionRegistry {
   public java.util.List<io.aura.contract.Permission> list();
   public java.util.Map<java.lang.String, io.aura.contract.Permission> snapshot();
 }
+### aura-contract:io.aura.contract.Route
+public final class io.aura.contract.Route extends java.lang.Record {
+  public io.aura.contract.Route(java.lang.String, java.lang.String, java.lang.Object, java.util.List<io.aura.contract.ApiParameter>, java.lang.String, java.util.Map<java.lang.String, java.lang.Object>, java.lang.String, boolean, java.lang.String, boolean);
+  public static io.aura.contract.Route of(java.lang.String, java.lang.String, java.lang.Object);
+  public static io.aura.contract.Route describe(io.aura.contract.Route, java.lang.String);
+  public io.aura.contract.Route describedAs(java.lang.String);
+  public io.aura.contract.Route withHandler(java.lang.Object);
+  public io.aura.contract.Route withPath(java.lang.String);
+  public io.aura.contract.Route requireAuth(java.lang.String);
+  public io.aura.contract.Route requireAuth();
+  public io.aura.contract.Route withParams(java.util.List<io.aura.contract.ApiParameter>);
+  public io.aura.contract.Route withReturnType(java.lang.String);
+  public io.aura.contract.Route withResponseSchema(java.util.Map<java.lang.String, java.lang.Object>);
+  public io.aura.contract.Route withStreaming(boolean);
+  public static io.aura.contract.Route fromContribution(io.aura.contract.RouteContribution);
+  public io.aura.contract.ApiRoute toApiRoute();
+  public final java.lang.String toString();
+  public final int hashCode();
+  public final boolean equals(java.lang.Object);
+  public java.lang.String method();
+  public java.lang.String path();
+  public java.lang.Object handler();
+  public java.util.List<io.aura.contract.ApiParameter> params();
+  public java.lang.String returnType();
+  public java.util.Map<java.lang.String, java.lang.Object> responseSchema();
+  public java.lang.String description();
+  public boolean authenticated();
+  public java.lang.String permission();
+  public boolean streaming();
+}
 ### aura-contract:io.aura.contract.RouteContribution
 public final class io.aura.contract.RouteContribution extends java.lang.Record {
   public static final java.lang.String AUTHENTICATED;
@@ -167,6 +198,7 @@ public final class io.aura.contract.RouteContribution extends java.lang.Record {
   public io.aura.contract.RouteContribution permission(java.lang.String);
   public java.util.Map<java.lang.String, java.lang.Object> responseSchema();
   public java.util.List<io.aura.contract.ApiParameter> parameters();
+  public io.aura.contract.Route toRoute();
   public final java.lang.String toString();
   public final int hashCode();
   public final boolean equals(java.lang.Object);
@@ -188,6 +220,11 @@ public final class io.aura.contract.RuntimeState extends java.lang.Enum<io.aura.
   public static final io.aura.contract.RuntimeState STOPPED;
   public static io.aura.contract.RuntimeState[] values();
   public static io.aura.contract.RuntimeState valueOf(java.lang.String);
+}
+### aura-contract:io.aura.contract.ScalarType
+public final class io.aura.contract.ScalarType {
+  public static java.lang.String jsonTypeName(java.lang.String);
+  public static boolean isScalar(java.lang.String);
 }
 ### aura-contract:io.aura.contract.StructuredError
 public final class io.aura.contract.StructuredError extends java.lang.Record {
@@ -415,12 +452,9 @@ public interface io.aura.AuraWebRuntime extends io.aura.AuraMcpRuntime {
   public abstract int port();
   public abstract java.lang.String env();
   public abstract int workers();
-  public abstract java.util.function.Consumer<?> routeConfig();
   public abstract java.util.List<java.lang.Object> services();
-  public abstract java.util.List<io.aura.RouteEntry> directRoutes();
+  public abstract java.util.List<io.aura.contract.Route> directRoutes();
   public abstract java.util.List<io.aura.WebSocketContribution> webSocketContributions();
-  public abstract java.util.List<java.lang.String> scanPackages();
-  public abstract java.util.List<java.lang.Class<?>> serviceClasses();
   public abstract java.lang.String staticFilesPath();
   public abstract boolean spa();
   public abstract java.lang.String corsOrigin();
@@ -546,20 +580,6 @@ public final class io.aura.Result<T> extends java.lang.Record {
   public java.lang.String message();
   public T data();
 }
-### aura-core:io.aura.RouteEntry
-public final class io.aura.RouteEntry extends java.lang.Record {
-  public io.aura.RouteEntry(java.lang.String, java.lang.String, java.lang.Object, java.lang.String, java.util.Map<java.lang.String, java.lang.Object>);
-  public io.aura.RouteEntry(java.lang.String, java.lang.String, java.lang.Object, java.lang.String);
-  public java.util.Map<java.lang.String, java.lang.Object> responseSchema();
-  public final java.lang.String toString();
-  public final int hashCode();
-  public final boolean equals(java.lang.Object);
-  public java.lang.String method();
-  public java.lang.String path();
-  public java.lang.Object handler();
-  public java.lang.String description();
-  public java.util.Map<java.lang.String, java.lang.Object> metadata();
-}
 ### aura-core:io.aura.Validatable
 public interface io.aura.Validatable {
   public abstract void validate();
@@ -663,6 +683,14 @@ public interface io.aura.annotation.Size extends java.lang.annotation.Annotation
   public abstract int min();
   public abstract int max();
   public abstract java.lang.String message();
+}
+### aura-core:io.aura.security.IpSafety
+public final class io.aura.security.IpSafety {
+  public static boolean isPublic(java.net.InetAddress);
+  public static void requirePublic(java.net.InetAddress, java.lang.String);
+  public static java.util.List<java.net.InetAddress> resolvePublic(java.lang.String) throws java.io.IOException;
+  public static java.net.InetAddress pinToPublic(java.net.InetAddress[]);
+  public static java.net.InetAddress pinToPublic(java.util.List<? extends java.net.InetAddress>);
 }
 ### aura-core:io.aura.snapshot.ExceptionSnapshot$EnvSnapshot
 public final class io.aura.snapshot.ExceptionSnapshot$EnvSnapshot extends java.lang.Record {
@@ -936,15 +964,9 @@ public interface io.aura.web.BaseHandler {
 }
 ### aura-core:io.aura.web.BaseRouteBuilder
 public class io.aura.web.BaseRouteBuilder {
-  public final io.aura.web.BaseRouter$Route route;
-  public java.lang.String description;
-  public java.lang.String returnType;
-  public java.util.Map<java.lang.String, java.lang.Object> responseSchema;
-  public boolean streaming;
-  public boolean authenticated;
-  public java.lang.String permission;
+  public io.aura.contract.Route route;
   public final java.util.Map<java.lang.String, java.lang.String> paramDescriptions;
-  public io.aura.web.BaseRouteBuilder(io.aura.web.BaseRouter$Route);
+  public io.aura.web.BaseRouteBuilder(io.aura.contract.Route);
   public io.aura.web.BaseRouteBuilder describe(java.lang.String);
   public io.aura.web.BaseRouteBuilder streaming();
   public io.aura.web.BaseRouteBuilder param(java.lang.String, java.lang.String);
@@ -960,16 +982,6 @@ public final class io.aura.web.BaseRouter$Group extends java.lang.Record {
   public final boolean equals(java.lang.Object);
   public java.lang.String prefix();
   public io.aura.web.BaseRouter router();
-}
-### aura-core:io.aura.web.BaseRouter$Route
-public final class io.aura.web.BaseRouter$Route extends java.lang.Record {
-  public io.aura.web.BaseRouter$Route(java.lang.String, java.lang.String, io.aura.web.BaseHandler);
-  public final java.lang.String toString();
-  public final int hashCode();
-  public final boolean equals(java.lang.Object);
-  public java.lang.String method();
-  public java.lang.String path();
-  public io.aura.web.BaseHandler handler();
 }
 ### aura-core:io.aura.web.BaseRouter$WsRoute
 public final class io.aura.web.BaseRouter$WsRoute extends java.lang.Record {
@@ -1105,27 +1117,9 @@ public interface io.aura.web.CodedException {
   public default int status();
   public default java.lang.String field();
 }
-### aura-web:io.aura.web.CompiledRoute$RouteMeta
-public final class io.aura.web.CompiledRoute$RouteMeta extends java.lang.Record {
-  public io.aura.web.CompiledRoute$RouteMeta(java.lang.String, java.lang.String, java.util.Map<java.lang.String, java.lang.String>, java.util.List<io.aura.contract.ApiParameter>);
-  public io.aura.web.CompiledRoute$RouteMeta(java.lang.String, java.lang.String, java.util.Map<java.lang.String, java.lang.String>);
-  public io.aura.web.CompiledRoute$RouteMeta(java.lang.String, java.lang.String, java.util.Map<java.lang.String, java.lang.String>, java.util.List<io.aura.contract.ApiParameter>, java.util.Map<java.lang.String, java.lang.Object>);
-  public io.aura.web.CompiledRoute$RouteMeta(java.lang.String, java.lang.String, java.util.Map<java.lang.String, java.lang.String>, java.util.List<io.aura.contract.ApiParameter>, java.util.Map<java.lang.String, java.lang.Object>, boolean, boolean, java.lang.String);
-  public final java.lang.String toString();
-  public final int hashCode();
-  public final boolean equals(java.lang.Object);
-  public java.lang.String description();
-  public java.lang.String returnType();
-  public java.util.Map<java.lang.String, java.lang.String> params();
-  public java.util.List<io.aura.contract.ApiParameter> parameters();
-  public java.util.Map<java.lang.String, java.lang.Object> responseSchema();
-  public boolean streaming();
-  public boolean authenticated();
-  public java.lang.String permission();
-}
 ### aura-web:io.aura.web.CompiledRoute
 public final class io.aura.web.CompiledRoute extends java.lang.Record {
-  public io.aura.web.CompiledRoute(java.lang.String, java.lang.String, java.util.regex.Pattern, java.util.List<java.lang.String>, java.util.List<io.aura.web.BaseHandler>, io.aura.web.BaseHandler, java.util.List<io.aura.web.BaseHandler>, io.aura.web.CompiledRoute$RouteMeta);
+  public io.aura.web.CompiledRoute(java.lang.String, java.lang.String, java.util.regex.Pattern, java.util.List<java.lang.String>, java.util.List<io.aura.web.BaseHandler>, io.aura.web.BaseHandler, java.util.List<io.aura.web.BaseHandler>, io.aura.contract.Route, java.util.Map<java.lang.String, java.lang.String>);
   public final java.lang.String toString();
   public final int hashCode();
   public final boolean equals(java.lang.Object);
@@ -1136,7 +1130,8 @@ public final class io.aura.web.CompiledRoute extends java.lang.Record {
   public java.util.List<io.aura.web.BaseHandler> beforeHandlers();
   public io.aura.web.BaseHandler handler();
   public java.util.List<io.aura.web.BaseHandler> afterHandlers();
-  public io.aura.web.CompiledRoute$RouteMeta meta();
+  public io.aura.contract.Route contract();
+  public java.util.Map<java.lang.String, java.lang.String> paramDescriptions();
 }
 ### aura-web:io.aura.web.Context
 public class io.aura.web.Context implements io.aura.web.BaseContext {
@@ -1178,6 +1173,35 @@ public class io.aura.web.Context implements io.aura.web.BaseContext {
   public io.aura.web.BaseContext cookie(java.lang.String, java.lang.String, int);
   public io.aura.web.BaseContext header(java.lang.String, java.lang.String);
   public io.aura.web.BaseContext status(int);
+}
+### aura-web:io.aura.web.GuardOutcome
+public final class io.aura.web.GuardOutcome extends java.lang.Record {
+  public io.aura.web.GuardOutcome(boolean, int, java.lang.String);
+  public static io.aura.web.GuardOutcome next();
+  public static io.aura.web.GuardOutcome reject(int, java.lang.String);
+  public static io.aura.web.GuardOutcome payload(int, java.lang.String);
+  public static io.aura.web.GuardOutcome stop(int);
+  public final java.lang.String toString();
+  public final int hashCode();
+  public final boolean equals(java.lang.Object);
+  public boolean proceed();
+  public int status();
+  public java.lang.String body();
+}
+### aura-web:io.aura.web.GuardedRequest
+public interface io.aura.web.GuardedRequest {
+  public abstract java.lang.String method();
+  public abstract java.lang.String path();
+  public abstract java.lang.String header(java.lang.String);
+  public abstract java.lang.String cookie(java.lang.String);
+  public abstract boolean secure();
+  public abstract java.lang.String hostName();
+  public abstract java.lang.String hostAndPort();
+  public abstract java.lang.String scheme();
+  public abstract java.lang.String peerIp();
+  public abstract void responseHeader(java.lang.String, java.lang.String);
+  public abstract void addResponseHeader(java.lang.String, java.lang.String);
+  public abstract void onComplete(java.lang.Runnable);
 }
 ### aura-web:io.aura.web.LambdaHandler
 public final class io.aura.web.LambdaHandler implements io.aura.web.BaseHandler {
@@ -1238,6 +1262,8 @@ public interface io.aura.web.ParamResolver$Binder {
 ### aura-web:io.aura.web.ParamResolver
 public final class io.aura.web.ParamResolver {
   public static io.aura.web.ParamResolver$Binder create(java.lang.reflect.Parameter);
+  public static java.lang.Object fromString(java.lang.String, java.lang.Class<?>);
+  public static boolean isBody(java.lang.Class<?>);
   public static java.lang.String resolveString(io.aura.web.BaseContext, java.lang.String);
   public static int parseInt(java.lang.String);
   public static java.lang.Integer parseIntBoxed(java.lang.String);
@@ -1255,6 +1281,19 @@ public final class io.aura.web.ParamResolver {
   public static java.lang.Byte parseByteBoxed(java.lang.String);
   public static char parseChar(java.lang.String);
   public static java.lang.Character parseCharBoxed(java.lang.String);
+}
+### aura-web:io.aura.web.RequestGuard
+public interface io.aura.web.RequestGuard {
+  public abstract io.aura.web.GuardOutcome evaluate(io.aura.web.GuardedRequest);
+}
+### aura-web:io.aura.web.RequestGuards$RoutePattern
+public interface io.aura.web.RequestGuards$RoutePattern {
+  public abstract java.lang.String matching(java.lang.String, java.lang.String);
+}
+### aura-web:io.aura.web.RequestGuards
+public final class io.aura.web.RequestGuards {
+  public static io.aura.web.RequestGuards standard(io.aura.AuraWebRuntime, io.aura.web.RequestGuards$RoutePattern);
+  public io.aura.web.GuardOutcome evaluate(io.aura.web.GuardedRequest);
 }
 ### aura-web:io.aura.web.Router
 public class io.aura.web.Router extends io.aura.web.BaseRouter {
@@ -1342,6 +1381,8 @@ public final class io.aura.web.StandardAdmissionPolicy implements io.aura.web.Ad
 ### aura-web:io.aura.web.TestClient$Request
 public class io.aura.web.TestClient$Request {
   public io.aura.web.TestClient$Request header(java.lang.String, java.lang.String);
+  public io.aura.web.TestClient$Request secure(boolean);
+  public io.aura.web.TestClient$Request remoteAddr(java.lang.String);
   public io.aura.web.TestClient$Request query(java.lang.String, java.lang.String);
   public io.aura.web.TestClient$Request cookie(java.lang.String, java.lang.String);
   public io.aura.web.TestClient$Request body(java.lang.Object);
@@ -1699,6 +1740,8 @@ public class io.aura.mcp.McpContext {
   public java.lang.String getString(java.lang.String);
   public int getInt(java.lang.String);
   public long getLong(java.lang.String);
+  public boolean getBoolean(java.lang.String);
+  public double getDouble(java.lang.String);
   public <E extends java.lang.Enum<E>> E getEnum(java.lang.String, java.lang.Class<E>);
 }
 ### aura-mcp:io.aura.mcp.McpEnumValue
@@ -1820,8 +1863,7 @@ public final class io.aura.mcp.McpResourceLink extends java.lang.Record implemen
 public class io.aura.mcp.McpRouter implements io.aura.contract.McpRouterSpec {
   public io.aura.mcp.McpRouter();
   public io.aura.mcp.McpToolBuilder tool(java.lang.String, java.lang.String);
-  public io.aura.mcp.McpRouter tool(io.aura.contract.ApiRoute, io.aura.mcp.McpHandler);
-  public io.aura.mcp.McpRouter tool(java.lang.String, java.lang.Object, java.lang.String, java.lang.String);
+  public io.aura.mcp.McpRouter tool(io.aura.contract.Route, io.aura.mcp.McpHandler);
   public java.util.List<io.aura.mcp.McpTool> tools();
   public io.aura.mcp.McpRouter resource(java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String);
   public io.aura.mcp.McpRouter prompt(java.lang.String, java.lang.String, java.lang.String, java.lang.String...);
@@ -1946,21 +1988,11 @@ public class io.aura.mcp.McpToolBuilder {
   public io.aura.mcp.McpToolBuilder handler(io.aura.mcp.McpHandler);
   public io.aura.mcp.McpToolBuilder permission(java.lang.String);
 }
-### aura-mcp:io.aura.mcp.McpUtil$ParamInfo
-public final class io.aura.mcp.McpUtil$ParamInfo extends java.lang.Record {
-  public io.aura.mcp.McpUtil$ParamInfo(java.lang.String, java.lang.String, java.lang.String);
-  public final java.lang.String toString();
-  public final int hashCode();
-  public final boolean equals(java.lang.Object);
-  public java.lang.String name();
-  public java.lang.String type();
-  public java.lang.String description();
-}
 ### aura-mcp:io.aura.mcp.McpUtil
 public final class io.aura.mcp.McpUtil {
   public static java.lang.String buildToolName(java.lang.String, java.lang.String);
   public static java.lang.String jsonType(java.lang.String);
-  public static java.util.Map<java.lang.String, java.lang.Object> buildInputSchema(java.util.List<io.aura.mcp.McpUtil$ParamInfo>);
+  public static java.util.Map<java.lang.String, java.lang.Object> inputSchema(java.util.List<io.aura.mcp.McpParam>);
 }
 ### aura-ai:io.aura.ai.AiBudget$Builder
 public final class io.aura.ai.AiBudget$Builder {
@@ -2265,6 +2297,19 @@ public interface io.aura.ai.EmbeddingProvider {
   public abstract java.util.List<java.lang.Double> embed(java.lang.String) throws java.lang.Exception;
   public default java.util.List<java.util.List<java.lang.Double>> embedBatch(java.util.List<java.lang.String>) throws java.lang.Exception;
 }
+### aura-ai:io.aura.ai.FakeAiProvider
+public final class io.aura.ai.FakeAiProvider implements io.aura.ai.AiProvider {
+  public static io.aura.ai.FakeAiProvider returning(java.lang.String);
+  public static io.aura.ai.FakeAiProvider returning(io.aura.ai.AiResponse);
+  public static io.aura.ai.FakeAiProvider returning(java.lang.String, java.util.Map<java.lang.String, ?>);
+  public static io.aura.ai.FakeAiProvider answering(java.util.function.Function<io.aura.ai.AiRequest, java.lang.String>);
+  public static io.aura.ai.FakeAiProvider failing(java.lang.Exception);
+  public io.aura.ai.AiResponse chat(io.aura.ai.AiRequest) throws java.lang.Exception;
+  public void stream(io.aura.ai.AiRequest, io.aura.ai.AiStreamHandler) throws java.lang.Exception;
+  public java.util.List<io.aura.ai.AiRequest> received();
+  public int callCount();
+  public io.aura.ai.AiRequest lastRequest();
+}
 ### aura-ai:io.aura.ai.InMemoryConversationStore
 public final class io.aura.ai.InMemoryConversationStore implements io.aura.ai.ConversationStore {
   public io.aura.ai.InMemoryConversationStore(int, long);
@@ -2320,6 +2365,19 @@ public final class io.aura.ai.RagRequestBuilder {
 public interface io.aura.ai.Retriever {
   public abstract java.util.List<java.lang.String> retrieve(java.lang.String, int) throws java.lang.Exception;
 }
+### aura-ai:io.aura.ai.ScriptedAiProvider
+public final class io.aura.ai.ScriptedAiProvider implements io.aura.ai.AiProvider {
+  public static io.aura.ai.ScriptedAiProvider create();
+  public static io.aura.ai.ScriptedAiProvider of(java.lang.Object...);
+  public io.aura.ai.ScriptedAiProvider then(io.aura.ai.AiResponse);
+  public io.aura.ai.ScriptedAiProvider then(java.lang.String);
+  public io.aura.ai.ScriptedAiProvider thenThrow(java.lang.Exception);
+  public io.aura.ai.AiResponse chat(io.aura.ai.AiRequest) throws java.lang.Exception;
+  public void stream(io.aura.ai.AiRequest, io.aura.ai.AiStreamHandler) throws java.lang.Exception;
+  public java.util.List<io.aura.ai.AiRequest> received();
+  public int callCount();
+  public int remaining();
+}
 ### aura-ai:io.aura.ai.StructuredOutput
 public final class io.aura.ai.StructuredOutput {
   public static <T> T parse(io.aura.ai.AiResponse, java.lang.Class<T>);
@@ -2355,6 +2413,8 @@ public interface io.aura.workflow.DurableWorkflowExecutionStore extends io.aura.
 public final class io.aura.workflow.InMemoryWorkflowExecutionStore implements io.aura.workflow.DurableWorkflowExecutionStore {
   public io.aura.workflow.InMemoryWorkflowExecutionStore();
   public io.aura.workflow.InMemoryWorkflowExecutionStore(int);
+  public io.aura.workflow.InMemoryWorkflowExecutionStore(io.aura.workflow.WorkflowClock);
+  public io.aura.workflow.InMemoryWorkflowExecutionStore(int, io.aura.workflow.WorkflowClock);
   public int maxExecutions();
   public synchronized void retainLocal(io.aura.workflow.WorkflowExecution);
   public synchronized void saveSnapshot(io.aura.workflow.WorkflowExecutionSnapshot);
@@ -2369,6 +2429,15 @@ public final class io.aura.workflow.InMemoryWorkflowExecutionStore implements io
   public synchronized java.util.Optional<io.aura.workflow.WorkflowLease> renew(io.aura.workflow.WorkflowLease, java.time.Duration);
   public synchronized void release(io.aura.workflow.WorkflowLease);
   public synchronized java.util.Optional<io.aura.workflow.WorkflowLease> currentLease(java.lang.String, java.lang.String);
+}
+### aura-workflow:io.aura.workflow.MutableClock
+public final class io.aura.workflow.MutableClock implements io.aura.workflow.WorkflowClock {
+  public io.aura.workflow.MutableClock();
+  public io.aura.workflow.MutableClock(java.time.Instant);
+  public synchronized java.time.Instant now();
+  public synchronized long nanos();
+  public void sleep(java.time.Duration);
+  public synchronized void advance(java.time.Duration);
 }
 ### aura-workflow:io.aura.workflow.RetryPolicy
 public final class io.aura.workflow.RetryPolicy {
@@ -2419,6 +2488,14 @@ public interface io.aura.workflow.Workflow<C> {
   public abstract io.aura.workflow.WorkflowResult execute(C, io.aura.workflow.WorkflowSelector<C>);
   public default io.aura.workflow.WorkflowResult execute(C);
   public static <C> io.aura.workflow.WorkflowDefinition$Builder<C> builder(java.lang.String);
+  public static <C> io.aura.workflow.WorkflowDefinition$Builder<C> builder(java.lang.String, io.aura.workflow.WorkflowClock);
+}
+### aura-workflow:io.aura.workflow.WorkflowClock
+public interface io.aura.workflow.WorkflowClock {
+  public static final io.aura.workflow.WorkflowClock SYSTEM;
+  public abstract java.time.Instant now();
+  public abstract long nanos();
+  public abstract void sleep(java.time.Duration) throws java.lang.InterruptedException;
 }
 ### aura-workflow:io.aura.workflow.WorkflowCompensation
 public interface io.aura.workflow.WorkflowCompensation<C> {
@@ -2446,6 +2523,7 @@ public final class io.aura.workflow.WorkflowDefinition<C> implements io.aura.wor
   public java.util.List<java.lang.String> order(java.lang.String);
   public io.aura.workflow.WorkflowResult execute(C, io.aura.workflow.WorkflowSelector<C>);
   public static <C> io.aura.workflow.WorkflowDefinition$Builder<C> builder(java.lang.String);
+  public static <C> io.aura.workflow.WorkflowDefinition$Builder<C> builder(java.lang.String, io.aura.workflow.WorkflowClock);
 }
 ### aura-workflow:io.aura.workflow.WorkflowException
 public class io.aura.workflow.WorkflowException extends java.lang.RuntimeException {
@@ -2600,6 +2678,7 @@ public final class io.aura.workflow.WorkflowRuntime<C> implements java.lang.Auto
   public io.aura.workflow.WorkflowRuntime(io.aura.workflow.WorkflowRegistry, io.aura.workflow.WorkflowExecutionStore);
   public io.aura.workflow.WorkflowRuntime(io.aura.workflow.WorkflowRegistry, io.aura.workflow.WorkflowExecutionStore, int, int);
   public io.aura.workflow.WorkflowRuntime(io.aura.workflow.WorkflowRegistry, io.aura.workflow.WorkflowExecutionStore, int, int, java.time.Duration, java.lang.String);
+  public io.aura.workflow.WorkflowRuntime(io.aura.workflow.WorkflowRegistry, io.aura.workflow.WorkflowExecutionStore, int, int, java.time.Duration, java.lang.String, io.aura.workflow.WorkflowClock);
   public io.aura.workflow.WorkflowRegistry registry();
   public io.aura.workflow.WorkflowExecutionStore store();
   public int activeExecutions();

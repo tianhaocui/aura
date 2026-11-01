@@ -2,7 +2,6 @@ package io.aura.mcp;
 
 import io.aura.contract.McpRouterSpec;
 
-import java.lang.reflect.Method;
 import java.util.*;
 import java.util.function.BiPredicate;
 
@@ -21,7 +20,7 @@ public class McpRouter implements McpRouterSpec {
      * carried verbatim: re-declaring them here is what used to strip the source and the
      * body POJO schema, collapsing a structured request into {@code {"type":"string"}}.
      */
-    public McpRouter tool(io.aura.contract.ApiRoute route, McpHandler handler) {
+    public McpRouter tool(io.aura.contract.Route route, McpHandler handler) {
         Objects.requireNonNull(route, "route");
         Objects.requireNonNull(handler, "handler");
         List<McpParam> params = route.params().stream()
@@ -29,14 +28,6 @@ public class McpRouter implements McpRouterSpec {
                 .toList();
         register(new McpTool(McpUtil.buildToolName(route.method(), route.path()),
                 route.description(), params, handler, route.permission(), route.authenticated()));
-        return this;
-    }
-
-    public McpRouter tool(String name, Object service, String method, String description) {
-        Method m = resolveMethod(service, method);
-        McpHandler handler = buildServiceHandler(service, m);
-        List<McpParam> params = buildParamsFromMethod(m);
-        tools.add(new McpTool(name, description, params, handler));
         return this;
     }
 
@@ -167,51 +158,5 @@ public class McpRouter implements McpRouterSpec {
             }
         }
         return result;
-    }
-
-    private static Method resolveMethod(Object service, String methodName) {
-        for (Method m : service.getClass().getDeclaredMethods()) {
-            if (m.getName().equals(methodName) && java.lang.reflect.Modifier.isPublic(m.getModifiers())) {
-                return m;
-            }
-        }
-        throw new IllegalArgumentException("Method not found: " + methodName + " in " + service.getClass().getName());
-    }
-
-    private static McpHandler buildServiceHandler(Object service, Method method) {
-        return ctx -> {
-            var methodParams = method.getParameters();
-            Object[] args = new Object[methodParams.length];
-            for (int i = 0; i < methodParams.length; i++) {
-                var p = methodParams[i];
-                Object val = ctx.get(p.getName());
-                args[i] = coerce(val, p.getType());
-            }
-            return method.invoke(service, args);
-        };
-    }
-
-    private static List<McpParam> buildParamsFromMethod(Method method) {
-        List<McpParam> params = new ArrayList<>();
-        for (var p : method.getParameters()) {
-            params.add(new McpParam(p.getName(), McpUtil.jsonType(p.getType().getSimpleName()), null, null));
-        }
-        return params;
-    }
-
-    private static Object coerce(Object val, Class<?> target) {
-        if (val == null) {
-            if (!target.isPrimitive()) return null;
-            if (target == boolean.class) return false;
-            if (target == double.class) return 0.0;
-            if (target == long.class) return 0L;
-            return 0;
-        }
-        String s = val.toString();
-        if (target == int.class || target == Integer.class) return Integer.parseInt(s);
-        if (target == long.class || target == Long.class) return Long.parseLong(s);
-        if (target == boolean.class || target == Boolean.class) return Boolean.parseBoolean(s);
-        if (target == double.class || target == Double.class) return Double.parseDouble(s);
-        return s;
     }
 }

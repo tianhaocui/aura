@@ -19,7 +19,9 @@ class McpBridgeProtocolTest {
     @BeforeEach
     void setup() {
         router = new McpRouter();
-        router.tool("get_user", new UserService(), "get", "获取用户");
+        router.tool("get_user", "获取用户")
+              .param("id", int.class, "用户号")
+              .handler(ctx -> new UserService().get(ctx.getInt("id")));
         router.tool("greet", "打招呼")
               .param("name", String.class, "名字")
               .handler(ctx -> "hello " + ctx.getString("name"));

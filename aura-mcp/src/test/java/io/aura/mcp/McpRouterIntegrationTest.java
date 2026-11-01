@@ -38,7 +38,10 @@ class McpRouterIntegrationTest {
     @Test
     void serviceMethod_get_bindsAndInvokes() throws Exception {
         McpRouter mcp = new McpRouter();
-        mcp.tool("get_order", new OrderService(), "get", "获取订单");
+        OrderService orders = new OrderService();
+        mcp.tool("get_order", "获取订单")
+                .param("id", int.class, "订单号")
+                .handler(ctx -> orders.get(ctx.getInt("id")));
 
         McpTool tool = mcp.tools().get(0);
         assertThat(tool.name()).isEqualTo("get_order");
@@ -54,7 +57,8 @@ class McpRouterIntegrationTest {
     @Test
     void serviceMethod_list_noParams() throws Exception {
         McpRouter mcp = new McpRouter();
-        mcp.tool("list_orders", new OrderService(), "list", "订单列表");
+        OrderService orders = new OrderService();
+        mcp.tool("list_orders", "订单列表").handler(ctx -> orders.list());
 
         assertThat(mcp.tools().get(0).params()).isEmpty();
         Object result = mcp.invoke("list_orders", Map.of());
@@ -172,7 +176,10 @@ class McpRouterIntegrationTest {
     @SuppressWarnings("unchecked")
     void buildSchema_conformsToMcpProtocol() {
         McpRouter mcp = new McpRouter();
-        mcp.tool("get_order", new OrderService(), "get", "获取订单");
+        var orders = new OrderService();
+        mcp.tool("get_order", "获取订单")
+           .param("id", int.class, "订单号")
+           .handler(ctx -> orders.get(ctx.getInt("id")));
         mcp.tool("query_orders", "按状态查询订单")
            .param("status", OrderStatus.class, "订单状态")
            .param("limit", int.class, "返回数量")
@@ -218,8 +225,12 @@ class McpRouterIntegrationTest {
         var orderService = new OrderService();
         var userService = new UserService();
 
-        mcp.tool("get_order", orderService, "get", "获取订单");
-        mcp.tool("get_user", userService, "get", "获取用户");
+        mcp.tool("get_order", "获取订单")
+           .param("id", int.class, "订单号")
+           .handler(ctx -> orderService.get(ctx.getInt("id")));
+        mcp.tool("get_user", "获取用户")
+           .param("id", int.class, "用户号")
+           .handler(ctx -> userService.get(ctx.getInt("id")));
         mcp.tool("search", "搜索")
            .param("keyword", String.class, "关键词")
            .handler(ctx -> "found:" + ctx.getString("keyword"));

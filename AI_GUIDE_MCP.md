@@ -6,10 +6,15 @@
 // Install MCP explicitly in Aura 1.0
 AuraApp.create().use(McpModule.create(router)).start("--mcp-stdio");
 
-// Selective exposure via McpRouter (recommended)
+// Selective exposure via McpRouter
 McpRouter mcp = new McpRouter();
-mcp.tool("get_user", userService, "get", "Get user by ID");
-mcp.tool("list_users", userService, "list", "List all users");
+mcp.tool("get_user", "Get user by ID")
+   .param("id", long.class, "User ID")
+   .handler(ctx -> userService.get(ctx.getLong("id")));
+
+// A tool that is already an HTTP route reuses that contract verbatim —
+// name, description, parameter types and auth all transfer, nothing to re-declare.
+mcp.tool(getOrderRoute, ctx -> orderService.get(ctx.getLong("id")));
 
 // Custom handler with explicit params
 mcp.tool("create_order", "Create order")
@@ -105,7 +110,12 @@ anonymous callers even when every registered tool is public.
 
 ## McpContext Methods
 
-`getString()`, `getInt()`, `getLong()`, `getEnum(name, Type.class)`, `get()`, `userId()`
+`getString()`, `getInt()`, `getLong()`, `getBoolean()`, `getDouble()`,
+`getEnum(name, Type.class)`, `get()`, `userId()`
+
+Missing values bind exactly as an HTTP query parameter does: `0`, `0L`, `false`,
+`0.0`, or `null`. Both transports go through `ParamResolver`, so a malformed
+argument raises `NumberFormatException` on either entry point.
 
 ## URL Configuration (npm bridge)
 
