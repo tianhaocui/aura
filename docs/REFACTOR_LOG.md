@@ -144,8 +144,12 @@ lines, `jq` dropped from the tool check); the classification half still needs
   Renaming the ports to `io.aura.port..` is the next layering step.
 - `aura-mcp` still declares a compile dependency on `aura-web`; R6 documents it
   and stays vacuous until copied into an aura-mcp test.
-- The readiness evidence scripts still assume the pre-refactor names in a few
-  comments.
+- `scripts/verify-public-api.sh` needs `jq`, which this machine does not have, so
+  step 5 of `verify-local-readiness.sh` stops there. The baseline this branch was
+  checked against came from a `jq`-free copy of the generator, not from that
+  script. The remaining unchecked boxes in `docs/1.0-readiness.md` are CI-side
+  runs (Docker/kind, service-container migrations, OSV, SBOM, signing, Central
+  Portal) that need a push to `origin`, not code.
 
 ## Suggested review split
 
