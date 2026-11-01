@@ -259,7 +259,10 @@ AuraApp.create()
 ## Verify with TestClient
 
 `TestClient` installs modules without opening a listener and uses the same route
-assembly, parameter binding, middleware, and error semantics as Undertow.
+assembly, pre-route guard chain (Host, admission, rate limit, security headers,
+CSRF, CORS), parameter binding, middleware, and error semantics as Undertow. A
+rejected request is rejected in the test, so security policy is verifiable in
+milliseconds instead of only over a socket.
 
 ```java
 AuraApp app = AuraApp.create().use(new OrderModule());

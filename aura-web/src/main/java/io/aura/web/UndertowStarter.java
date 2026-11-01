@@ -35,7 +35,6 @@ import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class UndertowStarter implements AuraStarter {
@@ -51,8 +50,7 @@ public class UndertowStarter implements AuraStarter {
     private volatile List<CompiledRoute> compiledRoutes;
     private volatile List<CompiledWsRoute> compiledWsRoutes;
     private WebSocketConnectionRegistry webSocketConnections;
-    private FixedWindowRateLimiter rateLimiter = new FixedWindowRateLimiter();
-    private final AtomicInteger inFlight = new AtomicInteger();
+    private RequestGuards guards;
     private final CancellationToken adapterShutdownCancellation = new CancellationToken();
     private final ConcurrentHashMap<io.undertow.server.ServerConnection,
             java.util.Set<CancellationToken>> connectionCancellations = new ConcurrentHashMap<>();
@@ -61,7 +59,7 @@ public class UndertowStarter implements AuraStarter {
     @SuppressWarnings("unchecked")
     public void start(AuraWebRuntime app) {
         this.app = app;
-        rateLimiter = new FixedWindowRateLimiter(app.rateLimitMaxKeys());
+        guards = RequestGuards.standard(app, this::matchedRoutePattern);
         long t0 = System.currentTimeMillis();
 
         router = RouteAssembler.assemble(app);
@@ -217,68 +215,16 @@ public class UndertowStarter implements AuraStarter {
         String method = exchange.getRequestMethod().toString();
         String path = exchange.getRequestURI();
 
-        if (app.isShuttingDown()) {
-            reject(exchange, 503, "Service Unavailable");
-            return;
-        }
-        if (!hostAllowed(exchange)) { app.emit(AuraEvent.of("request.rejected.host", java.util.Map.of("method", method))); reject(exchange, 421, "Misdirected Request"); return; }
-        if (!admit(exchange, method, path)) return;
-        if (app.admissionPolicy() == null && app.concurrencyLimit() > 0) {
-            exchange.addExchangeCompleteListener((completed, next) -> { inFlight.decrementAndGet(); next.proceed(); });
-        }
-        if (app.securityHeaders()) {
-            exchange.getResponseHeaders().put(new HttpString("X-Content-Type-Options"), "nosniff");
-            exchange.getResponseHeaders().put(new HttpString("X-Frame-Options"), "DENY");
-            exchange.getResponseHeaders().put(new HttpString("Referrer-Policy"), "no-referrer");
-            if (exchange.isSecure()) exchange.getResponseHeaders().put(new HttpString("Strict-Transport-Security"), "max-age=31536000; includeSubDomains");
-        }
-
-        if (isCsrfRejected(exchange, method)) {
-            exchange.setStatusCode(403);
-            exchange.getResponseHeaders().put(Headers.CONTENT_TYPE, "application/json; charset=utf-8");
-            exchange.getResponseSender().send("{\"error\":\"CSRF validation failed\"}");
-            return;
-        }
-
-        // CORS
-        String corsOrigin = app.corsOrigin();
-        if (corsOrigin != null) {
-            io.aura.CorsConfig corsConfig = app.corsConfig();
-            String allowOrigin;
-            String allowHeaders;
-            boolean credentials = false;
-            if (corsConfig != null) {
-                String requestOrigin = exchange.getRequestHeaders().getFirst("Origin");
-                allowOrigin = corsConfig.resolveOrigin(requestOrigin);
-                allowHeaders = corsConfig.headers();
-                credentials = corsConfig.credentials();
-                if (corsConfig.hasWildcardOrigin() && credentials) {
-                    // A wildcard cannot be combined with credentialed CORS. Disable this
-                    // response rather than reflecting an arbitrary browser Origin.
-                    allowOrigin = null;
-                    credentials = false;
-                }
-                if (requestOrigin != null && !"*".equals(allowOrigin)) {
-                    exchange.addResponseCommitListener(ex -> ex.getResponseHeaders().add(Headers.VARY, "Origin"));
-                }
-            } else {
-                allowOrigin = corsOrigin;
-                allowHeaders = "Content-Type, Authorization";
-            }
-            if (allowOrigin != null) {
-                exchange.getResponseHeaders().put(new HttpString("Access-Control-Allow-Origin"), allowOrigin);
-                exchange.getResponseHeaders().put(new HttpString("Access-Control-Allow-Methods"), "GET, POST, PUT, DELETE, PATCH, HEAD, OPTIONS");
-                exchange.getResponseHeaders().put(new HttpString("Access-Control-Allow-Headers"), allowHeaders);
-                exchange.getResponseHeaders().put(new HttpString("Access-Control-Max-Age"), "86400");
-                if (credentials) {
-                    exchange.getResponseHeaders().put(new HttpString("Access-Control-Allow-Credentials"), "true");
-                }
-            }
-            if ("OPTIONS".equals(method)) {
-                exchange.setStatusCode(204);
+        GuardOutcome guardOutcome = guards.evaluate(new HttpGuardedRequest(exchange));
+        if (!guardOutcome.proceed()) {
+            exchange.setStatusCode(guardOutcome.status());
+            if (guardOutcome.body() == null) {
                 exchange.endExchange();
-                return;
+            } else {
+                exchange.getResponseHeaders().put(Headers.CONTENT_TYPE, "application/json; charset=utf-8");
+                exchange.getResponseSender().send(guardOutcome.body());
             }
+            return;
         }
 
         // built-in schema endpoint
@@ -638,114 +584,6 @@ public class UndertowStarter implements AuraStarter {
         return token;
     }
 
-    private boolean isCsrfRejected(HttpServerExchange exchange, String method) {
-        String enabled = property("aura.csrf.enabled");
-        boolean enforce = enabled != null ? Boolean.parseBoolean(enabled)
-                : (app.publicOrigin() != null && !"dev".equalsIgnoreCase(app.env()));
-        if (!enforce || !isUnsafeMethod(method)) return false;
-        String headerName = propertyOrDefault("aura.csrf.header", "X-CSRF-Token");
-        String cookieName = propertyOrDefault("aura.csrf.cookie", "csrf_token");
-        String header = exchange.getRequestHeaders().getFirst(headerName);
-        var cookie = exchange.getRequestCookie(cookieName);
-        if (header != null && !header.isBlank() && cookie != null && cookie.getValue() != null
-                && !cookie.getValue().isBlank() && java.security.MessageDigest.isEqual(
-                header.getBytes(java.nio.charset.StandardCharsets.UTF_8),
-                cookie.getValue().getBytes(java.nio.charset.StandardCharsets.UTF_8))) return false;
-        String origin = exchange.getRequestHeaders().getFirst("Origin");
-        if (origin == null) {
-            String referer = exchange.getRequestHeaders().getFirst("Referer");
-            if (referer != null) {
-                try { origin = java.net.URI.create(referer).getScheme() + "://" + java.net.URI.create(referer).getAuthority(); }
-                catch (IllegalArgumentException ignored) { return true; }
-            }
-        }
-        if (origin == null) return true;
-        String expected = expectedPublicOrigin(exchange);
-        return !expected.equalsIgnoreCase(origin);
-    }
-
-    private String expectedPublicOrigin(HttpServerExchange exchange) {
-        String configured = app.publicOrigin();
-        if (configured == null) configured = property("aura.public-origin");
-        if (configured != null && !configured.isBlank()) return configured.trim();
-        String scheme = exchange.getRequestScheme();
-        String host = exchange.getHostAndPort();
-        String peer = exchange.getSourceAddress() == null || exchange.getSourceAddress().getAddress() == null
-                ? null : exchange.getSourceAddress().getAddress().getHostAddress();
-        if (Context.isTrustedProxy(String.join(",", app.trustedProxies()), peer)) {
-            String forwardedProto = exchange.getRequestHeaders().getFirst("X-Forwarded-Proto");
-            String forwardedHost = exchange.getRequestHeaders().getFirst("X-Forwarded-Host");
-            if (forwardedProto != null && forwardedProto.matches("(?i)https?")) scheme = forwardedProto.toLowerCase();
-            if (forwardedHost != null && forwardedHost.matches("[A-Za-z0-9.-]+(?::[0-9]{1,5})?")) host = forwardedHost;
-        }
-        return scheme + "://" + host;
-    }
-
-    private boolean hostAllowed(HttpServerExchange exchange) {
-        String host = exchange.getHostName();
-        if (host == null) return false;
-        if (!app.allowedHosts().isEmpty()) return app.allowedHosts().contains(host.toLowerCase());
-        if (app.publicOrigin() == null) return true;
-        try { return host.equalsIgnoreCase(java.net.URI.create(app.publicOrigin()).getHost()); }
-        catch (IllegalArgumentException e) { return false; }
-    }
-
-    private boolean admit(HttpServerExchange exchange, String method, String path) {
-        io.aura.web.AdmissionPolicy custom = app.admissionPolicy();
-        if (custom != null) {
-            String peer = peerIp(exchange);
-            String clientIp = Context.resolveClientIp(
-                    String.join(",", app.trustedProxies()), peer,
-                    exchange.getRequestHeaders().getFirst("X-Forwarded-For"));
-            io.aura.web.AdmissionDecision decision;
-            try {
-                decision = custom.admit(new io.aura.web.AdmissionRequest(
-                        method, path, matchedRoutePattern(method, path), clientIp,
-                        exchange.getRequestHeaders().getFirst("X-API-Key")));
-                if (decision == null) throw new IllegalStateException("Admission policy returned null");
-            } catch (RuntimeException failure) {
-                log.error("Admission policy failed closed for {} {}", method, path, failure);
-                rejectAdmission(exchange, 503, "AURA_ADMISSION_POLICY_ERROR", 0);
-                return false;
-            }
-            if (!decision.allowed()) {
-                app.emit(AuraEvent.of("request.rejected.admission", java.util.Map.of(
-                        "method", method, "path", path, "status", decision.status(),
-                        "code", decision.code())));
-                rejectAdmission(exchange, decision.status(), decision.code(),
-                        decision.retryAfterSeconds());
-                decision.close();
-                return false;
-            }
-            exchange.addExchangeCompleteListener((completed, next) -> {
-                try { decision.close(); } finally { next.proceed(); }
-            });
-            return true;
-        }
-
-        int limit = app.concurrencyLimit();
-        if (limit > 0 && inFlight.incrementAndGet() > limit) {
-            app.emit(AuraEvent.of("request.rejected.concurrency", java.util.Map.of("limit", limit)));
-            inFlight.decrementAndGet(); reject(exchange, 503, "Service Unavailable"); return false;
-        }
-        int rate = app.rateLimitPerSecond();
-        if (rate > 0) {
-            String peer = peerIp(exchange);
-            String forwardedFor = exchange.getRequestHeaders().getFirst("X-Forwarded-For");
-            String key = Context.resolveClientIp(
-                    String.join(",", app.trustedProxies()), peer, forwardedFor);
-            if (key == null || key.isBlank()) key = "unknown";
-            long now = System.currentTimeMillis() / 1000;
-            if (!rateLimiter.tryAcquire(key, rate, now)) {
-                app.emit(AuraEvent.of("request.rejected.rate", java.util.Map.of("ratePerSecond", rate, "key", key)));
-                if (limit > 0) inFlight.decrementAndGet();
-                exchange.getResponseHeaders().put(new HttpString("Retry-After"), "1");
-                reject(exchange, 429, "Too Many Requests"); return false;
-            }
-        }
-        return true;
-    }
-
     private String matchedRoutePattern(String method, String path) {
         for (CompiledRoute route : compiledRoutes) {
             if ((route.method().equals(method)
@@ -760,46 +598,9 @@ public class UndertowStarter implements AuraStarter {
         return path;
     }
 
-    private static String peerIp(HttpServerExchange exchange) {
-        return exchange.getSourceAddress() == null
-                || exchange.getSourceAddress().getAddress() == null
-                ? null : exchange.getSourceAddress().getAddress().getHostAddress();
-    }
-
-    private static void rejectAdmission(HttpServerExchange exchange, int status,
-                                        String code, int retryAfterSeconds) {
-        exchange.setStatusCode(status);
-        exchange.getResponseHeaders().put(Headers.CONTENT_TYPE, "application/json; charset=utf-8");
-        if (retryAfterSeconds > 0) {
-            exchange.getResponseHeaders().put(new HttpString("Retry-After"),
-                    Integer.toString(retryAfterSeconds));
-        }
-        exchange.getResponseSender().send(JSON.toJSONString(java.util.Map.of(
-                "error", "Request admission rejected", "code", code)));
-    }
-
-    private static void reject(HttpServerExchange exchange, int status, String message) {
-        exchange.setStatusCode(status);
-        exchange.getResponseHeaders().put(Headers.CONTENT_TYPE, "application/json; charset=utf-8");
-        exchange.getResponseSender().send("{\"error\":\"" + message + "\"}");
-    }
-
-    private static boolean isUnsafeMethod(String method) {
-        return "POST".equals(method) || "PUT".equals(method) || "PATCH".equals(method)
-                || "DELETE".equals(method);
-    }
-
+    /** Configuration lookup uses the runtime's single env/system-property/properties chain. */
     private String property(String key) {
-        String env = System.getenv(key.replace('.', '_').replace('-', '_').toUpperCase());
-        if (env != null) return env;
-        String sys = System.getProperty(key);
-        if (sys != null) return sys;
         return app.prop(key);
-    }
-
-    private String propertyOrDefault(String key, String fallback) {
-        String value = property(key);
-        return value == null || value.isBlank() ? fallback : value.trim();
     }
 
     static String safeLog(String value, int maxLength) {

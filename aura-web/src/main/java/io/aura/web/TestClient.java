@@ -19,12 +19,23 @@ public class TestClient {
     private final AuraWebRuntime app;
     private final Router router;
     private final List<CompiledRoute> compiled;
+    private final RequestGuards guards;
 
     TestClient(AuraWebRuntime app, Router router) {
         this.app = app;
         this.router = router;
         this.compiled = UndertowStarter.compileRoutes(router, app);
         UndertowStarter.detectDuplicateRoutes(compiled);
+        this.guards = RequestGuards.standard(app, this::routePattern);
+    }
+
+    /** Admission policies judge a request by its route template, the same as the real adapter. */
+    private String routePattern(String method, String path) {
+        for (CompiledRoute route : compiled) {
+            if ((route.method().equals(method) || "HEAD".equals(method) && "GET".equals(route.method()))
+                    && route.match(path) != null) return route.rawPath();
+        }
+        return path;
     }
 
     private static TestClient of(AuraWebRuntime app) {
@@ -68,6 +79,8 @@ public class TestClient {
         private String path;
         private final Map<String, String> headers = new LinkedHashMap<>();
         private String body;
+        private boolean secure;
+        private String remoteAddr;
 
         Request(String method, String path) {
             this.method = method;
@@ -77,6 +90,21 @@ public class TestClient {
         public Request header(String name, String value) {
             headers.entrySet().removeIf(entry -> entry.getKey().equalsIgnoreCase(name));
             headers.put(name, value);
+            return this;
+        }
+
+        /** Marks the request as arriving over TLS, which is what enables the HSTS header. */
+        public Request secure(boolean value) {
+            this.secure = value;
+            return this;
+        }
+
+        /**
+         * Sets the direct TCP peer address. Trusted-proxy rules only ever see this value, so a
+         * test that expects {@code X-Forwarded-For} to be honoured has to name its proxy here.
+         */
+        public Request remoteAddr(String ip) {
+            this.remoteAddr = ip;
             return this;
         }
 
@@ -107,6 +135,19 @@ public class TestClient {
         public Response execute() {
             String routePath = path.contains("?") ? path.substring(0, path.indexOf('?')) : path;
             Map<String, String> queryParams = parseQueryString(path);
+            MockGuardedRequest guarded =
+                    new MockGuardedRequest(method, path, headers, secure, remoteAddr);
+            try {
+                GuardOutcome outcome = guards.evaluate(guarded);
+                if (!outcome.proceed()) return guardResponse(guarded, outcome);
+                return handle(guarded, routePath, queryParams);
+            } finally {
+                guarded.complete();
+            }
+        }
+
+        private Response handle(MockGuardedRequest guarded, String routePath,
+                                Map<String, String> queryParams) {
             SnapshotScope snapshotScope = Snapshot.currentOrNull();
             boolean snapshotBound = false;
             if (snapshotScope == null && SnapshotRecorder.shouldCapture(app)) {
@@ -132,8 +173,7 @@ public class TestClient {
                         SnapshotRecorder.of(app).record(failure[0], route, mockCtx, method, routePath,
                                 queryParams, headers, body, activeSnapshotScope);
                     }
-                    return new Response(mockCtx.status == 0 ? 200 : mockCtx.status,
-                            mockCtx.responseBody, mockCtx.responseHeaders(), mockCtx.responseCookies());
+                    return response(guarded, mockCtx, mockCtx.responseBody);
                 }
 
                 // HEAD auto-fallback: use GET handler, suppress body
@@ -152,19 +192,34 @@ public class TestClient {
                             SnapshotRecorder.of(app).record(failure[0], route, mockCtx, method, routePath,
                                     queryParams, headers, body, activeSnapshotScope);
                         }
-                        return new Response(mockCtx.status == 0 ? 200 : mockCtx.status,
-                                null, mockCtx.responseHeaders(), mockCtx.responseCookies());
+                        return response(guarded, mockCtx, null);
                     }
                 }
 
+                Map<String, String> responseHeaders = new LinkedHashMap<>(guarded.responseHeaders());
                 if (app.devMode()) {
-                    String diagnostic = buildRouteDiagnostic(method, routePath);
-                    return new Response(404, diagnostic, Map.of("Content-Type", "application/json"));
+                    responseHeaders.put("Content-Type", "application/json");
+                    return new Response(404, buildRouteDiagnostic(method, routePath), responseHeaders);
                 }
-                return new Response(404, "Not Found", Map.of());
+                return new Response(404, "Not Found", responseHeaders);
             } finally {
                 if (snapshotBound) Snapshot.clear();
             }
+        }
+
+        /** Guard-set headers such as security and CORS headers come first; a handler may override. */
+        private Response response(MockGuardedRequest guarded, MockContext ctx, String body) {
+            Map<String, String> merged = new LinkedHashMap<>(guarded.responseHeaders());
+            merged.putAll(ctx.responseHeaders());
+            return new Response(ctx.status == 0 ? 200 : ctx.status, body, merged, ctx.responseCookies());
+        }
+
+        private Response guardResponse(MockGuardedRequest guarded, GuardOutcome outcome) {
+            Map<String, String> merged = new LinkedHashMap<>(guarded.responseHeaders());
+            if (outcome.body() != null) {
+                merged.putIfAbsent("Content-Type", "application/json; charset=utf-8");
+            }
+            return new Response(outcome.status(), outcome.body(), merged);
         }
 
         @SuppressWarnings({"unchecked", "rawtypes"})

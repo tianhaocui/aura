@@ -72,10 +72,18 @@ Map<String, Object> schema = client.schema();
 Map<String, Object> openApi = client.openApi();
 ```
 
-`TestClient` installs the same modules, compiles the same routes, applies the
-same binding and exception resolution, and returns the same structured errors
-as Undertow. Use a real Undertow socket test only for transport behavior such as
-TLS, compression, multipart parsing, SSE, WebSocket, disconnects, and headers.
+`Request.remoteAddr(ip)` names the TCP peer and `Request.secure(true)` marks the
+request as TLS, which is how a test exercises trusted-proxy rules and HSTS.
+Without `remoteAddr`, a trusted-proxy `X-Forwarded-For` is ignored exactly as it
+is in production.
+
+`TestClient` installs the same modules, compiles the same routes, runs the same
+pre-route guard chain (Host allow-list, admission and rate limits, security
+headers, CSRF, CORS), applies the same binding and exception resolution, and
+returns the same structured errors as Undertow. It can only observe one request
+at a time, so concurrency bulkheads still need a socket test. Use a real Undertow
+socket test for transport behavior such as TLS, compression, multipart parsing,
+SSE, WebSocket, and disconnects.
 
 ## Structured Errors
 
