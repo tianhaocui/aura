@@ -80,7 +80,7 @@ public class TestClient {
         private final Map<String, String> headers = new LinkedHashMap<>();
         private String body;
         private boolean secure;
-        private String remoteAddr;
+        private String remoteAddr = "127.0.0.1";
 
         Request(String method, String path) {
             this.method = method;
@@ -100,8 +100,10 @@ public class TestClient {
         }
 
         /**
-         * Sets the direct TCP peer address. Trusted-proxy rules only ever see this value, so a
-         * test that expects {@code X-Forwarded-For} to be honoured has to name its proxy here.
+         * Sets the direct TCP peer address, loopback by default. One value feeds both the
+         * guard chain and {@code ctx.ip()}, so a test that expects {@code X-Forwarded-For}
+         * to be honoured has to name its proxy here -- and a test that names an untrusted
+         * peer sees that peer everywhere, not only in the policy.
          */
         public Request remoteAddr(String ip) {
             this.remoteAddr = ip;
@@ -163,7 +165,7 @@ public class TestClient {
                     Map<String, String> params = route.match(routePath);
                     if (params == null) continue;
 
-                    var mockCtx = new MockContext(params, queryParams, headers, body, app, routePath);
+                    var mockCtx = new MockContext(params, queryParams, headers, body, app, routePath, guarded.peerIp());
                     final Exception[] failure = new Exception[1];
                     RouteExecutor.execute(route, mockCtx, (e, c) -> {
                         failure[0] = e;
@@ -182,7 +184,7 @@ public class TestClient {
                         if (!"GET".equals(route.method())) continue;
                         Map<String, String> params = route.match(routePath);
                         if (params == null) continue;
-                        var mockCtx = new MockContext(params, queryParams, headers, body, app, routePath);
+                        var mockCtx = new MockContext(params, queryParams, headers, body, app, routePath, guarded.peerIp());
                         final Exception[] failure = new Exception[1];
                         RouteExecutor.execute(route, mockCtx, (e, c) -> {
                             failure[0] = e;

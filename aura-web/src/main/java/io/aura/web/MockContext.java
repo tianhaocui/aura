@@ -10,6 +10,9 @@ import java.util.concurrent.ConcurrentHashMap;
 
 public class MockContext extends Context {
 
+    /** The address an in-memory request is deemed to have arrived from. */
+    private static final String LOCALHOST = "127.0.0.1";
+
     int status;
     String responseBody;
     private boolean responded;
@@ -22,6 +25,7 @@ public class MockContext extends Context {
     private final Map<Class<?>, Object> attrs = new ConcurrentHashMap<>();
     private final Map<String, Object> namedAttrs = new ConcurrentHashMap<>();
     private final Map<String, String> respHeaders = new HashMap<>();
+    private final String peerIp;
     private final java.util.Map<String, String> responseCookies = new java.util.LinkedHashMap<>();
 
     public MockContext(Map<String, String> pathParams, Map<String, String> queryParams,
@@ -31,7 +35,14 @@ public class MockContext extends Context {
 
     public MockContext(Map<String, String> pathParams, Map<String, String> queryParams,
                        Map<String, String> headers, String body, AuraWebRuntime app, String requestPath) {
+        this(pathParams, queryParams, headers, body, app, requestPath, LOCALHOST);
+    }
+
+    public MockContext(Map<String, String> pathParams, Map<String, String> queryParams,
+                       Map<String, String> headers, String body, AuraWebRuntime app,
+                       String requestPath, String peerIp) {
         super(null, pathParams, app, null);
+        this.peerIp = peerIp;
         this.pathParams = pathParams;
         this.headers = headers;
         this.body = body;
@@ -132,9 +143,11 @@ public class MockContext extends Context {
 
     @Override
     public String ip() {
-        String xff = headers.get("X-Forwarded-For");
         String trusted = app == null ? null : String.join(",", app.trustedProxies());
-        return Context.resolveClientIp(trusted, "127.0.0.1", xff);
+        // The peer is the address the guard chain judged and the lookup is the
+        // case-insensitive one HTTP uses. Two client identities inside one mock
+        // request means a test that exercises the code nobody ships.
+        return Context.resolveClientIp(trusted, peerIp, header("X-Forwarded-For"));
     }
 
     @Override
