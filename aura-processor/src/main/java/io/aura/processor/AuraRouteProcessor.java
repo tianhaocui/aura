@@ -7,6 +7,7 @@ import io.aura.annotation.Options;
 import io.aura.annotation.Patch;
 import io.aura.annotation.Post;
 import io.aura.annotation.Put;
+import io.aura.contract.ScalarType;
 
 import javax.annotation.processing.AbstractProcessor;
 import javax.annotation.processing.Filer;
@@ -151,13 +152,17 @@ public final class AuraRouteProcessor extends AbstractProcessor {
             boolean required = isBody(parameter.asType()) || parameter.asType().getKind().isPrimitive()
                     || "path".equals(sourceName);
             String description = annotationValue(parameter, "io.aura.annotation.Desc", "value");
-            String schema = isBody(parameter.asType()) ? bodySchema(parameter.asType()) : "java.util.Map.of()";
+            // Enums are bound from the request line but still have to publish their
+            // accepted values, exactly like the reflective catalog does.
+            String schema = isBody(parameter.asType()) || asEnum(parameter.asType()) != null
+                    ? bodySchema(parameter.asType()) : "java.util.Map.of()";
             contracts.add("new io.aura.contract.ApiParameter(\"" + escape(name) + "\", \""
-                    + escape(parameter.asType().toString()) + "\", \"" + sourceName + "\", " + required + ", "
+                    + escape(simpleTypeName(parameter.asType().toString())) + "\", \"" + sourceName + "\", "
+                    + required + ", "
                     + (description == null ? "null" : "\"" + escape(description) + "\"") + ", " + schema + ")");
         }
         source.append(String.join(", ", contracts)).append("), \"returnType\", \"")
-                .append(escape(method.getReturnType().toString())).append("\"");
+                .append(escape(simpleTypeName(method.getReturnType().toString()))).append("\"");
         if (method.getReturnType().getKind() != TypeKind.VOID) {
             source.append(", \"responseSchema\", ").append(bodySchema(method.getReturnType()));
         }
@@ -224,15 +229,19 @@ public final class AuraRouteProcessor extends AbstractProcessor {
 
     private boolean isBody(TypeMirror type) {
         if (isContext(type)) return false;
-        // Keep this scalar set in lock-step with ParamResolver.  A scalar
-        // parameter is bound from path/query; anything outside this set is a
-        // request body.  Missing wrapper types here would make the generated
-        // route try to deserialize a short/byte/char as JSON instead of
-        // applying the same binding semantics as the reflection path.
-        return !Set.of("java.lang.String", "int", "long", "boolean", "double", "float",
-                "short", "byte", "char", "java.lang.Integer", "java.lang.Long",
-                "java.lang.Boolean", "java.lang.Double", "java.lang.Float",
-                "java.lang.Short", "java.lang.Byte", "java.lang.Character").contains(type.toString());
+        // The scalar table lives in the shared contract, which is also what the runtime
+        // binder consults. A scalar parameter is bound from path/query; anything outside
+        // it is a request body. Keeping the set here separate from ParamResolver is what
+        // used to let a generated route deserialize an enum body the reflective route read
+        // from the query string.
+        return !ScalarType.isScalar(type.toString()) && asEnum(type) == null;
+    }
+
+    /** The enum type behind a type mirror, or null when the type is not an enum. */
+    private TypeElement asEnum(TypeMirror type) {
+        if (!(type instanceof javax.lang.model.type.DeclaredType declared)) return null;
+        TypeElement element = (TypeElement) declared.asElement();
+        return element.getKind() == ElementKind.ENUM ? element : null;
     }
 
     private boolean isSimpleBodyType(TypeMirror type) {
@@ -271,6 +280,11 @@ public final class AuraRouteProcessor extends AbstractProcessor {
     }
 
     private String scalar(String value, TypeMirror type) {
+        TypeElement enumType = asEnum(type);
+        if (enumType != null) {
+            return "((" + value + ") == null ? null : java.lang.Enum.valueOf("
+                    + enumType.getQualifiedName() + ".class, " + value + "))";
+        }
         String converted = switch (type.toString()) {
             case "int", "java.lang.Integer" -> "Integer.parseInt(" + value + ")";
             case "long", "java.lang.Long" -> "Long.parseLong(" + value + ")";
@@ -279,6 +293,8 @@ public final class AuraRouteProcessor extends AbstractProcessor {
             case "float", "java.lang.Float" -> "Float.parseFloat(" + value + ")";
             case "short", "java.lang.Short" -> "Short.parseShort(" + value + ")";
             case "byte", "java.lang.Byte" -> "Byte.parseByte(" + value + ")";
+            case "java.math.BigDecimal" -> "new java.math.BigDecimal(" + value + ")";
+            case "java.math.BigInteger" -> "new java.math.BigInteger(" + value + ")";
             case "char", "java.lang.Character" -> "(" + value + ").charAt(0)";
             default -> null;
         };
@@ -313,14 +329,7 @@ public final class AuraRouteProcessor extends AbstractProcessor {
     private String schemaForType(TypeMirror type, Element annotations, int depth) {
         if (type == null || depth > 5) return "java.util.Map.of(\"type\", \"object\")";
         String name = type.toString();
-        String jsonType = switch (name) {
-            case "boolean", "java.lang.Boolean" -> "boolean";
-            case "byte", "short", "int", "long", "java.lang.Byte", "java.lang.Short",
-                    "java.lang.Integer", "java.lang.Long" -> "integer";
-            case "float", "double", "java.lang.Float", "java.lang.Double", "java.math.BigDecimal" -> "number";
-            case "java.lang.String", "java.lang.Character", "char" -> "string";
-            default -> null;
-        };
+        String jsonType = ScalarType.jsonTypeName(name);
         if (jsonType != null) return scalarSchema(type, annotations, jsonType);
         if (type.getKind() == TypeKind.ARRAY) {
             javax.lang.model.type.ArrayType array = (javax.lang.model.type.ArrayType) type;
@@ -372,18 +381,6 @@ public final class AuraRouteProcessor extends AbstractProcessor {
         return "java.util.Map.of(\"type\", \"object\")";
     }
 
-    private String scalarSchema(TypeMirror type, Element element) {
-        String typeName = type.toString();
-        String jsonType = switch (typeName) {
-            case "boolean", "java.lang.Boolean" -> "boolean";
-            case "byte", "short", "int", "long", "java.lang.Byte", "java.lang.Short",
-                    "java.lang.Integer", "java.lang.Long" -> "integer";
-            case "float", "double", "java.lang.Float", "java.lang.Double", "java.math.BigDecimal" -> "number";
-            default -> "string";
-        };
-        return scalarSchema(type, element, jsonType);
-    }
-
     private String scalarSchema(TypeMirror type, Element element, String jsonType) {
         List<String> entries = new ArrayList<>();
         entries.add("\"type\"");
@@ -400,9 +397,6 @@ public final class AuraRouteProcessor extends AbstractProcessor {
         if (sizeMax != null && !"2147483647".equals(sizeMax)) { entries.add("\"maxLength\""); entries.add(sizeMax); }
         if (pattern != null) { entries.add("\"pattern\""); entries.add("\"" + escape(pattern) + "\""); }
         if (minLength != null) { entries.add("\"minLength\""); entries.add(minLength); }
-        if ("array".equals(jsonType)) {
-            return "java.util.Map.of(\"type\", \"array\", \"items\", java.util.Map.of(\"type\", \"string\"))";
-        }
         return "java.util.Map.of(" + String.join(", ", entries) + ")";
     }
 
@@ -417,6 +411,15 @@ public final class AuraRouteProcessor extends AbstractProcessor {
             return declared.asElement().toString();
         }
         return type.toString();
+    }
+
+    /**
+     * {@code java.util.List<com.acme.Order>} becomes {@code List<Order>}. The reflective
+     * catalog reports {@code Class#getSimpleName}-style names, and both descriptions feed
+     * the same consumers, so the generator has to report the same spelling.
+     */
+    private static String simpleTypeName(String typeName) {
+        return typeName.replaceAll("(?<!\\w)[a-z][a-z0-9_]*(\\.[a-z0-9_]+)+\\.", "");
     }
 
     private static String escape(String value) {

@@ -1,6 +1,7 @@
 package io.aura.mcp;
 
 import io.aura.contract.ApiParameter;
+import io.aura.contract.ScalarType;
 
 import java.util.*;
 
@@ -16,11 +17,10 @@ public final class McpUtil {
 
     public static String jsonType(String javaType) {
         if (javaType == null) return "string";
+        String scalar = ScalarType.jsonTypeName(javaType);
+        if (scalar != null) return scalar;
         return switch (javaType) {
             case "string", "integer", "number", "boolean", "object", "array" -> javaType;
-            case "int", "long", "Integer", "Long" -> "integer";
-            case "double", "float", "Double", "Float", "BigDecimal" -> "number";
-            case "Boolean" -> "boolean";
             default -> "string";
         };
     }

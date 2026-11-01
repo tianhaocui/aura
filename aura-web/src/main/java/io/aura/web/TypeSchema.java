@@ -1,5 +1,7 @@
 package io.aura.web;
 
+import io.aura.contract.ScalarType;
+
 import java.lang.reflect.Field;
 import java.lang.reflect.GenericArrayType;
 import java.lang.reflect.ParameterizedType;
@@ -48,13 +50,9 @@ final class TypeSchema {
             return describe(rawClass, visiting, depth);
         }
         if (!(genericType instanceof Class<?> type)) return object();
-        if (type == String.class || type == Character.class || type == char.class) return type("string");
-        if (type == boolean.class || type == Boolean.class) return type("boolean");
-        if (type == byte.class || type == short.class || type == int.class || type == long.class
-                || type == Byte.class || type == Short.class || type == Integer.class || type == Long.class)
-            return type("integer");
-        if (type == float.class || type == double.class || type == Float.class || type == Double.class
-                || Number.class.isAssignableFrom(type)) return type("number");
+        String scalar = ScalarType.jsonTypeName(type.getName());
+        if (scalar != null) return type(scalar);
+        if (Number.class.isAssignableFrom(type)) return type("number");
         if (type.isEnum()) {
             Map<String, Object> schema = type("string");
             List<String> values = new ArrayList<>();

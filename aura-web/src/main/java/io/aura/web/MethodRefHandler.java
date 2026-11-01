@@ -1,6 +1,7 @@
 package io.aura.web;
 
 import com.alibaba.fastjson2.JSON;
+import io.aura.contract.ScalarType;
 
 import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
@@ -69,11 +70,9 @@ public final class MethodRefHandler implements BaseHandler {
         }
         if (type.isInstance(val)) return val;
         String s = val.toString();
-        if (type == int.class || type == Integer.class) return Integer.parseInt(s);
-        if (type == long.class || type == Long.class) return Long.parseLong(s);
-        if (type == double.class || type == Double.class) return Double.parseDouble(s);
-        if (type == boolean.class || type == Boolean.class) return Boolean.parseBoolean(s);
-        if (type == String.class) return s;
+        if (ScalarType.isScalar(type.getName()) || type.isEnum()) {
+            return ParamResolver.fromString(s, type);
+        }
         if (type.isRecord() || TypeUtil.isPojo(type)) {
             return JSON.parseObject(JSON.toJSONString(val), type);
         }

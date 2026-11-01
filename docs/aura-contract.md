@@ -45,3 +45,8 @@ permissioned route has no authorizer.
 `PermissionRegistry` provides an explicit, duplicate-checked list of permission
 ids contributed by modules. Authorization implementations can consume its
 snapshot without depending on Aura's runtime registry.
+
+`ScalarType` is the single table of Java types that are JSON scalars. HTTP
+binding, `/__schema__`, OpenAPI, MCP `inputSchema`, and the compile-time route
+generator all resolve a type through it, so the same parameter can no longer be
+a query string to one consumer and a request body to another.

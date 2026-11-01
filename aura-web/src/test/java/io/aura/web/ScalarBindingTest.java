@@ -25,12 +25,33 @@ class ScalarBindingTest {
                 .bodyContains("1.5/2.5/3/4/5/6/x/y");
     }
 
+    @Test
+    void reflectionRoutesBindEnumsAndBigDecimalFromQueryParameters() {
+        Router router = new Router();
+        ServiceRegistrar.register(new MoneyService(), router);
+
+        TestApplications.client(router).get("/money")
+                .query("direction", "UP")
+                .query("amount", "12.50")
+                .expect(200)
+                .bodyContains("UP/12.50");
+    }
+
     static final class ScalarService {
         @Get("/scalars")
         public String values(float floatValue, Float boxedFloat, short shortValue, Short boxedShort,
                              byte byteValue, Byte boxedByte, char charValue, Character boxedChar) {
             return floatValue + "/" + boxedFloat + "/" + shortValue + "/" + boxedShort + "/"
                     + byteValue + "/" + boxedByte + "/" + charValue + "/" + boxedChar;
+        }
+    }
+
+    enum Direction { UP, DOWN }
+
+    static final class MoneyService {
+        @Get("/money")
+        public String values(Direction direction, java.math.BigDecimal amount) {
+            return direction + "/" + amount;
         }
     }
 }

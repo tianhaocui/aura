@@ -39,4 +39,29 @@ class GeneratedAppTest {
         var responseProperties = (java.util.Map<String, Object>) get.responseSchema().get("properties");
         assertThat(responseProperties.keySet()).contains("id", "status");
     }
+
+    @Test
+    void generatedRoutesBindEnumsAndDecimalsExactlyLikeTheReflectionPath() {
+        TestClient client = TestClient.of(GeneratedApp.create());
+
+        assertThat(client.get("/generated/orders/search")
+                .query("direction", "UP").query("minId", "1")
+                .expect(200).body()).contains("ready");
+
+        var search = ((java.util.List<io.aura.contract.ApiRoute>) client.schema().get("routes")).stream()
+                .filter(route -> route.path().equals("/generated/orders/search"))
+                .findFirst().orElseThrow();
+        assertThat(search.params())
+                .extracting(io.aura.contract.ApiParameter::name, io.aura.contract.ApiParameter::source)
+                .containsExactly(
+                        org.assertj.core.groups.Tuple.tuple("direction", "query"),
+                        org.assertj.core.groups.Tuple.tuple("minId", "query"));
+        assertThat(search.params().get(0).schema())
+                .containsEntry("type", "string")
+                .containsEntry("enum", java.util.List.of("UP", "DOWN"));
+        // A plain scalar publishes no schema on either path and spells its type the way
+        // the reflective catalog does, so consumers infer the JSON type from one name.
+        assertThat(search.params().get(1).schema()).isEmpty();
+        assertThat(search.params().get(1).type()).isEqualTo("BigDecimal");
+    }
 }

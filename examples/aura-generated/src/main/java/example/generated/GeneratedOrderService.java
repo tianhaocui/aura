@@ -32,6 +32,20 @@ public final class GeneratedOrderService {
         return order;
     }
 
+    @Get("/search")
+    @Desc("Search generated orders")
+    public java.util.List<Order> search(@Desc("Sort direction") Direction direction,
+                                        @Desc("Minimum identifier") java.math.BigDecimal minId) {
+        java.math.BigDecimal floor = minId == null ? java.math.BigDecimal.ZERO : minId;
+        return orders.values().stream()
+                .filter(order -> floor.compareTo(java.math.BigDecimal.valueOf(order.id())) <= 0)
+                .sorted(direction == Direction.DOWN
+                        ? java.util.Comparator.comparingLong(Order::id).reversed()
+                        : java.util.Comparator.comparingLong(Order::id))
+                .toList();
+    }
+
+    public enum Direction { UP, DOWN }
     public record CreateOrder(long id, @NotBlank String status) { }
     public record Order(long id, String status) { }
 }

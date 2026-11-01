@@ -44,6 +44,32 @@ class ApiRouteCatalogTest {
         assertThat(route.params()).containsExactly(parameter);
     }
 
+    enum Direction { UP, DOWN }
+
+    static class SearchService {
+        public String search(List<String> tags, Direction direction) { return tags + "/" + direction; }
+    }
+
+    @Test
+    void describesCollectionAndEnumParametersWhereTheBinderReadsThem() {
+        Router router = new Router();
+        router.post("/search", new SearchService(), "search");
+
+        CompiledRoute route = UndertowStarter.compileRoutes(router).get(0);
+        ApiRoute description = ApiRouteCatalog.describe(route, null);
+
+        // A List is never a query string: the binder reads it from the body, so the
+        // contract has to say body too.
+        assertThat(description.params().get(0).source()).isEqualTo("body");
+        assertThat(description.params().get(0).required()).isTrue();
+        assertThat(description.params().get(0).schema().get("type")).isEqualTo("array");
+
+        // An enum arrives as its name(), with the accepted spellings spelled out.
+        assertThat(description.params().get(1).source()).isEqualTo("query");
+        assertThat(description.params().get(1).schema().get("type")).isEqualTo("string");
+        assertThat(description.params().get(1).schema().get("enum")).isEqualTo(List.of("UP", "DOWN"));
+    }
+
     @Test
     void reflectsResponseRecordSchemaForServiceRoutes() {
         Router router = new Router();

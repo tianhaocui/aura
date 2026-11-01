@@ -21,13 +21,20 @@ public final class ApiRouteCatalog {
             if (route.handler() instanceof MethodRefHandler methodHandler) {
                 Method method = methodHandler.resolvedMethod();
                 for (Parameter parameter : method.getParameters()) {
-                    if (parameter.getType() == Context.class || parameter.getType() == BaseContext.class) continue;
-                    String source = parameter.getType().isRecord() || TypeUtil.isPojo(parameter.getType())
-                            ? "body" : route.paramNames().contains(parameter.getName()) ? "path" : "query";
-                    boolean required = parameter.getType().isPrimitive() || "path".equals(source);
-                    parameters.add(new ApiParameter(parameter.getName(), parameter.getType().getSimpleName(), source,
-                            required, route.paramDescriptions().get(parameter.getName()),
-                            "body".equals(source) ? TypeSchema.describe(parameter.getType()) : Map.of()));
+                    Class<?> type = parameter.getType();
+                    if (type == Context.class || type == BaseContext.class) continue;
+                    // The same rule the binder uses, so the described location is the
+                    // location the value is actually read from.
+                    boolean body = ParamResolver.isBody(type);
+                    String source = body ? "body"
+                            : route.paramNames().contains(parameter.getName()) ? "path" : "query";
+                    boolean required = body || type.isPrimitive() || "path".equals(source);
+                    // An enum is scalar enough to bind from the request line but still needs
+                    // its accepted values spelled out for the model.
+                    Map<String, Object> schema = body || type.isEnum()
+                            ? TypeSchema.describe(type) : Map.of();
+                    parameters.add(new ApiParameter(parameter.getName(), type.getSimpleName(), source,
+                            required, route.paramDescriptions().get(parameter.getName()), schema));
                 }
             } else {
                 for (String name : route.paramNames()) {

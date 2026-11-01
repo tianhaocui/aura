@@ -1,7 +1,10 @@
 package io.aura.web;
 
 import io.aura.BeanValidator;
+import io.aura.contract.ScalarType;
 
+import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.lang.reflect.Parameter;
 
 public final class ParamResolver {
@@ -23,38 +26,67 @@ public final class ParamResolver {
                 "Without it, all route parameters receive null/0.");
         }
 
-        if (type == String.class) return ctx -> resolveString(ctx, name);
-        if (type == int.class) return ctx -> parseInt(resolveString(ctx, name));
-        if (type == Integer.class) return ctx -> parseIntBoxed(resolveString(ctx, name));
-        if (type == long.class) return ctx -> parseLong(resolveString(ctx, name));
-        if (type == Long.class) return ctx -> parseLongBoxed(resolveString(ctx, name));
-        if (type == boolean.class) return ctx -> parseBool(resolveString(ctx, name));
-        if (type == Boolean.class) return ctx -> parseBoolBoxed(resolveString(ctx, name));
-        if (type == double.class) return ctx -> parseDouble(resolveString(ctx, name));
-        if (type == Double.class) return ctx -> parseDoubleBoxed(resolveString(ctx, name));
-        if (type == float.class) return ctx -> parseFloat(resolveString(ctx, name));
-        if (type == Float.class) return ctx -> parseFloatBoxed(resolveString(ctx, name));
-        if (type == short.class) return ctx -> parseShort(resolveString(ctx, name));
-        if (type == Short.class) return ctx -> parseShortBoxed(resolveString(ctx, name));
-        if (type == byte.class) return ctx -> parseByte(resolveString(ctx, name));
-        if (type == Byte.class) return ctx -> parseByteBoxed(resolveString(ctx, name));
-        if (type == char.class) return ctx -> parseChar(resolveString(ctx, name));
-        if (type == Character.class) return ctx -> parseCharBoxed(resolveString(ctx, name));
-
-        if (isBody(param)) return ctx -> {
+        if (isBody(type)) return ctx -> {
             Object obj = ctx.body(parameterType(param));
             if (obj != null) BeanValidator.validate(obj);
             return obj;
         };
 
-        return ctx -> resolveString(ctx, name);
+        return ctx -> fromString(resolveString(ctx, name), type);
     }
 
-    private static boolean isBody(Parameter param) {
-        Class<?> type = param.getType();
-        return type.isRecord() || TypeUtil.isPojo(type) || type.isArray()
-                || java.util.Map.class.isAssignableFrom(type)
-                || java.lang.Iterable.class.isAssignableFrom(type);
+    /**
+     * The one string-to-value table. HTTP binding and argument replay both come through
+     * here, so a value that binds to {@code short} on a request also binds to
+     * {@code short} when the same handler is invoked with a map.
+     */
+    public static Object fromString(String value, Class<?> type) {
+        if (type == String.class) return value;
+        if (type == int.class) return parseInt(value);
+        if (type == Integer.class) return parseIntBoxed(value);
+        if (type == long.class) return parseLong(value);
+        if (type == Long.class) return parseLongBoxed(value);
+        if (type == boolean.class) return parseBool(value);
+        if (type == Boolean.class) return parseBoolBoxed(value);
+        if (type == double.class) return parseDouble(value);
+        if (type == Double.class) return parseDoubleBoxed(value);
+        if (type == float.class) return parseFloat(value);
+        if (type == Float.class) return parseFloatBoxed(value);
+        if (type == short.class) return parseShort(value);
+        if (type == Short.class) return parseShortBoxed(value);
+        if (type == byte.class) return parseByte(value);
+        if (type == Byte.class) return parseByteBoxed(value);
+        if (type == char.class) return parseChar(value);
+        if (type == Character.class) return parseCharBoxed(value);
+        if (type == BigDecimal.class) return parseDecimal(value, BigDecimal::new);
+        if (type == BigInteger.class) return parseDecimal(value, BigInteger::new);
+        if (type.isEnum()) return parseEnum(type, value);
+        return value;
+    }
+
+    /**
+     * The one body-versus-path/query rule. Everything the HTTP layer can spell as a
+     * scalar — including enums, which arrive as their {@code name()} — is bound from the
+     * request line; anything else arrives as JSON. Schema consumers call this too, so a
+     * parameter can no longer be a body to the binder and a query string to the contract.
+     */
+    public static boolean isBody(Class<?> type) {
+        return !ScalarType.isScalar(type.getName()) && !type.isEnum();
+    }
+
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    static Object parseEnum(Class<?> type, String value) {
+        if (value == null || value.isEmpty()) return null;
+        return Enum.valueOf((Class) type, value);
+    }
+
+    static Object parseDecimal(String value, java.util.function.Function<String, Object> parser) {
+        if (value == null) return null;
+        try {
+            return parser.apply(value);
+        } catch (NumberFormatException e) {
+            throw new IllegalArgumentException("Invalid number: " + value);
+        }
     }
 
     private static java.lang.reflect.Type parameterType(Parameter param) {
