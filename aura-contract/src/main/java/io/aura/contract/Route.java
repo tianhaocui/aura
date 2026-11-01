@@ -34,6 +34,9 @@ public record Route(
         String permission,
         boolean streaming
 ) {
+    /** The method a WebSocket endpoint is declared under — one contract, one door. */
+    public static final String WEBSOCKET = "WS";
+
     public Route {
         if (method == null || method.isBlank()) {
             throw new IllegalArgumentException("route method must not be blank");
@@ -44,6 +47,9 @@ public record Route(
         method = method.trim().toUpperCase(Locale.ROOT);
         path = path.trim();
         Objects.requireNonNull(handler, "route handler must not be null");
+        // A handshake that upgrades is not readable as one request and one response,
+        // whatever the caller happened to pass for the streaming flag.
+        if (WEBSOCKET.equals(method)) streaming = true;
         params = params == null ? List.of() : List.copyOf(params);
         responseSchema = responseSchema == null
                 ? Map.of()
@@ -63,6 +69,20 @@ public record Route(
     /** Minimal shape: method + path + handler. All other fields default. */
     public static Route of(String method, String path, Object handler) {
         return new Route(method, path, handler, List.of(), null, Map.of(), null, false, null, false);
+    }
+
+    /**
+     * A WebSocket endpoint described as the same contract as an HTTP route. The handler is
+     * the web layer's own configuration shape, carried as {@code Object} so this module stays
+     * free of it; the route it produces is authenticated, permissioned, and published exactly
+     * like any other.
+     */
+    public static Route webSocket(String path, Object configure) {
+        return new Route(WEBSOCKET, path, configure, List.of(), null, Map.of(), null, false, null, true);
+    }
+
+    public boolean isWebSocket() {
+        return WEBSOCKET.equals(method);
     }
 
     /** Convenience factory: description + auth for hand-authored module routes. */

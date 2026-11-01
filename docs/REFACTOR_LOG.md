@@ -68,12 +68,26 @@ until Stage ②/④ resolved it, so `mvn test` had carried
 core; contributing `GET /health/live` is HTTP mechanism, so the class moved to
 `io.aura.web` and the exclusion is gone.
 
+**A WebSocket endpoint became a `Route` instead of a second contribution type.**
+Review found `WebSocketContribution` travelling beside the contract, so nothing
+in `/__schema__`, OpenAPI, or the MCP bridge knew it existed and its handshake
+skipped the auth door entirely — `compileWsRoutes` applied no `secure()`. It is
+now `Route.webSocket(path, configure)` with method `WS`, which forces
+`streaming` because that is the fact that makes it unreadable to a
+request/response consumer, publishes its path parameters, and appends the same
+`RouteAssembler.secure(...)` handler to the handshake's before-chain, so a
+`requireAuth` endpoint answers 401/403 before the protocol changes.
+`context.webSocket(...)` survived as sugar over `context.route(...)` because the
+callback shape is the ergonomics; the parallel record and the
+`webSocketContributions()` accessor did not.
+
 ## Deleted or moved public surface
 
 | 1.0.0 | now |
 | --- | --- |
 | `io.aura.contract.RouteContribution` | `Route.of(method, path, handler)` + `describedAs`, `withParams`, `withReturnType`, `withResponseSchema`, `withStreaming`, `requireAuth` |
 | `RouteEntry`, `PackageScanner` | gone, no replacement: `context.route(Route)` is the only contribution |
+| `io.aura.WebSocketContribution`, `AuraWebRuntime.webSocketContributions()` | `Route.webSocket(path, configure)` (method `WS`), reached through `context.route`; `context.webSocket` is sugar over it |
 | `io.aura.contract.ApiRoute`, `ApiRouteCatalog` | `Route`, `io.aura.web.RouteCatalog` |
 | `io.aura.contract.RouteContributor`, `ModuleContext.routes(...)` | `new XAuraRoutes(service).routes().forEach(context::route)` |
 | `Route.fromContribution(...)`, metadata `Map<String,Object>` keys | typed fields; a misspelled key can no longer drop a route from the schema |

@@ -19,6 +19,9 @@ public class TestClient {
     private final AuraWebRuntime app;
     private final Router router;
     private final List<CompiledRoute> compiled;
+    // Compiled without a connection registry: this client describes the endpoints and admits
+    // requests through them, it never upgrades a socket.
+    private final List<CompiledWsRoute> webSockets;
     private final RequestGuards guards;
 
     TestClient(AuraWebRuntime app, Router router) {
@@ -26,6 +29,7 @@ public class TestClient {
         this.router = router;
         this.compiled = UndertowStarter.compileRoutes(router, app);
         UndertowStarter.detectDuplicateRoutes(compiled);
+        this.webSockets = UndertowStarter.compileWsRoutes(app, router, null);
         this.guards = RequestGuards.standard(app, this::routePattern);
     }
 
@@ -34,6 +38,11 @@ public class TestClient {
         for (CompiledRoute route : compiled) {
             if ((route.method().equals(method) || "HEAD".equals(method) && "GET".equals(route.method()))
                     && route.match(path) != null) return route.rawPath();
+        }
+        if ("GET".equals(method)) {
+            for (CompiledWsRoute route : webSockets) {
+                if (route.match(path) != null) return route.rawPath();
+            }
         }
         return path;
     }
@@ -64,14 +73,18 @@ public class TestClient {
     public Request head(String path) { return new Request("HEAD", path); }
     public Request options(String path) { return new Request("OPTIONS", path); }
 
-    /** Returns the same route schema served by the real Web adapter. */
+    /** Returns the same route schema served by the real Web adapter, WebSocket endpoints included. */
     public Map<String, Object> schema() {
-        return RouteContract.schema(app, compiled);
+        return RouteContract.schema(app, compiled, webSocketContracts());
     }
 
     /** Returns the same OpenAPI document served by the real Web adapter. */
     public Map<String, Object> openApi() {
-        return RouteContract.openApi(app, compiled);
+        return RouteContract.openApi(app, compiled, webSocketContracts());
+    }
+
+    private List<io.aura.contract.Route> webSocketContracts() {
+        return webSockets.stream().map(CompiledWsRoute::contract).toList();
     }
 
     public class Request {

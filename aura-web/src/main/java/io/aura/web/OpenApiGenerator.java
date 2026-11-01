@@ -19,6 +19,10 @@ public final class OpenApiGenerator {
 
         Map<String, Map<String, Object>> paths = new LinkedHashMap<>();
         if (routes != null) for (Route route : routes) {
+            // OpenAPI documents request/response operations. A handshake that upgrades to a
+            // persistent connection has neither, so it is skipped here on purpose rather than
+            // emitted as an operation no tool can read.
+            if (route.isWebSocket()) continue;
             Map<String, Object> operation = new LinkedHashMap<>();
             if (route.description() != null) operation.put("description", route.description());
             operation.put("operationId", operationId(route));

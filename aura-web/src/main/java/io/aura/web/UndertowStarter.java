@@ -3,6 +3,7 @@ package io.aura.web;
 import com.alibaba.fastjson2.JSON;
 import io.aura.AuraWebRuntime;
 import io.aura.contract.CancellationToken;
+import io.aura.contract.Route;
 import io.aura.AuraEvent;
 import io.aura.AuraStarter;
 import io.aura.snapshot.Snapshot;
@@ -461,7 +462,7 @@ public class UndertowStarter implements AuraStarter {
     }
 
     private void serveSchema(HttpServerExchange exchange) {
-        Map<String, Object> schema = RouteContract.schema(app, compiledRoutes);
+        Map<String, Object> schema = RouteContract.schema(app, compiledRoutes, webSocketContracts());
 
         exchange.getResponseHeaders().put(Headers.CONTENT_TYPE, "application/json; charset=utf-8");
         exchange.getResponseHeaders().put(Headers.CACHE_CONTROL, "no-store");
@@ -469,10 +470,14 @@ public class UndertowStarter implements AuraStarter {
     }
 
     private void serveOpenApi(HttpServerExchange exchange) {
-        Map<String, Object> document = RouteContract.openApi(app, compiledRoutes);
+        Map<String, Object> document = RouteContract.openApi(app, compiledRoutes, webSocketContracts());
         exchange.getResponseHeaders().put(Headers.CONTENT_TYPE, "application/json; charset=utf-8");
         exchange.getResponseHeaders().put(Headers.CACHE_CONTROL, "no-store");
         exchange.getResponseSender().send(JSON.toJSONString(document));
+    }
+
+    private List<Route> webSocketContracts() {
+        return compiledWsRoutes.stream().map(CompiledWsRoute::contract).toList();
     }
 
     @SuppressWarnings({"unchecked", "rawtypes"})
@@ -636,23 +641,37 @@ public class UndertowStarter implements AuraStarter {
     }
 
     private List<CompiledWsRoute> compileWsRoutes(BaseRouter router) {
-        return compileWsRoutes(router, "", new ArrayList<>(app.beforeHandlers()));
+        return compileWsRoutes(app, router, webSocketConnections);
     }
 
-    private List<CompiledWsRoute> compileWsRoutes(BaseRouter router, String prefix,
-                                                   List<BaseHandler> parentBefore) {
+    /**
+     * The WebSocket half of the route table, built from the same contracts as HTTP so that the
+     * dispatching server and the in-memory client describe one endpoint set.
+     */
+    static List<CompiledWsRoute> compileWsRoutes(AuraWebRuntime app, BaseRouter router,
+                                                 WebSocketConnectionRegistry connections) {
+        return compileWsRoutes(app, router, "", new ArrayList<>(app.beforeHandlers()), connections);
+    }
+
+    private static List<CompiledWsRoute> compileWsRoutes(AuraWebRuntime app, BaseRouter router,
+                                                         String prefix, List<BaseHandler> parentBefore,
+                                                         WebSocketConnectionRegistry connections) {
         List<CompiledWsRoute> result = new ArrayList<>();
         List<BaseHandler> before = new ArrayList<>(parentBefore);
         before.addAll(router.beforeHandlers);
 
         for (BaseRouter.WsRoute ws : router.wsRoutes) {
-            String fullPath = prefix + ws.path();
-            result.add(CompiledWsRoute.compile(
-                    fullPath, before, ws.handler(), app.maxWebSocketMessageSize(),
-                    webSocketConnections));
+            Route contract = ws.route().withPath(prefix + ws.path());
+            List<BaseHandler> handshake = new ArrayList<>(before);
+            // The handshake is an HTTP request, so it stands in the same auth door as the routes
+            // it upgrades: declared with the endpoint, checked before the protocol switches.
+            handshake.add(RouteAssembler.secure(app, contract, request -> { }));
+            result.add(CompiledWsRoute.compile(contract, handshake,
+                    app.maxWebSocketMessageSize(), connections));
         }
         for (BaseRouter.Group group : router.groups) {
-            result.addAll(compileWsRoutes(group.router(), prefix + group.prefix(), before));
+            result.addAll(compileWsRoutes(app, group.router(), prefix + group.prefix(), before,
+                    connections));
         }
         return result;
     }

@@ -34,6 +34,9 @@ class McpBridgeToolTest {
                "params":[],"authenticated":false,"streaming":true},
               {"method":"POST","path":"/headerful",
                "params":[{"name":"trace","type":"string","source":"header","required":false}],
+               "authenticated":false},
+              {"method":"WS","path":"/ws/room/{roomId}","description":"Chat room",
+               "params":[{"name":"roomId","type":"String","source":"path","required":true}],
                "authenticated":false}
             ]}""";
 
@@ -72,9 +75,23 @@ class McpBridgeToolTest {
         assertThat(result(output, 1).getString("code")).isEqualTo("MCP_MISSING_ARGUMENT");
     }
 
+    /**
+     * The schema marks a WebSocket endpoint as streaming, which is enough to decline it; the
+     * method is checked as well so a document that omits that flag cannot hand the bridge an
+     * upgrade request it has no way to answer.
+     */
     @Test
-    void successfulCallStillReturnsTheUpstreamBody() throws Exception {
+    void webSocketEndpointIsNeitherAdvertisedNorCallable() throws Exception {
         String output = bridge(SCHEMA, 200,
+                "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/list\"}",
+                "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/call\",\"params\":{\"name\":\"ws_ws_room_by_id\",\"arguments\":{\"roomId\":\"lobby\"}}}");
+
+        assertThat(toolNames(output)).noneMatch(name -> name.startsWith("ws_"));
+        assertThat(result(output, 2).getString("code")).isEqualTo("MCP_TOOL_NOT_FOUND");
+    }
+
+    @Test
+    void successfulCallStillReturnsTheUpstreamBody() throws Exception {        String output = bridge(SCHEMA, 200,
                 "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"get_orders_by_id\",\"arguments\":{\"id\":\"7\"}}}");
 
         JSONObject result = result(output, 1);

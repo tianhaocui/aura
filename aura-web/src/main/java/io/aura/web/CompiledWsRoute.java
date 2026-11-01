@@ -1,5 +1,6 @@
 package io.aura.web;
 
+import io.aura.contract.Route;
 import io.undertow.server.HttpServerExchange;
 import io.undertow.websockets.WebSocketConnectionCallback;
 import io.undertow.websockets.WebSocketProtocolHandshakeHandler;
@@ -10,9 +11,11 @@ import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-record CompiledWsRoute(String rawPath, Pattern pattern, List<String> paramNames,
+record CompiledWsRoute(Route contract, Pattern pattern, List<String> paramNames,
                        List<BaseHandler> beforeHandlers, WsHandler wsHandler,
                        long maxMessageBytes, WebSocketConnectionRegistry connections) {
+
+    String rawPath() { return contract.path(); }
 
     Map<String, String> match(String path) {
         Matcher m = pattern.matcher(path);
@@ -105,9 +108,9 @@ record CompiledWsRoute(String rawPath, Pattern pattern, List<String> paramNames,
         return params;
     }
 
-    static CompiledWsRoute compile(String path, List<BaseHandler> beforeHandlers,
-                                   WsHandler handler, long maxMessageBytes,
-                                   WebSocketConnectionRegistry connections) {
+    static CompiledWsRoute compile(Route contract, List<BaseHandler> beforeHandlers,
+                                   long maxMessageBytes, WebSocketConnectionRegistry connections) {
+        String path = contract.path();
         List<String> paramNames = new ArrayList<>();
         String regex = path
                 .replace(".", "\\.")
@@ -118,7 +121,8 @@ record CompiledWsRoute(String rawPath, Pattern pattern, List<String> paramNames,
         while (m.find()) {
             paramNames.add(m.group(1));
         }
-        return new CompiledWsRoute(path, Pattern.compile("^" + regex + "$"),
-                paramNames, beforeHandlers, handler, maxMessageBytes, connections);
+        return new CompiledWsRoute(contract, Pattern.compile("^" + regex + "$"),
+                paramNames, beforeHandlers, (WsHandler) contract.handler(),
+                maxMessageBytes, connections);
     }
 }

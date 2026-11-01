@@ -28,6 +28,11 @@ record, the stage-by-stage log, and the migration table.
   `McpRouter.tool(Route, McpHandler)` or the `tool(name, description)` builder.
 - A present-but-blank route permission now fails at startup instead of publishing
   an unprotected route.
+- `io.aura.WebSocketContribution` and `AuraWebRuntime.webSocketContributions()`
+  are removed. A WebSocket endpoint is contributed as a `Route` with method
+  `Route.WEBSOCKET` — `context.webSocket(path, configure)` is sugar over
+  `context.route(Route.webSocket(path, configure))` — and `BaseRouter.WsRoute`
+  now wraps that contract instead of a bare path and handler.
 
 ### Changed
 
@@ -40,8 +45,27 @@ record, the stage-by-stage log, and the migration table.
 - Host, admission, security-header, CSRF and CORS checks run as one chain built
   by `RequestGuards.standard(app, routePattern)`, used by Undertow and
   `TestClient` alike, so in-memory verification covers the security layer.
+- A guarded request carries the path its templates match — the URI without the
+  query string — on both transports, so a route-scoped rule cannot be bypassed
+  by appending `?x=1`.
+- `MockContext.ip()` resolves the same client address the admission chain judged,
+  from the peer the request was built with plus `X-Forwarded-For` and the
+  configured trusted proxies.
+- A `WS` route is assembled, published and authorised like an HTTP route: it
+  appears in `/__schema__` as a streaming endpoint with its path parameters, is
+  skipped by OpenAPI and the MCP bridge on purpose, and its handshake runs the
+  same `requireAuth`/permission door before the protocol changes.
+- `/__schema__` publishes `streaming`, so a request/response consumer can decline
+  an endpoint instead of discovering it at call time.
 
 ### Fixed
+
+- The MCP bridge stopped handing a model choices it cannot serve: authenticated,
+  streaming, `WS` and untransmittable-parameter routes are no longer advertised,
+  a guessed tool name for one stays refused, an upstream status at or above 400
+  becomes `MCP_UPSTREAM_HTTP_<status>` instead of a successful tool result whose
+  text is an error page, and a missing required argument is named instead of
+  silently dropped.
 
 - Snapshot capture redacts URLs, query parameters, bodies and stack traces before
   they leave the request thread, and bounded external calls share one `IpSafety`

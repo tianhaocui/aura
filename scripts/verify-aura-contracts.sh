@@ -158,10 +158,14 @@ if rg -n 'import io\.aura\.Aura;|Aura\.create\(|AuraPlugin|\bReloadable\b|Before
   echo "removed pre-1.0 API found in first-party code" >&2
   exit 1
 fi
-rg -q 'RouteContract\.schema\(app, compiledRoutes\)' \
+rg -q 'RouteContract\.schema\(app, compiledRoutes, webSocketContracts\(\)\)' \
   "$repo_root/aura-web/src/main/java/io/aura/web/UndertowStarter.java"
-rg -q 'RouteContract\.openApi\(app, compiledRoutes\)' \
+rg -q 'RouteContract\.openApi\(app, compiledRoutes, webSocketContracts\(\)\)' \
   "$repo_root/aura-web/src/main/java/io/aura/web/UndertowStarter.java"
+rg -q 'RouteContract\.schema\(app, compiled, webSocketContracts\(\)\)' \
+  "$repo_root/aura-web/src/main/java/io/aura/web/TestClient.java"
+rg -q 'RouteContract\.openApi\(app, compiled, webSocketContracts\(\)\)' \
+  "$repo_root/aura-web/src/main/java/io/aura/web/TestClient.java"
 rg -q 'public Map<String, Object> schema\(\)' \
   "$repo_root/aura-web/src/main/java/io/aura/web/TestClient.java"
 rg -q 'public Map<String, Object> openApi\(\)' \
@@ -318,6 +322,9 @@ rg -q 'FixedWindowRateLimiter' "$repo_root/aura-web/src/main/java/io/aura/web/Re
 rg -q 'context.admissionPolicy' "$repo_root/docs/aura-web.md"
 rg -q 'matchedRoutePattern' "$repo_root/aura-web/src/main/java/io/aura/web/UndertowStarter.java"
 rg -q 'void webSocket' "$repo_root/aura-core/src/main/java/io/aura/ModuleContext.java"
-rg -q 'webSocketContributions' "$repo_root/aura-web/src/main/java/io/aura/web/RouteAssembler.java"
+# A WebSocket endpoint is a Route: one assembly door, the same auth door, and no OpenAPI operation.
+rg -q 'if \(entry\.isWebSocket\(\)\) registerWebSocket' "$repo_root/aura-web/src/main/java/io/aura/web/RouteAssembler.java"
+rg -q 'RouteAssembler.secure\(app, contract' "$repo_root/aura-web/src/main/java/io/aura/web/UndertowStarter.java"
+rg -q 'if \(route.isWebSocket\(\)\) continue;' "$repo_root/aura-web/src/main/java/io/aura/web/OpenApiGenerator.java"
 
 echo "Aura module and documentation contracts passed (version $root_version)"

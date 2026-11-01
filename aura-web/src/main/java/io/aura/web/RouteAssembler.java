@@ -10,9 +10,9 @@ final class RouteAssembler {
     static Router assemble(AuraWebRuntime app) {
         app.prepareModules();
         Router router = new Router();
-        registerDirectRoutes(app, router);
-        for (var contribution : app.webSocketContributions()) {
-            router.ws(contribution.path(), contribution.configure());
+        for (Route entry : app.directRoutes()) {
+            if (entry.isWebSocket()) registerWebSocket(router, entry);
+            else registerDirectRoute(app, router, entry);
         }
 
         for (Object service : app.services()) {
@@ -21,29 +21,50 @@ final class RouteAssembler {
         return router;
     }
 
-    private static void registerDirectRoutes(AuraWebRuntime app, Router router) {
-        for (Route entry : app.directRoutes()) {
-            BaseHandler handler = entry.handler() instanceof BaseHandler h
-                    ? h : new LambdaHandler(entry.handler());
-            handler = secure(app, entry, handler);
-            BaseRouteBuilder builder = switch (entry.method()) {
-                case "GET" -> router.get(entry.path(), handler);
-                case "POST" -> router.post(entry.path(), handler);
-                case "PUT" -> router.put(entry.path(), handler);
-                case "DELETE" -> router.delete(entry.path(), handler);
-                case "PATCH" -> router.patch(entry.path(), handler);
-                case "HEAD" -> router.head(entry.path(), handler);
-                case "OPTIONS" -> router.options(entry.path(), handler);
-                default -> throw new IllegalArgumentException("Unsupported route method: " + entry.method());
-            };
-            // One assignment instead of copying seven fields in lockstep: the declared Route already
-            // carries every fact, only the dispatch handler changes to the auth-wrapped one.
-            builder.route = entry.withHandler(handler);
+    /**
+     * The contributed handler is the module's configuration callback; assembling turns it into
+     * the concrete endpoint once, so a later handshake never re-runs module code.
+     */
+    @SuppressWarnings("unchecked")
+    private static void registerWebSocket(Router router, Route entry) {
+        WsHandler handler;
+        if (entry.handler() instanceof WsHandler configured) {
+            handler = configured;
+        } else if (entry.handler() instanceof java.util.function.Consumer<?> configure) {
+            handler = new WsHandler();
+            ((java.util.function.Consumer<WsHandler>) configure).accept(handler);
+        } else {
+            throw new IllegalArgumentException(
+                    "WebSocket route handler must configure a WsHandler: " + entry.path());
         }
+        router.ws(RouteCatalog.describeWebSocket(entry).withHandler(handler));
     }
 
-    private static BaseHandler secure(AuraWebRuntime app, Route entry,
-                                      BaseHandler next) {
+    private static void registerDirectRoute(AuraWebRuntime app, Router router, Route entry) {
+        BaseHandler handler = entry.handler() instanceof BaseHandler h
+                ? h : new LambdaHandler(entry.handler());
+        handler = secure(app, entry, handler);
+        BaseRouteBuilder builder = switch (entry.method()) {
+            case "GET" -> router.get(entry.path(), handler);
+            case "POST" -> router.post(entry.path(), handler);
+            case "PUT" -> router.put(entry.path(), handler);
+            case "DELETE" -> router.delete(entry.path(), handler);
+            case "PATCH" -> router.patch(entry.path(), handler);
+            case "HEAD" -> router.head(entry.path(), handler);
+            case "OPTIONS" -> router.options(entry.path(), handler);
+            default -> throw new IllegalArgumentException("Unsupported route method: " + entry.method());
+        };
+        // One assignment instead of copying seven fields in lockstep: the declared Route already
+        // carries every fact, only the dispatch handler changes to the auth-wrapped one.
+        builder.route = entry.withHandler(handler);
+    }
+
+    /**
+     * The one auth door, used for HTTP handlers and for the WebSocket handshake: an endpoint
+     * that requires a user requires one before it upgrades, not after.
+     */
+    static BaseHandler secure(AuraWebRuntime app, Route entry,
+                              BaseHandler next) {
         String permission = entry.permission();
         if (!entry.authenticated()) return next;
         return request -> {

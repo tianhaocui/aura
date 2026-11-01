@@ -22,7 +22,14 @@ public interface ModuleContext extends io.aura.contract.CapabilityLookup {
      */
     void route(io.aura.contract.Route route);
 
-    /** Adds one WebSocket endpoint owned by the current business module. */
+    /**
+     * Adds one WebSocket endpoint owned by the current business module. Sugar over
+     * {@link #route(io.aura.contract.Route)}: the endpoint is contributed as a
+     * {@code WS} route, so it is published in the schema and authenticated like any
+     * other. A handshake that needs a permission declares
+     * {@code Route.webSocket(path, configure).requireAuth(permission)} through
+     * {@link #route} instead.
+     */
     void webSocket(String path, java.util.function.Consumer<io.aura.web.WsHandler> configure);
 
     /** Adds middleware applied before every assembled HTTP route and WebSocket handshake. */

@@ -138,8 +138,11 @@ public final class io.aura.contract.PermissionRegistry {
 }
 ### aura-contract:io.aura.contract.Route
 public final class io.aura.contract.Route extends java.lang.Record {
+  public static final java.lang.String WEBSOCKET;
   public io.aura.contract.Route(java.lang.String, java.lang.String, java.lang.Object, java.util.List<io.aura.contract.ApiParameter>, java.lang.String, java.util.Map<java.lang.String, java.lang.Object>, java.lang.String, boolean, java.lang.String, boolean);
   public static io.aura.contract.Route of(java.lang.String, java.lang.String, java.lang.Object);
+  public static io.aura.contract.Route webSocket(java.lang.String, java.lang.Object);
+  public boolean isWebSocket();
   public static io.aura.contract.Route describe(io.aura.contract.Route, java.lang.String);
   public io.aura.contract.Route describedAs(java.lang.String);
   public io.aura.contract.Route withHandler(java.lang.Object);
@@ -404,7 +407,6 @@ public interface io.aura.AuraWebRuntime extends io.aura.AuraMcpRuntime {
   public abstract int workers();
   public abstract java.util.List<java.lang.Object> services();
   public abstract java.util.List<io.aura.contract.Route> directRoutes();
-  public abstract java.util.List<io.aura.WebSocketContribution> webSocketContributions();
   public abstract java.lang.String staticFilesPath();
   public abstract boolean spa();
   public abstract java.lang.String corsOrigin();
@@ -552,15 +554,6 @@ public final class io.aura.Validate {
   public static void maxLength(java.lang.String, int, java.lang.String);
   public static void matches(java.lang.String, java.lang.String, java.lang.String);
   public static void isTrue(boolean, java.lang.String);
-}
-### aura-core:io.aura.WebSocketContribution
-public final class io.aura.WebSocketContribution extends java.lang.Record {
-  public io.aura.WebSocketContribution(java.lang.String, java.util.function.Consumer<io.aura.web.WsHandler>);
-  public final java.lang.String toString();
-  public final int hashCode();
-  public final boolean equals(java.lang.Object);
-  public java.lang.String path();
-  public java.util.function.Consumer<io.aura.web.WsHandler> configure();
 }
 ### aura-core:io.aura.annotation.Delete
 public interface io.aura.annotation.Delete extends java.lang.annotation.Annotation {
@@ -928,12 +921,13 @@ public final class io.aura.web.BaseRouter$Group extends java.lang.Record {
 }
 ### aura-core:io.aura.web.BaseRouter$WsRoute
 public final class io.aura.web.BaseRouter$WsRoute extends java.lang.Record {
-  public io.aura.web.BaseRouter$WsRoute(java.lang.String, io.aura.web.WsHandler);
+  public io.aura.web.BaseRouter$WsRoute(io.aura.contract.Route);
+  public java.lang.String path();
+  public io.aura.web.WsHandler handler();
   public final java.lang.String toString();
   public final int hashCode();
   public final boolean equals(java.lang.Object);
-  public java.lang.String path();
-  public io.aura.web.WsHandler handler();
+  public io.aura.contract.Route route();
 }
 ### aura-core:io.aura.web.BaseRouter
 public class io.aura.web.BaseRouter {
@@ -963,6 +957,7 @@ public class io.aura.web.BaseRouter {
   public io.aura.web.BaseRouter after(io.aura.web.BaseHandler);
   public io.aura.web.BaseRouter group(java.lang.String, java.util.function.Consumer<io.aura.web.BaseRouter>);
   public io.aura.web.BaseRouter ws(java.lang.String, java.util.function.Consumer<io.aura.web.WsHandler>);
+  public io.aura.web.BaseRouter ws(io.aura.contract.Route);
   public io.aura.web.BaseRouteBuilder addRoute(java.lang.String, java.lang.String, io.aura.web.BaseHandler);
 }
 ### aura-core:io.aura.web.RequestType
@@ -1163,6 +1158,7 @@ public final class io.aura.web.MethodRefHandler implements io.aura.web.BaseHandl
 public class io.aura.web.MockContext extends io.aura.web.Context {
   public io.aura.web.MockContext(java.util.Map<java.lang.String, java.lang.String>, java.util.Map<java.lang.String, java.lang.String>, java.util.Map<java.lang.String, java.lang.String>, java.lang.String, io.aura.AuraWebRuntime);
   public io.aura.web.MockContext(java.util.Map<java.lang.String, java.lang.String>, java.util.Map<java.lang.String, java.lang.String>, java.util.Map<java.lang.String, java.lang.String>, java.lang.String, io.aura.AuraWebRuntime, java.lang.String);
+  public io.aura.web.MockContext(java.util.Map<java.lang.String, java.lang.String>, java.util.Map<java.lang.String, java.lang.String>, java.util.Map<java.lang.String, java.lang.String>, java.lang.String, io.aura.AuraWebRuntime, java.lang.String, java.lang.String);
   public java.lang.String path(java.lang.String);
   public java.lang.String query(java.lang.String);
   public java.lang.String query(java.lang.String, java.lang.String);
@@ -1243,6 +1239,7 @@ public final class io.aura.web.RequestGuards {
 ### aura-web:io.aura.web.RouteCatalog
 public final class io.aura.web.RouteCatalog {
   public static io.aura.contract.Route describe(io.aura.web.CompiledRoute);
+  public static io.aura.contract.Route describeWebSocket(io.aura.contract.Route);
 }
 ### aura-web:io.aura.web.Router
 public class io.aura.web.Router extends io.aura.web.BaseRouter {

@@ -47,6 +47,22 @@ public final class RouteCatalog {
                 .withResponseSchema(responseSchema(route, contract));
     }
 
+    /**
+     * The path placeholders a WebSocket endpoint publishes. A handshake carries no method
+     * signature to read, but a schema that shows {@code {roomId}} without naming it leaves a
+     * consumer guessing what to put in the URL.
+     */
+    public static Route describeWebSocket(Route route) {
+        if (!route.params().isEmpty()) return route;
+        List<ApiParameter> parameters = new ArrayList<>();
+        java.util.regex.Matcher matcher =
+                java.util.regex.Pattern.compile("\\{([a-zA-Z_][a-zA-Z0-9_]*)}").matcher(route.path());
+        while (matcher.find()) {
+            parameters.add(new ApiParameter(matcher.group(1), "String", "path", true, null));
+        }
+        return route.withParams(parameters);
+    }
+
     private static Map<String, Object> responseSchema(CompiledRoute route, Route contract) {
         if (!contract.responseSchema().isEmpty()) return contract.responseSchema();
         if (!(route.handler() instanceof MethodRefHandler methodHandler)) return Map.of();

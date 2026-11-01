@@ -38,7 +38,6 @@ final class ModularRuntime implements AuraWebRuntime {
     private final Map<String, Object> namedRegistry = new ConcurrentHashMap<>();
     private final List<Object> services = new CopyOnWriteArrayList<>();
     private final List<Route> directRoutes = new CopyOnWriteArrayList<>();
-    private final List<WebSocketContribution> webSocketContributions = new CopyOnWriteArrayList<>();
     private final List<AutoCloseable> closeables = new CopyOnWriteArrayList<>();
     private final List<io.aura.contract.HealthCheck> healthChecks = new CopyOnWriteArrayList<>();
     private final List<AuraEventListener> eventListeners = new CopyOnWriteArrayList<>();
@@ -311,7 +310,6 @@ final class ModularRuntime implements AuraWebRuntime {
     @Override public int workers() { return config.workers(); }
     @Override public List<Object> services() { return List.copyOf(services); }
     @Override public List<Route> directRoutes() { return List.copyOf(directRoutes); }
-    @Override public List<WebSocketContribution> webSocketContributions() { return List.copyOf(webSocketContributions); }
     @Override public String staticFilesPath() { return config.staticFilesPath(); }
     @Override public boolean spa() { return config.spa(); }
     @Override public String corsOrigin() { return config.corsOrigin(); }
@@ -529,7 +527,7 @@ final class ModularRuntime implements AuraWebRuntime {
             directRoutes.add(route);
         }
         @Override public void webSocket(String path, java.util.function.Consumer<io.aura.web.WsHandler> configure) {
-            webSocketContributions.add(new WebSocketContribution(path, configure));
+            route(Route.webSocket(path, configure));
         }
         @Override public void before(BaseHandler handler) {
             if (handler == null) throw new ModuleException("AURA_MIDDLEWARE_INVALID", descriptor.id(), "Before middleware must not be null");

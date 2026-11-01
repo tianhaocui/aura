@@ -19,19 +19,28 @@ final class RouteContract {
         return List.copyOf(result);
     }
 
-    static Map<String, Object> schema(AuraWebRuntime app, List<CompiledRoute> routes) {
+    static Map<String, Object> schema(AuraWebRuntime app, List<CompiledRoute> routes,
+                                      List<Route> webSockets) {
         Map<String, Object> schema = new LinkedHashMap<>();
         String name = app.prop("app.name");
         schema.put("name", name == null ? "Aura App" : name);
         List<Map<String, Object>> views = new ArrayList<>();
         for (Route route : describe(routes)) views.add(view(route, app));
+        // WebSocket endpoints are published because a consumer has to know they exist; they are
+        // published as streaming routes so a request/response consumer declines them by itself.
+        for (Route route : webSockets) views.add(view(route, app));
         schema.put("routes", views);
         return schema;
     }
 
-    static Map<String, Object> openApi(AuraWebRuntime app, List<CompiledRoute> routes) {
+    static Map<String, Object> openApi(AuraWebRuntime app, List<CompiledRoute> routes,
+                                       List<Route> webSockets) {
         String name = app.prop("app.name");
-        return OpenApiGenerator.generate(name == null ? "Aura API" : name, "1.0.0", describe(routes));
+        List<Route> all = new ArrayList<>(describe(routes));
+        all.addAll(webSockets);
+        // The whole endpoint set goes in: the generator decides what it can document, rather than
+        // being handed a pre-filtered list that hides the decision.
+        return OpenApiGenerator.generate(name == null ? "Aura API" : name, "1.0.0", all);
     }
 
     /**
@@ -63,6 +72,12 @@ final class RouteContract {
             if ("path".equals(parameter.source())) {
                 path = path.replace("{" + parameter.name() + "}", exampleValue(parameter.type()));
             }
+        }
+        if (route.isWebSocket()) {
+            // The only honest example: the handshake is a GET that has to ask to be upgraded.
+            return "curl -i -N " + base + path
+                    + " -H 'Connection: Upgrade' -H 'Upgrade: websocket'"
+                    + " -H 'Sec-WebSocket-Version: 13' -H 'Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ=='";
         }
         if ("GET".equals(route.method())) {
             List<String> queryParts = new ArrayList<>();

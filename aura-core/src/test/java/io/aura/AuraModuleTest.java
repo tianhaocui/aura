@@ -453,12 +453,23 @@ class AuraModuleTest {
         app.prepare();
 
         AuraWebRuntime runtime = (AuraWebRuntime) app.runtimeView();
-        assertThat(runtime.webSocketContributions()).singleElement()
-                .extracting(WebSocketContribution::path)
+        assertThat(runtime.directRoutes()).singleElement()
+                .extracting(io.aura.contract.Route::path)
                 .isEqualTo("/events");
-        assertThatThrownBy(() -> new WebSocketContribution("events", handler -> { }))
+        assertThat(runtime.directRoutes()).singleElement()
+                .satisfies(route -> {
+                    assertThat(route.isWebSocket()).isTrue();
+                    // Streaming is not a decoration here: it is the fact that makes the endpoint
+                    // unreadable to every request/response consumer, so it cannot be left unset.
+                    assertThat(route.streaming()).isTrue();
+                });
+        java.util.function.Consumer<io.aura.web.WsHandler> configure = handler -> { };
+        assertThatThrownBy(() -> io.aura.contract.Route.webSocket("events", configure))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("start with");
+        assertThatThrownBy(() -> io.aura.contract.Route.webSocket("/events", null))
+                .isInstanceOf(NullPointerException.class)
+                .hasMessageContaining("handler");
     }
 
     private static AuraModule module(String id, List<String> dependencies, List<String> installed) {

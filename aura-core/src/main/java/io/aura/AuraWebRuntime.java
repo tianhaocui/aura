@@ -32,9 +32,10 @@ public interface AuraWebRuntime extends AuraMcpRuntime {
      * Routes contributed directly by modules, in the unified {@link Route} shape.
      * Stage ②-B made this the single metadata source for HTTP dispatch, TestClient,
      * {@code /__schema__} and OpenAPI; every field is typed — no {@code Map} keys.
+     * A WebSocket endpoint is one of these routes under {@link Route#WEBSOCKET},
+     * because it is the same decision about who may reach a path and what it returns.
      */
     List<Route> directRoutes();
-    List<WebSocketContribution> webSocketContributions();
     String staticFilesPath();
     boolean spa();
     String corsOrigin();

@@ -266,6 +266,9 @@ public class McpBridge {
      * A parameter the bridge cannot transmit is the same case one level down.
      */
     private static String unusableBecause(JSONObject route) {
+        if (io.aura.contract.Route.WEBSOCKET.equals(route.getString("method"))) {
+            return "route is a WebSocket endpoint, not an HTTP request";
+        }
         if (route.getBooleanValue("authenticated")) return "route requires authentication the bridge cannot supply";
         if (route.getBooleanValue("streaming")) return "route streams a response the bridge cannot read";
         JSONArray params = route.getJSONArray("params");

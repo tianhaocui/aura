@@ -111,13 +111,21 @@ routes with `Route.of(...).withStreaming(true)`.
 
 WebSocket handshakes enforce the configured Origin policy. Missing Origin is
 not implicitly trusted when the application requires browser-origin checks.
-Business modules contribute endpoints explicitly:
+Business modules contribute endpoints explicitly, and an endpoint is one
+`Route` like any other: it is published in `/__schema__` as a streaming `WS`
+route, stays out of the OpenAPI document, and is refused before the protocol
+changes when it requires a user it cannot identify.
 
 ```java
 context.webSocket("/events", socket -> socket
         .onOpen(connection -> connection.send("ready"))
         .onMessage((connection, text) -> connection.send("echo:" + text))
         .onClose((connection, code, reason) -> { }));
+
+// A handshake that needs a permission declares it through the same contract:
+context.route(Route.webSocket("/rooms/{roomId}", socket -> socket
+        .onMessage((connection, text) -> connection.send("echo:" + text)))
+        .requireAuth("rooms.write"));
 ```
 
 ## Production Controls

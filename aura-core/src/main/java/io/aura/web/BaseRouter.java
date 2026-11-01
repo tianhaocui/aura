@@ -98,7 +98,19 @@ public class BaseRouter {
     public BaseRouter ws(String path, Consumer<WsHandler> config) {
         WsHandler handler = new WsHandler();
         config.accept(handler);
-        wsRoutes.add(new WsRoute(path, handler));
+        return ws(Route.webSocket(path, handler));
+    }
+
+    /** Declares a WebSocket endpoint from its route contract, the same shape HTTP uses. */
+    public BaseRouter ws(Route route) {
+        if (!route.isWebSocket()) {
+            throw new IllegalArgumentException("WebSocket route must use method WS: " + route.path());
+        }
+        if (!(route.handler() instanceof WsHandler)) {
+            // Reaching the handshake with anything else fails there, far from the mistake.
+            throw new IllegalArgumentException("WebSocket route handler must be a WsHandler: " + route.path());
+        }
+        wsRoutes.add(new WsRoute(route));
         return this;
     }
 
@@ -109,5 +121,10 @@ public class BaseRouter {
     }
 
     public record Group(String prefix, BaseRouter router) {}
-    public record WsRoute(String path, WsHandler handler) {}
+
+    /** A WebSocket endpoint: the contract, and nothing else. */
+    public record WsRoute(Route route) {
+        public String path() { return route.path(); }
+        public WsHandler handler() { return (WsHandler) route.handler(); }
+    }
 }
