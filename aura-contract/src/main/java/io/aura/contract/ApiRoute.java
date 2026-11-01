@@ -32,4 +32,13 @@ public record ApiRoute(String method, String path, String description, String re
             else authenticated = true;
         }
     }
+
+    /**
+     * Derives the transport-neutral view from a unified {@link Route}.
+     * Stage ② makes {@code Route} the source of truth; {@code ApiRoute} becomes a
+     * pure read-only projection consumed by {@code /__schema__} and OpenAPI.
+     */
+    public static ApiRoute from(Route route) {
+        return route.toApiRoute();
+    }
 }

@@ -81,4 +81,15 @@ public record RouteContribution(String method, String path, Object handler,
         }
         return java.util.List.copyOf(result);
     }
+
+    /**
+     * Bridges this contribution into the unified {@link Route} shape used by
+     * every consumer (HTTP dispatch, TestClient, {@code /__schema__}, OpenAPI, MCP).
+     * Stage ② adds this method; callers should prefer constructing a {@code Route}
+     * directly. Retained for backward compatibility until Stage ④ removes
+     * {@code RouteContribution}.
+     */
+    public Route toRoute() {
+        return Route.fromContribution(this);
+    }
 }
