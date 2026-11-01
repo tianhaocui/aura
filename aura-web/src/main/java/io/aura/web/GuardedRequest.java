@@ -11,7 +11,12 @@ public interface GuardedRequest {
 
     String method();
 
-    /** Request target exactly as the transport saw it, query string included. */
+    /**
+     * Request path without its query string, because that is what a route template
+     * matches. A transport that hands out {@code getRequestURI()} and a transport that
+     * hands out the raw target are not interchangeable here: admission rules keyed on
+     * the matched template silently stop firing the moment a query string appears.
+     */
     String path();
 
     /** Request header value matched case-insensitively, or null when absent. */

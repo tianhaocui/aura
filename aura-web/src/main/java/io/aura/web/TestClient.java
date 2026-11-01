@@ -136,7 +136,7 @@ public class TestClient {
             String routePath = path.contains("?") ? path.substring(0, path.indexOf('?')) : path;
             Map<String, String> queryParams = parseQueryString(path);
             MockGuardedRequest guarded =
-                    new MockGuardedRequest(method, path, headers, secure, remoteAddr);
+                    new MockGuardedRequest(method, routePath, headers, secure, remoteAddr);
             try {
                 GuardOutcome outcome = guards.evaluate(guarded);
                 if (!outcome.proceed()) return guardResponse(guarded, outcome);

@@ -274,6 +274,43 @@ class GuardChainTest {
     }
 
     @Test
+    void queryStringsNeverDisableARouteRule() {
+        // /reports ends in a literal segment, /orders/{id} ends in a parameter: a template
+        // matched against a path that still carries its query string only works by accident
+        // for the second one, because a path segment pattern also accepts '?'.
+        StandardAdmissionPolicy policy = StandardAdmissionPolicy.builder()
+                .routeRate("/reports", 1)
+                .routeRate("/orders/{id}", 1)
+                .build();
+        AuraApp app = AuraApp.create(new AuraConfig()).use(new AuraModule() {
+            @Override public ModuleMetadata descriptor() {
+                return ModuleMetadata.of("admission", "1.0.0");
+            }
+
+            @Override public void install(ModuleContext context) {
+                context.admissionPolicy(policy);
+                context.route(Route.of("GET", "/reports", (BaseHandler) ctx -> ctx.text("report")));
+                context.route(Route.of("GET", "/orders/{id}",
+                        (BaseHandler) ctx -> ctx.text(ctx.path("id"))));
+            }
+        });
+        TestClient client = TestClient.of(app);
+
+        assertThat(blockedStatus(client, "/reports", "trace")).as(
+                "a query string disabled the route rule on /reports").isEqualTo(429);
+        assertThat(blockedStatus(client, "/orders/1", "trace")).as(
+                "a query string disabled the route rule on /orders/{id}").isEqualTo(429);
+    }
+
+    /** First rate-limited status among six quick requests, or -1 when the rule never fired. */
+    private static int blockedStatus(TestClient client, String path, String query) {
+        client.get(path).query(query, "on").expect(200);
+        for (int i = 0; i < 6; i++) {
+            if (client.get(path).query(query, "on").execute().status() == 429) return 429;
+        }
+        return -1;
+    }
+    @Test
     void admissionPolicy_failureClosesAndKeepsItsErrorCode() {
         AuraApp app = AuraApp.create(new AuraConfig()).use(new AuraModule() {
             @Override public ModuleMetadata descriptor() {
