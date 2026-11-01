@@ -59,7 +59,8 @@ traffic. It does not: its public surface is `get`/`post`/`send` for live calls,
 `AI_GUIDE_OPS.md` shows application code registering it. Recording and replaying
 a snapshot is what makes it safe, not what makes it a test tool. The name is the
 only arguable part, and renaming a security-reviewed class was not worth the
-churn.
+churn; the class javadoc now states the role instead, so the reading that
+spawned the task cannot be reached again from the file alone.
 
 **`HealthModule` moved instead of being excused.** Stage ① wrote R5 to fail
 until Stage ②/④ resolved it, so `mvn test` had carried

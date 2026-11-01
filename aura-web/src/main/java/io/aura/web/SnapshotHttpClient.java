@@ -31,6 +31,13 @@ import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
+/**
+ * Bounded HTTP client for one external dependency: timeout, response-size cap and
+ * cancellation apply whether or not a snapshot is open. Recording and replaying the
+ * dependency through {@link Snapshot} is what makes the call safe to run in a test,
+ * not a substitute for the live request -- so this is production code, and an
+ * application registers one instance per dependency it calls.
+ */
 public class SnapshotHttpClient {
 
     private static final Duration DEFAULT_TIMEOUT = Duration.ofSeconds(10);
