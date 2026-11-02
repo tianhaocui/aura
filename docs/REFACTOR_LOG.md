@@ -24,8 +24,10 @@ verifiable in memory in milliseconds. Every stage below is a commit on
 | ②-C | `836b083` | MCP stopped stripping the contract; one `McpUtil.inputSchema` builder for every tool |
 | ②-D | `751d577` | one Java→JSON type table (`ScalarType`) and one binder (`ParamResolver`) shared by HTTP and MCP |
 | ③ | `17ffae7` | pre-route guards extracted to `RequestGuards.standard(app, routePattern)`, consumed by both Undertow and `TestClient` |
-| ④-ab | `a78630a` | deleted the reflection MCP tool binding and the package-scan route entry |
-| ④-cf | `69f4eb9` | deleted `RouteContribution`, `RouteEntry`, `ApiRoute`, `RouteContributor`; `/__schema__` became an explicit JSON projection; `AuraApp` kept `create()` + `create(AuraConfig)` and one varargs `start` |
+| ④-ab | `a78630a` | deleted `io.aura.RouteEntry`, `io.aura.web.PackageScanner` and the reflective
+  `McpRouter.tool(name, service, method, description)` binding — one contribution door and one
+  declared tool door left |
+| ④-cf | `69f4eb9` | deleted `RouteContribution`, `RouteContributor`, `ApiRoute`, `ApiRouteCatalog`; `/__schema__` became an explicit JSON projection; `AuraApp` kept `create()` + `create(AuraConfig)` and one varargs `start` |
 | ④-g | `5994f96` | `HealthModule` moved to `io.aura.web`; `ArchitectureTest` R5 turned from a recorded failure into a boundary |
 | ⑤-ai | `ab7622c` | in-memory AI providers for self-verification without a model endpoint |
 | ⑤-workflow | `2f15688` | injectable, virtual workflow clock |
@@ -34,6 +36,7 @@ verifiable in memory in milliseconds. Every stage below is a commit on
 | review-D | `2b63207` | a WebSocket endpoint became a `Route` |
 | review-E | `9dfb9c2` | the schema token, OpenAPI switch and WebSocket Origin allow-list moved into the shared guard chain, so `TestClient` proves them without a port |
 | review-F | `cfa665a` | `required` became the binder's single rule on both transports, MCP stopped inventing types, and OpenAPI/examples joined `ScalarType` |
+| review-G | `dca32d3` | a refused contribution names the module or the route instead of throwing `NullPointerException`; the wire documents are read through typed getters, and `SchemaProbeTest` (zero assertions) is gone |
 
 ## Decisions that differed from the plan
 
@@ -150,21 +153,42 @@ constructor says nothing about which route was being assembled). Both are coded
 replaced, for the reason the whole 0.6 return runs on: an AI that reads the
 failure has to be able to repair it without reading the source it failed in.
 
+**Documentation compiles against the tree, and that required fixing the gate
+first.** `IpSafety`, `RequestGuards.standard`, `FakeAiProvider`/
+`ScriptedAiProvider` and `WorkflowClock`/`MutableClock` were added by this branch
+and documented nowhere, so the first pass at review-H wrote fences for them and
+marked them `aura:compile`. The gate then passed a deliberately wrong import:
+`docs/aura-core.md` naming `io.aura.HealthModule` -- the location ④-g deleted --
+compiled, because `dependency:build-classpath` puts the installed
+`io.github.tianhaocui:aura-core:1.0.0` jar on the classpath and that jar still
+contains `io/aura/HealthModule.class`. The gate was checking the documentation
+against `~/.m2`, the same lie trap #1 above describes for the reactor. It now
+builds `aura-ai` and `aura-workflow` alongside `aura-web`, takes their
+`target/classes` first, and drops every installed `aura-*.jar` from the compile
+classpath, so a fence resolves against this checkout or not at all. The floor
+moved from a total count to a per-document count for the same kind of reason: a
+single total falls by exactly as much as a deleted marker lowers the count of
+markers found, so deleting a fence could not fail a whole-list floor. Prose is
+covered by the same gate now too, because only the fence compiles and a reader
+copies the sentence next to it.
+
 ## Deleted or moved public surface
 
 | 1.0.0 | now |
 | --- | --- |
 | `io.aura.contract.RouteContribution` | `Route.of(method, path, handler)` + `describedAs`, `withParams`, `withReturnType`, `withResponseSchema`, `withStreaming`, `requireAuth` |
-| `RouteEntry`, `PackageScanner` | gone, no replacement: `context.route(Route)` is the only contribution |
+| `io.aura.RouteEntry` (public) and `io.aura.web.PackageScanner` (package-private, called by
+  `RouteAssembler`) | gone, no replacement: `context.route(Route)` is the only contribution, and
+  the scan door is closed rather than hidden behind a flag |
 | `io.aura.WebSocketContribution`, `AuraWebRuntime.webSocketContributions()` | `Route.webSocket(path, configure)` (method `WS`), reached through `context.route`; `context.webSocket` is sugar over it |
 | `io.aura.contract.ApiRoute`, `ApiRouteCatalog` | `Route`, `io.aura.web.RouteCatalog` |
 | `io.aura.contract.RouteContributor`, `ModuleContext.routes(...)` | `new XAuraRoutes(service).routes().forEach(context::route)` |
-| `Route.fromContribution(...)`, metadata `Map<String,Object>` keys | typed fields; a misspelled key can no longer drop a route from the schema |
+| `RouteContribution`'s metadata `Map<String,Object>` keys | typed fields; a misspelled key can no longer drop a route from the schema |
 | `AuraApp.create(Path)`, `create(Properties)` | `AuraApp.create(AuraConfig.fromProperties(path))` |
 | `AuraApp.start()` | `start(String...)` |
 | `AuraApp::authenticate` reflection route scanning | unchanged; `@Get`/`@Post` + `aura-processor` is the production path |
 | `io.aura.HealthModule` | `io.aura.web.HealthModule` |
-| `McpRouter.tool(Object, String)` reflective binding | `McpRouter.tool(Route, McpHandler)` |
+| `McpRouter.tool(String name, Object service, String method, String description)` reflective binding | `McpRouter.tool(Route, McpHandler)` |
 | `McpParam(String, String, String, List)` and `McpParam(String, String, String, List, boolean)` | `McpParam(ApiParameter, List<McpEnumValue>)` — a tool argument is declared with the shared parameter record, so it cannot carry its own Java-to-JSON opinion |
 
 `/__schema__` keeps its JSON keys — `method`, `path`, `description`,
@@ -269,6 +293,20 @@ green on the same document. A substring of the whole projection cannot fail a
 rename; the reason the old assertions survived every key change so far is the
 reason they are gone.
 
+`fix(review-H)` was checked at the gate, since its subject is the gate. Three
+mutations, one per rule it now enforces: the `io.aura.web.HealthModule` import in
+the new `docs/aura-core.md` fence changed to the removed `io.aura.HealthModule`
+failed the run with `错误: 找不到符号` at that fence's line 8 and 15 (and failed
+only after the installed `aura-*.jar` files came off the classpath -- before that
+fix the same mutation passed, which is the finding); deleting the
+`workflow-virtual-time` marker line failed with `no compilable fence marked in
+docs/aura-workflow.md`; and the same removed location written into `README.md`
+prose failed with `documentation names the removed io.aura.HealthModule
+location`. Restoring each file returned the gate to `7 compiled fences`. The
+per-document floor is what makes the second one fail: under the earlier total
+floor the mutation was invisible, because the count of markers found dropped with
+the count of fences compiled.
+
 Known flake: `LiquibaseSchemaMigratorTest.concurrentFirstStartsSerializeChangesetsAcrossIndependentPools`
 allows 15 seconds for two serialized Liquibase runs and timed out once on this
 Intel machine while passing twice. It is timing, not behaviour, but the budget
@@ -293,6 +331,16 @@ lines, `jq` dropped from the tool check); the classification half still needs
 
 ## Still open
 
+- The compiling list covers `docs/DOCUMENTATION.md`, `AI_GUIDE.md` and the four
+  module documents that gained fences; `docs/aura-module.md`, `aura-db.md`,
+  `aura-mcp.md` and `aura-processor.md` are still only scanned for legacy API
+  names, so a moved type in their prose is still invisible. `aura-db` and
+  `aura-mcp` also need their modules added to the gate's build list first.
+- `McpRouterTest` and the MCP schema tests still read `buildSchema()` through
+  unchecked casts and string lookups. `fix(review-G)` typed the readers of the
+  two wire documents it could reach (`TestClient.schema()`/`openApi()` and
+  `OpenApiGenerator.generate(...)`); the MCP tool schema is a third projection
+  of the same `Route` and belongs with them.
 - `McpToolBuilder` is still a second declaration door for hand-authored tools.
   Its disagreements with the route path are gone (`ApiParameter` in, one
   `McpUtil.inputSchema` render, non-scalar arguments refused at registration),

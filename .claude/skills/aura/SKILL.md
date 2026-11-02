@@ -38,7 +38,7 @@ public final class OrdersModule implements AuraModule {
 }
 
 AuraApp app = AuraApp.create(new AuraConfig().port(8080))
-        .use(HealthModule.create())
+        .use(io.aura.web.HealthModule.create())
         .use(new OrdersModule());
 ```
 

@@ -102,7 +102,7 @@ Applications written against the released 1.0.0 API move with the route collapse
 | `AuraApp.create(path)` / `AuraApp.create(properties)` | `AuraApp.create(AuraConfig.fromProperties(path))` |
 | `AuraApp.start()` | `start(String...)` |
 | `io.aura.HealthModule` | `io.aura.web.HealthModule` |
-| `McpRouter.tool(service, "name")` reflection | `McpRouter.tool(route, handler)` |
+| `McpRouter.tool(name, service, method, description)` reflection | `McpRouter.tool(route, handler)` |
 | a blank `permission` string dropped silently | fails at startup, because dropping it would publish an unprotected route |
 
 ## Configuration and permissions

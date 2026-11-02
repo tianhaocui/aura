@@ -172,3 +172,56 @@ and ownership health without requiring a metrics SDK.
 for an authorized application route or MCP resource. `WorkflowModule` does not
 publish a schema HTTP endpoint automatically; schema exposure must use the same
 authentication policy as the rest of the application.
+
+## Time source
+
+`WorkflowClock` is the module's only time door: `now()` for wall timestamps, `nanos()` for
+deadline arithmetic, and `sleep(Duration)` for retry backoff. `WorkflowClock.SYSTEM` is the
+default everywhere a clock is not supplied. `MutableClock` is the test clock — it stays frozen
+until `advance(Duration)` and its sleeps are virtual, so a thirty-minute backoff and a five-minute
+lease expiry run in the same millisecond.
+
+<!-- aura:compile name=workflow-virtual-time -->
+```java
+package docs.example;
+
+import io.aura.workflow.InMemoryWorkflowExecutionStore;
+import io.aura.workflow.MutableClock;
+import io.aura.workflow.RetryPolicy;
+import io.aura.workflow.StepMode;
+import io.aura.workflow.Workflow;
+import io.aura.workflow.WorkflowDefinition;
+import io.aura.workflow.WorkflowRegistry;
+import io.aura.workflow.WorkflowRuntime;
+
+import java.time.Duration;
+
+public final class VirtualWorkflowTime {
+    private VirtualWorkflowTime() { }
+
+    /** Retry timestamps come from the injected clock, so backoff totals are assertable. */
+    public static WorkflowDefinition<Object> hourlyBackoff(MutableClock clock) {
+        return Workflow.<Object>builder("place-order", clock)
+                .step("charge", context -> "ok", StepMode.IDEMPOTENT,
+                        RetryPolicy.fixed(3, Duration.ofMinutes(30)))
+                .build();
+    }
+
+    /** Lease acquisition and renewal read the same clock as the execution record. */
+    public static WorkflowRuntime<Object> leased(MutableClock clock) {
+        return new WorkflowRuntime<>(new WorkflowRegistry(),
+                new InMemoryWorkflowExecutionStore(clock), 2, 16,
+                Duration.ofMinutes(5), "owner-1", clock);
+    }
+}
+```
+
+`MutableClock.advance(...)` moves the wall and monotonic readings together and refuses a negative
+duration; a lease that expires on the injected clock must not be able to move backwards while an
+execution timestamp still can. Advance the clock from the test, never from a workflow step.
+
+The three injection points are the whole surface: `Workflow.builder(id, clock)` for step and
+execution timestamps, `new InMemoryWorkflowExecutionStore(clock)` for record ordering and lease
+expiry, and the trailing `WorkflowClock` parameter of `WorkflowRuntime` for renewal deadlines.
+Passing a `MutableClock` to only one of them leaves part of the timing on real time, which is how
+a test ends up asserting the machine's clock instead of the workflow's.

@@ -93,6 +93,17 @@ record, the stage-by-stage log, and the migration table.
   `AURA_ROUTE_CONTRIBUTION_INVALID` naming the module. Neither is a bare
   `NullPointerException` any more, so the assembly mistake says which door was
   wrong instead of pointing at a constructor frame.
+- The types this branch added are documented where their module is documented:
+  `IpSafety` in `docs/aura-core.md`, `RequestGuards.standard(...)` in
+  `docs/aura-web.md`, `FakeAiProvider` and `ScriptedAiProvider` in
+  `docs/aura-ai.md`, and `WorkflowClock`/`MutableClock` in
+  `docs/aura-workflow.md`.
+- The documentation gate compiles instead of quoting. `docs/aura-core.md`,
+  `docs/aura-web.md`, `docs/aura-ai.md` and `docs/aura-workflow.md` now carry
+  `aura:compile` fences, the gate builds `aura-ai` and `aura-workflow` too, and
+  it drops the installed `aura-*.jar` files from the compile classpath so a
+  fence resolves against this tree only. Prose that names the removed
+  `io.aura.HealthModule` location fails the same gate.
 
 ### Fixed
 

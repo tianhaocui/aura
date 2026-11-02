@@ -63,7 +63,7 @@ valid Maven naming.
 
 ```java
 AuraApp app = AuraApp.create(new AuraConfig().port(8080))
-    .use(HealthModule.create())
+    .use(io.aura.web.HealthModule.create())
     .use(new AuraModule() {
         @Override public ModuleMetadata descriptor() {
             return ModuleMetadata.of("hello", "1.0.0");
@@ -86,7 +86,7 @@ routes fail at startup with stable error codes.
 
 ```java
 AuraApp.create()
-    .use(HealthModule.create())
+    .use(io.aura.web.HealthModule.create())
     .use(DatabaseModule.create(db))
     .use(WorkflowModule.create())
     .use(AiModule.create(provider))

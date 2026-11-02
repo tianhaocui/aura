@@ -222,6 +222,44 @@ route template, validated client IP, and `X-API-Key`. Rejections return stable
 `AURA_RATE_LIMITED` or `AURA_CONCURRENCY_LIMITED` codes. The standard policy
 exposes bounded key count, in-flight count, and rejection counters.
 
+## Guard Chain
+
+Every request crosses one policy chain before it reaches a route, and both transports build that
+chain from the same call: `UndertowStarter` for a live socket and `TestClient` for the in-memory
+client. `TestClient` therefore rejects exactly what a real socket rejects instead of skipping
+straight to the handler.
+
+<!-- aura:compile name=web-standard-guard-chain -->
+```java
+package docs.example;
+
+import io.aura.AuraWebRuntime;
+import io.aura.web.RequestGuards;
+
+public final class StandardGuardChain {
+    private StandardGuardChain() { }
+
+    /** The chain shape both transports install; the adapter supplies the route-template lookup. */
+    public static RequestGuards chain(AuraWebRuntime app, RequestGuards.RoutePattern routePattern) {
+        return RequestGuards.standard(app, routePattern);
+    }
+}
+```
+
+The order is fixed, because each step assumes the one before it already ran: Host (421),
+Admission (concurrency, rate limit, or the installed `AdmissionPolicy`), SecurityHeaders, CSRF,
+CORS (an `OPTIONS` preflight stops here with 204), and finally the gates on Aura's own endpoints —
+`/__schema__`, `/openapi.json`, and a browser `Upgrade: websocket` handshake.
+
+Draining is deliberately absent from this chain. Rejecting new traffic while in-flight requests
+finish is a transport lifecycle job, and a per-request rule here would silence the `/health`
+probes whose purpose is to answer `DOWN`.
+
+Each rejection on an Aura endpoint is bodyless on purpose: a 404 and a 401 are the whole signal
+for `/__schema__`, and an error document that names the reason discloses more than the status
+code does. The schema switch and its token are independent doors — either one alone opens the
+endpoint.
+
 ## Snapshots
 
 Snapshot recording redacts credentials, query values, bodies, exception text,

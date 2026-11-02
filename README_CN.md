@@ -58,7 +58,7 @@ artifactId 可以继续使用合法但不同的 Maven 命名。
 
 ```java
 AuraApp app = AuraApp.create(new AuraConfig().port(8080))
-    .use(HealthModule.create())
+    .use(io.aura.web.HealthModule.create())
     .use(new AuraModule() {
         @Override public ModuleMetadata descriptor() {
             return ModuleMetadata.of("hello", "1.0.0");
@@ -80,7 +80,7 @@ app.start();
 
 ```java
 AuraApp.create()
-    .use(HealthModule.create())
+    .use(io.aura.web.HealthModule.create())
     .use(DatabaseModule.create(db))
     .use(WorkflowModule.create())
     .use(AiModule.create(provider))

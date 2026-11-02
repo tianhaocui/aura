@@ -95,8 +95,9 @@ Application properties follow the same lifecycle boundary: configure them with
 `AuraApp.property(...)` before `prepare()` or `start()`. Changes after module
 preparation are rejected so module behavior cannot change nondeterministically.
 
-Use `HealthModule.create()` when an application needs the standard health
-contract. It contributes `GET /health/live`, `GET /health/ready`, and
+Use the Web adapter's `io.aura.web.HealthModule.create()` when an application
+needs the standard health contract. Health probes read runtime state, so the
+module lives with the adapter rather than in `aura-core`. It contributes `GET /health/live`, `GET /health/ready`, and
 `GET /health`; liveness reports whether shutdown has begun, readiness requires
 the runtime to be `RUNNING` and all registered checks to be `UP`, and the
 aggregate endpoint reports dependency health without exposing check errors.

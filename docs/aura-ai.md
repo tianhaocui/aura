@@ -145,6 +145,58 @@ output 和 cancellation；它不允许替换 prompt、system prompt 或默认 re
   accounting window. Call `resetUsage()` at the start of a new window; unknown
   provider usage is counted separately instead of being guessed.
 
+## 测试用 provider
+
+`FakeAiProvider` 和 `ScriptedAiProvider` 是 `aura-ai` 自带的确定性 provider，让 AI 分支在没有网络、
+没有真实延迟的情况下可验证。两者都记录收到的请求，因此断言写在 provider 上而不是 mock 框架里。
+
+<!-- aura:compile name=ai-deterministic-providers -->
+```java
+package docs.example;
+
+import io.aura.ai.AiClient;
+import io.aura.ai.AiRequest;
+import io.aura.ai.FakeAiProvider;
+import io.aura.ai.ScriptedAiProvider;
+
+import java.io.IOException;
+import java.util.Map;
+
+public final class DeterministicAiProviders {
+    private DeterministicAiProviders() { }
+
+    /** 每次调用都回答同一个内容，并留下收到的请求。 */
+    public static String oneShotAnswer() throws Exception {
+        FakeAiProvider provider = FakeAiProvider.returning(
+                "Order 42 shipped.", Map.of("prompt_tokens", 12));
+        try (AiClient client = new AiClient(provider)) {
+            client.chat(AiRequest.builder().prompt("Where is order 42?").build());
+            return provider.lastRequest().prompt();
+        }
+    }
+
+    /** 第一次失败、第二次成功：整条 retry 路径放进一个测试里。 */
+    public static ScriptedAiProvider failsThenSucceeds() {
+        return ScriptedAiProvider.create()
+                .thenThrow(new IOException("upstream unavailable"))
+                .then("Order 42 shipped.");
+    }
+
+    /** 每次失败都抛出同一个异常类型，让 retry 策略自己分类。 */
+    public static FakeAiProvider alwaysFailing() {
+        return FakeAiProvider.failing(new IOException("upstream unavailable"));
+    }
+}
+```
+
+选择只有一个：同一个回答用 `FakeAiProvider`（`returning`、`answering(Function<AiRequest, String>)`、
+`failing(Exception)`），连续调用必须表现不同才用 `ScriptedAiProvider`（`of(Object...)`、
+`then(AiResponse|String)`、`thenThrow(Exception)`）。`ScriptedAiProvider` 的脚本耗尽后抛
+`IllegalStateException` 并报出已调用次数，而不是重复最后一条回答——脚本写短了是测试的错误，
+不该被静默放过。`received()`、`callCount()`、`lastRequest()` 和 `remaining()` 就是断言面。
+
+两者都实现 `stream`：脚本内容按 token 发出，脚本失败走 `onError`，因此流式分支同样不需要网络。
+
 ## 流式输出
 
 ```java

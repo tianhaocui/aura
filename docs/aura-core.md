@@ -11,7 +11,7 @@ AuraApp app = AuraApp.create(new AuraConfig()
         .port(8080)
         .maxBodySize(10 * 1024 * 1024L)
         .requestTimeout(30))
-    .use(HealthModule.create())
+    .use(io.aura.web.HealthModule.create())
     .use(new OrdersModule());
 
 app.start();
@@ -147,6 +147,76 @@ Install the Web adapter's `io.aura.web.HealthModule.create()` to contribute:
 Register dependency checks with `app.healthCheck(...)` or
 `ModuleContext.healthCheck(...)`. Checks execute on a bounded executor, have a
 configured timeout, fail closed, and never return raw exception messages.
+
+<!-- aura:compile name=core-health-composition -->
+```java
+package docs.example;
+
+import io.aura.AuraApp;
+import io.aura.AuraModule;
+import io.aura.ModuleContext;
+import io.aura.contract.HealthStatus;
+import io.aura.contract.ModuleMetadata;
+import io.aura.web.HealthModule;
+
+public final class HealthComposition {
+    private HealthComposition() { }
+
+    public static AuraApp create() {
+        return AuraApp.create()
+                .use(HealthModule.create())
+                .use(new OrdersHealth());
+    }
+
+    private static final class OrdersHealth implements AuraModule {
+        @Override public ModuleMetadata descriptor() {
+            return ModuleMetadata.of("orders-health", "1.0.0");
+        }
+
+        @Override public void install(ModuleContext context) {
+            context.healthCheck(() -> HealthStatus.UP);
+        }
+    }
+}
+```
+
+## Outbound Address Safety
+
+Any module that opens an outbound HTTP connection reaches the same two failures: an operator
+pointing a configured host at a cloud metadata address, and a name that resolves publicly at
+check time but privately by connect time. `io.aura.security.IpSafety` is the shared guard for
+both, so the blacklist lives in one place instead of being re-typed per client.
+
+<!-- aura:compile name=core-pinned-outbound-host -->
+```java
+package docs.example;
+
+import io.aura.security.IpSafety;
+
+import java.io.IOException;
+import java.net.InetAddress;
+import java.util.List;
+
+public final class PinnedOutboundHost {
+    private PinnedOutboundHost() { }
+
+    /** Resolve once, validate every answer, then connect to the returned address only. */
+    public static InetAddress target(String host) throws IOException {
+        List<InetAddress> resolved = IpSafety.resolvePublic(host);
+        return IpSafety.pinToPublic(resolved);
+    }
+}
+```
+
+`resolvePublic` throws `SecurityException` if *any* resolved address is non-public, and
+`pinToPublic` fails closed on a mixed set rather than falling back to another answer — a mixed
+set is the signature of an in-flight rebinding attempt. The caller must then connect to the
+pinned address; a second DNS lookup would reopen the window the pin exists to close.
+
+Rejected ranges cover IPv4 private, loopback, link-local (including `169.254.169.254`), CGNAT,
+multicast and reserved blocks, and the equivalent IPv6 ranges plus `2001:db8::/32`. IPv4-embedded
+IPv6 forms are unwrapped and evaluated as IPv4. The checks are pure byte-range comparisons and
+never consult local interfaces, so results are deterministic across environments.
 
 ## Validation
 

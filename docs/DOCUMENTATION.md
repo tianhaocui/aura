@@ -121,7 +121,7 @@ semantics from drifting between test and production paths.
 
 ```java
 AuraApp.create()
-    .use(HealthModule.create())
+    .use(io.aura.web.HealthModule.create())
     .use(DatabaseModule.create(db))
     .use(WorkflowModule.create())
     .use(AiModule.create(provider))

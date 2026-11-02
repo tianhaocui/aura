@@ -47,7 +47,7 @@ Every application module must compile with preserved Java parameter names:
 
 ```java
 AuraApp app = AuraApp.create()
-        .use(HealthModule.create())
+        .use(io.aura.web.HealthModule.create())
         .use(DatabaseModule.create(db))
         .use(new OrderModule())
         .start();

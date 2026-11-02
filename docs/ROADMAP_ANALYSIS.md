@@ -88,13 +88,14 @@ r.crud("/api/docs", docsService, CrudOptions.of().pageSize(50));
 **API 设计：**
 
 ```java
-// 方式一：Builder API（推荐）
-Aura.create()
-    .cron("0 9 * * *", () -> reminderService.checkOverdue())
-    .cron("*/5 * * * *", () -> stockService.checkLowStock())
-    .start();
+// 方式一：模块 install() 显式注册（推荐）
+@Override public void install(ModuleContext context) {
+    context.cron("0 9 * * *", () -> reminderService.checkOverdue());
+    context.cron("*/5 * * * *", () -> stockService.checkLowStock());
+}
 
-// 方式二：注解（可选，后续加）
+// 方式二：注解（可选，后续加）—— 由 aura-processor 在编译期生成显式贡献，
+// 运行期不再有包扫描这条门
 @Schedule("0 9 * * *")
 public void checkOverdue() { ... }
 ```
@@ -102,8 +103,10 @@ public void checkOverdue() { ... }
 **实现复杂度：** 中等（约 200 行）
 - 内置轻量 cron 解析器（只支持标准 5 字段）
 - 基于 `ScheduledExecutorService`，不引入 Quartz
-- `app.cron()` 注册任务，`stop()` 时自动关闭线程池
-- 支持 `@Schedule` 注解（PackageScanner 扫描时注册）
+- `ModuleContext.cron()` 注册任务（与 `context.route(Route)` 同为 install() 里的显式贡献），
+  `stop()` 时自动关闭线程池
+- `@Schedule` 注解走 aura-processor 编译期生成，不恢复包扫描：`PackageScanner` 与
+  `RouteEntry` 已在 ④-ab 删除，一条贡献门是本分支不可回退的约束
 
 **边界判断：** 不做分布式调度、不做任务持久化、不做失败重试。单机 cron 够用。
 
