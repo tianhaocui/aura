@@ -88,6 +88,11 @@ record, the stage-by-stage log, and the migration table.
   its own shape publishes that shape to OpenAPI (an enum keeps its accepted
   values), and the `example` in `/__schema__` is generated from the same table,
   so replaying the example a model copied binds.
+- A route contributed without a handler fails as `AURA_ROUTE_HANDLER_MISSING`
+  naming the method and path, and a `null` contribution fails as
+  `AURA_ROUTE_CONTRIBUTION_INVALID` naming the module. Neither is a bare
+  `NullPointerException` any more, so the assembly mistake says which door was
+  wrong instead of pointing at a constructor frame.
 
 ### Fixed
 

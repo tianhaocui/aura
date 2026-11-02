@@ -376,4 +376,29 @@ if [ "$(rg -c 'public McpParam\(' "$repo_root/aura-mcp/src/main/java/io/aura/mcp
   exit 1
 fi
 
+# An assembly mistake has to name itself. A bare NullPointerException from requireNonNull points
+# at the constructor frame, not at the route or the module that contributed it.
+rg -q 'AURA_ROUTE_HANDLER_MISSING' "$repo_root/aura-contract/src/main/java/io/aura/contract/Route.java"
+if rg -q 'requireNonNull\(handler' "$repo_root/aura-contract/src/main/java/io/aura/contract/Route.java"; then
+  echo "a handlerless route contribution lost the route it named" >&2
+  exit 1
+fi
+rg -q 'AURA_ROUTE_CONTRIBUTION_INVALID' "$repo_root/aura-core/src/main/java/io/aura/ModularRuntime.java"
+
+# Aura's own endpoint documents are read parsed and typed in tests. An unchecked cast hands a
+# renamed key to the next assertion as null, and a substring of the whole document matches text
+# that has nothing to do with the field its name claims.
+for test_tree in "$repo_root/aura-web/src/test" "$repo_root/examples/aura-generated/src/test"; do
+  if rg -q 'client\.(schema|openApi)\(\)\.get\(|\(List<Map<String, Object>>\) client\.|client\.(schema|openApi)\(\)\.toString\(\)\)\.contains\(' \
+      "$test_tree"; then
+    echo "a route document was read as a cast or a substring instead of SchemaWire: $test_tree" >&2
+    exit 1
+  fi
+done
+# A test with no assertions is a probe that always passes.
+if [ -e "$repo_root/aura-web/src/test/java/io/aura/web/SchemaProbeTest.java" ]; then
+  echo "SchemaProbeTest returned: it printed the schema document and asserted nothing" >&2
+  exit 1
+fi
+
 echo "Aura module and documentation contracts passed (version $root_version)"

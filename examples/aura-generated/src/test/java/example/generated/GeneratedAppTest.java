@@ -1,5 +1,8 @@
 package example.generated;
 
+import com.alibaba.fastjson2.JSON;
+import com.alibaba.fastjson2.JSONArray;
+import com.alibaba.fastjson2.JSONObject;
 import io.aura.web.TestClient;
 import org.junit.jupiter.api.Test;
 
@@ -17,31 +20,22 @@ class GeneratedAppTest {
                 .expect(200).body()).contains("created");
         assertThat(client.get("/generated/orders/2").expect(200).body())
                 .contains("created");
-        assertThat(client.schema().toString())
-                .contains("Get one generated order", "Order identifier", "/generated/orders/{id}");
-        @SuppressWarnings("unchecked")
-        var routes = (java.util.List<java.util.Map<String, Object>>) client.schema().get("routes");
-        var create = routes.stream().filter(route -> route.get("path").equals("/generated/orders")
-                && route.get("method").equals("POST")).findFirst().orElseThrow();
-        @SuppressWarnings("unchecked")
-        var createParams = (java.util.List<io.aura.contract.ApiParameter>) create.get("params");
-        assertThat(createParams).singleElement()
-                .satisfies(parameter -> {
-                    assertThat(parameter.schema()).containsEntry("type", "object");
-                    @SuppressWarnings("unchecked")
-                    var properties = (java.util.Map<String, Object>) parameter.schema().get("properties");
-                    @SuppressWarnings("unchecked")
-                    var status = (java.util.Map<String, Object>) properties.get("status");
-                    assertThat(status).containsEntry("minLength", 1);
-                });
-        var get = routes.stream().filter(route -> route.get("path").equals("/generated/orders/{id}")
-                && route.get("method").equals("GET")).findFirst().orElseThrow();
-        @SuppressWarnings("unchecked")
-        var responseSchema = (java.util.Map<String, Object>) get.get("responseSchema");
-        assertThat(responseSchema).containsEntry("type", "object");
-        @SuppressWarnings("unchecked")
-        var responseProperties = (java.util.Map<String, Object>) responseSchema.get("properties");
-        assertThat(responseProperties.keySet()).contains("id", "status");
+
+        JSONObject get = route(client, "/generated/orders/{id}");
+        assertThat(get.getString("method")).isEqualTo("GET");
+        assertThat(get.getString("description")).isEqualTo("Get one generated order");
+        assertThat(parameter(get, "id").getString("description")).isEqualTo("Order identifier");
+
+        JSONObject body = parameters(route(client, "/generated/orders", "POST")).getJSONObject(0);
+        assertThat(body.getString("source")).isEqualTo("body");
+        assertThat(body.getJSONObject("schema")).containsEntry("type", "object");
+        assertThat(body.getJSONObject("schema").getJSONObject("properties")
+                .getJSONObject("status")).containsEntry("minLength", 1);
+        assertThat(parameters(route(client, "/generated/orders", "POST"))).hasSize(1);
+
+        assertThat(get.getJSONObject("responseSchema")).containsEntry("type", "object");
+        assertThat(get.getJSONObject("responseSchema").getJSONObject("properties").keySet())
+                .contains("id", "status");
     }
 
     @Test
@@ -52,24 +46,50 @@ class GeneratedAppTest {
                 .query("direction", "UP").query("minId", "1")
                 .expect(200).body()).contains("ready");
 
-        @SuppressWarnings("unchecked")
-        var searchRoutes = (java.util.List<java.util.Map<String, Object>>) client.schema().get("routes");
-        var search = searchRoutes.stream()
-                .filter(route -> route.get("path").equals("/generated/orders/search"))
-                .findFirst().orElseThrow();
-        @SuppressWarnings("unchecked")
-        var searchParams = (java.util.List<io.aura.contract.ApiParameter>) search.get("params");
-        assertThat(searchParams)
-                .extracting(io.aura.contract.ApiParameter::name, io.aura.contract.ApiParameter::source)
-                .containsExactly(
-                        org.assertj.core.groups.Tuple.tuple("direction", "query"),
-                        org.assertj.core.groups.Tuple.tuple("minId", "query"));
-        assertThat(searchParams.get(0).schema())
+        JSONArray searchParams = parameters(route(client, "/generated/orders/search"));
+        assertThat(searchParams).hasSize(2);
+        assertThat(searchParams.getJSONObject(0)).containsEntry("name", "direction")
+                .containsEntry("source", "query");
+        assertThat(searchParams.getJSONObject(1)).containsEntry("name", "minId")
+                .containsEntry("source", "query");
+        assertThat(searchParams.getJSONObject(0).getJSONObject("schema"))
                 .containsEntry("type", "string")
                 .containsEntry("enum", java.util.List.of("UP", "DOWN"));
         // A plain scalar publishes no schema on either path and spells its type the way
         // the reflective catalog does, so consumers infer the JSON type from one name.
-        assertThat(searchParams.get(1).schema()).isEmpty();
-        assertThat(searchParams.get(1).type()).isEqualTo("BigDecimal");
+        JSONObject minId = searchParams.getJSONObject(1);
+        assertThat(minId.getJSONObject("schema")).isNullOrEmpty();
+        assertThat(minId.getString("type")).isEqualTo("BigDecimal");
+    }
+
+    // The document is read as parsed JSON, not as unchecked casts: a key that moved has to fail
+    // the lookup that wanted it, instead of yielding a null that a later assertion can accept.
+
+    private static JSONObject route(TestClient client, String path) {
+        return route(client, path, "GET");
+    }
+
+    private static JSONObject route(TestClient client, String path, String method) {
+        JSONArray routes = JSON.parseObject(JSON.toJSONString(client.schema())).getJSONArray("routes");
+        for (int i = 0; i < routes.size(); i++) {
+            JSONObject route = routes.getJSONObject(i);
+            if (path.equals(route.getString("path")) && method.equals(route.getString("method"))) {
+                return route;
+            }
+        }
+        throw new AssertionError(method + " " + path + " never appeared in /__schema__: " + routes);
+    }
+
+    private static JSONArray parameters(JSONObject route) {
+        JSONArray params = route.getJSONArray("params");
+        return params == null ? new JSONArray() : params;
+    }
+
+    private static JSONObject parameter(JSONObject route, String name) {
+        for (int i = 0; i < parameters(route).size(); i++) {
+            JSONObject parameter = parameters(route).getJSONObject(i);
+            if (name.equals(parameter.getString("name"))) return parameter;
+        }
+        throw new AssertionError(name + " never appeared in " + route);
     }
 }

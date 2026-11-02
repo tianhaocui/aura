@@ -20,10 +20,20 @@ class RouteTest {
     }
 
     @Test
-    void nullHandlerFailsFast() {
+    void nullHandlerFailsWithTheRouteNamedAndACodeToRepair() {
+        // A handler-less contribution used to surface as a bare NullPointerException whose stack
+        // trace named no route; the code is what an assembling AI can act on.
         assertThatThrownBy(() -> new Route("GET", "/x", null,
                 List.of(), null, Map.of(), null, false, null, false))
-                .isInstanceOf(NullPointerException.class);
+                .isInstanceOfSatisfying(ContractException.class, failure -> {
+                    assertThat(failure.error().code()).isEqualTo("AURA_ROUTE_HANDLER_MISSING");
+                    assertThat(failure).hasMessageContaining("GET /x");
+                    assertThat(failure).hasMessageContaining("Route.of(method, path, handler)");
+                });
+
+        assertThatThrownBy(() -> Route.of("POST", "/orders", null))
+                .isInstanceOf(ContractException.class)
+                .hasMessageContaining("POST /orders");
     }
 
     @Test

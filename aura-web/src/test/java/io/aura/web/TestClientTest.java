@@ -63,24 +63,25 @@ class TestClientTest {
                 .param("id", "long", "path", true, "Order identifier");
         TestClient client = TestApplications.client(router);
 
-        @SuppressWarnings("unchecked")
-        var routes = (java.util.List<java.util.Map<String, Object>>) client.schema().get("routes");
-        assertThat(routes).singleElement().satisfies(route -> {
-            assertThat(route).containsEntry("method", "GET")
-                    .containsEntry("description", "Get order")
-                    // A lambda route declares no return type, and undeclared metadata
-                    // stays out of the document instead of arriving as a null.
-                    .doesNotContainKey("returnType");
-            @SuppressWarnings("unchecked")
-            var params = (java.util.List<io.aura.contract.ApiParameter>) route.get("params");
-            assertThat(params).singleElement().extracting(io.aura.contract.ApiParameter::name)
-                    .isEqualTo("id");
-            assertThat((String) route.get("example")).contains("/orders/1");
-        });
+        com.alibaba.fastjson2.JSONObject route = SchemaWire.route(client, "/orders/{id}");
+        assertThat(route).containsEntry("method", "GET")
+                .containsEntry("description", "Get order")
+                // A lambda route declares no return type, and undeclared metadata
+                // stays out of the document instead of arriving as a null.
+                .doesNotContainKey("returnType");
+        assertThat(route.getString("example")).contains("/orders/1");
+        assertThat(SchemaWire.parameter(route, "id"))
+                .containsEntry("source", "path")
+                .containsEntry("required", true)
+                .containsEntry("description", "Order identifier");
 
-        var paths = (java.util.Map<?, ?>) client.openApi().get("paths");
-        var operation = (java.util.Map<?, ?>) ((java.util.Map<?, ?>) paths.get("/orders/{id}")).get("get");
-        assertThat(operation.get("operationId")).isEqualTo("get_orders_id");
+        assertThat(SchemaWire.operation(client, "/orders/{id}", "GET").getString("operationId"))
+                .isEqualTo("get_orders_id");
+        // The same two facts about the same parameter, in both documents.
+        assertThat(SchemaWire.queryParameters(client, "/orders/{id}", "GET").getJSONObject(0))
+                .containsEntry("name", "id")
+                .containsEntry("in", "path")
+                .containsEntry("required", true);
     }
 
     @Test

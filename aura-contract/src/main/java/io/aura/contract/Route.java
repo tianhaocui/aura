@@ -5,7 +5,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Objects;
 
 /**
  * Single, immutable description of a route — the only shape a module can
@@ -46,7 +45,14 @@ public record Route(
         }
         method = method.trim().toUpperCase(Locale.ROOT);
         path = path.trim();
-        Objects.requireNonNull(handler, "route handler must not be null");
+        // A contribution with no handler is the one assembly mistake whose repair is not in the
+        // stack trace: the caller has to learn which route, and that a handler is mandatory by
+        // construction, from the failure itself.
+        if (handler == null) {
+            throw new ContractException("AURA_ROUTE_HANDLER_MISSING",
+                    "Route " + method + " " + path + " has no handler; "
+                            + "Route.of(method, path, handler) requires one");
+        }
         // A handshake that upgrades is not readable as one request and one response,
         // whatever the caller happened to pass for the streaming flag.
         if (WEBSOCKET.equals(method)) streaming = true;

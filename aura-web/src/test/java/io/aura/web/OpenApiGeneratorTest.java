@@ -1,11 +1,12 @@
 package io.aura.web;
 
+import com.alibaba.fastjson2.JSONArray;
+import com.alibaba.fastjson2.JSONObject;
 import io.aura.contract.ApiParameter;
 import io.aura.contract.Route;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
-import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -17,13 +18,11 @@ class OpenApiGeneratorTest {
                 .withReturnType("Order")
                 .withParams(List.of(new ApiParameter("id", "long", "path", true, "Order ID")));
 
-        Map<String, Object> document = OpenApiGenerator.generate("Orders", "1.0.0", List.of(route));
-        assertThat(document).containsEntry("openapi", "3.0.3");
-        Map<?, ?> paths = (Map<?, ?>) document.get("paths");
-        Map<?, ?> operation = (Map<?, ?>) ((Map<?, ?>) paths.get("/orders/{id}")).get("get");
-        assertThat(operation.get("operationId")).isEqualTo("get_orders_id");
-        List<?> parameters = (List<?>) operation.get("parameters");
-        assertThat(parameters).hasSize(1);
+        JSONObject document = SchemaWire.document(OpenApiGenerator.generate("Orders", "1.0.0", List.of(route)));
+        assertThat(document.getString("openapi")).isEqualTo("3.0.3");
+        JSONObject operation = SchemaWire.operation(document, "/orders/{id}", "GET");
+        assertThat(operation.getString("operationId")).isEqualTo("get_orders_id");
+        assertThat(operation.getJSONArray("parameters")).hasSize(1);
     }
 
     @Test
@@ -31,20 +30,20 @@ class OpenApiGeneratorTest {
         Route route = Route.of("GET", "/orders/1", (BaseHandler) ctx -> { })
                 .describedAs("Get order")
                 .withReturnType("Order")
-                .withResponseSchema(Map.of("type", "object",
-                        "properties", Map.of("id", Map.of("type", "integer"))));
+                .withResponseSchema(java.util.Map.of("type", "object",
+                        "properties", java.util.Map.of("id", java.util.Map.of("type", "integer"))));
 
-        Map<String, Object> document = OpenApiGenerator.generate("Orders", "1.0.0", List.of(route));
-        Map<?, ?> paths = (Map<?, ?>) document.get("paths");
-        Map<?, ?> operation = (Map<?, ?>) ((Map<?, ?>) paths.get("/orders/1")).get("get");
-        Map<?, ?> response = (Map<?, ?>) ((Map<?, ?>) operation.get("responses")).get("200");
-        assertThat(response.containsKey("content")).isTrue();
+        JSONObject document = SchemaWire.document(OpenApiGenerator.generate("Orders", "1.0.0", List.of(route)));
+        JSONObject response = SchemaWire.operation(document, "/orders/1", "GET")
+                .getJSONObject("responses").getJSONObject("200");
+        assertThat(response.containsKey("content"))
+                .as("a route that describes its response publishes it, or a client codes against an empty body")
+                .isTrue();
     }
 
     enum Channel { SMS, EMAIL }
 
     @Test
-    @SuppressWarnings("unchecked")
     void queryParameterTypesComeFromTheOneScalarTable() {
         Route route = Route.of("GET", "/report", (BaseHandler) ctx -> { })
                 .withParams(List.of(
@@ -54,30 +53,34 @@ class OpenApiGeneratorTest {
 
         // The private table this replaces called BigDecimal and short strings; the schema
         // document and the MCP tool said number and integer for the same handler.
-        List<Map<String, Object>> parameters =
-                (List<Map<String, Object>>) operation(route, "/report").get("parameters");
-        assertThat(parameters).extracting(parameter -> ((Map<String, Object>) parameter.get("schema")).get("type"))
-                .containsExactly("number", "integer", "integer");
+        assertThat(parameterTypes(route, "/report")).containsExactly("number", "integer", "integer");
     }
 
     @Test
-    @SuppressWarnings("unchecked")
     void declaredParameterSchemaReachesOpenApiInsteadOfAnUnboundedString() {
         Route route = Route.of("GET", "/notify", (BaseHandler) ctx -> { })
                 .withParams(List.of(new ApiParameter("channel", "Channel", "query", true, null,
                         TypeSchema.describe(Channel.class))));
 
-        List<Map<String, Object>> parameters =
-                (List<Map<String, Object>>) operation(route, "/notify").get("parameters");
-        assertThat(parameters.get(0).get("schema")).isInstanceOfSatisfying(Map.class, schema ->
-                assertThat(schema).containsEntry("type", "string")
-                        .containsEntry("enum", List.of("SMS", "EMAIL")));
+        assertThat(parameterSchema(route, "/notify", "channel"))
+                .containsEntry("type", "string")
+                .containsEntry("enum", List.of("SMS", "EMAIL"));
     }
 
-    @SuppressWarnings("unchecked")
-    private static Map<String, Object> operation(Route route, String path) {
-        Map<String, Object> document = OpenApiGenerator.generate("Orders", "1.0.0", List.of(route));
-        Map<String, Object> pathItem = (Map<String, Object>) ((Map<String, Object>) document.get("paths")).get(path);
-        return (Map<String, Object>) pathItem.get("get");
+    /** The JSON types OpenAPI published for the route's parameters, in declaration order. */
+    private static List<String> parameterTypes(Route route, String path) {
+        return listedParameters(route, path).toJavaList(JSONObject.class).stream()
+                .map(parameter -> parameter.getJSONObject("schema").getString("type"))
+                .toList();
+    }
+
+    private static JSONObject parameterSchema(Route route, String path, String name) {
+        return SchemaWire.parameter(listedParameters(route, path), name).getJSONObject("schema");
+    }
+
+    private static JSONArray listedParameters(Route route, String path) {
+        return SchemaWire.operation(SchemaWire.document(
+                OpenApiGenerator.generate("Orders", "1.0.0", List.of(route))), path, "GET")
+                .getJSONArray("parameters");
     }
 }

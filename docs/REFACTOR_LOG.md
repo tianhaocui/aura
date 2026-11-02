@@ -33,6 +33,7 @@ verifiable in memory in milliseconds. Every stage below is a commit on
 | review-C | `a14410e` | the MCP bridge stopped offering and calling routes it cannot serve |
 | review-D | `2b63207` | a WebSocket endpoint became a `Route` |
 | review-E | `9dfb9c2` | the schema token, OpenAPI switch and WebSocket Origin allow-list moved into the shared guard chain, so `TestClient` proves them without a port |
+| review-F | `cfa665a` | `required` became the binder's single rule on both transports, MCP stopped inventing types, and OpenAPI/examples joined `ScalarType` |
 
 ## Decisions that differed from the plan
 
@@ -136,6 +137,19 @@ behaviour changed on purpose: a production app that set `aura.schema.enabled`
 without a token previously got a permanent 404, so the switch and the token are
 now independent doors instead of a flag that silently did nothing.
 
+**Two assembly mistakes keep two codes.** `Route`'s constructor and
+`ModularRuntime.route(...)` both refuse, and it is tempting to collapse them into
+one failure since both mean "you contributed something unusable". They stayed
+apart because the caller repairs them in different places: a `null` handed to
+`context.route` names the *module* (`AURA_ROUTE_CONTRIBUTION_INVALID` carries the
+descriptor id, which is how a bundle of forty routes is narrowed to one install
+method), while a `Route` built without a handler names the *method and path*
+(`AURA_ROUTE_HANDLER_MISSING`, because a stack frame inside a record's
+constructor says nothing about which route was being assembled). Both are coded
+`ContractException`/`ModuleException` rather than the `NullPointerException` they
+replaced, for the reason the whole 0.6 return runs on: an AI that reads the
+failure has to be able to repair it without reading the source it failed in.
+
 ## Deleted or moved public surface
 
 | 1.0.0 | now |
@@ -170,8 +184,13 @@ binding to `0` or `false`.
 
 - `ModuleAssemblyTest.routeContributionWithoutHandlerFailsDuringModuleInstallation`
   and `routeContributorIsEvaluatedExactlyOnce`: the shapes they covered no longer
-  exist; `Route` requires a handler by construction, so the error code is
-  unreachable.
+  exist — there is no contributor lambda to evaluate twice, and a route without a
+  handler is refused where it is built. `fix(review-G)` gave that refusal back a
+  name: `Route`'s constructor answers `AURA_ROUTE_HANDLER_MISSING` with the method
+  and path, `ModularRuntime` answers `AURA_ROUTE_CONTRIBUTION_INVALID` with the
+  module id, and `RouteTest` / `AuraModuleTest` assert both codes. Neither was a
+  `NullPointerException` from `Objects.requireNonNull` any more, which named
+  nothing and pointed at a constructor frame instead of the door.
 - `RouteTest.toApiRouteProjectsAllFieldsExceptHandler` and
   `apiRouteFromRoundTripsViaRoute`: the projection moved into the schema
   document, and `TestClientTest` / `PermissionAuthorizationTest` now assert the
@@ -186,6 +205,17 @@ binding to `0` or `false`.
   parameter's name: the old expectation *was* the defect, and each one still
   runs. `RouteCatalogTest`'s body assertion flipped to `required: false` with
   the reason written next to it.
+- `SchemaProbeTest` was deleted, not rewritten. It started an app, printed
+  `/__schema__` to `/tmp/aura-schema-probe.json` and asserted nothing, so it
+  could not fail and cost a real port to find out. What it stood for is now
+  `SchemaWire` — a test-only reader that parses `TestClient.schema()` and
+  `TestClient.openApi()` into typed JSON — used by `TestClientTest`,
+  `WebSocketContractTest`, `OpenApiGeneratorTest`, `RequiredParameterTest`,
+  `SchemaExampleTest`, `PermissionAuthorizationTest` and the generated example.
+  Reading the projection with `getBoolean`/`getString` is what makes a moved key
+  a failure; the previous unchecked casts handed a `null` to the next assertion
+  and the `toString().contains` form matched text that had nothing to do with the
+  field its name claimed.
 
 No assertion was weakened to make a stage pass.
 
@@ -224,10 +254,37 @@ green throughout — a present parameter still binds, an optional parameter stil
 arrives as `null`, an absent body still reads `tags=null` — so the reds name
 the fix rather than the build.
 
+`fix(review-G)` was checked the same way at both doors. Replacing
+`Route`'s `ContractException` with the `Objects.requireNonNull` it displaced
+turned exactly 3 cases red — 1 in `RouteTest`, and in aura-core
+`AuraModuleTest.moduleContributesValidatedWebSocketEndpoint` plus
+`aHandlerlessRouteContributionFailsWithTheRouteNamed` — which is the point of
+the change: the failure has to name the route, and only a coded exception says
+it in a form a caller can act on. The typed wire reader was checked against the
+drift it exists to catch: renaming `/__schema__`'s `description` key to `summary`
+— a key move a consumer would notice — turned 3 cases red
+(`TestClientTest`, `WebSocketContractTest`, and the generated example), while the
+`toString().contains` version of the generated-example assertions it replaced ran
+green on the same document. A substring of the whole projection cannot fail a
+rename; the reason the old assertions survived every key change so far is the
+reason they are gone.
+
 Known flake: `LiquibaseSchemaMigratorTest.concurrentFirstStartsSerializeChangesetsAcrossIndependentPools`
 allows 15 seconds for two serialized Liquibase runs and timed out once on this
 Intel machine while passing twice. It is timing, not behaviour, but the budget
 should be raised with the rest of the database work.
+
+Known flake: `DeploymentSecurityTest.hostAllowlistRejectsUnexpectedHost` answered
+`404` where it asserts `421` once, during the run that followed three aborted
+`-Dmaven.test.failure.ignore` reactor runs, and passed on the full reactor and
+three further aura-web runs before and after. `availablePort()` reserves a port
+and releases it before the app binds, so a listener that outlived one of those
+abandoned runs could own it — and a server without that route answers `404` for a
+Host the allowlist would have rejected. The cause is not proven, only the shape
+that fits: a `404` says a different process answered, not that the guard missed.
+The class proves behaviour over a real socket, so the port cannot be dropped; the
+fix is to bind the accepted socket rather than pick a number, and it belongs with
+the rest of the socket-backed tests.
 
 `scripts/verify-public-api.sh` needs `jq`, which is not installed here. The
 regenerated baseline came from the script's own generation half (its first 141

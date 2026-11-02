@@ -1,5 +1,6 @@
 package io.aura.web;
 
+import com.alibaba.fastjson2.JSONObject;
 import io.aura.AuraApp;
 import io.aura.AuraConfig;
 import io.aura.contract.Route;
@@ -11,7 +12,6 @@ import java.io.InputStreamReader;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
-import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.*;
@@ -32,29 +32,25 @@ class WebSocketContractTest {
     }
 
     @Test
-    @SuppressWarnings("unchecked")
     void webSocketEndpointIsPublishedAsARoute() {
         TestClient client = TestClient.of(TestApplications.app("ws-schema",
                 Route.of("GET", "/health", (BaseHandler) ctx -> ctx.text("ok")),
                 chatRoom().describedAs("Chat room stream")));
 
-        List<Map<String, Object>> routes = (List<Map<String, Object>>) client.schema().get("routes");
-        Map<String, Object> view = routes.stream()
-                .filter(route -> "/ws/room/{roomId}".equals(route.get("path")))
-                .findFirst().orElseThrow();
+        JSONObject view = SchemaWire.route(client, "/ws/room/{roomId}");
 
         assertThat(view).containsEntry("method", "WS");
         assertThat(view).containsEntry("description", "Chat room stream");
         // Streaming is what tells a request/response consumer to decline the endpoint, so it has
         // to be in the document and not merely true inside the JVM.
         assertThat(view).containsEntry("streaming", true);
-        assertThat((String) view.get("example"))
+        assertThat(view.getString("example"))
                 .contains("Upgrade: websocket")
                 .contains("/ws/room/example");
-        // The template is only usable if the document says what fills it.
-        assertThat(view.get("params").toString())
-                .contains("roomId")
-                .contains("path");
+        // The template is only usable if the document says what fills it and from where.
+        assertThat(SchemaWire.parameter(view, "roomId"))
+                .containsEntry("source", "path")
+                .containsEntry("required", true);
     }
 
     @Test

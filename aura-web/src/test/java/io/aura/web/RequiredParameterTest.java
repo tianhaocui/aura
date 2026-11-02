@@ -1,7 +1,5 @@
 package io.aura.web;
 
-import com.alibaba.fastjson2.JSON;
-import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
 import org.junit.jupiter.api.Test;
 
@@ -57,13 +55,13 @@ class RequiredParameterTest {
     @Test
     void schemaMarksExactlyTheParameterTheBinderRefuses() {
         TestClient client = client();
-        JSONObject rank = routeDocument(client, "/rank");
+        JSONObject rank = SchemaWire.route(client, "/rank");
 
-        assertThat(parameter(rank, "limit").getBoolean("required"))
+        assertThat(SchemaWire.parameter(rank, "limit").getBoolean("required"))
                 .as("a primitive signature cannot hold null, so absence is a client error")
                 .isTrue();
-        assertThat(parameter(rank, "limit").getString("source")).isEqualTo("query");
-        assertThat(parameter(rank, "tag").getBoolean("required"))
+        assertThat(SchemaWire.parameter(rank, "limit").getString("source")).isEqualTo("query");
+        assertThat(SchemaWire.parameter(rank, "tag").getBoolean("required"))
                 .as("null is a value this handler chose to accept")
                 .isFalse();
 
@@ -74,33 +72,13 @@ class RequiredParameterTest {
     @Test
     void absentBodyIsNotMarkedRequiredBecauseTheHandlerCanSeeNull() {
         TestClient client = client();
-        JSONObject feed = routeDocument(client, "/feed");
+        JSONObject feed = SchemaWire.route(client, "/feed");
 
-        assertThat(parameter(feed, "tags").getString("source")).isEqualTo("body");
-        assertThat(parameter(feed, "tags").getBoolean("required")).isFalse();
+        assertThat(SchemaWire.parameter(feed, "tags").getString("source")).isEqualTo("body");
+        assertThat(SchemaWire.parameter(feed, "tags").getBoolean("required")).isFalse();
 
         client.post("/feed").execute().expect(200).bodyContains("tags=null");
         client.post("/feed").body(List.of("a", "b")).execute()
                 .expect(200).bodyContains("tags=[a, b]");
-    }
-
-    /** The route's entry in the wire document, so the assertions read the keys a client reads. */
-    private static JSONObject routeDocument(TestClient client, String path) {
-        JSONObject document = JSON.parseObject(client.get("/__schema__").execute().body());
-        JSONArray routes = document.getJSONArray("routes");
-        for (int i = 0; i < routes.size(); i++) {
-            JSONObject route = routes.getJSONObject(i);
-            if (path.equals(route.getString("path"))) return route;
-        }
-        throw new AssertionError(path + " never appeared in /__schema__: " + document);
-    }
-
-    private static JSONObject parameter(JSONObject route, String name) {
-        JSONArray parameters = route.getJSONArray("params");
-        for (int i = 0; i < parameters.size(); i++) {
-            JSONObject parameter = parameters.getJSONObject(i);
-            if (name.equals(parameter.getString("name"))) return parameter;
-        }
-        throw new AssertionError(name + " never appeared in " + route);
     }
 }

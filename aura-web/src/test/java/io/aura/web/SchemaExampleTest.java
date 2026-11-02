@@ -1,7 +1,5 @@
 package io.aura.web;
 
-import com.alibaba.fastjson2.JSON;
-import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
 import org.junit.jupiter.api.Test;
 
@@ -29,7 +27,7 @@ class SchemaExampleTest {
         router.get("/report", new ReportService(), "report");
         TestClient client = TestApplications.client(router);
 
-        JSONObject route = routeDocument(client, "/report");
+        JSONObject route = SchemaWire.route(client, "/report");
         assertThat(route.getString("example"))
                 .as("the type table that classes rate as number also writes its example")
                 .contains("rate=1.0")
@@ -38,15 +36,5 @@ class SchemaExampleTest {
         // Replay what the document told the client to send.
         client.get("/report").query("rate", "1.0").execute()
                 .expect(200).bodyContains("rate=1.0");
-    }
-
-    private static JSONObject routeDocument(TestClient client, String path) {
-        JSONObject document = JSON.parseObject(client.get("/__schema__").execute().body());
-        JSONArray routes = document.getJSONArray("routes");
-        for (int i = 0; i < routes.size(); i++) {
-            JSONObject route = routes.getJSONObject(i);
-            if (path.equals(route.getString("path"))) return route;
-        }
-        throw new AssertionError(path + " never appeared in /__schema__: " + document);
     }
 }

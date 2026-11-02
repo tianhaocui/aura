@@ -19,13 +19,16 @@ class PermissionAuthorizationTest {
         TestClient.Response response = TestClient.of(app).get("/orders/list").execute();
         assertThat(response.status()).isEqualTo(200);
         assertThat(response.body()).isEqualTo("ok");
-        @SuppressWarnings("unchecked")
-        java.util.List<java.util.Map<String, Object>> routes =
-                (java.util.List<java.util.Map<String, Object>>) TestClient.of(app).schema().get("routes");
-        assertThat(routes.get(0)).containsEntry("authenticated", true)
+
+        TestClient client = TestClient.of(app);
+        assertThat(SchemaWire.route(client, "/orders/list"))
+                .containsEntry("authenticated", true)
                 .containsEntry("permission", "orders.read");
-        assertThat(TestClient.of(app).openApi().toString())
-                .contains("x-aura-authenticated", "x-aura-permission", "orders.read");
+        // The same two facts in the OpenAPI operation, which is where a tool that speaks
+        // OpenAPI reads them -- not a substring search over the whole document.
+        assertThat(SchemaWire.operation(client, "/orders/list", "GET"))
+                .containsEntry("x-aura-authenticated", true)
+                .containsEntry("x-aura-permission", "orders.read");
     }
 
     @Test

@@ -468,8 +468,50 @@ class AuraModuleTest {
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("start with");
         assertThatThrownBy(() -> io.aura.contract.Route.webSocket("/events", null))
-                .isInstanceOf(NullPointerException.class)
-                .hasMessageContaining("handler");
+                .isInstanceOf(io.aura.contract.ContractException.class)
+                .extracting(failure -> ((io.aura.contract.ContractException) failure).error().code())
+                .isEqualTo("AURA_ROUTE_HANDLER_MISSING");
+    }
+
+    @Test
+    void aNullContributionNamesTheModuleThatTriedToRegisterIt() {
+        // The door keeps its own code even though a Route cannot be built without a handler: a
+        // module that handed over null is a different mistake from a handler-less route.
+        AuraApp app = AuraApp.create().use(new AuraModule() {
+            @Override public io.aura.contract.ModuleMetadata descriptor() {
+                return io.aura.contract.ModuleMetadata.of("null-contribution", "1.0.0");
+            }
+
+            @Override public void install(ModuleContext context) {
+                context.route(null);
+            }
+        });
+
+        assertThatThrownBy(app::prepare)
+                .isInstanceOfSatisfying(ModuleException.class, failure -> {
+                    assertThat(failure.code()).isEqualTo("AURA_ROUTE_CONTRIBUTION_INVALID");
+                    assertThat(failure.module()).isEqualTo("null-contribution");
+                    assertThat(failure).hasMessageContaining("must not be null");
+                });
+    }
+
+    @Test
+    void aHandlerlessRouteContributionFailsWithTheRouteNamed() {
+        AuraApp app = AuraApp.create().use(new AuraModule() {
+            @Override public io.aura.contract.ModuleMetadata descriptor() {
+                return io.aura.contract.ModuleMetadata.of("missing-handler", "1.0.0");
+            }
+
+            @Override public void install(ModuleContext context) {
+                context.route(io.aura.contract.Route.of("GET", "/missing-handler", null));
+            }
+        });
+
+        assertThatThrownBy(app::prepare)
+                .isInstanceOfSatisfying(io.aura.contract.ContractException.class, failure -> {
+                    assertThat(failure.error().code()).isEqualTo("AURA_ROUTE_HANDLER_MISSING");
+                    assertThat(failure).hasMessageContaining("GET /missing-handler");
+                });
     }
 
     private static AuraModule module(String id, List<String> dependencies, List<String> installed) {
