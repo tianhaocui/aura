@@ -103,6 +103,54 @@ db.paginateDynamic(sql, filter, PaginationOrder.by("created DESC", "id ASC"),
 // If filter = Map.of() → no WHERE clause at all
 ```
 
+The builder and the dynamic path are the same call written out, with the total kept
+optional so a caller cannot tell a missing count and a zero count apart:
+
+<!-- aura:compile name=db-query-builder-and-bounded-page -->
+```java
+package docs.example;
+
+import io.aura.db.Db;
+import io.aura.db.Page;
+import io.aura.db.PaginationOrder;
+import io.aura.db.Row;
+import io.aura.db.TotalStrategy;
+
+import java.util.List;
+import java.util.Map;
+
+public final class UserQueries {
+    private UserQueries() { }
+
+    /** Conditions, order, bounds, then one terminal operation. Nulls and false flags skip. */
+    public static List<Row> activeAdults(Db db, List<Integer> ids, String name) {
+        return db.table("user")
+                .where("age", ">", 18)
+                .where("status", "active")
+                .whereIf(name != null, "name", name)
+                .whereIf(!ids.isEmpty(), "id", "IN", ids)
+                .orderBy("name", "id ASC")
+                .limit(10)
+                .offset(20)
+                .find();
+    }
+
+    public static Page<Row> firstPage(Db db, Map<String, Object> filter) {
+        return db.paginateDynamic(
+                "SELECT * FROM user #where(name, '=', name) #and(age, '>', age)",
+                filter, PaginationOrder.by("created DESC", "id ASC"),
+                1, 20, TotalStrategy.EXACT);
+    }
+
+    /** TotalStrategy without a count leaves the total empty, so "no total" is not "no rows". */
+    public static String describe(Page<Row> page) {
+        return "page " + page.pageNum() + ", " + page.list().size() + " rows, "
+                + page.total().orElse(-1L) + " total, "
+                + (page.hasNext() ? "more to come" : "last page");
+    }
+}
+```
+
 ### Execute
 
 ```java

@@ -15,6 +15,47 @@ and fixed path/query/body binding. Install it explicitly:
 new OrderServiceAuraRoutes(orderService).routes().forEach(context::route);
 ```
 
+The source it reads is an ordinary service -- public methods, public class, scalar
+path and query parameters, a record body with its validation annotations -- and that
+source is what has to stay true as the annotations change:
+
+<!-- aura:compile name=processor-annotated-service -->
+```java
+package docs.example;
+
+import io.aura.annotation.Desc;
+import io.aura.annotation.Get;
+import io.aura.annotation.NotBlank;
+import io.aura.annotation.Path;
+import io.aura.annotation.Post;
+
+import java.util.LinkedHashMap;
+import java.util.Map;
+
+@Path("/generated/orders")
+@Desc("Generated order API")
+public final class GeneratedOrderService {
+    private final Map<Long, Order> orders = new LinkedHashMap<>();
+
+    @Get("/{id}")
+    @Desc("Get one generated order")
+    public Order get(@Desc("Order identifier") long id) {
+        return orders.get(id);
+    }
+
+    @Post("")
+    @Desc("Create generated order")
+    public Order create(CreateOrder request) {
+        Order order = new Order(request.id(), request.status());
+        orders.put(order.id(), order);
+        return order;
+    }
+
+    public record CreateOrder(long id, @NotBlank String status) { }
+    public record Order(long id, String status) { }
+}
+```
+
 Do not also register the same service through the reflection-based service
 registrar; that would contribute duplicate routes and fail startup validation.
 

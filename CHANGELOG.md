@@ -151,6 +151,14 @@ record, the stage-by-stage log, and the migration table.
 - `AI_GUIDE_MCP.md` joined the canonical documents the gate reads, and the gate
   fails if any of them teaches `McpToolBuilder` or a `tool("name", ...)` chain.
   A guide that names the deleted door is as broken as code that calls it.
+- The last four module guides joined them: `docs/aura-module.md`, `docs/aura-db.md`,
+  `docs/aura-mcp.md` and `docs/aura-processor.md` carry `aura:compile` fences too, so
+  every canonical module guide compiles against this tree (12 fences). `aura-db` and
+  `aura-mcp` joined the gate's build list, and `aura-processor` deliberately did not
+  join its classpath -- that module's `META-INF/services` processor registration
+  would turn documentation into a build that generates sources -- so fences now
+  compile with `-proc:none`, a failure names the document and the fence, and the
+  contracts gate fails if one of the four leaves the compiling list.
 - `ArchitectureTest` R1 forbids `io.aura.web..` as a dependency target for every
   policy package, and R2's subject is `io.aura.port..` with
   `allowEmptyShould(true)` dropped so it cannot go vacuous. The rule that can

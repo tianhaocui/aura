@@ -112,24 +112,54 @@ of invented alongside them.
 
 Not all APIs should be MCP tools. McpRouter lets you choose which operations to expose.
 
+<!-- aura:compile name=mcp-tool-from-route -->
 ```java
-McpRouter mcp = new McpRouter();
+package docs.example;
 
-// MCP-only tool: a Route nobody serves, declared with the same ApiParameter the
-// route catalog produces
-mcp.tool(Route.of("POST", "/orders", (McpHandler) ctx ->
-            orderService.create(ctx.getString("product"), ctx.getInt("quantity")))
-    .describedAs("Create a new order")
-    .withParams(List.of(
-        new ApiParameter("product", "String", "query", true, "Product name"),
-        new ApiParameter("quantity", "int", "query", true, "Quantity")));
+import io.aura.contract.ApiParameter;
+import io.aura.contract.Route;
+import io.aura.mcp.McpHandler;
+import io.aura.mcp.McpRouter;
 
-// Route already exported over HTTP: keep every declared fact, rebind only the handler
-mcp.tool(getUserRoute.withHandler((McpHandler) ctx -> userService.get(ctx.getLong("id"))));
+import java.util.List;
+import java.util.Map;
 
-AuraApp.create()
-    .use(McpModule.create(mcp))
-    .start(args);
+public final class OrderTools {
+    private OrderTools() { }
+
+    public static McpRouter router() {
+        McpRouter mcp = new McpRouter();
+
+        // A tool with no HTTP endpoint is still a Route -- one nobody serves -- declared with
+        // the same ApiParameter the route catalog produces.
+        mcp.tool(Route.of("POST", "/orders", (McpHandler) ctx -> new Order(
+                        ctx.getString("product"),
+                        ctx.getInt("quantity"),
+                        ctx.getEnum("status", OrderStatus.class)))
+                .describedAs("Create a new order")
+                .withParams(List.of(
+                        new ApiParameter("product", "String", "query", true, "Product name"),
+                        new ApiParameter("quantity", "int", "query", true, "Quantity"),
+                        // The accepted values are the parameter's declared schema, which is the
+                        // same map OpenAPI renders -- MCP invents no vocabulary of its own.
+                        new ApiParameter("status", "OrderStatus", "query", true, "Order status",
+                                Map.of("type", "string", "enum", List.of("NEW", "PAID"))))));
+
+        // A route already served over HTTP keeps every declared fact; only the handler rebinds.
+        Route getUser = Route.of("GET", "/user/{id}",
+                        (io.aura.port.BaseHandler) ctx -> ctx.text("served over HTTP"))
+                .describedAs("Get a user")
+                .withParams(List.of(new ApiParameter("id", "long", "path", true, "User identifier")));
+        mcp.tool(getUser.withHandler((McpHandler) ctx -> ctx.getLong("id")));
+
+        return mcp;
+    }
+
+    /** The name a model sends is the name the handler binds. */
+    public enum OrderStatus { NEW, PAID }
+
+    public record Order(String product, int quantity, OrderStatus status) { }
+}
 ```
 
 A parameter whose `required` flag is true is refused before the handler runs when the

@@ -439,6 +439,17 @@ if rg -q 'toJavaObject\(Map\.class\)' "$repo_root/aura-mcp/src/main"; then
   exit 1
 fi
 
+# The compiling list is the whole of the documentation gate's reach: a document dropped from
+# `docs=(...)` stops being compiled and nothing else notices, and its prose can name a type that
+# no longer exists. The four module guides that gained fences are checked for being in that list.
+for guide in aura-module aura-db aura-mcp aura-processor; do
+  if ! rg -qU "(?m)^docs=\\([^)]*docs/$guide\\.md[^)]*\\)" \
+      "$repo_root/scripts/verify-docs-code.sh"; then
+    echo "documentation stopped compiling a module guide: docs/$guide.md is not in the compiling list" >&2
+    exit 1
+  fi
+done
+
 # The same table binds as it renders: the string-to-value rules live next to the JSON names they
 # match, so a type that says "integer" cannot bind to a string on one transport and 0 on another.
 # A parse method re-added to the adapter, or the bridge reading the binder, is that drift.

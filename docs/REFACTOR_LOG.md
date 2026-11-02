@@ -195,6 +195,48 @@ markers found, so deleting a fence could not fail a whole-list floor. Prose is
 covered by the same gate now too, because only the fence compiles and a reader
 copies the sentence next to it.
 
+**Every module guide compiles now, and the list that decides that is guarded.**
+`stage2-j4` gave the last four guides -- `docs/aura-module.md`, `aura-db.md`,
+`aura-mcp.md`, `aura-processor.md` -- `aura:compile` fences, which took the gate
+from 7 fences to 12 and made its `docs=(...)` list the thing worth defending: a
+guide dropped from that list stops being compiled and nothing else notices, so the
+contracts gate now fails with `documentation stopped compiling a module guide`. Two
+details the new coverage produced rather than expected. `aura-processor` is
+deliberately kept off the fence classpath: the first run after it was added printed
+"annotation processing is enabled because one or more processors were found on the
+class path" for every fence, because that module's own
+`META-INF/services/javax.annotation.processing.Processor` entry made the doc gate a
+build that generates sources; the javac call now says `-proc:none`, so processing
+cannot come back through a dependency. And a fence failure used to be only a javac
+symbol error, which names a class but not the page a reader would copy it from --
+`verify-docs-code.sh` now prints which document and which fence failed.
+
+What the four fences actually pin is different from what the older ones pinned.
+`module-composed-application` is the first place all four adapter factories
+(`WorkflowModule.create()`, `DatabaseModule.create(db)`,
+`AiModule.create(FakeAiProvider.returning(...))`, `McpModule.create()`) are checked
+beside `authorize(...)`/`authenticate(...)` in one expression -- the document's
+headline claim that a module is a Maven dependency and an explicit `use(...)`, which
+prose could only assert. `mcp-tool-from-route` compiles the `stage2-j2` door
+end to end: a `Route` with an `McpHandler`, an enum parameter carrying its declared
+`{"type":"string","enum":[...]}` schema, and `withHandler` projecting an already
+served HTTP route. `db-query-builder-and-bounded-page` compiles the chain the
+reference lists separately (`where`, `whereIf`, `IN` expansion, `orderBy`, `limit`,
+`offset`) together with `paginateDynamic(..., PaginationOrder, int, int,
+TotalStrategy)` and `Page.total()` read as the `OptionalLong` it is, so the
+"no total is not zero rows" promise is a compiling statement rather than a comment.
+`processor-annotated-service` compiles the annotation surface -- `@Path`, `@Get`,
+`@Post`, `@Desc`, `@NotBlank` on a record component -- which is the input the
+processor reads and the only half of that document a reader writes by hand; the
+generated class it mentions cannot be fenced, because it exists only after the
+processor runs.
+
+One prose line changed with it: `docs/aura-module.md` declared a lambda route's query
+parameter as `"string"`, while the compiled fence says `"String"`. The gate did not
+force that -- `McpUtil.isWireName` accepts a JSON wire name, so both render -- but the
+document held two vocabularies for the same field, and the catalog's own vocabulary is
+the Java type name.
+
 **The ports left `io.aura.web`, and the split package was load-bearing.** The
 plan recorded R1's missing `io.aura.web..` entry as a chore deferred because the
 package name meant two things at once. It was worse than a naming problem:
@@ -624,7 +666,7 @@ reach the document. `McpWire` is test code, so the public API baseline did not m
 -- the gate's classifier half reported `Aura public API classifier passed` against
 the `stage2-j2` snapshot unchanged. `mvn -o clean verify` is green at the end of the
 stage with the same per-module numbers as J2, and `verify-docs-code.sh` still reports
-`7 compiled fences`.
+its then-count, `7 compiled fences` (`stage2-j4` raised it to 12).
 
 `WebSocketTest.connectionLimitRejectsExcessAndReleasesPermitOnClose` broke the first
 full reactor run of this stage -- `Expecting AtomicInteger(1) to have value: 1 but
@@ -640,6 +682,27 @@ value: 2`, and the rerun with the original bound is green. This is the second fl
 found by a full reactor run rather than a rerun, and it is the same shape as the
 first (`LiquibaseSchemaMigratorTest`'s budget): a socket-backed test whose timing
 assumption was machine-dependent. `DeploymentSecurityTest` is still open.
+
+`stage2-j4` was falsified four times, twice against the documentation gate and twice
+against the contracts gate. Renaming one marker (`<!-- aura:compile name=... -->` to
+`<!-- compile ... -->`) failed with `no compilable fence marked in
+.../docs/aura-db.md` and exit 1 -- the per-document floor written in the earlier
+documentation stage did its job for free, which is the sign a floor was the right
+shape. Changing a call inside that same fence (`PaginationOrder.by(...)` to
+`PaginationOrder.sort(...)`) failed with javac's `错误: 找不到符号` and then the new
+line `documentation fence 'db-query-builder-and-bounded-page' in
+.../docs/aura-db.md no longer compiles`. Dropping `aura-db` from the gate's
+`doc_modules` -- the list that decides which `target/classes` a fence may name --
+failed five symbols deep in `module-composed-application`, before the db fence was
+even reached, which is the honest version of that evidence: the composing guide
+borrows the database module's types too, so the classpath list is load-bearing for
+documents other than the one that motivated it. The fourth mutation removed
+`docs/aura-mcp.md` from the gate's `docs` list while leaving its marker in place, and
+only the new contracts-gate assertion noticed: `documentation stopped compiling a
+module guide: docs/aura-mcp.md is not in the compiling list`. Restoring each returned
+the gate to `12 compiled fences`, and `mvn -o clean verify` is green behind it with
+the same per-module numbers as `stage2-j3` -- the stage added no test and changed no
+public surface, because a fence is documentation the compiler reads.
 
 Verified without `-Dmaven.test.failure.ignore` (`mvn -o verify`), and note the trap
 that run avoids: `mvn -o -pl aura-mcp test` without `-am` resolves `aura-core` from
@@ -674,11 +737,15 @@ lines, `jq` dropped from the tool check); the classification half still needs
 
 ## Still open
 
-- The compiling list covers `docs/DOCUMENTATION.md`, `AI_GUIDE.md` and the four
-  module documents that gained fences; `docs/aura-module.md`, `aura-db.md`,
-  `aura-mcp.md` and `aura-processor.md` are still only scanned for legacy API
-  names, so a moved type in their prose is still invisible. `aura-db` and
-  `aura-mcp` also need their modules added to the gate's build list first.
+- Every canonical module guide now compiles: `stage2-j4` added the last four, so a
+  moved type in a guide's example fails the build. What is still prose-only is the
+  entry documents -- `README.md`, `README_CN.md`, `AI_GUIDE_MCP.md`,
+  `AI_GUIDE_OPS.md` -- which the gate scans for legacy API names but does not
+  compile, because their blocks are JSON, bash and properties rather than Java.
+- The ten compiled documents hold one fence each at the floor; a guide whose example
+  is deleted entirely falls to the `no compilable fence marked in` message, but a
+  guide that keeps one thin fence can still describe the rest of its module in words
+  the compiler never sees.
 - `scripts/verify-public-api.sh` needs `jq`, which this machine does not have, so
   step 5 of `verify-local-readiness.sh` stops there. The baseline this branch was
   checked against came from a `jq`-free copy of the generator, not from that

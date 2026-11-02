@@ -13,9 +13,11 @@ fi
 
 # The modules a fence may name, and the subset whose dependencies have to be resolved to build
 # that classpath. Compiling them is what makes a moved or renamed type fail here instead of
-# shipping as prose.
-doc_modules=(aura-contract aura-core aura-web aura-ai aura-workflow)
-compile_modules=(aura-web aura-ai aura-workflow)
+# shipping as prose. `aura-processor` is deliberately absent: its classes are its
+# `META-INF/services` registration, and putting it on this classpath would silently enable
+# annotation processing for every fence.
+doc_modules=(aura-contract aura-core aura-web aura-ai aura-workflow aura-db aura-mcp)
+compile_modules=(aura-web aura-ai aura-workflow aura-db aura-mcp)
 selected="$(IFS=,; echo "${compile_modules[*]}")"
 
 "${maven[@]}" -q -f "$repo_root/pom.xml" \
@@ -49,6 +51,10 @@ docs=(
   "$repo_root/docs/aura-web.md"
   "$repo_root/docs/aura-ai.md"
   "$repo_root/docs/aura-workflow.md"
+  "$repo_root/docs/aura-module.md"
+  "$repo_root/docs/aura-db.md"
+  "$repo_root/docs/aura-mcp.md"
+  "$repo_root/docs/aura-processor.md"
 )
 compiled=0
 for doc in "${docs[@]}"; do
@@ -64,7 +70,14 @@ for doc in "${docs[@]}"; do
     sed -i.bak -E 's/public final class /final class /; s/public class /class /' "$source"
     rm -f "$source.bak"
     mkdir -p "$temp_dir/classes"
-    javac --release 17 -parameters -cp "$classpath" -d "$temp_dir/classes" "$source"
+    # -proc:none: a fence is checked as written. An annotation processor on the classpath would
+    # otherwise run over it and make the gate's output depend on generated sources.
+    if ! javac -proc:none --release 17 -parameters -cp "$classpath" -d "$temp_dir/classes" "$source"; then
+      # javac has already said which symbol it could not find; this names the document the reader
+      # would copy it from, which is the half a bare compiler error leaves out.
+      echo "documentation fence '$name' in $doc no longer compiles" >&2
+      exit 1
+    fi
     doc_compiled=$((doc_compiled + 1))
   done < <(rg -n '<!-- aura:compile name=[a-z0-9-]+ -->' "$doc" \
     | sed -E 's/^([0-9]+):.*name=([a-z0-9-]+).*/\1:\2/' || true)

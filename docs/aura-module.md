@@ -2,7 +2,21 @@
 
 Aura 1.0 modules are explicit Maven-installed building blocks. A module has one public `AuraModule` entry point and contributes behavior through `ModuleContext`.
 
+<!-- aura:compile name=module-order-entry -->
 ```java
+package docs.example;
+
+import io.aura.AuraApp;
+import io.aura.AuraConfig;
+import io.aura.AuraModule;
+import io.aura.ModuleContext;
+import io.aura.contract.ApiParameter;
+import io.aura.contract.ModuleMetadata;
+import io.aura.contract.Route;
+import io.aura.port.BaseHandler;
+
+import java.util.List;
+
 public final class OrderModule implements AuraModule {
     @Override public ModuleMetadata descriptor() {
         return ModuleMetadata.of("order", "1.0.0")
@@ -11,19 +25,70 @@ public final class OrderModule implements AuraModule {
     }
 
     @Override public void install(ModuleContext context) {
-        context.route(Route.of("GET", "/orders",
-                (BaseHandler) ctx -> ctx.text("ok")));
         context.register(new OrderService());
+        context.route(Route.of("GET", "/orders", (BaseHandler) ctx -> ctx.text("ok"))
+                .withParams(List.of(
+                        new ApiParameter("customerId", "String", "query", true,
+                                "Customer identifier"),
+                        new ApiParameter("order", "Order", "body", true,
+                                "Order payload"))));
+    }
+
+    public static void main(String[] args) {
+        AuraApp.create(new AuraConfig().port(8080))
+                .use(new OrderModule())
+                .start();
+    }
+
+    static final class OrderService { }
+}
+```
+
+The same blocks install together: each adapter module is a Maven dependency and an
+explicit `use(...)`, and none of them opens a listener the application did not ask
+for.
+
+<!-- aura:compile name=module-composed-application -->
+```java
+package docs.example;
+
+import io.aura.AuraApp;
+import io.aura.AuraConfig;
+import io.aura.AuraModule;
+import io.aura.ModuleContext;
+import io.aura.ai.AiModule;
+import io.aura.ai.FakeAiProvider;
+import io.aura.contract.ModuleMetadata;
+import io.aura.db.DatabaseModule;
+import io.aura.db.Db;
+import io.aura.mcp.McpModule;
+import io.aura.workflow.WorkflowModule;
+
+public final class ComposedApplication {
+    private ComposedApplication() { }
+
+    public static AuraApp create() {
+        Db db = Db.create("jdbc:h2:mem:orders;DB_CLOSE_DELAY=-1", "sa", "");
+        return AuraApp.create(new AuraConfig().port(8080))
+                .authorize((userId, permission) -> "operator".equals(userId)
+                        && "orders.read".equals(permission))
+                .authenticate(ctx -> ctx.header("Authorization"))
+                .use(WorkflowModule.create())
+                .use(DatabaseModule.create(db))
+                .use(AiModule.create(FakeAiProvider.returning("ok")))
+                .use(McpModule.create())
+                .use(new Orders())
+                .start();
+    }
+
+    private static final class Orders implements AuraModule {
+        @Override public ModuleMetadata descriptor() {
+            return ModuleMetadata.of("orders", "1.0.0").requires("workflow");
+        }
+
+        @Override public void install(ModuleContext context) { }
     }
 }
-
-AuraApp.create()
-        .use(WorkflowModule.create())
-        .use(DatabaseModule.create(db))
-        .use(AiModule.create(provider))
-        .use(McpModule.create(mcpRouter))
-        .use(new OrderModule())
-        .start();
 ```
 
 ## Rules
@@ -36,7 +101,7 @@ AuraApp.create()
 ```java
 context.route(Route.of("POST", "/orders", handler)
         .withParams(List.of(
-                new ApiParameter("customerId", "string", "query", true,
+                new ApiParameter("customerId", "String", "query", true,
                         "Customer identifier"),
                 new ApiParameter("order", "Order", "body", true,
                         "Order payload"))));
