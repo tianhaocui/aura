@@ -1,7 +1,6 @@
 package io.aura.web;
 
-import
-io.aura.port.BaseHandler;import
+import io.aura.port.BaseHandler;import
 io.aura.port.BaseRouter;
 import io.aura.contract.ApiParameter;
 import org.junit.jupiter.api.Test;

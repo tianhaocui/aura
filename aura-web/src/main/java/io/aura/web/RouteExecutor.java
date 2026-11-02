@@ -1,7 +1,6 @@
 package io.aura.web;
 
-import
-io.aura.port.BaseContext;import
+import io.aura.port.BaseContext;import
 io.aura.port.BaseHandler;
 import java.util.List;
 

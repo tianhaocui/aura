@@ -1,7 +1,6 @@
 package io.aura.web;
 
-import
-io.aura.port.BaseHandler;
+import io.aura.port.BaseHandler;
 import io.aura.AuraApp;
 import io.aura.AuraModule;
 import io.aura.ModuleContext;

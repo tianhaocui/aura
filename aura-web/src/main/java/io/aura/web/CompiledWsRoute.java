@@ -1,7 +1,6 @@
 package io.aura.web;
 
-import
-io.aura.port.BaseHandler;import
+import io.aura.port.BaseHandler;import
 io.aura.port.WsHandler;
 import io.aura.contract.Route;
 import io.undertow.server.HttpServerExchange;

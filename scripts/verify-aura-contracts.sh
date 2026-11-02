@@ -376,6 +376,36 @@ if [ "$(rg -c 'public McpParam\(' "$repo_root/aura-mcp/src/main/java/io/aura/mcp
   exit 1
 fi
 
+# The same table binds as it renders: the string-to-value rules live next to the JSON names they
+# match, so a type that says "integer" cannot bind to a string on one transport and 0 on another.
+# A parse method re-added to the adapter, or the bridge reading the binder, is that drift.
+rg -q 'ScalarType\.fromString' "$repo_root/aura-web/src/main/java/io/aura/web/ParamResolver.java"
+rg -q 'ScalarType\.fromString' "$repo_root/aura-mcp/src/main/java/io/aura/mcp/McpContext.java"
+if rg -qn 'public static [A-Za-z]+(Boxed)? parse[A-Z]' \
+    "$repo_root/aura-web/src/main/java/io/aura/web/ParamResolver.java"; then
+  echo "the string-to-value table left ScalarType again: ParamResolver owns a parse method" >&2
+  exit 1
+fi
+if rg -qn '^import io\.aura\.web\.' "$repo_root/aura-mcp/src/main"; then
+  echo "aura-mcp main code reaches into the Web adapter" >&2
+  exit 1
+fi
+if ! rg -Uqn 'aura-web</artifactId>[[:space:]]*<scope>test</scope>' "$repo_root/aura-mcp/pom.xml" \
+   || rg -Uqn 'aura-web</artifactId>[[:space:]]*</dependency>' "$repo_root/aura-mcp/pom.xml"; then
+  echo "aura-mcp must depend on aura-web in test scope only: the bridge is a sibling of the adapter" >&2
+  exit 1
+fi
+if ! test -f "$repo_root/aura-mcp/src/test/java/io/aura/mcp/McpLayeringTest.java"; then
+  echo "R6 has no gate that can fire: aura-mcp must run McpLayeringTest over its own classpath" >&2
+  exit 1
+fi
+if rg -qn '\.allowEmptyShould\(true\)' "$repo_root/aura-core/src/test/java/io/aura/ArchitectureTest.java" \
+    "$repo_root/aura-web/src/test/java/io/aura/web/WebLayeringTest.java" \
+    "$repo_root/aura-mcp/src/test/java/io/aura/mcp/McpLayeringTest.java"; then
+  echo "a layering rule was relaxed to pass with an empty subject set" >&2
+  exit 1
+fi
+
 # An assembly mistake has to name itself. A bare NullPointerException from requireNonNull points
 # at the constructor frame, not at the route or the module that contributed it.
 rg -q 'AURA_ROUTE_HANDLER_MISSING' "$repo_root/aura-contract/src/main/java/io/aura/contract/Route.java"

@@ -1,7 +1,6 @@
 package io.aura.web;
 
-import
-io.aura.port.BaseContext;import
+import io.aura.port.BaseContext;import
 io.aura.port.BaseHandler;import
 io.aura.port.RouteResponse;
 import com.alibaba.fastjson2.JSON;
@@ -75,7 +74,7 @@ public final class MethodRefHandler implements BaseHandler {
         if (type.isInstance(val)) return val;
         String s = val.toString();
         if (ScalarType.isScalar(type.getName()) || type.isEnum()) {
-            return ParamResolver.fromString(s, type);
+            return ScalarType.fromString(s, type);
         }
         if (type.isRecord() || TypeUtil.isPojo(type)) {
             return JSON.parseObject(JSON.toJSONString(val), type);

@@ -1,7 +1,6 @@
 package io.aura.web;
 
-import
-io.aura.port.SseEmitter;
+import io.aura.port.SseEmitter;
 import io.aura.AuraConfig;
 import io.aura.AuraWebRuntime;
 import org.junit.jupiter.api.Test;

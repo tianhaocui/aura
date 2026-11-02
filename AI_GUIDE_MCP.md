@@ -114,8 +114,8 @@ anonymous callers even when every registered tool is public.
 `getEnum(name, Type.class)`, `get()`, `userId()`
 
 Missing values bind exactly as an HTTP query parameter does: `0`, `0L`, `false`,
-`0.0`, or `null`. Both transports go through `ParamResolver`, so a malformed
-argument raises `NumberFormatException` on either entry point.
+`0.0`, or `null`. Both transports go through `ScalarType.fromString(value, type)`,
+so a malformed argument raises `NumberFormatException` on either entry point.
 
 ## URL Configuration (npm bridge)
 

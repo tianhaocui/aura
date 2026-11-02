@@ -51,15 +51,27 @@ record, the stage-by-stage log, and the migration table.
   `McpParam(ApiParameter, List<McpEnumValue>)` is the only constructor, and a
   hand-authored tool argument that is not a JSON scalar is refused when the tool
   is registered.
+- The string-to-value table moved from `io.aura.web.ParamResolver` to
+  `io.aura.contract.ScalarType`, beside the JSON names it must match.
+  `ParamResolver.fromString`, `ParamResolver.isBody` and its sixteen
+  `public static … parse…(String)` methods are removed; use
+  `ScalarType.fromString(value, type)` and `ScalarType.isBody(type)`.
+  `ParamResolver` keeps the request-shaped half: `create(Parameter)`,
+  `isRequired(type, source)` and `resolveString(ctx, name)`.
 
 ### Changed
 
 - `/__schema__` and OpenAPI project the same `Route` record. The JSON keys stay
   as they were; absent metadata stays absent.
-- HTTP parameter binding and MCP tool arguments share `ParamResolver`, so a
-  malformed number is a `NumberFormatException` on both transports instead of a
-  400 on one and a silent zero on the other.
+- HTTP parameter binding and MCP tool arguments share
+  `ScalarType.fromString(value, type)`, so a malformed number is a
+  `NumberFormatException` on both transports instead of a 400 on one and a silent
+  zero on the other.
 - Java-to-JSON types and accepted enum values come from one table.
+- `aura-mcp` depends on `aura-web` in test scope only. The bridge talks to a
+  running application over HTTP, so `aura-mcp-bridge.jar` no longer bundles the
+  Undertow adapter, and `McpLayeringTest` fails if `src/main` reaches into
+  `io.aura.web` again.
 - Host, admission, security-header, CSRF and CORS checks run as one chain built
   by `RequestGuards.standard(app, routePattern)`, used by Undertow and
   `TestClient` alike, so in-memory verification covers the security layer.

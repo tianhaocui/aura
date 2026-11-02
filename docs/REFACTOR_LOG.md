@@ -203,6 +203,31 @@ build failure. R2 dropped its `allowEmptyShould(true)`, and neither R2 nor
 `WebLayeringTest` carries one: a rule whose subject set went empty has stopped
 checking something, and a green build would report that as a pass.
 
+**The binder's table moved, and it took the last `mcp -> web` edge with it.**
+`ParamResolver` held two unrelated things: how a value is pulled out of an HTTP
+request, and the string-to-value table every transport needs. The second half is
+policy -- it is the promise `/__schema__` publishes when it says `integer` -- and
+it sat in the Undertow adapter, which left `aura-mcp` importing `io.aura.web` to
+coerce a tool argument and kept a compile dependency on a web server inside a
+bridge that only speaks HTTP to one. `fromString`, `isBody` and the sixteen
+private parse helpers now live in `ScalarType`, beside the JSON names they have to
+agree with: a type that renders as `integer` is a type that binds as an integer,
+and adding a scalar means answering both questions in one place. `ParamResolver`
+keeps the request-shaped half -- `create(Parameter)`, `isRequired`,
+`resolveString` -- and `aura-mcp`'s dependency on `aura-web` became test-scoped,
+because the tests mount an application and `src/main` has no reason to.
+
+That made R6 expressible, so R6 moved rather than being tightened in place. The
+copy in `aura-core` carried `allowEmptyShould(true)` and a javadoc admitting it
+was vacuous: no `io.aura.mcp` class is on that classpath, so the rule had passed
+by inspecting nothing. `McpLayeringTest` in `aura-mcp` runs the same assertion
+over the module where the subject set exists, and the core copy is gone -- a rule
+kept in a file where it cannot fire is documentation filed under tests. The
+bridge jar is smaller for it: `aura-mcp-bridge.jar` went from 1560
+`io/undertow/` classes and 67 `io/aura/web/` classes to none of either, and from
+6,172,757 bytes to 2,354,235 -- the adapter was being shipped inside a bridge that
+only speaks HTTP to an application running it somewhere else.
+
 ## Deleted or moved public surface
 
 | 1.0.0 | now |
@@ -220,6 +245,7 @@ checking something, and a green build would report that as a pass.
 | `AuraApp::authenticate` reflection route scanning | unchanged; `@Get`/`@Post` + `aura-processor` is the production path |
 | `io.aura.HealthModule` | `io.aura.web.HealthModule` |
 | `io.aura.web.BaseHandler`, `BaseContext`, `BaseRouter`, `BaseRouteBuilder`, `BaseExceptionHandler`, `SseEmitter`, `UploadedFile`, `RouteResponse`, `RequestType`, `WsHandler`, `WsConnection`, `AdmissionPolicy`, `AdmissionRequest`, `AdmissionDecision` | same types in `io.aura.port`; `io.aura.web` is the Undertow adapter only |
+| `io.aura.web.ParamResolver.fromString`, `.isBody`, `.parseInt`/`.parseLong`/`.parseBool`/`.parseDouble`/`.parseFloat`/`.parseShort`/`.parseByte`/`.parseChar` and the eight boxed overloads | `io.aura.contract.ScalarType.fromString(value, type)` and `ScalarType.isBody(type)`; the coercion rules are private, so no transport asks a parse method for one type again |
 | `McpRouter.tool(String name, Object service, String method, String description)` reflective binding | `McpRouter.tool(Route, McpHandler)` |
 | `McpParam(String, String, String, List)` and `McpParam(String, String, String, List, boolean)` | `McpParam(ApiParameter, List<McpEnumValue>)` — a tool argument is declared with the shared parameter record, so it cannot carry its own Java-to-JSON opinion |
 
@@ -369,10 +395,36 @@ they were written as bare `rg -q` assertions: a release gate that fails without
 naming the invariant is a gate someone has to debug at 2 a.m., so both now carry
 their own message.
 
-Known flake: `LiquibaseSchemaMigratorTest.concurrentFirstStartsSerializeChangesetsAcrossIndependentPools`
-allows 15 seconds for two serialized Liquibase runs and timed out once on this
-Intel machine while passing twice. It is timing, not behaviour, but the budget
-should be raised with the rest of the database work.
+`McpLayeringTest` was falsified the way only a rule about a dependency can be: with
+`aura-web` back at compile scope and a `LayeringProbe` in `aura-mcp/src/main`
+calling `TestClient.schema()`, it failed with
+`Method <io.aura.mcp.LayeringProbe.client(io.aura.web.TestClient)> calls method
+<io.aura.web.TestClient.schema()> in (LayeringProbe.java:7)`; putting the scope
+back and deleting the probe returned one green case. Neither the probe nor the pom
+edit is committed. The five new release-gate checks were falsified one mutation
+apiece -- `ParamResolver` regrowing `parseInt`, `McpContext` importing
+`io.aura.web.ParamResolver`, the pom's test scope removed, `McpLayeringTest.java`
+deleted, and `.allowEmptyShould(true)` added back to a layering rule -- each failing
+with its own message and each green again on restore. The binding table gained unit
+tests where it now lives (`ScalarTypeTest` went from 3 cases to 8: the table binds
+every type it renders, absent values bind to the type's own absence, a malformed
+value names itself, enums bind by `name()`, and `isBody` is the mirror of the scalar
+table), which is the same rule review-G applied to the wire documents: a check
+belongs next to the code it covers.
+
+Verified without `-Dmaven.test.failure.ignore` (`mvn -o verify`), and note the trap
+that run avoids: `mvn -o -pl aura-mcp test` without `-am` resolves `aura-core` from
+`~/.m2`, where the installed 1.0.0 jar still has the ports in `io.aura.web`, and the
+failure surfaces as `TestEngine with ID 'junit-jupiter' failed to discover tests`
+rather than as a stale-jar message. Every module run here carries `-am`.
+
+Fixed flake: `LiquibaseSchemaMigratorTest.concurrentFirstStartsSerializeChangesetsAcrossIndependentPools`
+allowed 15 seconds for two serialized Liquibase runs and timed out at 16.4 s on
+this Intel machine during the `stage2-j1` reactor run, which broke a full
+`mvn -o clean verify` rather than a rerun. The budget is 60 seconds now. The
+invariant the case checks is which pool applied the changesets -- exactly one,
+because the lock serialises them -- so a timeout is a deadlock guard, and a
+deadline that a slow changelog parse can cross tests machine speed instead.
 
 Known flake: `DeploymentSecurityTest.hostAllowlistRejectsUnexpectedHost` answered
 `404` where it asserts `421` once, during the run that followed three aborted
@@ -406,14 +458,10 @@ lines, `jq` dropped from the tool check); the classification half still needs
 - `McpToolBuilder` is still a second declaration door for hand-authored tools.
   Its disagreements with the route path are gone (`ApiParameter` in, one
   `McpUtil.inputSchema` render, non-scalar arguments refused at registration),
-  but naming arguments in Java is still a choice an AI makes that
+  and it no longer reaches into the adapter for a coercion rule, but naming
+  arguments in Java is still a choice an AI makes that
   `McpRouter.tool(Route, McpHandler)` does not ask for. Deleting the builder is
-  the review's stronger remedy and stays open with the MCP/`aura-web` dependency
-  cleanup.
-- `aura-mcp` still declares a compile dependency on `aura-web`; R6 documents it
-  and stays vacuous until copied into an aura-mcp test. Now that
-  `io.aura.web` means only the adapter, that copy has somewhere unambiguous to
-  point at, and `WebLayeringTest` shows the mechanism works.
+  the review's stronger remedy and stays open.
 - `scripts/verify-public-api.sh` needs `jq`, which this machine does not have, so
   step 5 of `verify-local-readiness.sh` stops there. The baseline this branch was
   checked against came from a `jq`-free copy of the generator, not from that

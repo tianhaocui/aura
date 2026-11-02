@@ -64,8 +64,12 @@ class LiquibaseSchemaMigratorTest {
                 second.start(null);
                 return null;
             });
-            firstRun.get(15, TimeUnit.SECONDS);
-            secondRun.get(15, TimeUnit.SECONDS);
+            // A guard against a migration lock deadlocking, not a latency promise: the assertion
+            // below is which pool applied the changesets. Two serialized Liquibase runs measured
+            // 16.4 s on a slow machine against the old 15 s budget, so the budget has to leave
+            // room for the changelog parse and the H2 lock retry rather than for a benchmark.
+            firstRun.get(60, TimeUnit.SECONDS);
+            secondRun.get(60, TimeUnit.SECONDS);
 
             int firstApplied = first.migrationResult().orElseThrow().appliedCount();
             int secondApplied = second.migrationResult().orElseThrow().appliedCount();

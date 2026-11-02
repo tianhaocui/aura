@@ -1,7 +1,6 @@
 package io.aura.web;
 
-import
-io.aura.port.AdmissionDecision;import
+import io.aura.port.AdmissionDecision;import
 io.aura.port.AdmissionPolicy;import
 io.aura.port.AdmissionRequest;
 import com.alibaba.fastjson2.JSON;

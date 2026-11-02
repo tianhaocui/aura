@@ -1,7 +1,6 @@
 package io.aura.web;
 
-import
-io.aura.port.WsConnection;
+import io.aura.port.WsConnection;
 import io.aura.AuraApp;
 import io.aura.AuraConfig;
 import io.aura.AuraModule;

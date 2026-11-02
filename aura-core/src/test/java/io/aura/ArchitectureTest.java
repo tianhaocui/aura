@@ -36,10 +36,11 @@ import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
  * the real bar is Maven's, and this rule catches the drift that Maven allows: a policy type
  * left in, or reaching into, the adapter's package in a module that sees both.
  *
- * <p><b>Known violation flagged but not fixed here:</b> {@code aura-mcp} depends on
- * {@code aura-web} (reverse dependency, see {@code aura-mcp/pom.xml} — flagged by R6 below;
- * the rule is vacuous when run from aura-core because io.aura.mcp is not on this classpath,
- * it needs a sibling copy in an aura-mcp test to actually bite). The fix is a separate PR.
+ * <p>The layering rules that need another module's classpath live in that module:
+ * {@code aura-web/src/test/java/io/aura/web/WebLayeringTest.java} and
+ * {@code aura-mcp/src/test/java/io/aura/mcp/McpLayeringTest.java}. A rule kept here whose subject
+ * set is not on this classpath passes by checking nothing, so R1's {@code io.aura.web..} entry is
+ * deliberately a tripwire and R6 is not restated in this file at all.
  */
 @AnalyzeClasses(
         packages = "io.aura",
@@ -140,19 +141,8 @@ public class ArchitectureTest {
                     .should().implement(AuraModule.class)
                     .because("Core declares AuraModule; only mechanisms/examples implement it");
 
-    /**
-     * R6: flag the known {@code mcp → web} reverse dependency (aura-mcp/pom.xml lists a
-     * compile dependency on aura-web). From aura-core this rule is vacuous — io.aura.mcp
-     * classes are not on this classpath — hence {@code allowEmptyShould(true)}; it acts as
-     * documentation now and becomes a real gate once copied into an aura-mcp test (separate
-     * PR; do not fix the dependency here).
-     */
-    @ArchTest
-    static final ArchRule mcpMustNotDependOnWeb =
-            noClasses().that().resideInAPackage("io.aura.mcp..")
-                    .should().dependOnClassesThat().resideInAnyPackage("io.aura.web..", "io.undertow..")
-                    .as("Stage① known bug flag: aura-mcp depends on aura-web (see aura-mcp/pom.xml) — "
-                            + "enforced for real in a follow-up PR")
-                    .allowEmptyShould(true)
-                    .because("mcp is a sibling mechanism of web, not a consumer of its internals");
+    // R6 (mcp must not depend on web) lives in aura-mcp/src/test/java/io/aura/mcp/McpLayeringTest.java.
+    // It cannot be enforced here: no io.aura.mcp class is on this module's classpath, so the rule
+    // would have an empty subject set and pass by doing nothing -- which is what it did until the
+    // copy in aura-mcp replaced it.
 }

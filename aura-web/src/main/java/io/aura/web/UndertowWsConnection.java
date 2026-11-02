@@ -1,7 +1,6 @@
 package io.aura.web;
 
-import
-io.aura.port.WsConnection;import
+import io.aura.port.WsConnection;import
 io.aura.port.WsHandler;
 import io.undertow.websockets.core.WebSocketCallback;
 import io.undertow.websockets.core.WebSocketChannel;

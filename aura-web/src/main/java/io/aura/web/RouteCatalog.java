@@ -1,9 +1,9 @@
 package io.aura.web;
 
-import
-io.aura.port.BaseContext;
+import io.aura.port.BaseContext;
 import io.aura.contract.ApiParameter;
 import io.aura.contract.Route;
+import io.aura.contract.ScalarType;
 
 import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
@@ -26,7 +26,7 @@ public final class RouteCatalog {
                     if (type == Context.class || type == BaseContext.class) continue;
                     // The same rule the binder uses, so the described location is the
                     // location the value is actually read from.
-                    boolean body = ParamResolver.isBody(type);
+                    boolean body = ScalarType.isBody(type);
                     String source = body ? "body"
                             : route.paramNames().contains(parameter.getName()) ? "path" : "query";
                     // The binder enforces this same rule, so a declared required parameter is

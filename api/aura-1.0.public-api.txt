@@ -181,6 +181,8 @@ public final class io.aura.contract.RuntimeState extends java.lang.Enum<io.aura.
 public final class io.aura.contract.ScalarType {
   public static java.lang.String jsonTypeName(java.lang.String);
   public static boolean isScalar(java.lang.String);
+  public static java.lang.Object fromString(java.lang.String, java.lang.Class<?>);
+  public static boolean isBody(java.lang.Class<?>);
 }
 ### aura-contract:io.aura.contract.StructuredError
 public final class io.aura.contract.StructuredError extends java.lang.Record {
@@ -1208,25 +1210,7 @@ public interface io.aura.web.ParamResolver$Binder {
 public final class io.aura.web.ParamResolver {
   public static io.aura.web.ParamResolver$Binder create(java.lang.reflect.Parameter);
   public static boolean isRequired(java.lang.Class<?>, java.lang.String);
-  public static java.lang.Object fromString(java.lang.String, java.lang.Class<?>);
-  public static boolean isBody(java.lang.Class<?>);
   public static java.lang.String resolveString(io.aura.port.BaseContext, java.lang.String);
-  public static int parseInt(java.lang.String);
-  public static java.lang.Integer parseIntBoxed(java.lang.String);
-  public static long parseLong(java.lang.String);
-  public static java.lang.Long parseLongBoxed(java.lang.String);
-  public static boolean parseBool(java.lang.String);
-  public static java.lang.Boolean parseBoolBoxed(java.lang.String);
-  public static double parseDouble(java.lang.String);
-  public static java.lang.Double parseDoubleBoxed(java.lang.String);
-  public static float parseFloat(java.lang.String);
-  public static java.lang.Float parseFloatBoxed(java.lang.String);
-  public static short parseShort(java.lang.String);
-  public static java.lang.Short parseShortBoxed(java.lang.String);
-  public static byte parseByte(java.lang.String);
-  public static java.lang.Byte parseByteBoxed(java.lang.String);
-  public static char parseChar(java.lang.String);
-  public static java.lang.Character parseCharBoxed(java.lang.String);
 }
 ### aura-web:io.aura.web.RequestGuard
 public interface io.aura.web.RequestGuard {

@@ -1,6 +1,6 @@
 package io.aura.mcp;
 
-import io.aura.web.ParamResolver;
+import io.aura.contract.ScalarType;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -34,29 +34,39 @@ public class McpContext {
         return val == null ? null : val.toString();
     }
 
+    /**
+     * A tool argument arrives as JSON, so a number may already be a {@link Number} or may be
+     * the string a client sent. Both shapes go through {@link ScalarType#fromString(String,
+     * Class)} with the same target type the HTTP binder would use, which is what keeps a
+     * malformed value from meaning 400 on one transport and {@code 0} on the other.
+     */
     public int getInt(String name) {
         Object val = get(name);
         if (val instanceof Number n) return n.intValue();
-        return ParamResolver.parseInt(val == null ? null : val.toString());
+        return (Integer) ScalarType.fromString(text(val), int.class);
     }
 
     public long getLong(String name) {
         Object val = get(name);
         if (val instanceof Number n) return n.longValue();
-        return ParamResolver.parseLong(val == null ? null : val.toString());
+        return (Long) ScalarType.fromString(text(val), long.class);
     }
 
     /** A missing flag is {@code false}, the same default an HTTP query parameter gets. */
     public boolean getBoolean(String name) {
         Object val = get(name);
         if (val instanceof Boolean b) return b;
-        return ParamResolver.parseBool(val == null ? null : val.toString());
+        return (Boolean) ScalarType.fromString(text(val), boolean.class);
     }
 
     public double getDouble(String name) {
         Object val = get(name);
         if (val instanceof Number n) return n.doubleValue();
-        return ParamResolver.parseDouble(val == null ? null : val.toString());
+        return (Double) ScalarType.fromString(text(val), double.class);
+    }
+
+    private static String text(Object val) {
+        return val == null ? null : val.toString();
     }
 
     @SuppressWarnings("unchecked")

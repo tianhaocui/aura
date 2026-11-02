@@ -1,7 +1,6 @@
 package io.aura.web;
 
-import
-io.aura.port.SseEmitter;
+import io.aura.port.SseEmitter;
 import io.aura.Validate;
 import org.junit.jupiter.api.Test;
 

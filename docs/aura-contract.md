@@ -53,3 +53,12 @@ snapshot without depending on Aura's runtime registry.
 binding, `/__schema__`, OpenAPI, MCP `inputSchema`, and the compile-time route
 generator all resolve a type through it, so the same parameter can no longer be
 a query string to one consumer and a request body to another.
+
+The table answers two questions about the same type, and they have one source:
+`jsonTypeName` says what a type renders as, `fromString(value, type)` says how a
+string binds into it, and `isBody(type)` says whether a type binds from the
+request line at all. A missing value binds to the type's own absence -- `0` or
+`false` for a primitive, `null` for a boxed one -- and required-ness is decided
+by the caller, which knows whether the handler signature can receive that
+absence. Keeping the rendering next to the binding is what stops a transport
+from advertising `integer` and then reading `"seven"` as `0`.

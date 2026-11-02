@@ -1,7 +1,6 @@
 package io.aura.web;
 
-import
-io.aura.port.BaseRouteBuilder;
+import io.aura.port.BaseRouteBuilder;
 import io.aura.annotation.*;
 
 import java.lang.reflect.Method;
