@@ -40,6 +40,7 @@ verifiable in memory in milliseconds. Every stage below is a commit on
 | review-H | `6cbf8de` | the added types are documented in their module docs, and `verify-docs-code.sh` compiles the documentation against this tree instead of quoting it |
 | stage2-i | `6c4f93b` | the 14 policy ports left `io.aura.web` for `io.aura.port`, so R1 can forbid the adapter package, R2 has a real subject set, and `WebLayeringTest` enforces the boundary where both sides are on the classpath |
 | stage2-j1 | `66bff04` | the string-to-value table moved from `io.aura.web.ParamResolver` to `io.aura.contract.ScalarType`, beside the JSON names it must match, and `aura-mcp` dropped its compile-scope dependency on the Undertow adapter |
+| stage2-j2 | `f7fb8f0` | `McpToolBuilder`, `McpEnumValue` and `McpRouter.tool(String, String)` are deleted so `McpRouter.tool(Route)` is the only tool door, enum choices and body shapes are projected from the contract's own schema, label→code mapping moved into the handler, and both silent failures got codes |
 
 ## Decisions that differed from the plan
 
