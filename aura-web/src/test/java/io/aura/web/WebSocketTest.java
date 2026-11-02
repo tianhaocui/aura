@@ -55,7 +55,7 @@ class WebSocketTest {
             var first = HttpClient.newHttpClient().newWebSocketBuilder()
                     .buildAsync(URI.create("ws://localhost:" + port + "/ws/limited"), requestingListener())
                     .join();
-            assertThat(opens).hasValue(1);
+            awaitCount(opens, 1);
 
             var rejectedCode = new CompletableFuture<Integer>();
             var rejected = HttpClient.newHttpClient().newWebSocketBuilder()
@@ -128,6 +128,14 @@ class WebSocketTest {
         } finally {
             app.stop();
         }
+    }
+
+    /** The handler's open runs on an Undertow thread; the client's join() only proves the handshake. */
+    private static void awaitCount(AtomicInteger counter, int expected) throws InterruptedException {
+        for (int attempt = 0; attempt < 120 && counter.get() < expected; attempt++) {
+            Thread.sleep(25);
+        }
+        assertThat(counter).hasValue(expected);
     }
 
     private static WebSocket.Listener requestingListener() {

@@ -83,14 +83,8 @@ class McpRouterTest {
             assertThat(tool.description()).isEqualTo("Get order");
             assertThat(tool.params()).singleElement().extracting(McpParam::name).isEqualTo("id");
         });
-        @SuppressWarnings("unchecked")
-        Map<String, Object> toolSchema = ((List<Map<String, Object>>) mcp.buildSchema().get("tools")).get(0);
-        @SuppressWarnings("unchecked")
-        Map<String, Object> properties = (Map<String, Object>) ((Map<String, Object>) toolSchema.get("inputSchema"))
-                .get("properties");
-        @SuppressWarnings("unchecked")
-        Map<String, Object> idSchema = (Map<String, Object>) properties.get("id");
-        assertThat(idSchema).containsEntry("type", "integer");
+        assertThat(McpWire.of(mcp.buildSchema()).tool("get_orders_by_id").inputSchema()
+                .property("id").type()).isEqualTo("integer");
         assertThat(mcp.invoke("get_orders_by_id", Map.of("id", "42"))).isEqualTo("order-42");
     }
 
@@ -105,15 +99,10 @@ class McpRouterTest {
                         true, "Order fields", body)));
         McpRouter mcp = new McpRouter().tool(route);
 
-        @SuppressWarnings("unchecked")
-        Map<String, Object> tool = ((List<Map<String, Object>>) mcp.buildSchema().get("tools")).get(0);
-        @SuppressWarnings("unchecked")
-        Map<String, Object> properties = (Map<String, Object>) ((Map<String, Object>) tool.get("inputSchema"))
-                .get("properties");
-        @SuppressWarnings("unchecked")
-        Map<String, Object> request = (Map<String, Object>) properties.get("request");
-        assertThat(request).containsEntry("type", "object");
-        assertThat(request.get("description")).isEqualTo("Order fields");
+        McpWire.Property request = McpWire.of(mcp.buildSchema()).tool("post_orders").inputSchema()
+                .property("request");
+        assertThat(request.type()).isEqualTo("object");
+        assertThat(request.description()).isEqualTo("Order fields");
 
         // The whole point of the shared contract: the declared source reaches the tool.
         assertThat(mcp.tools().get(0).params().get(0).contract().source()).isEqualTo("body");
@@ -163,29 +152,23 @@ class McpRouterTest {
                 (user, permission) -> user.equals("user-1") && permission.equals("orders.delete")))
                 .isEqualTo("deleted-7");
 
-        @SuppressWarnings("unchecked")
-        Map<String, Object> tool = ((List<Map<String, Object>>) mcp.buildSchema().get("tools")).get(0);
-        assertThat(tool).containsEntry("x-aura-permission", "orders.delete");
+        assertThat(McpWire.of(mcp.buildSchema()).tool("delete_order").permission())
+                .isEqualTo("orders.delete");
     }
 
     @Test
-    @SuppressWarnings("unchecked")
     void tool_enumParam_projectsTheChoicesItsContractDeclares() {
         McpRouter mcp = new McpRouter();
         mcp.tool(Route.of("POST", "/query", (McpHandler) ctx -> null)
                 .describedAs("查询")
                 .withParams(List.of(statusParam())));
 
-        Map<String, Object> schema = mcp.buildSchema();
-        Map<String, Object> inputSchema = (Map<String, Object>)
-                ((List<Map<String, Object>>) schema.get("tools")).get(0).get("inputSchema");
-        Map<String, Object> statusProp = (Map<String, Object>)
-                ((Map<String, Object>) inputSchema.get("properties")).get("status");
-
         // MCP renders what the contract declared; it has no enum vocabulary of its own.
-        assertThat(statusProp).containsEntry("type", "string");
-        assertThat((List<String>) statusProp.get("enum")).containsExactly("NEW", "CANCEL", "PAID");
-        assertThat(statusProp.get("description")).isEqualTo("订单状态");
+        McpWire.Property status = McpWire.of(mcp.buildSchema()).tool("post_query").inputSchema()
+                .property("status");
+        assertThat(status.type()).isEqualTo("string");
+        assertThat(status.enumValues()).containsExactly("NEW", "CANCEL", "PAID");
+        assertThat(status.description()).isEqualTo("订单状态");
     }
 
     @Test
@@ -306,12 +289,9 @@ class McpRouterTest {
         mcp.tool(Route.of("GET", "/users", (McpHandler) ctx -> svc.list())
                 .describedAs("用户列表"));
 
-        Map<String, Object> schema = mcp.buildSchema();
-        @SuppressWarnings("unchecked")
-        List<Map<String, Object>> tools = (List<Map<String, Object>>) schema.get("tools");
-        assertThat(tools).hasSize(2);
-        assertThat(tools.get(0).get("name")).isEqualTo("get_user");
-        assertThat(tools.get(1).get("name")).isEqualTo("get_users");
+        List<String> published = McpWire.of(mcp.buildSchema()).tools().stream()
+                .map(McpWire.Tool::name).toList();
+        assertThat(published).containsExactly("get_user", "get_users");
     }
 
     @Test
@@ -329,18 +309,11 @@ class McpRouterTest {
         assertThat(tool.params()).extracting(p -> p.contract().type())
                 .containsExactly("String", "int", "boolean");
 
-        @SuppressWarnings("unchecked")
-        Map<String, Object> inputSchema = (Map<String, Object>)
-                ((List<Map<String, Object>>) mcp.buildSchema().get("tools")).get(0).get("inputSchema");
-        @SuppressWarnings("unchecked")
-        Map<String, Object> properties = (Map<String, Object>) inputSchema.get("properties");
-        assertThat(properties).extractingByKey("name").isInstanceOfSatisfying(Map.class,
-                property -> assertThat(property.get("type")).isEqualTo("string"));
-        assertThat(properties).extractingByKey("age").isInstanceOfSatisfying(Map.class,
-                property -> assertThat(property.get("type")).isEqualTo("integer"));
-        assertThat(properties).extractingByKey("active").isInstanceOfSatisfying(Map.class,
-                property -> assertThat(property.get("type")).isEqualTo("boolean"));
-        assertThat((List<String>) inputSchema.get("required")).containsExactly("name", "age", "active");
+        McpWire.Schema inputSchema = McpWire.of(mcp.buildSchema()).tool("post_test").inputSchema();
+        assertThat(inputSchema.property("name").type()).isEqualTo("string");
+        assertThat(inputSchema.property("age").type()).isEqualTo("integer");
+        assertThat(inputSchema.property("active").type()).isEqualTo("boolean");
+        assertThat(inputSchema.required()).containsExactly("name", "age", "active");
     }
 
     @Test
@@ -379,7 +352,6 @@ class McpRouterTest {
     }
 
     @Test
-    @SuppressWarnings("unchecked")
     void routeSecurityMetadataProtectsGeneratedTool() throws Exception {
         var route = Route.of("DELETE", "/orders/{id}", (McpHandler) ctx -> "deleted")
                 .describedAs("Delete order")
@@ -388,10 +360,14 @@ class McpRouterTest {
                 .requireAuth("orders.delete");
         McpRouter mcp = new McpRouter().tool(route);
 
-        Map<String, Object> schema = mcp.buildSchema();
-        Map<String, Object> tool = ((List<Map<String, Object>>) schema.get("tools")).get(0);
-        assertThat(tool).containsEntry("x-aura-authenticated", true)
-                .containsEntry("x-aura-permission", "orders.delete");
+        McpWire.Tool published = McpWire.of(mcp.buildSchema()).tool("delete_orders_by_id");
+        assertThat(published.authenticated()).isTrue();
+        assertThat(published.permission()).isEqualTo("orders.delete");
+
+        // Absent metadata stays absent rather than arriving as a false promise.
+        McpRouter plain = new McpRouter().tool(Route.of("GET", "/plain", (McpHandler) ctx -> "x"));
+        assertThat(McpWire.of(plain.buildSchema()).tool("get_plain").keys())
+                .doesNotContain("x-aura-authenticated", "x-aura-permission");
         assertThatThrownBy(() -> mcp.invoke("delete_orders_by_id", Map.of("id", 1)))
                 .isInstanceOf(SecurityException.class)
                 .hasMessageContaining("authentication required");

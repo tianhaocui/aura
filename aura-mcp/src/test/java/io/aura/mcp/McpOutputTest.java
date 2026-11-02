@@ -10,22 +10,20 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class McpOutputTest {
     @Test
-    @SuppressWarnings("unchecked")
     void explicitContentPreservesMcpTypesAndStructuredData() throws Exception {
         McpRouter router = new McpRouter();
         router.tool(Route.of("POST", "/outputs",
                 (McpHandler) ctx -> new McpImage("aGVsbG8=", "image/png"))
                 .describedAs("Return explicit MCP content"));
-        Map<String, Object> imageResult = McpContent.result(router.invoke("post_outputs", Map.of()));
-        java.util.List<Map<String, Object>> image = (java.util.List<Map<String, Object>>) imageResult.get("content");
-        assertThat(image.get(0))
-                .containsEntry("type", "image")
-                .containsEntry("mimeType", "image/png");
+        McpWire image = McpWire.of(McpContent.result(router.invoke("post_outputs", Map.of())));
+        assertThat(image.contentBlocks()).singleElement().satisfies(block -> {
+            assertThat(block.type()).isEqualTo("image");
+            assertThat(block.string("mimeType")).isEqualTo("image/png");
+        });
 
-        Map<String, Object> structured = McpContent.result(
-                new McpStructured(Map.of("ok", true)));
-        assertThat(structured).containsKey("structuredContent");
-        assertThat((Map<String, Object>) structured.get("structuredContent")).containsEntry("ok", true);
+        McpWire structured = McpWire.of(McpContent.result(new McpStructured(Map.of("ok", true))));
+        assertThat(structured.keys()).contains("structuredContent");
+        assertThat(structured.object("structuredContent").flag("ok")).isTrue();
     }
 
     @Test

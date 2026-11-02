@@ -419,6 +419,26 @@ if ! rg -q 'bodySchema\(parameter\.asType\(\)\)' \
   exit 1
 fi
 
+# tools/list is the third projection of the same Route contract. Reading it back with an unchecked
+# cast turns a renamed key into a null that the next assertion compares against something else, so
+# the MCP schema tests read it through McpWire, which names the keys the document actually has. The
+# one remaining suppression is an in-Java handler result, not a wire document.
+for reader in McpRouterTest McpRouterIntegrationTest McpUtilTest McpOutputTest; do
+  if ! rg -q 'McpWire' "$repo_root/aura-mcp/src/test/java/io/aura/mcp/$reader.java"; then
+    echo "MCP schema tests read the tools/list document with unchecked casts again: $reader" >&2
+    exit 1
+  fi
+done
+unchecked="$(rg -o 'SuppressWarnings\("unchecked"\)' "$repo_root/aura-mcp/src" 2>/dev/null | wc -l | tr -d ' ')"
+if [ "$unchecked" -gt 1 ]; then
+  echo "the MCP module carries $unchecked unchecked casts; its wire documents are read through McpWire" >&2
+  exit 1
+fi
+if rg -q 'toJavaObject\(Map\.class\)' "$repo_root/aura-mcp/src/main"; then
+  echo "the MCP module cast a JSON object into a raw Map instead of using the Map it already is" >&2
+  exit 1
+fi
+
 # The same table binds as it renders: the string-to-value rules live next to the JSON names they
 # match, so a type that says "integer" cannot bind to a string on one transport and 0 on another.
 # A parse method re-added to the adapter, or the bridge reading the binder, is that drift.

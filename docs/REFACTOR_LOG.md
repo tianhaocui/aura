@@ -294,6 +294,34 @@ parameter the Java-to-JSON table cannot render published itself as a string
 second lives on `McpParam`'s constructor so the HTTP bridge cannot skip it, and
 `McpRouter.tool` re-throws it with the route that produced it.
 
+**The tools/list document is read as a document now, not as a bag of maps.** J2
+closed the declaration side of MCP; the checking side still cast `buildSchema()`
+into `Map<String, Object>` at every level -- 24 suppressions in its tests and 4 in
+`src/main`, plus five `toJavaObject(Map.class)` calls on
+`com.alibaba.fastjson2.JSONObject` values -- a type that already *is* a
+`Map<String, Object>`, so each call copied the document to declare what it was --
+and one suppression that sat on `McpContext.getEnum`, a method with no cast in it.
+An unchecked cast is not a neutral way to read a wire document: when `properties`
+became `params`, the cast did not complain, `schema.get("properties")` returned
+`null`, and the failure surfaced two lines later as `NullPointerException` or as an
+assertion about the wrong thing. `McpWire` -- test code only, no production
+dependency -- walks the document by key names, so a renamed or missing key reports
+the key that was looked for and the keys the document actually holds. The module
+now carries one suppression, in
+`McpRouterIntegrationTest`, and it is not a wire document: that test asserts on the
+`Map` a handler returned inside the JVM, where the generic type is the handler's
+own signature.
+
+Reading the document honestly also let one invariant be stated. A tool published
+for a route with no security metadata carries neither `x-aura-authenticated` nor
+`x-aura-permission` -- `routeSecurityMetadataProtectsGeneratedTool` now asserts the
+metadata for `requireAuth("orders.delete")` and the absence of both keys for a plain
+route in the same case. The half that was missing was not assertable through a cast:
+`tool.get("x-aura-authenticated")` is `null` when the key is absent, when the key is
+renamed, and when an enclosing cast produced a `null` three levels up, so an
+"absent" check could not tell a guarantee from a typo. `McpWire` reports the keys the
+document actually has, which is what makes absence a fact worth checking.
+
 ## Deleted or moved public surface
 
 | 1.0.0 | now |
@@ -573,6 +601,45 @@ and the two extra `McpTool` constructors out; `McpParam(ApiParameter)`,
 in. Nothing else moved, which is the check that says a deletion deleted only what
 it named.
 
+`stage2-j3` added three assertions to the same gate and falsified each one. The
+per-file check was turned red by restoring the pre-stage `McpUtilTest` from
+`HEAD` -- the version that read `buildSchema()` with casts and named no `McpWire` --
+which failed with `MCP schema tests read the tools/list document with unchecked
+casts again: McpUtilTest` and returned to green on restore. The bound was turned
+red by putting one unchecked read back into `McpOutputTest` while every file still
+named the reader, which failed with `the MCP module carries 2 unchecked casts; its
+wire documents are read through McpWire` -- the message that fires names the count,
+so a regression is reported as a quantity rather than as a boolean. The third
+assertion was falsified by the stage itself rather than by a mutation: the first
+gate run after the block was written exited 1 with `the MCP module cast a JSON
+object into a raw Map instead of using the Map it already is`, because two of the
+five `toJavaObject(Map.class)` calls were still in `src/main`; the check caught an
+incomplete fix, which is the only evidence that matters from a gate.
+
+The stage moved no case count. The four schema tests hold the same 52 cases before
+and after (`McpUtilTest` 17, `McpRouterTest` 24, `McpRouterIntegrationTest` 9,
+`McpOutputTest` 2) and the module still runs 182; what changed is how those cases
+reach the document. `McpWire` is test code, so the public API baseline did not move
+-- the gate's classifier half reported `Aura public API classifier passed` against
+the `stage2-j2` snapshot unchanged. `mvn -o clean verify` is green at the end of the
+stage with the same per-module numbers as J2, and `verify-docs-code.sh` still reports
+`7 compiled fences`.
+
+`WebSocketTest.connectionLimitRejectsExcessAndReleasesPermitOnClose` broke the first
+full reactor run of this stage -- `Expecting AtomicInteger(1) to have value: 1 but
+did not`, a message that is itself the proof of the race, because the counter was
+read once for the comparison and again for the report and disagreed with itself in
+between. The client's `buildAsync(...).join()` completes at handshake; the
+`onOpen` handler increments on an Undertow thread, so the assertion at the top of
+the case tested a deadline, not the limit. It now waits for the count it checks,
+like the reconnect loop further down in the same case already did. The wait is
+load-bearing and was shown so: `awaitCount(opens, 1)` changed to expect a count the
+limit cannot reach at that point failed with `Expecting AtomicInteger(1) to have
+value: 2`, and the rerun with the original bound is green. This is the second flake
+found by a full reactor run rather than a rerun, and it is the same shape as the
+first (`LiquibaseSchemaMigratorTest`'s budget): a socket-backed test whose timing
+assumption was machine-dependent. `DeploymentSecurityTest` is still open.
+
 Verified without `-Dmaven.test.failure.ignore` (`mvn -o verify`), and note the trap
 that run avoids: `mvn -o -pl aura-mcp test` without `-am` resolves `aura-core` from
 `~/.m2`, where the installed 1.0.0 jar still has the ports in `io.aura.web`, and the
@@ -611,11 +678,6 @@ lines, `jq` dropped from the tool check); the classification half still needs
   `aura-mcp.md` and `aura-processor.md` are still only scanned for legacy API
   names, so a moved type in their prose is still invisible. `aura-db` and
   `aura-mcp` also need their modules added to the gate's build list first.
-- `McpRouterTest` and the MCP schema tests still read `buildSchema()` through
-  unchecked casts and string lookups. `fix(review-G)` typed the readers of the
-  two wire documents it could reach (`TestClient.schema()`/`openApi()` and
-  `OpenApiGenerator.generate(...)`); the MCP tool schema is a third projection
-  of the same `Route` and belongs with them.
 - `scripts/verify-public-api.sh` needs `jq`, which this machine does not have, so
   step 5 of `verify-local-readiness.sh` stops there. The baseline this branch was
   checked against came from a `jq`-free copy of the generator, not from that

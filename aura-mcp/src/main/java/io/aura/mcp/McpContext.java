@@ -66,7 +66,6 @@ public class McpContext {
         return val == null ? null : val.toString();
     }
 
-    @SuppressWarnings("unchecked")
     public <E extends Enum<E>> E getEnum(String name, Class<E> type) {
         Object val = args.get(name);
         if (val == null) return null;

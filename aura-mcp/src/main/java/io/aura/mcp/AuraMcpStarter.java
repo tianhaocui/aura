@@ -63,8 +63,7 @@ public class AuraMcpStarter implements McpStarter {
                 requireText(params, "name");
                 requireObjectOrAbsent(params, "arguments");
                 JSONObject arguments = params.getJSONObject("arguments");
-                yield router.getPrompt(params.getString("name"), arguments == null
-                        ? Map.of() : arguments.toJavaObject(Map.class));
+                yield router.getPrompt(params.getString("name"), arguments == null ? Map.of() : arguments);
             }
             default -> null;
             };
@@ -96,8 +95,7 @@ public class AuraMcpStarter implements McpStarter {
                 if (value != null) transportMetadata.put(key, value.toString());
             }
         }
-        @SuppressWarnings("unchecked")
-        Map<String, Object> argsMap = args != null ? (Map<String, Object>) args.toJavaObject(Map.class) : Map.of();
+        Map<String, Object> argsMap = args == null ? Map.of() : args;
         String userId;
         try {
             userId = app.mcpAuthenticator() == null

@@ -47,11 +47,6 @@ class McpRouterIntegrationTest {
                 Map.of("type", "string", "enum", List.of("NEW", "PROCESSING", "DONE", "CANCEL")));
     }
 
-    @SuppressWarnings("unchecked")
-    private static List<String> choices(McpParam param) {
-        return (List<String>) param.contract().schema().get("enum");
-    }
-
     // === 1. service 方法绑定 ===
 
     @Test
@@ -97,8 +92,12 @@ class McpRouterIntegrationTest {
 
         McpParam param = mcp.tools().get(0).params().get(0);
         assertThat(param.contract().type()).isEqualTo("OrderStatus");
-        assertThat(param.contract().schema()).containsEntry("type", "string");
-        assertThat(choices(param)).containsExactly("NEW", "PROCESSING", "DONE", "CANCEL");
+
+        McpWire.Property status = McpWire.of(mcp.buildSchema()).tool("post_query").inputSchema()
+                .property("status");
+        assertThat(status.type()).isEqualTo("string");
+        assertThat(status.enumValues()).containsExactly("NEW", "PROCESSING", "DONE", "CANCEL");
+        assertThat(status.description()).isEqualTo("订单状态");
     }
 
     @Test
@@ -173,7 +172,6 @@ class McpRouterIntegrationTest {
     // === 5. buildSchema — MCP protocol 格式 ===
 
     @Test
-    @SuppressWarnings("unchecked")
     void buildSchema_conformsToMcpProtocol() {
         McpRouter mcp = new McpRouter();
         var orders = new OrderService();
@@ -185,36 +183,22 @@ class McpRouterIntegrationTest {
                 .withParams(List.of(status(),
                         new ApiParameter("limit", "int", "query", true, "返回数量"))));
 
-        Map<String, Object> schema = mcp.buildSchema();
-        assertThat(schema).containsKey("tools");
-
-        List<Map<String, Object>> tools = (List<Map<String, Object>>) schema.get("tools");
-        assertThat(tools).hasSize(2);
+        McpWire wire = McpWire.of(mcp.buildSchema());
+        assertThat(wire.tools()).hasSize(2);
 
         // tool 0: get_order
-        Map<String, Object> t0 = tools.get(0);
-        assertThat(t0.get("name")).isEqualTo("get_order");
-        assertThat(t0.get("description")).isEqualTo("获取订单");
-        assertThat(t0).containsKey("inputSchema");
-
-        Map<String, Object> inputSchema0 = (Map<String, Object>) t0.get("inputSchema");
-        assertThat(inputSchema0.get("type")).isEqualTo("object");
-        assertThat(inputSchema0).containsKey("properties");
-        assertThat(inputSchema0).containsKey("required");
+        McpWire.Tool getOrder = wire.tool("get_order");
+        assertThat(getOrder.description()).isEqualTo("获取订单");
+        assertThat(getOrder.inputSchema().type()).isEqualTo("object");
+        assertThat(getOrder.inputSchema().keys()).contains("properties", "required");
 
         // tool 1: post_query — enum param rendered from the declared schema, and a scalar
         // rendered from the shared Java-to-JSON table.
-        Map<String, Object> t1 = tools.get(1);
-        Map<String, Object> inputSchema1 = (Map<String, Object>) t1.get("inputSchema");
-        Map<String, Object> properties = (Map<String, Object>) inputSchema1.get("properties");
-        Map<String, Object> statusProp = (Map<String, Object>) properties.get("status");
-
-        assertThat(statusProp.get("type")).isEqualTo("string");
-        assertThat((List<String>) statusProp.get("enum")).hasSize(4);
-        assertThat(statusProp.get("description")).isEqualTo("订单状态");
-
-        Map<String, Object> limitProp = (Map<String, Object>) properties.get("limit");
-        assertThat(limitProp.get("type")).isEqualTo("integer");
+        McpWire.Schema query = wire.tool("post_query").inputSchema();
+        assertThat(query.property("status").type()).isEqualTo("string");
+        assertThat(query.property("status").enumValues()).hasSize(4);
+        assertThat(query.property("status").description()).isEqualTo("订单状态");
+        assertThat(query.property("limit").type()).isEqualTo("integer");
     }
 
     // === 6. 混合注册 — 多种方式共存 ===

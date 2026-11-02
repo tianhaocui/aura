@@ -158,6 +158,15 @@ record, the stage-by-stage log, and the migration table.
   classes and the Undertow implementation are both loaded, so a policy type
   shipped inside the adapter fails the build instead of surviving a shared
   package name.
+- The MCP tests read `tools/list` through a typed reader (`McpWire`) instead of
+  casting the document into `Map<String, Object>` at every level. A renamed key
+  used to become a `null` that the next assertion compared against something
+  else; now it names the key it looked for. `aura-mcp` carries one unchecked
+  cast (an in-Java handler result, not a wire document) and no
+  `toJavaObject(Map.class)` — a fastjson `JSONObject` is already the map it was
+  cast into. The contracts gate holds all three: each schema test names
+  `McpWire`, at most one unchecked cast may sit in the module, and
+  `toJavaObject(Map.class)` may not return.
 
 ### Fixed
 
@@ -175,6 +184,11 @@ record, the stage-by-stage log, and the migration table.
   they leave the request thread, and bounded external calls share one `IpSafety`
   SSRF check.
 - The annotation processor no longer references itself while compiling.
+- `WebSocketTest.connectionLimitRejectsExcessAndReleasesPermitOnClose` asserted
+  the handler's open count immediately after the client's handshake `join()`, but
+  the count is incremented on an Undertow thread. It failed once in a full
+  reactor run and passed on the retry; it now waits for the count it checks, so
+  the limit it tests cannot be verified against a race.
 - `CorsConfigTest2` matched no Surefire include pattern and never ran in a normal
   build; renamed to `CorsEnforcementTest`, and `mvn verify` runs
   `ArchitectureTest` instead of excluding it.

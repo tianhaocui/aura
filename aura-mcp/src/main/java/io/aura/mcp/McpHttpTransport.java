@@ -484,8 +484,7 @@ final class McpHttpTransport {
             case "prompts/get" -> {
                 if (!validText(params, "name") || !objectOrAbsent(params, "arguments")) yield INVALID;
                 JSONObject arguments = params.getJSONObject("arguments");
-                yield router.getPrompt(params.getString("name"), arguments == null
-                        ? Map.of() : arguments.toJavaObject(Map.class));
+                yield router.getPrompt(params.getString("name"), arguments == null ? Map.of() : arguments);
             }
             case "tools/call" -> validText(params, "name") && objectOrAbsent(params, "arguments")
                     ? callTool(runtime, userId, params) : INVALID;
@@ -497,8 +496,7 @@ final class McpHttpTransport {
     private Object callTool(AuraMcpRuntime runtime, String userId, JSONObject params) {
         String toolName = params.getString("name");
         JSONObject arguments = params.getJSONObject("arguments");
-        @SuppressWarnings("unchecked")
-        Map<String, Object> args = arguments == null ? Map.of() : arguments.toJavaObject(Map.class);
+        Map<String, Object> args = arguments == null ? Map.of() : arguments;
         try {
             io.aura.contract.McpAuthorizer authorizer = runtime.mcpAuthorizer();
             Object value = router.invoke(toolName, args, userId,

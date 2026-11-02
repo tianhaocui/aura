@@ -374,12 +374,10 @@ public class McpBridge {
                 JSONObject p = params.getJSONObject(i);
                 String source = p.getString("source");
                 Boolean required = p.getBoolean("required");
-                @SuppressWarnings("unchecked")
-                Map<String, Object> bodySchema = p.getJSONObject("schema") == null
-                        ? Map.of() : p.getJSONObject("schema").toJavaObject(Map.class);
+                JSONObject schema = p.getJSONObject("schema");
                 list.add(new McpParam(new io.aura.contract.ApiParameter(p.getString("name"),
                         p.getString("type"), source, required == null || required,
-                        p.getString("description"), bodySchema)));
+                        p.getString("description"), schema == null ? Map.of() : schema)));
             }
         }
         return McpUtil.inputSchema(list);
