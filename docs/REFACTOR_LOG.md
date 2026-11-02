@@ -38,6 +38,7 @@ verifiable in memory in milliseconds. Every stage below is a commit on
 | review-F | `cfa665a` | `required` became the binder's single rule on both transports, MCP stopped inventing types, and OpenAPI/examples joined `ScalarType` |
 | review-G | `dca32d3` | a refused contribution names the module or the route instead of throwing `NullPointerException`; the wire documents are read through typed getters, and `SchemaProbeTest` (zero assertions) is gone |
 | review-H | `6cbf8de` | the added types are documented in their module docs, and `verify-docs-code.sh` compiles the documentation against this tree instead of quoting it |
+| stage2-i | `6c4f93b` | the 14 policy ports left `io.aura.web` for `io.aura.port`, so R1 can forbid the adapter package, R2 has a real subject set, and `WebLayeringTest` enforces the boundary where both sides are on the classpath |
 
 ## Decisions that differed from the plan
 
