@@ -40,4 +40,44 @@ class OpenApiGeneratorTest {
         Map<?, ?> response = (Map<?, ?>) ((Map<?, ?>) operation.get("responses")).get("200");
         assertThat(response.containsKey("content")).isTrue();
     }
+
+    enum Channel { SMS, EMAIL }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void queryParameterTypesComeFromTheOneScalarTable() {
+        Route route = Route.of("GET", "/report", (BaseHandler) ctx -> { })
+                .withParams(List.of(
+                        new ApiParameter("total", "BigDecimal", "query", false, null),
+                        new ApiParameter("rank", "short", "query", false, null),
+                        new ApiParameter("id", "Long", "query", true, null)));
+
+        // The private table this replaces called BigDecimal and short strings; the schema
+        // document and the MCP tool said number and integer for the same handler.
+        List<Map<String, Object>> parameters =
+                (List<Map<String, Object>>) operation(route, "/report").get("parameters");
+        assertThat(parameters).extracting(parameter -> ((Map<String, Object>) parameter.get("schema")).get("type"))
+                .containsExactly("number", "integer", "integer");
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void declaredParameterSchemaReachesOpenApiInsteadOfAnUnboundedString() {
+        Route route = Route.of("GET", "/notify", (BaseHandler) ctx -> { })
+                .withParams(List.of(new ApiParameter("channel", "Channel", "query", true, null,
+                        TypeSchema.describe(Channel.class))));
+
+        List<Map<String, Object>> parameters =
+                (List<Map<String, Object>>) operation(route, "/notify").get("parameters");
+        assertThat(parameters.get(0).get("schema")).isInstanceOfSatisfying(Map.class, schema ->
+                assertThat(schema).containsEntry("type", "string")
+                        .containsEntry("enum", List.of("SMS", "EMAIL")));
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Map<String, Object> operation(Route route, String path) {
+        Map<String, Object> document = OpenApiGenerator.generate("Orders", "1.0.0", List.of(route));
+        Map<String, Object> pathItem = (Map<String, Object>) ((Map<String, Object>) document.get("paths")).get(path);
+        return (Map<String, Object>) pathItem.get("get");
+    }
 }

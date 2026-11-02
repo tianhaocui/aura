@@ -248,49 +248,54 @@ class McpRouterTest {
     }
 
     @Test
-    void tool_customHandler_missingParam_returnsZeroForInt() throws Exception {
+    void tool_customHandler_missingParam_namesTheRequiredArgument() {
         McpRouter mcp = new McpRouter();
         mcp.tool("inc", "加一")
            .param("n", int.class, "数字")
            .handler(ctx -> ctx.getInt("n") + 1);
 
-        Object result = mcp.invoke("inc", Map.of());
-        assertThat(result).isEqualTo(1);
+        // The tool published n as required, so running it on an implied 1 was a result the
+        // model never asked for.
+        assertThatThrownBy(() -> mcp.invoke("inc", Map.of()))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("required argument missing: n");
     }
 
     @Test
-    void tool_missingBooleanParam_returnsFalse() throws Exception {
+    void tool_missingBooleanParam_namesTheRequiredArgument() {
         McpRouter mcp = new McpRouter();
         var svc = new UserService();
         mcp.tool("check", "检查")
            .param("active", boolean.class, "是否激活")
            .handler(ctx -> svc.check(ctx.getBoolean("active")));
 
-        Object result = mcp.invoke("check", Map.of());
-        assertThat(result).isEqualTo("active=false");
+        assertThatThrownBy(() -> mcp.invoke("check", Map.of()))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("required argument missing: active");
     }
 
     @Test
-    void tool_missingDoubleParam_returnsZero() throws Exception {
+    void tool_missingDoubleParam_namesTheRequiredArgument() {
         McpRouter mcp = new McpRouter();
         var svc = new UserService();
         mcp.tool("rate", "费率")
            .param("value", double.class, "金额")
            .handler(ctx -> svc.rate(ctx.getDouble("value")));
 
-        Object result = mcp.invoke("rate", Map.of());
-        assertThat(result).isEqualTo("rate=0.0");
+        assertThatThrownBy(() -> mcp.invoke("rate", Map.of()))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("required argument missing: value");
     }
 
     @Test
-    void tool_customHandler_missingParam_returnsNullForString() throws Exception {
+    void tool_optionalParamStillRunsWhileAbsent() throws Exception {
         McpRouter mcp = new McpRouter();
         mcp.tool("echo", "回声")
-           .param("msg", String.class, "消息")
+           .optional("msg", String.class, "消息")
            .handler(ctx -> ctx.getString("msg"));
 
-        Object result = mcp.invoke("echo", Map.of());
-        assertThat(result).isNull();
+        // optional() is how a hand-authored tool says null is a value it handles.
+        assertThat(mcp.invoke("echo", Map.of())).isNull();
     }
 
     @Test
@@ -320,10 +325,24 @@ class McpRouterTest {
            .param("active", boolean.class, "是否激活")
            .handler(ctx -> null);
 
+        // A builder parameter stores the Java type it was given, exactly as a route parameter
+        // does, and the wire document is where the Java-to-JSON decision appears -- once.
         McpTool tool = mcp.tools().get(0);
-        assertThat(tool.params().get(0).type()).isEqualTo("string");
-        assertThat(tool.params().get(1).type()).isEqualTo("integer");
-        assertThat(tool.params().get(2).type()).isEqualTo("boolean");
+        assertThat(tool.params()).extracting(p -> p.contract().type())
+                .containsExactly("String", "int", "boolean");
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> inputSchema = (Map<String, Object>)
+                ((List<Map<String, Object>>) mcp.buildSchema().get("tools")).get(0).get("inputSchema");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> properties = (Map<String, Object>) inputSchema.get("properties");
+        assertThat(properties).extractingByKey("name").isInstanceOfSatisfying(Map.class,
+                property -> assertThat(property.get("type")).isEqualTo("string"));
+        assertThat(properties).extractingByKey("age").isInstanceOfSatisfying(Map.class,
+                property -> assertThat(property.get("type")).isEqualTo("integer"));
+        assertThat(properties).extractingByKey("active").isInstanceOfSatisfying(Map.class,
+                property -> assertThat(property.get("type")).isEqualTo("boolean"));
+        assertThat((List<String>) inputSchema.get("required")).containsExactly("name", "age", "active");
     }
 
     @Test
@@ -375,14 +394,15 @@ class McpRouterTest {
     }
 
     @Test
-    void tool_missingLongParam_returnsZero() throws Exception {
+    void tool_missingLongParam_namesTheRequiredArgument() {
         McpRouter mcp = new McpRouter();
         mcp.tool("ts", "时间戳")
            .param("t", long.class, "时间")
            .handler(ctx -> ctx.getLong("t"));
 
-        Object result = mcp.invoke("ts", Map.of());
-        assertThat(result).isEqualTo(0L);
+        assertThatThrownBy(() -> mcp.invoke("ts", Map.of()))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("required argument missing: t");
     }
 
     @Test

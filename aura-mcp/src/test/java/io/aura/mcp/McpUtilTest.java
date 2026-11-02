@@ -84,8 +84,8 @@ class McpUtilTest {
     @Test
     void inputSchema_withParams_correctStructure() {
         List<McpParam> params = List.of(
-                new McpParam("id", "int", "the item id", null),
-                new McpParam("name", "String", null, null)
+                new McpParam(new ApiParameter("id", "int", "tool", true, "the item id"), List.of()),
+                new McpParam(new ApiParameter("name", "String", "tool", true, null), List.of())
         );
         Map<String, Object> schema = McpUtil.inputSchema(params);
 
@@ -140,9 +140,10 @@ class McpUtilTest {
     @Test
     @SuppressWarnings("unchecked")
     void inputSchema_declaresEnumLabelsTheModelCanEmit() {
-        List<McpParam> params = List.of(new McpParam("status", "String", "Order status", List.of(
-                new McpEnumValue("PAID(已支付)", "PAID"),
-                new McpEnumValue("NEW(新建)", "NEW"))));
+        List<McpParam> params = List.of(new McpParam(
+                new ApiParameter("status", "String", "tool", true, "Order status"),
+                List.of(new McpEnumValue("PAID(已支付)", "PAID"),
+                        new McpEnumValue("NEW(新建)", "NEW"))));
 
         Map<String, Object> properties = (Map<String, Object>) McpUtil.inputSchema(params).get("properties");
         Map<String, Object> status = (Map<String, Object>) properties.get("status");

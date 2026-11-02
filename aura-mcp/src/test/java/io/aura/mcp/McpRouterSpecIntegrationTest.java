@@ -138,6 +138,26 @@ class McpRouterSpecIntegrationTest {
         assertThat(anonymous.toJSONString()).contains("MCP_AUTHENTICATION_REQUIRED");
     }
 
+    @Test
+    void stdioRefusesARequiredArgumentTheToolAdvertised() throws Exception {
+        McpRouter router = new McpRouter();
+        router.tool("get_order", "Get order")
+                .param("id", int.class, "order id")
+                .handler(ctx -> "should not run");
+        AuraMcpRuntime runtime = (AuraMcpRuntime) AuraApp.create()
+                .use(McpModule.create(router))
+                .prepare().runtimeView();
+
+        JSONObject response = runStdio(runtime, router, Map.of(
+                "jsonrpc", "2.0", "id", 5, "method", "tools/call",
+                "params", Map.of("name", "get_order", "arguments", Map.of())));
+
+        // tools/list marked id required, so the stdio door says exactly that instead of
+        // letting the handler read a default.
+        assertThat(response.toJSONString()).contains("MCP_MISSING_ARGUMENT");
+        assertThat(response.toJSONString()).doesNotContain("should not run");
+    }
+
     private static AuraApp application(RecordingRouter router) {
         return AuraApp.create()
                 .mcpAuthenticate(metadata -> "Bearer custom".equals(metadata.get("authorization"))

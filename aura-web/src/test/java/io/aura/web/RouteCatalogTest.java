@@ -60,7 +60,9 @@ class RouteCatalogTest {
         // A List is never a query string: the binder reads it from the body, so the
         // contract has to say body too.
         assertThat(description.params().get(0).source()).isEqualTo("body");
-        assertThat(description.params().get(0).required()).isTrue();
+        // A body may arrive as null and the handler decides what that means, so required is
+        // not claimed here -- the contract does not promise a rejection the binder never makes.
+        assertThat(description.params().get(0).required()).isFalse();
         assertThat(description.params().get(0).schema().get("type")).isEqualTo("array");
 
         // An enum arrives as its name(), with the accepted spellings spelled out.

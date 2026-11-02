@@ -20,6 +20,9 @@ public record ApiError(String error, String code, String field, String reason, S
             return "Check the request fields against the API schema";
         }
         if (code.startsWith("AUTH")) return "Authenticate the request and retry";
+        if ("AURA_PARAMETER_REQUIRED".equals(code)) {
+            return "Send the parameter named in field; the schema marks it required";
+        }
         if (code.startsWith("FORBIDDEN") || code.startsWith("PERMISSION")) {
             return "Request the required permission or use an authorized identity";
         }

@@ -328,7 +328,8 @@ rg -q 'RouteAssembler.secure\(app, contract' "$repo_root/aura-web/src/main/java/
 rg -q 'if \(route.isWebSocket\(\)\) continue;' "$repo_root/aura-web/src/main/java/io/aura/web/OpenApiGenerator.java"
 # Aura's own endpoints are gated in the shared chain, and nowhere else: a second copy in the
 # transport is what let the in-memory client claim a protection it did not run.
-rg -q 'chain\.add\(new BuiltinEndpointsGuard\(app\)\)' "$repo_root/aura-web/src/main/java/io/aura/web/RequestGuards.java"
+guard_chain="$repo_root/aura-web/src/main/java/io/aura/web/RequestGuards.java"
+rg -q 'chain\.add\(new BuiltinEndpointsGuard\(app\)\)' "$guard_chain"
 for transport in UndertowStarter TestClient; do
   if rg -q 'private boolean (schemaAllowed|originAllowed)\(|aura\.schema\.auth-token' \
       "$repo_root/aura-web/src/main/java/io/aura/web/$transport.java"; then
@@ -336,5 +337,43 @@ for transport in UndertowStarter TestClient; do
     exit 1
   fi
 done
+
+# "required" is a promise the runtime keeps, so exactly one rule decides it and every door that
+# publishes it enforces it. A second opinion here is how a tool advertised a required argument
+# it then let the handler read as 0.
+rg -q 'type\.isPrimitive\(\) \|\| "path"\.equals\(source\)' \
+  "$repo_root/aura-web/src/main/java/io/aura/web/ParamResolver.java"
+rg -q 'ParamResolver\.isRequired\(type, source\)' \
+  "$repo_root/aura-web/src/main/java/io/aura/web/RouteCatalog.java"
+rg -q 'throw new RequiredParameterException\(name\)' \
+  "$repo_root/aura-web/src/main/java/io/aura/web/ParamResolver.java"
+for door in McpRouter AuraMcpStarter McpHttpTransport McpBridge; do
+  rg -q 'McpMissingArgument' "$repo_root/aura-mcp/src/main/java/io/aura/mcp/$door.java"
+done
+# A declaration site that hard-codes required=true is a second rule: it publishes a promise the
+# binder may not keep. Ask the binder instead.
+for declaration in "$repo_root/aura-web/src/main/java/io/aura/web/RouteCatalog.java" \
+                   "$repo_root/aura-mcp/src/main/java/io/aura/mcp/McpToolBuilder.java"; do
+  if rg -q 'new ApiParameter\([^)]*\btrue\b' "$declaration" \
+     && ! rg -q 'isRequired\(' "$declaration"; then
+    echo "required invented outside the binder rule: $declaration" >&2
+    exit 1
+  fi
+done
+
+# One Java-to-JSON table: a private switch in a consumer is how the same parameter became a
+# string here and an integer there.
+rg -q 'ScalarType\.jsonTypeName' "$repo_root/aura-web/src/main/java/io/aura/web/OpenApiGenerator.java"
+rg -q 'ScalarType\.jsonTypeName' "$repo_root/aura-web/src/main/java/io/aura/web/RouteContract.java"
+rg -q 'ScalarType\.jsonTypeName' "$repo_root/aura-mcp/src/main/java/io/aura/mcp/McpUtil.java"
+rg -q 'ScalarType\.isScalar' "$repo_root/aura-mcp/src/main/java/io/aura/mcp/McpToolBuilder.java"
+if rg -q 'case "int", "Integer"' "$repo_root/aura-web/src/main" "$repo_root/aura-mcp/src/main"; then
+  echo "a Java-to-JSON type table was recreated outside ScalarType" >&2
+  exit 1
+fi
+if [ "$(rg -c 'public McpParam\(' "$repo_root/aura-mcp/src/main/java/io/aura/mcp/McpParam.java")" != "1" ]; then
+  echo "McpParam grew a second way to declare an argument besides ApiParameter" >&2
+  exit 1
+fi
 
 echo "Aura module and documentation contracts passed (version $root_version)"

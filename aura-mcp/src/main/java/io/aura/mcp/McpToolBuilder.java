@@ -1,9 +1,19 @@
 package io.aura.mcp;
 
+import io.aura.contract.ApiParameter;
+import io.aura.contract.ScalarType;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * Declares a hand-authored MCP tool. It is a shorter way to write the same
+ * {@link ApiParameter} contract a {@link McpRouter#tool(io.aura.contract.Route, McpHandler)}
+ * gets from an HTTP route, not a second contract: the builder names Java types and leaves every
+ * Java-to-JSON decision to {@link McpUtil#inputSchema}, and it accepts only the types a tool
+ * argument can actually carry.
+ */
 public class McpToolBuilder {
 
     private final String name;
@@ -23,12 +33,15 @@ public class McpToolBuilder {
         if (type.isEnum()) {
             return addEnumParam(name, type, description);
         }
-        params.add(new McpParam(name, McpUtil.jsonType(type.getSimpleName()), description, null));
+        params.add(declared(name, type, description, null, true));
         return this;
     }
 
     public McpToolBuilder optional(String name, Class<?> type, String description) {
-        params.add(new McpParam(name, McpUtil.jsonType(type.getSimpleName()), description, null, false));
+        if (type.isEnum()) {
+            return addEnumParam(name, type, description, false);
+        }
+        params.add(declared(name, type, description, null, false));
         return this;
     }
 
@@ -37,8 +50,25 @@ public class McpToolBuilder {
         for (var entry : mapping.entrySet()) {
             enumValues.add(new McpEnumValue(entry.getKey(), entry.getValue()));
         }
-        params.add(new McpParam(name, McpUtil.jsonType(type.getSimpleName()), description, enumValues));
+        params.add(declared(name, type, description, enumValues, true));
         return this;
+    }
+
+    /**
+     * A tool argument arrives as a JSON scalar, so a complex type cannot be declared here.
+     * Refusing it at registration beats publishing {@code "type":"string"} for an object the
+     * handler will never receive; a real body belongs on an HTTP route.
+     */
+    private static McpParam declared(String name, Class<?> type, String description,
+                                     List<McpEnumValue> enumValues, boolean required) {
+        if (!ScalarType.isScalar(type.getName()) && !type.isEnum()) {
+            throw new IllegalArgumentException("Tool argument '" + name + "' cannot be a "
+                    + type.getName() + "; a hand-authored tool takes scalar arguments. Expose the"
+                    + " HTTP route with McpRouter.tool(Route, McpHandler) so a body is described"
+                    + " by the route contract.");
+        }
+        return new McpParam(new ApiParameter(name, type.getSimpleName(), "tool",
+                required, description), enumValues);
     }
 
     public McpToolBuilder handler(McpHandler handler) {
@@ -62,6 +92,11 @@ public class McpToolBuilder {
 
     @SuppressWarnings({"unchecked", "rawtypes"})
     private McpToolBuilder addEnumParam(String name, Class<?> enumType, String description) {
+        return addEnumParam(name, enumType, description, true);
+    }
+
+    private McpToolBuilder addEnumParam(String name, Class<?> enumType, String description,
+                                        boolean required) {
         Object[] constants = enumType.getEnumConstants();
         List<McpEnumValue> enumValues = new ArrayList<>();
         for (Object c : constants) {
@@ -69,7 +104,7 @@ public class McpToolBuilder {
             String label = extractLabel(c);
             enumValues.add(new McpEnumValue(label != null ? enumName + "(" + label + ")" : enumName, enumName));
         }
-        params.add(new McpParam(name, "string", description, enumValues));
+        params.add(declared(name, enumType, description, enumValues, required));
         return this;
     }
 

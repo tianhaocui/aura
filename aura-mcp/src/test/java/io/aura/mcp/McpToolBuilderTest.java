@@ -19,6 +19,18 @@ class McpToolBuilderTest {
         return new McpToolBuilder(router, name, desc);
     }
 
+    /**
+     * The JSON type a parameter publishes. The builder keeps the Java type it was handed --
+     * like a route parameter does -- and the mapping to JSON happens only here, inside the
+     * schema render, so a test can tell the two declarations apart.
+     */
+    @SuppressWarnings("unchecked")
+    private static String wireType(McpTool tool, String paramName) {
+        Map<String, Object> properties =
+                (Map<String, Object>) McpUtil.inputSchema(tool.params()).get("properties");
+        return String.valueOf(((Map<String, Object>) properties.get(paramName)).get("type"));
+    }
+
     // -----------------------------------------------------------------------
     // build() — basic structure
     // -----------------------------------------------------------------------
@@ -33,33 +45,36 @@ class McpToolBuilderTest {
     }
 
     @Test
-    void build_withStringParam_registersCorrectType() {
+    void build_withStringParam_declaresJavaTypeAndPublishesString() {
         McpTool tool = builder("t", "d")
                 .param("name", String.class, "the name")
                 .build();
         assertThat(tool.params()).hasSize(1);
         McpParam p = tool.params().get(0);
         assertThat(p.name()).isEqualTo("name");
-        assertThat(p.type()).isEqualTo("string");
+        assertThat(p.contract().type()).isEqualTo("String");
         assertThat(p.description()).isEqualTo("the name");
-        assertThat(p.contract()).isEqualTo(new ApiParameter("name", "string", "tool", true, "the name"));
+        assertThat(p.contract()).isEqualTo(new ApiParameter("name", "String", "tool", true, "the name"));
         assertThat(p.isEnum()).isFalse();
+        assertThat(wireType(tool, "name")).isEqualTo("string");
     }
 
     @Test
-    void build_withIntParam_registersIntegerType() {
+    void build_withIntParam_declaresJavaTypeAndPublishesInteger() {
         McpTool tool = builder("t", "d")
                 .param("count", int.class, "count")
                 .build();
-        assertThat(tool.params().get(0).type()).isEqualTo("integer");
+        assertThat(tool.params().get(0).contract().type()).isEqualTo("int");
+        assertThat(wireType(tool, "count")).isEqualTo("integer");
     }
 
     @Test
-    void build_withLongParam_registersIntegerType() {
+    void build_withLongParam_declaresJavaTypeAndPublishesInteger() {
         McpTool tool = builder("t", "d")
                 .param("ts", long.class, "timestamp")
                 .build();
-        assertThat(tool.params().get(0).type()).isEqualTo("integer");
+        assertThat(tool.params().get(0).contract().type()).isEqualTo("long");
+        assertThat(wireType(tool, "ts")).isEqualTo("integer");
     }
 
     @Test
@@ -67,7 +82,8 @@ class McpToolBuilderTest {
         McpTool tool = builder("t", "d")
                 .param("active", boolean.class, "is active")
                 .build();
-        assertThat(tool.params().get(0).type()).isEqualTo("boolean");
+        assertThat(tool.params().get(0).contract().type()).isEqualTo("boolean");
+        assertThat(wireType(tool, "active")).isEqualTo("boolean");
     }
 
     @Test
@@ -153,7 +169,10 @@ class McpToolBuilderTest {
 
         McpParam p = tool.params().get(0);
         assertThat(p.isEnum()).isTrue();
-        assertThat(p.type()).isEqualTo("string");
+        // The enum type itself is what's declared; the wire says "string" plus the labels,
+        // which is how a model knows which strings it may send.
+        assertThat(p.contract().type()).isEqualTo("Status");
+        assertThat(wireType(tool, "status")).isEqualTo("string");
         assertThat(p.enumValues()).hasSize(3);
     }
 
@@ -253,6 +272,30 @@ class McpToolBuilderTest {
         assertThatThrownBy(() -> tool.params().add(null))
                 .isInstanceOf(UnsupportedOperationException.class);
     }
+
+    // -----------------------------------------------------------------------
+    // what a hand-authored tool may declare
+    // -----------------------------------------------------------------------
+
+    @Test
+    void param_complexType_isRefusedWhereItIsDeclared() {
+        // A tool argument arrives as a JSON scalar; publishing "type":"string" for a record
+        // the handler can never receive is the failure this refuses.
+        assertThatThrownBy(() -> builder("t", "d").param("user", User.class, "user"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("cannot be a")
+                .hasMessageContaining(User.class.getName())
+                .hasMessageContaining("McpRouter.tool");
+    }
+
+    @Test
+    void optional_complexType_isRefusedWhereItIsDeclared() {
+        assertThatThrownBy(() -> builder("t", "d").optional("user", User.class, "user"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("cannot be a");
+    }
+
+    record User(String name) { }
 
     @Test
     void optionalParametersAreOmittedFromRequiredSchema() {

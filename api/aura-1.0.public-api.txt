@@ -1203,6 +1203,7 @@ public interface io.aura.web.ParamResolver$Binder {
 ### aura-web:io.aura.web.ParamResolver
 public final class io.aura.web.ParamResolver {
   public static io.aura.web.ParamResolver$Binder create(java.lang.reflect.Parameter);
+  public static boolean isRequired(java.lang.Class<?>, java.lang.String);
   public static java.lang.Object fromString(java.lang.String, java.lang.Class<?>);
   public static boolean isBody(java.lang.Class<?>);
   public static java.lang.String resolveString(io.aura.web.BaseContext, java.lang.String);
@@ -1752,8 +1753,6 @@ public class io.aura.mcp.McpPackager {
 }
 ### aura-mcp:io.aura.mcp.McpParam
 public final class io.aura.mcp.McpParam {
-  public io.aura.mcp.McpParam(java.lang.String, java.lang.String, java.lang.String, java.util.List<io.aura.mcp.McpEnumValue>);
-  public io.aura.mcp.McpParam(java.lang.String, java.lang.String, java.lang.String, java.util.List<io.aura.mcp.McpEnumValue>, boolean);
   public io.aura.mcp.McpParam(io.aura.contract.ApiParameter, java.util.List<io.aura.mcp.McpEnumValue>);
   public io.aura.contract.ApiParameter contract();
   public java.lang.String name();

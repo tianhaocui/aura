@@ -33,6 +33,25 @@ Generated and reflective routes both contribute `Route` values, and
 Prefer the optional `aura-processor` for production builds and keep
 reflection for prototypes.
 
+## Parameter binding and `required`
+
+`ParamResolver.isRequired(type, source)` is the one rule that decides whether a
+parameter is required: a primitive or a path segment, because that is what a
+handler's signature cannot hold as `null`. The binder enforces it — a missing
+`int`/`long`/`double`/`boolean`/`char` or path parameter answers
+`400 AURA_PARAMETER_REQUIRED` with the parameter's name in `field` — and
+`RouteCatalog` publishes exactly that answer in `/__schema__` and OpenAPI, so the
+document a model reads and the server it calls cannot disagree. Everything else
+is nullable and arrives as `null`: a `String` query parameter the client skipped,
+and a request body, which is why a body is not marked required even though the
+handler can choose to reject `null` itself with `bodyOrThrow`. Declare the boxed
+type when a missing value is a value you want to see.
+
+The Java type on a parameter is what the schema renderers turn into JSON:
+`ScalarType` answers for `openapi.json`, `/__schema__` and MCP `inputSchema`
+alike, and the `example` curl in the schema document is generated from the same
+table, so replaying an example a model copied binds.
+
 ## Context
 
 Common request methods:
@@ -105,6 +124,9 @@ Production 500 responses do not include raw exception messages or stack traces.
 `/__schema__` is disabled in production unless explicitly protected or enabled
 by the application policy. `/openapi.json` requires `AuraConfig.openApi(true)`
 outside explicit dev mode. Both are generated from the same compiled routes.
+Both gates are guard-chain decisions (`BuiltinEndpointsGuard`), so `TestClient`
+applies the schema token, the OpenAPI switch and the WebSocket Origin allow-list
+exactly as a socket does — see the verification section above.
 
 ## SSE And WebSocket
 

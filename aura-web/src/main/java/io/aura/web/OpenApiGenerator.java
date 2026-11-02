@@ -2,6 +2,7 @@ package io.aura.web;
 
 import io.aura.contract.ApiParameter;
 import io.aura.contract.Route;
+import io.aura.contract.ScalarType;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -37,7 +38,12 @@ public final class OpenApiGenerator {
                     value.put("name", parameter.name());
                     value.put("in", parameter.source());
                     value.put("required", parameter.required());
-                    value.put("schema", Map.of("type", openApiType(parameter.type())));
+                    // A parameter that described its own shape publishes it, exactly as the
+                    // MCP schema does, so an enum's accepted values reach a tool reading
+                    // openapi.json too instead of only reaching the model that bound it.
+                    value.put("schema", parameter.schema().isEmpty()
+                            ? Map.of("type", openApiType(parameter.type()))
+                            : new LinkedHashMap<>(parameter.schema()));
                     if (parameter.description() != null) value.put("description", parameter.description());
                     parameters.add(value);
                 }
@@ -74,13 +80,14 @@ public final class OpenApiGenerator {
                 .replaceAll("^_+|_+$", "");
     }
 
-    private static String openApiType(String type) {
-        if (type == null) return "string";
-        return switch (type) {
-            case "int", "Integer", "long", "Long" -> "integer";
-            case "double", "Double", "float", "Float" -> "number";
-            case "boolean", "Boolean" -> "boolean";
-            default -> "string";
-        };
+    /**
+     * The shared scalar table answers this; a route parameter's type is a Java type name, so
+     * anything it does not recognise is something OpenAPI has to describe as a string. The
+     * private switch this replaced had drifted from that table and called a {@code BigDecimal}
+     * query parameter a string here while the schema document called it a number.
+     */
+    private static String openApiType(String javaTypeName) {
+        String json = ScalarType.jsonTypeName(javaTypeName);
+        return json != null ? json : "string";
     }
 }

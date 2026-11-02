@@ -42,7 +42,28 @@ public final class ParamResolver {
             return obj;
         };
 
-        return ctx -> fromString(resolveString(ctx, name), type);
+        return ctx -> {
+            String raw = resolveString(ctx, name);
+            if (raw == null && type.isPrimitive()) throw new RequiredParameterException(name);
+            return fromString(raw, type);
+        };
+    }
+
+    /**
+     * The one required-ness rule: a parameter the handler signature cannot receive as null is
+     * required, and one it can is not.
+     *
+     * <p>A primitive cannot hold null, so absence is a client error and the binder answers 400.
+     * A path segment is required because the route only matched if it was there. A POJO, a
+     * collection or a boxed scalar can be null, and a handler that says {@code if (items == null)}
+     * meant it -- so the schema does not promise a rejection the server does not make.
+     *
+     * <p>{@code /__schema__}, OpenAPI and the MCP bridge read this through
+     * {@link RouteCatalog#describe}; {@link #create(Parameter)} enforces exactly it, so a declared
+     * required parameter is one the server actually refuses to see missing.
+     */
+    public static boolean isRequired(Class<?> type, String source) {
+        return type.isPrimitive() || "path".equals(source);
     }
 
     /**

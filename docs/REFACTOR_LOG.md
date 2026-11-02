@@ -32,6 +32,7 @@ verifiable in memory in milliseconds. Every stage below is a commit on
 | review-A/B | `d88ab00`, `fb06686` | guarded requests match route templates on the path alone; one mock request resolves one client IP |
 | review-C | `a14410e` | the MCP bridge stopped offering and calling routes it cannot serve |
 | review-D | `2b63207` | a WebSocket endpoint became a `Route` |
+| review-E | `9dfb9c2` | the schema token, OpenAPI switch and WebSocket Origin allow-list moved into the shared guard chain, so `TestClient` proves them without a port |
 
 ## Decisions that differed from the plan
 
@@ -84,6 +85,42 @@ request/response consumer, publishes its path parameters, and appends the same
 callback shape is the ergonomics; the parallel record and the
 `webSocketContributions()` accessor did not.
 
+**`required` became the binder's rule instead of a declaration.** Review found
+that `required` was published by `RouteCatalog` and by `McpToolBuilder` but
+enforced nowhere: a primitive `int limit` was marked required, then bound to
+`0` when the client withheld it, so the schema that told a model "you must send
+this" was the same schema that rewarded not sending it. One rule now answers it
+— `ParamResolver.isRequired(type, source)`, i.e. required is what the handler's
+signature cannot express as `null`, a primitive or a path segment — and the
+binder enforces it with `RequiredParameterException` (400,
+`AURA_PARAMETER_REQUIRED`, the offending name in `field`). A request body stays
+`required: false` even though it used to be marked mandatory: a handler may
+legitimately see `null` there, and
+`GenericBodyBindingTest.missingCollectionBodyPreservesNullableBodyBinding`
+pins that, so the declaration moved to match the runtime rather than the other
+way round. Both MCP doors now keep the promise `tools/list` makes:
+`McpRouter.invoke` refuses before the handler runs, and stdio, the HTTP
+transport and the bridge all answer `MCP_MISSING_ARGUMENT` instead of invoking
+a tool with a zero.
+
+**`McpToolBuilder` lost its private type table; the door itself is still open.**
+The same review note recorded that the builder is a second *declaration* path,
+and unlike the other findings this one is only half-closed, so it is written
+down: hand-authored tools still name their arguments in Java rather than
+deriving them from a `Route`, which is a choice the route path never asks an AI
+to make. What disappeared is the disagreement — the builder holds
+`ApiParameter` records and leaves every Java-to-JSON decision to
+`McpUtil.inputSchema`, and it now refuses a non-scalar argument at
+registration instead of publishing `"type": "string"` for an object the handler
+cannot receive. `McpParam`'s two string-typed constructors went with it, so
+`ApiParameter` is the only way to describe an argument. The two copies of the
+type table that the MCP one was beside got the same treatment: `OpenApiGenerator`
+asks `ScalarType` (its private switch called a `BigDecimal` query parameter a
+string while the schema document called it a number), a parameter that
+described its own shape now publishes that shape to OpenAPI instead of an
+unbounded string, and `RouteContract.exampleValue` comes from the same table so
+the example a model copies is a value the binder accepts.
+
 **The built-in endpoint gates joined the chain rather than staying in the
 dispatch.** Review found three decisions living inside
 `UndertowStarter.dispatch` — the schema token, the OpenAPI switch, and the
@@ -114,6 +151,7 @@ now independent doors instead of a flag that silently did nothing.
 | `AuraApp::authenticate` reflection route scanning | unchanged; `@Get`/`@Post` + `aura-processor` is the production path |
 | `io.aura.HealthModule` | `io.aura.web.HealthModule` |
 | `McpRouter.tool(Object, String)` reflective binding | `McpRouter.tool(Route, McpHandler)` |
+| `McpParam(String, String, String, List)` and `McpParam(String, String, String, List, boolean)` | `McpParam(ApiParameter, List<McpEnumValue>)` — a tool argument is declared with the shared parameter record, so it cannot carry its own Java-to-JSON opinion |
 
 `/__schema__` keeps its JSON keys — `method`, `path`, `description`,
 `returnType`, `params`, `example`, `responseSchema`, `authenticated`,
@@ -121,6 +159,12 @@ now independent doors instead of a flag that silently did nothing.
 behind them changed. Absent metadata stays absent rather than arriving as
 `null`, and a present-but-blank permission now fails at startup instead of
 publishing an unprotected route.
+
+One published value changed meaning on purpose. `params[].required` is the
+binder's rule now, so a request body reads `required: false` where 1.0 said
+`true`, and a missing primitive or path parameter is answered with
+`400 AURA_PARAMETER_REQUIRED` (and `MCP_MISSING_ARGUMENT` over MCP) instead of
+binding to `0` or `false`.
 
 ## Tests that disappeared, and why
 
@@ -136,6 +180,12 @@ publishing an unprotected route.
   `routeContractsAreImmutableAndNormalized`.
 - `RuntimeFoundationTest.healthModuleDeclaresTheStandardHealthRoutes`: moved to
   `HealthModuleTest` in aura-web, which can see the moved class.
+- Seven cases in `MethodRefHandlerTest`, `LambdaHandlerTest` and `McpRouterTest`
+  asserted that an absent parameter defaults to `0`, `0L` or `false`. They were
+  renamed to `..._namesTheRequiredParameter` and now assert the refusal and the
+  parameter's name: the old expectation *was* the defect, and each one still
+  runs. `RouteCatalogTest`'s body assertion flipped to `required: false` with
+  the reason written next to it.
 
 No assertion was weakened to make a stage pass.
 
@@ -159,6 +209,21 @@ and the jacoco `check` rules. Two traps cost real time and are worth repeating:
    pattern, so it executed only when `-Dtest` replaced the defaults. Renamed to
    `CorsEnforcementTest`; its six cases now run in a normal build and pass.
 
+**Review fixes were checked by reverting them, not only by adding tests.** For
+`fix(review-F)` the four enforcement points were deleted one transport at a
+time and the new cases were run again: removing the required loop in
+`McpRouter.invoke` and the scalar refusal in `McpToolBuilder.declared` turned
+exactly 8 aura-mcp cases red (`McpRouterTest` ×4, the stdio door, the HTTP
+transport door, the two registration refusals); removing the binder's
+`RequiredParameterException` and `RouteCatalog`'s use of
+`ParamResolver.isRequired` turned exactly 11 aura-web cases red, including the
+wire-document pair in `RequiredParameterTest` and the 400 that decays to
+`limit=0 tag=null`; restoring `OpenApiGenerator`'s private switch and dropping
+the parameter schema turned exactly its 2 new cases red. The controls stayed
+green throughout — a present parameter still binds, an optional parameter still
+arrives as `null`, an absent body still reads `tags=null` — so the reds name
+the fix rather than the build.
+
 Known flake: `LiquibaseSchemaMigratorTest.concurrentFirstStartsSerializeChangesetsAcrossIndependentPools`
 allows 15 seconds for two serialized Liquibase runs and timed out once on this
 Intel machine while passing twice. It is timing, not behaviour, but the budget
@@ -171,6 +236,13 @@ lines, `jq` dropped from the tool check); the classification half still needs
 
 ## Still open
 
+- `McpToolBuilder` is still a second declaration door for hand-authored tools.
+  Its disagreements with the route path are gone (`ApiParameter` in, one
+  `McpUtil.inputSchema` render, non-scalar arguments refused at registration),
+  but naming arguments in Java is still a choice an AI makes that
+  `McpRouter.tool(Route, McpHandler)` does not ask for. Deleting the builder is
+  the review's stronger remedy and stays open with the MCP/`aura-web` dependency
+  cleanup.
 - `io.aura.web` is a split package: the core ports and the Undertow
   implementation share it, which is why R1 cannot forbid `io.aura.web..` yet.
   Renaming the ports to `io.aura.port..` is the next layering step.

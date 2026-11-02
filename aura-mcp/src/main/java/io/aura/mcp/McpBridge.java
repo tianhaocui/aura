@@ -192,7 +192,7 @@ public class McpBridge {
             } catch (UpstreamStatus failure) {
                 log().warning("MCP bridge tool " + toolName + " upstream returned HTTP " + failure.status());
                 return McpContent.error("MCP_UPSTREAM_HTTP_" + failure.status());
-            } catch (MissingArgument failure) {
+            } catch (McpMissingArgument failure) {
                 log().warning("MCP bridge tool " + toolName + " missing required argument");
                 return McpContent.error("MCP_MISSING_ARGUMENT");
             } catch (Exception e) {
@@ -221,7 +221,7 @@ public class McpBridge {
                 if (val == null) {
                     // Skipping a required argument produces a request the server rejects for
                     // a reason the model never learns; the name is the only useful feedback.
-                    if (Boolean.TRUE.equals(p.getBoolean("required"))) throw new MissingArgument(pName);
+                    if (Boolean.TRUE.equals(p.getBoolean("required"))) throw new McpMissingArgument(pName);
                     continue;
                 }
 
@@ -294,13 +294,6 @@ public class McpBridge {
         }
 
         private int status() { return status; }
-    }
-
-    /** A required argument the model did not send. */
-    private static final class MissingArgument extends IllegalArgumentException {
-        private MissingArgument(String name) {
-            super("required argument missing: " + name);
-        }
     }
 
     private URI resolveRouteUri(String path, String query) {

@@ -3,6 +3,7 @@ package io.aura.web;
 import io.aura.AuraWebRuntime;
 import io.aura.contract.ApiParameter;
 import io.aura.contract.Route;
+import io.aura.contract.ScalarType;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -102,12 +103,17 @@ final class RouteContract {
         return curl.toString();
     }
 
-    private static String exampleValue(String type) {
-        if (type == null) return "value";
-        return switch (type) {
-            case "int", "Integer", "long", "Long" -> "1";
-            case "boolean", "Boolean" -> "true";
-            case "double", "Double" -> "1.0";
+    /**
+     * The example comes from the same table that types the parameter, so a model copying it
+     * sends a value the binder accepts. The private switch this replaced labelled a
+     * {@code BigDecimal} path parameter "example", which parses as nothing.
+     */
+    private static String exampleValue(String javaTypeName) {
+        String jsonType = ScalarType.jsonTypeName(javaTypeName);
+        return switch (jsonType == null ? "string" : jsonType) {
+            case "integer" -> "1";
+            case "number" -> "1.0";
+            case "boolean" -> "true";
             default -> "example";
         };
     }

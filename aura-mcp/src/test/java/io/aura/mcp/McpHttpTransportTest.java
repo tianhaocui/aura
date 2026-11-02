@@ -28,6 +28,9 @@ class McpHttpTransportTest {
         router.tool("delete_order", "Delete order")
                 .permission("orders.delete")
                 .handler(ctx -> "deleted");
+        router.tool("get_order", "Get order")
+                .param("id", int.class, "order id")
+                .handler(ctx -> "should not run");
         module = McpModule.create(router).http("/mcp", 2, Duration.ofMinutes(5));
         AuraApp app = AuraApp.create()
                 .mcpAuthenticate(metadata -> {
@@ -586,6 +589,22 @@ class McpHttpTransportTest {
         JSONObject result = JSON.parseObject(response.body()).getJSONObject("result");
         assertThat(result.getString("code")).isEqualTo("MCP_PERMISSION_DENIED");
         assertThat(response.body()).doesNotContain("orders.delete", "permission denied");
+    }
+
+    @Test
+    void declaredRequiredArgumentIsRefusedAtTheTransportWhenOmitted() {
+        String session = initialize("Bearer alice", 1).header(McpHttpTransport.SESSION_HEADER);
+
+        // tools/list advertised id as required, so calling without it is the model's mistake
+        // and the answer has to name it rather than let the handler see 0.
+        TestClient.Response response = request("Bearer alice", session, 2, "tools/call",
+                Map.of("name", "get_order", "arguments", Map.of())).expect(200);
+        JSONObject result = JSON.parseObject(response.body()).getJSONObject("result");
+        assertThat(result.getString("code")).isEqualTo("MCP_MISSING_ARGUMENT");
+        assertThat(response.body()).doesNotContain("should not run");
+
+        request("Bearer alice", session, 3, "tools/call",
+                Map.of("name", "get_order", "arguments", Map.of("id", 7))).expect(200);
     }
 
     @Test

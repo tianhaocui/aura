@@ -9,15 +9,11 @@ public final class McpParam {
     private final ApiParameter contract;
     private final List<McpEnumValue> enumValues;
 
-    public McpParam(String name, String type, String description, List<McpEnumValue> enumValues) {
-        this(name, type, description, enumValues, true);
-    }
-
-    public McpParam(String name, String type, String description,
-                    List<McpEnumValue> enumValues, boolean required) {
-        this(new ApiParameter(name, type, "tool", required, description), enumValues);
-    }
-
+    /**
+     * {@link ApiParameter} is the only way to describe an argument: the builder, a route
+     * contract, and the HTTP bridge all hand over the same record, so no entry point can
+     * carry its own Java-to-JSON opinion.
+     */
     public McpParam(ApiParameter contract, List<McpEnumValue> enumValues) {
         this.contract = java.util.Objects.requireNonNull(contract, "contract");
         this.enumValues = enumValues == null ? List.of() : List.copyOf(enumValues);

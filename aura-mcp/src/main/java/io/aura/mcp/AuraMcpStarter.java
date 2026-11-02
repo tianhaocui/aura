@@ -117,6 +117,9 @@ public class AuraMcpStarter implements McpStarter {
         } catch (SecurityException denied) {
             log.warn("MCP tool permission denied for {}", toolName);
             return McpContent.error("MCP_PERMISSION_DENIED");
+        } catch (McpMissingArgument missing) {
+            log.warn("MCP tool {} is missing the required argument {}", toolName, missing.name());
+            return McpContent.error("MCP_MISSING_ARGUMENT");
         } catch (Exception e) {
             log.warn("MCP tool invocation failed for {}", toolName, e);
             return McpContent.error("MCP_TOOL_ERROR");

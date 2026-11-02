@@ -33,6 +33,15 @@ record, the stage-by-stage log, and the migration table.
   `Route.WEBSOCKET` — `context.webSocket(path, configure)` is sugar over
   `context.route(Route.webSocket(path, configure))` — and `BaseRouter.WsRoute`
   now wraps that contract instead of a bare path and handler.
+- A missing `int`/`long`/`double`/`boolean`/`char` or path parameter is a
+  `400 AURA_PARAMETER_REQUIRED` naming the parameter, not a handler running on
+  `0` or `false`. Applications that relied on the default must declare the
+  boxed type instead.
+- `McpParam(String, String, String, List)` and
+  `McpParam(String, String, String, List, boolean)` are removed;
+  `McpParam(ApiParameter, List<McpEnumValue>)` is the only constructor, and a
+  hand-authored tool argument that is not a JSON scalar is refused when the tool
+  is registered.
 
 ### Changed
 
@@ -62,6 +71,23 @@ record, the stage-by-stage log, and the migration table.
   shared chain. `TestClient` now answers `/__schema__` and `/openapi.json` itself
   and rejects exactly what a socket rejects, so the protection around the route
   map is verifiable in milliseconds instead of only over a real port.
+- `required` is the binder's rule everywhere: `ParamResolver.isRequired(type,
+  source)` decides it (a primitive or a path segment, because that is what a
+  signature cannot hold as `null`), `RouteCatalog` publishes exactly that, and
+  the missing-primitive/path case is refused before the handler runs. A request
+  body is no longer marked required, since a handler may legitimately see
+  `null`.
+- `McpRouter.invoke` enforces what `tools/list` advertises, and stdio, the HTTP
+  transport and the bridge answer `MCP_MISSING_ARGUMENT` instead of invoking a
+  tool whose required argument was withheld.
+- A hand-authored MCP tool declares `ApiParameter` records and refuses a
+  non-scalar argument at registration, so `tools/list` cannot publish
+  `"type": "string"` for an object the handler will never receive. `McpParam`
+  lost its string-typed constructors.
+- OpenAPI parameter types come from `ScalarType` too, a parameter that described
+  its own shape publishes that shape to OpenAPI (an enum keeps its accepted
+  values), and the `example` in `/__schema__` is generated from the same table,
+  so replaying the example a model copied binds.
 
 ### Fixed
 

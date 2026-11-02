@@ -142,6 +142,13 @@ public class McpRouter implements McpRouterSpec {
                 throw new SecurityException("MCP permission denied for tool " + toolName);
             }
         }
+        // The same fact the tool just advertised in tools/list, checked before it runs: an
+        // argument marked required cannot be skipped and left for the handler to read as 0.
+        for (McpParam param : tool.params()) {
+            if (param.required() && (args == null || args.get(param.name()) == null)) {
+                throw new McpMissingArgument(param.name());
+            }
+        }
         McpContext ctx = new McpContext(args, collectMappings(tool), userId);
         return tool.handler().handle(ctx);
     }

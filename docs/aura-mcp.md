@@ -129,6 +129,17 @@ AuraApp.create()
     .start(args);
 ```
 
+A `param(...)` is required and an `optional(...)` is not, and the tool refuses the
+call before the handler runs when a required argument is absent: the answer is
+`MCP_MISSING_ARGUMENT` on stdio, the HTTP transport and the bridge alike, so a
+model that skipped an argument it was told to fill in learns that instead of
+watching the handler run on `0`. Arguments are scalars — `param` and `optional`
+reject a record, class or collection when the tool is registered, because a tool
+argument arrives as a JSON scalar and publishing `"type": "string"` for an object
+the handler cannot receive is the failure that refusal prevents. A tool with a
+structured body is an HTTP route exported with `McpRouter.tool(route, handler)`,
+where the body's shape already lives in the contract.
+
 Binding a tool to a service method by reflection is not an entry point: parameter
 names are erased without `-parameters`, the declared types arrive as `string`, and
 the tool silently disagrees with the same route's HTTP schema.

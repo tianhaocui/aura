@@ -27,7 +27,9 @@ public final class RouteCatalog {
                     boolean body = ParamResolver.isBody(type);
                     String source = body ? "body"
                             : route.paramNames().contains(parameter.getName()) ? "path" : "query";
-                    boolean required = body || type.isPrimitive() || "path".equals(source);
+                    // The binder enforces this same rule, so a declared required parameter is
+                    // one the server actually refuses to see missing.
+                    boolean required = ParamResolver.isRequired(type, source);
                     // An enum is scalar enough to bind from the request line but still needs
                     // its accepted values spelled out for the model.
                     Map<String, Object> schema = body || type.isEnum()

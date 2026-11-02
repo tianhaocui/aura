@@ -508,6 +508,8 @@ final class McpHttpTransport {
             return McpContent.error("MCP_RESPONSE_TOO_LARGE");
         } catch (SecurityException denied) {
             return McpContent.error("MCP_PERMISSION_DENIED");
+        } catch (McpMissingArgument missing) {
+            return McpContent.error("MCP_MISSING_ARGUMENT");
         } catch (Exception failure) {
             org.slf4j.LoggerFactory.getLogger(McpHttpTransport.class)
                     .warn("MCP HTTP tool invocation failed for {}", toolName, failure);

@@ -106,11 +106,14 @@ class MethodRefHandlerTest {
     }
 
     @Test
-    void handle_int_missing_defaultsZero() throws Exception {
+    void handle_int_missing_namesTheRequiredParameter() {
         var handler = new MethodRefHandler(new TypeSvc(), "byInt");
         var ctx = mockCtx(Map.of(), Map.of(), null);
-        handler.handle(ctx);
-        assertThat(ctx.responseBody).contains("\"int:0\"");
+        // The signature cannot hold null, so the contract calls it required and the binder
+        // refuses the request instead of running the handler on a 0 nobody sent.
+        assertThatThrownBy(() -> handler.handle(ctx))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("Required parameter 'id' is missing");
     }
 
     @Test
@@ -133,11 +136,12 @@ class MethodRefHandlerTest {
     }
 
     @Test
-    void handle_long_missing_defaultsZero() throws Exception {
+    void handle_long_missing_namesTheRequiredParameter() {
         var handler = new MethodRefHandler(new TypeSvc(), "byLong");
         var ctx = mockCtx(Map.of(), Map.of(), null);
-        handler.handle(ctx);
-        assertThat(ctx.responseBody).contains("\"long:0\"");
+        assertThatThrownBy(() -> handler.handle(ctx))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("Required parameter 'id' is missing");
     }
 
     @Test
@@ -160,11 +164,12 @@ class MethodRefHandlerTest {
     }
 
     @Test
-    void handle_double_missing_defaultsZero() throws Exception {
+    void handle_double_missing_namesTheRequiredParameter() {
         var handler = new MethodRefHandler(new TypeSvc(), "byDouble");
         var ctx = mockCtx(Map.of(), Map.of(), null);
-        handler.handle(ctx);
-        assertThat(ctx.responseBody).contains("\"double:0.0\"");
+        assertThatThrownBy(() -> handler.handle(ctx))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("Required parameter 'val' is missing");
     }
 
     @Test
@@ -195,11 +200,13 @@ class MethodRefHandlerTest {
     }
 
     @Test
-    void handle_bool_missing_defaultsFalse() throws Exception {
+    void handle_bool_missing_namesTheRequiredParameter() {
         var handler = new MethodRefHandler(new TypeSvc(), "byBool");
         var ctx = mockCtx(Map.of(), Map.of(), null);
-        handler.handle(ctx);
-        assertThat(ctx.responseBody).contains("\"bool:false\"");
+        // A missing flag is not a false the client chose to send.
+        assertThatThrownBy(() -> handler.handle(ctx))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("Required parameter 'active' is missing");
     }
 
     // --- handle() tests: boxed types ---
