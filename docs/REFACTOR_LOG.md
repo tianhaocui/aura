@@ -42,6 +42,7 @@ verifiable in memory in milliseconds. Every stage below is a commit on
 | stage2-j1 | `66bff04` | the string-to-value table moved from `io.aura.web.ParamResolver` to `io.aura.contract.ScalarType`, beside the JSON names it must match, and `aura-mcp` dropped its compile-scope dependency on the Undertow adapter |
 | stage2-j2 | `f7fb8f0` | `McpToolBuilder`, `McpEnumValue` and `McpRouter.tool(String, String)` are deleted so `McpRouter.tool(Route)` is the only tool door, enum choices and body shapes are projected from the contract's own schema, label→code mapping moved into the handler, and both silent failures got codes |
 | stage2-j3 | `78c2873` | the MCP schema tests read `tools/list` through `McpWire` instead of unchecked casts (`24 + 4` suppressions to `1 + 0`, no `toJavaObject(Map.class)` left), the absent-metadata invariant became assertable, and the gate holds all three bounds |
+| stage2-j4 | `bcc893b` | `docs/aura-module.md`, `aura-db.md`, `aura-mcp.md` and `aura-processor.md` gained `aura:compile` fences (7 fences to 12), so every module guide compiles against this tree; fences build with `-proc:none`, a failure names its document and fence, and the contracts gate guards the compiling list |
 
 ## Decisions that differed from the plan
 
