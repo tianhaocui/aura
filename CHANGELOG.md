@@ -81,6 +81,23 @@ record, the stage-by-stage log, and the migration table.
   `ParamResolver` keeps the request-shaped half: `create(Parameter)`,
   `isRequired(type, source)` and `resolveString(ctx, name)`.
 
+### Added
+
+- `context.cron("0 9 * * *", () -> reminders.checkOverdue())` is the scheduling
+  door. A module contributes periodic work in `install` the way it contributes a
+  route, the runtime arms it from `CronSchedule.next(…)` against the wall clock,
+  and the daemon pool that holds it closes with the runtime — no module builds a
+  `ScheduledExecutorService` of its own. The parser takes the standard five-field
+  crontab subset (`*`, lists, ranges, steps, 0 or 7 for Sunday, and a day that
+  matches either field when both restrict the day) and refuses a day-of-month no
+  selected month has, because that line would silently never fire.
+- A cron task that throws is reported as a `runtime.cron.failure` event with
+  `AURA_CRON_TASK_FAILED` and its next occurrence stays armed. A missing task or
+  expression (`AURA_CRON_CONTRIBUTION_INVALID`), an expression that is not five
+  fields, is out of range, or selects an empty day
+  (`AURA_CRON_EXPRESSION_INVALID`) and a contribution made after the schedule was
+  armed (`AURA_CRON_CONTRIBUTION_TOO_LATE`) fail at the door and name the module.
+
 ### Changed
 
 - `/__schema__` and OpenAPI project the same `Route` record. The JSON keys stay

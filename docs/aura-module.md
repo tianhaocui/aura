@@ -117,6 +117,8 @@ context.route(Route.of("POST", "/orders", handler)
   `AURA_PARAMETER_NAMES_MISSING`; compile application modules with Maven's
   `<parameters>true</parameters>` setting so binding and generated schemas agree.
 - `install(...)` only registers services, routes and capabilities. `start(...)` opens external resources; `stop(...)` releases them.
+- Periodic work is a contribution too: `context.cron("0 9 * * *", task)` is the only
+  scheduling door, and the runtime owns the thread that runs it.
 - Module properties must use `aura.<module-id>.*` and are read through `context.property(...)`.
 - Record configuration is bound with `context.config(OrderConfig.class)`, using only the current module's `aura.<module-id>.*` prefix.
   Values resolve with the same precedence as `context.property(...)`: environment,
@@ -202,6 +204,60 @@ message.
 
 Snapshot storage is bounded by default. Configure `maxSnapshots(...)`, `maxStorageSize(...)`, and
 `retentionTtl(...)` when needed; dropped snapshots are counted and can be observed with `onDrop(...)`.
+
+## Scheduled work
+
+`context.cron(expression, task)` is the only scheduling door. A module contributes
+its timers during `install`, the runtime arms them when it starts, and the pool
+that holds them shuts down when the runtime stops, so no module builds a
+`ScheduledExecutorService` of its own.
+
+<!-- aura:compile name=module-cron-reminders -->
+```java
+package docs.example;
+
+import io.aura.AuraModule;
+import io.aura.ModuleContext;
+import io.aura.contract.ModuleMetadata;
+
+public final class ReminderModule implements AuraModule {
+    @Override public ModuleMetadata descriptor() {
+        return ModuleMetadata.of("reminder", "1.0.0");
+    }
+
+    @Override public void install(ModuleContext context) {
+        context.cron("0 9 * * *", ReminderModule::checkOverdue);
+        context.cron("*/5 * * * *", ReminderModule::warnLowStock);
+    }
+
+    static void checkOverdue() { }
+
+    static void warnLowStock() { }
+}
+```
+
+The expression is the standard five-field crontab subset:
+`minute hour day-of-month month day-of-week`, with `*`, lists (`1,15`), ranges
+(`8-10`) and steps (`*/5`, `5-40/10`, `20/5`). Day of week accepts 0 and 7 for
+Sunday, and when both day-of-month and day-of-week name days a day matches
+either one, which is what a crontab line does. Fire times are wall-clock times in
+the runtime's zone: `0 9 * * *` means 09:00 local, and a fire time inside a
+daylight-saving gap runs at the shifted time rather than being skipped.
+
+Failures are coded and named for the contribution that caused them:
+
+| Code | When |
+| --- | --- |
+| `AURA_CRON_CONTRIBUTION_INVALID` | the expression or the task is missing |
+| `AURA_CRON_EXPRESSION_INVALID` | the expression is not five fields, a field is out of range, or the days and months it selects can never meet |
+| `AURA_CRON_CONTRIBUTION_TOO_LATE` | the task was contributed after the runtime armed its schedule |
+| `AURA_CRON_TASK_FAILED` | the task threw; reported as a `runtime.cron.failure` event and the next occurrence stays armed |
+
+A task that throws does not end its schedule, and a task never runs concurrently
+with itself: it is re-armed from the clock reading taken after the previous run
+finished, so a slow run skips the occurrences it missed instead of catching up on
+them. Different tasks do run at the same time, because the pool is sized to the
+number of contributions.
 
 ## Business workflow extensions
 

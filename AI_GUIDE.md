@@ -109,6 +109,13 @@ Use `context.require(Type.class)` for required capabilities and
 `context.find(Type.class)` for optional capabilities. Do not use global
 registries, reflection-based module discovery, or numeric workflow positions.
 
+Periodic work is contributed the same way: `context.cron("0 9 * * *", task)`
+during `install()`. Expressions are standard five-field crontab, and the runtime
+owns the thread that runs the task, so a module never creates a `Timer`, a
+`ScheduledExecutorService`, or its own thread pool. A bad expression fails
+startup with `AURA_CRON_EXPRESSION_INVALID`, and a task that throws is reported
+as a `runtime.cron.failure` event while its next occurrence stays armed.
+
 ## Generated Routes
 
 For production services with route annotations, add the optional

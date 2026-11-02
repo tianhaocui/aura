@@ -544,4 +544,41 @@ if ! rg -q 'private Consumer<WsConnection> onOpen;' "$ws_handler" \
 fi
 rg -q 'openHandler()' "$repo_root/aura-web/src/main/java/io/aura/web/CompiledWsRoute.java"
 
+# Stage K: cron is one contribution door, its fire times come from the wall clock,
+# and every way it can fail is coded and documented.
+if [ "$(rg -c 'void cron\(' "$repo_root/aura-core/src/main/java/io/aura/ModuleContext.java")" != "1" ]; then
+  echo "ModuleContext no longer offers exactly one scheduling door" >&2
+  exit 1
+fi
+for door in AuraApp AuraRuntime; do
+  if rg -q '\b(cron|schedule|scheduler)\(' "$repo_root/aura-core/src/main/java/io/aura/$door.java"; then
+    echo "a second scheduling door opened in $door: cron is contributed through ModuleContext" >&2
+    exit 1
+  fi
+done
+if rg -q 'scheduleAtFixedRate|scheduleWithFixedDelay|new (java\.util\.)?Timer\(' \
+    "$repo_root/aura-core/src/main/java"; then
+  echo "cron was armed on a fixed-rate loop: fire times come from CronSchedule.next, so the schedule cannot drift off the wall clock" >&2
+  exit 1
+fi
+if ! rg -q 'setDaemon\(true\)' "$repo_root/aura-core/src/main/java/io/aura/CronScheduler.java"; then
+  echo "the cron pool is not on daemon threads again: a running timer would keep the JVM alive" >&2
+  exit 1
+fi
+for code in AURA_CRON_CONTRIBUTION_INVALID AURA_CRON_EXPRESSION_INVALID \
+            AURA_CRON_CONTRIBUTION_TOO_LATE AURA_CRON_TASK_FAILED; do
+  if ! rg -q "\"$code\"" "$repo_root/aura-core/src/main/java/io/aura/ModularRuntime.java"; then
+    echo "cron stopped failing with $code" >&2
+    exit 1
+  fi
+  if ! rg -q "$code" "$repo_root/docs/aura-module.md"; then
+    echo "cron failure $code is no longer documented" >&2
+    exit 1
+  fi
+done
+if ! rg -q 'runtime\.cron\.failure' "$repo_root/aura-core/src/main/java/io/aura/ModularRuntime.java"; then
+  echo "a failed cron task is no longer observable as a runtime.cron.failure event" >&2
+  exit 1
+fi
+
 echo "Aura module and documentation contracts passed (version $root_version)"

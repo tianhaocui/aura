@@ -49,6 +49,14 @@ public interface ModuleContext extends io.aura.contract.CapabilityLookup {
 
     void healthCheck(io.aura.contract.HealthCheck healthCheck);
 
+    /**
+     * Adds one cron task owned by the current business module. This is the only scheduling
+     * entry point: a standard five-field expression ({@code minute hour day-of-month month
+     * day-of-week}) and a task that runs on it. The task is contributed like a route, during
+     * {@code install}, and its thread pool is shut down when the runtime stops.
+     */
+    void cron(String expression, Runnable task);
+
     io.aura.contract.PermissionRegistry permissions();
 
     String property(String key);

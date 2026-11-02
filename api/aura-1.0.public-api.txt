@@ -502,6 +502,7 @@ public interface io.aura.ModuleContext extends io.aura.contract.CapabilityLookup
   public abstract void resultWrapper(java.util.function.Function<java.lang.Object, java.lang.Object>);
   public abstract void admissionPolicy(io.aura.port.AdmissionPolicy);
   public abstract void healthCheck(io.aura.contract.HealthCheck);
+  public abstract void cron(java.lang.String, java.lang.Runnable);
   public abstract io.aura.contract.PermissionRegistry permissions();
   public abstract java.lang.String property(java.lang.String);
   public abstract <T> T config(java.lang.Class<T>);

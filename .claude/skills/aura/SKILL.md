@@ -16,6 +16,8 @@ framework code.
 3. Use exactly one application style: `AuraApp.create().use(...)`.
 4. Keep every read, queue, executor, replay buffer, and key registry bounded.
 5. Verify generated code with `TestClient` before starting a real server.
+6. Schedule with `context.cron("0 9 * * *", task)` in `install()`; never create a
+   `Timer`, a `ScheduledExecutorService`, or a raw thread inside a module.
 
 ## Minimal Pattern
 

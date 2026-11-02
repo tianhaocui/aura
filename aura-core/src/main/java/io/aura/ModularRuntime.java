@@ -40,6 +40,7 @@ final class ModularRuntime implements AuraWebRuntime {
     private final List<Route> directRoutes = new CopyOnWriteArrayList<>();
     private final List<AutoCloseable> closeables = new CopyOnWriteArrayList<>();
     private final List<io.aura.contract.HealthCheck> healthChecks = new CopyOnWriteArrayList<>();
+    private final List<CronContribution> cronContributions = new CopyOnWriteArrayList<>();
     private final List<AuraEventListener> eventListeners = new CopyOnWriteArrayList<>();
     private final List<BaseHandler> beforeHandlers = new CopyOnWriteArrayList<>();
     private final List<BaseHandler> afterHandlers = new CopyOnWriteArrayList<>();
@@ -66,6 +67,7 @@ final class ModularRuntime implements AuraWebRuntime {
     private McpRouterSpec mcpRouter;
     private AuraStarter starter;
     private McpStarter mcpStarter;
+    private CronScheduler cronScheduler;
     private volatile Thread keepAliveThread;
     private volatile Thread shutdownHook;
     private volatile boolean devMode;
@@ -238,6 +240,11 @@ final class ModularRuntime implements AuraWebRuntime {
                 if (mcpPort == -2) mcpStarter.startStdio(this); else mcpStarter.start(this);
                 if (completeRequestedStop()) return;
             }
+            if (!cronContributions.isEmpty()) {
+                cronScheduler = CronScheduler.start(List.copyOf(cronContributions),
+                        CronScheduler.newPool(cronContributions.size()),
+                        java.time.Clock.systemDefaultZone(), this::publishCronFailure);
+            }
             keepAliveThread = new Thread(() -> {
                 try { new java.util.concurrent.CountDownLatch(1).await(); }
                 catch (InterruptedException ignored) { Thread.currentThread().interrupt(); }
@@ -280,6 +287,7 @@ final class ModularRuntime implements AuraWebRuntime {
         shutdownCancellation.cancel();
         if (keepAliveThread != null) keepAliveThread.interrupt();
         List<ShutdownFailure> failures = new java.util.ArrayList<>();
+        stopCronScheduler(failures);
         if (mcpStarter != null) {
             stopComponent("mcp-starter", mcpStarter::stop, failures);
             mcpStarter = null;
@@ -381,6 +389,7 @@ final class ModularRuntime implements AuraWebRuntime {
         shuttingDown.set(true);
         shutdownCancellation.cancel();
         if (keepAliveThread != null) keepAliveThread.interrupt();
+        stopCronScheduler(failures);
         if (mcpStarter != null) {
             stopComponent("mcp-starter", mcpStarter::stop, failures);
             mcpStarter = null;
@@ -449,6 +458,23 @@ final class ModularRuntime implements AuraWebRuntime {
             }
         }
         closeables.clear();
+    }
+
+    private void stopCronScheduler(List<ShutdownFailure> failures) {
+        if (cronScheduler == null) return;
+        stopComponent("cron-scheduler", cronScheduler::close, failures);
+        cronScheduler = null;
+    }
+
+    private void publishCronFailure(CronContribution contribution, Throwable failure) {
+        LOG.error("Aura cron task failed: module={}, expression={}, failureType={}",
+                contribution.moduleId(), contribution.schedule().expression(),
+                failure.getClass().getName());
+        emitSafely(AuraEvent.of("runtime.cron.failure", Map.of(
+                "code", "AURA_CRON_TASK_FAILED",
+                "moduleId", contribution.moduleId(),
+                "expression", contribution.schedule().expression(),
+                "failureType", failure.getClass().getName())));
     }
 
     private void stopComponent(String component, Runnable stopAction,
@@ -562,6 +588,27 @@ final class ModularRuntime implements AuraWebRuntime {
             admissionPolicyModule = descriptor.id();
         }
         @Override public void healthCheck(io.aura.contract.HealthCheck check) { if (check != null) healthChecks.add(check); }
+        @Override public void cron(String expression, Runnable task) {
+            if (expression == null || expression.isBlank() || task == null) {
+                throw new ModuleException("AURA_CRON_CONTRIBUTION_INVALID", descriptor.id(),
+                        "Cron contribution needs an expression and a task");
+            }
+            RuntimeState current = state.get();
+            if (current != RuntimeState.NEW && current != RuntimeState.STARTING) {
+                throw new ModuleException("AURA_CRON_CONTRIBUTION_TOO_LATE", descriptor.id(),
+                        "Cron tasks are contributed while the runtime starts; module "
+                                + descriptor.id() + " scheduled \"" + expression
+                                + "\" while the runtime was " + current);
+            }
+            CronSchedule schedule;
+            try {
+                schedule = CronSchedule.parse(expression);
+            } catch (IllegalArgumentException invalid) {
+                throw new ModuleException("AURA_CRON_EXPRESSION_INVALID", descriptor.id(),
+                        invalid.getMessage());
+            }
+            cronContributions.add(new CronContribution(schedule, task, descriptor.id()));
+        }
         @Override public PermissionRegistry permissions() { return permissions; }
         @Override public String property(String key) { String prefix = "aura." + descriptor.id() + "."; if (key == null || !key.startsWith(prefix)) throw new ModuleException("AURA_MODULE_PROPERTY_SCOPE", descriptor.id(), "Module properties must use prefix " + prefix); return prop(key); }
         @Override public <T> T config(Class<T> recordType) {
