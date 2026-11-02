@@ -43,6 +43,7 @@ verifiable in memory in milliseconds. Every stage below is a commit on
 | stage2-j2 | `f7fb8f0` | `McpToolBuilder`, `McpEnumValue` and `McpRouter.tool(String, String)` are deleted so `McpRouter.tool(Route)` is the only tool door, enum choices and body shapes are projected from the contract's own schema, label→code mapping moved into the handler, and both silent failures got codes |
 | stage2-j3 | `78c2873` | the MCP schema tests read `tools/list` through `McpWire` instead of unchecked casts (`24 + 4` suppressions to `1 + 0`, no `toJavaObject(Map.class)` left), the absent-metadata invariant became assertable, and the gate holds all three bounds |
 | stage2-j4 | `bcc893b` | `docs/aura-module.md`, `aura-db.md`, `aura-mcp.md` and `aura-processor.md` gained `aura:compile` fences (7 fences to 12), so every module guide compiles against this tree; fences build with `-proc:none`, a failure names its document and fence, and the contracts gate guards the compiling list |
+| stage2-k1 | `fd6c206` | `ModuleContext.cron(expression, task)` is the only scheduling door and `CronSchedule`/`CronScheduler`/`CronContribution` stay package-private, so the API baseline grew by one line: the runtime arms wall-clock crontab fire times on daemon threads, closes the pool as the first cleanup component, refuses an expression that could never fire, and reports a throwing task as `runtime.cron.failure` without disarming its next occurrence |
 
 ## Decisions that differed from the plan
 
