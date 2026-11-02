@@ -1,4 +1,4 @@
-package io.aura.web;
+package io.aura.port;
 
 @FunctionalInterface
 public interface BaseExceptionHandler<T extends Exception> {

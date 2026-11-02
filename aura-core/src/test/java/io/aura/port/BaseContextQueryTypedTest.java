@@ -1,4 +1,4 @@
-package io.aura.web;
+package io.aura.port;
 
 import org.junit.jupiter.api.Test;
 

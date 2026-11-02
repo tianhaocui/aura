@@ -1,5 +1,7 @@
 package io.aura.web;
 
+import
+io.aura.port.BaseHandler;
 import com.alibaba.fastjson2.JSON;
 import io.aura.AuraApp;
 import io.aura.AuraConfig;

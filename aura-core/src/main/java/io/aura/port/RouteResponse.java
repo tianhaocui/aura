@@ -1,4 +1,4 @@
-package io.aura.web;
+package io.aura.port;
 
 /** Shared response policy for reflective and generated route handlers. */
 public final class RouteResponse {

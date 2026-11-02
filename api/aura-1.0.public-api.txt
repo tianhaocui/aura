@@ -203,7 +203,7 @@ public final class io.aura.AuraApp implements java.lang.AutoCloseable {
   public io.aura.AuraApp authorize(java.util.function.BiPredicate<java.lang.String, java.lang.String>);
   public io.aura.AuraApp mcpAuthenticate(io.aura.contract.McpAuthenticator);
   public io.aura.AuraApp mcpAuthorize(io.aura.contract.McpAuthorizer);
-  public io.aura.AuraApp authenticate(java.util.function.Function<io.aura.web.BaseContext, java.lang.String>);
+  public io.aura.AuraApp authenticate(java.util.function.Function<io.aura.port.BaseContext, java.lang.String>);
   public io.aura.AuraApp property(java.lang.String, java.lang.String);
   public io.aura.AuraApp start(java.lang.String...);
   public io.aura.AuraApp prepare();
@@ -377,7 +377,7 @@ public interface io.aura.AuraRuntime extends java.lang.AutoCloseable,io.aura.con
   public abstract io.aura.AuraRuntime observe(io.aura.AuraEventListener);
   public abstract io.aura.AuraRuntime healthCheck(io.aura.contract.HealthCheck);
   public abstract io.aura.AuraRuntime authorize(java.util.function.BiPredicate<java.lang.String, java.lang.String>);
-  public abstract io.aura.AuraRuntime authenticate(java.util.function.Function<io.aura.web.BaseContext, java.lang.String>);
+  public abstract io.aura.AuraRuntime authenticate(java.util.function.Function<io.aura.port.BaseContext, java.lang.String>);
   public default io.aura.AuraRuntime mcpAuthenticate(io.aura.contract.McpAuthenticator);
   public default io.aura.AuraRuntime mcpAuthorize(io.aura.contract.McpAuthorizer);
   public abstract io.aura.AuraRuntime property(java.lang.String, java.lang.String);
@@ -438,13 +438,13 @@ public interface io.aura.AuraWebRuntime extends io.aura.AuraMcpRuntime {
   public abstract void emit(io.aura.AuraEvent);
   public abstract java.lang.String prop(java.lang.String);
   public abstract <T> T getBean(java.lang.Class<T>);
-  public abstract java.util.function.Function<io.aura.web.BaseContext, java.lang.String> authFunction();
+  public abstract java.util.function.Function<io.aura.port.BaseContext, java.lang.String> authFunction();
   public abstract java.util.function.BiPredicate<java.lang.String, java.lang.String> permissionChecker();
-  public abstract java.util.Map<java.lang.Class<? extends java.lang.Exception>, io.aura.web.BaseExceptionHandler<?>> exceptionHandlers();
-  public abstract java.util.List<io.aura.web.BaseHandler> beforeHandlers();
-  public abstract java.util.List<io.aura.web.BaseHandler> afterHandlers();
+  public abstract java.util.Map<java.lang.Class<? extends java.lang.Exception>, io.aura.port.BaseExceptionHandler<?>> exceptionHandlers();
+  public abstract java.util.List<io.aura.port.BaseHandler> beforeHandlers();
+  public abstract java.util.List<io.aura.port.BaseHandler> afterHandlers();
   public abstract java.util.function.Function<java.lang.Object, java.lang.Object> resultWrapper();
-  public abstract io.aura.web.AdmissionPolicy admissionPolicy();
+  public abstract io.aura.port.AdmissionPolicy admissionPolicy();
   public abstract io.aura.snapshot.SnapshotOptions snapshotOptions();
 }
 ### aura-core:io.aura.BeanValidator
@@ -493,12 +493,12 @@ public interface io.aura.ModuleContext extends io.aura.contract.CapabilityLookup
   public abstract void register(java.lang.String, java.lang.Object);
   public abstract void service(java.lang.Object);
   public abstract void route(io.aura.contract.Route);
-  public abstract void webSocket(java.lang.String, java.util.function.Consumer<io.aura.web.WsHandler>);
-  public abstract void before(io.aura.web.BaseHandler);
-  public abstract void after(io.aura.web.BaseHandler);
-  public abstract <T extends java.lang.Exception> void exception(java.lang.Class<T>, io.aura.web.BaseExceptionHandler<T>);
+  public abstract void webSocket(java.lang.String, java.util.function.Consumer<io.aura.port.WsHandler>);
+  public abstract void before(io.aura.port.BaseHandler);
+  public abstract void after(io.aura.port.BaseHandler);
+  public abstract <T extends java.lang.Exception> void exception(java.lang.Class<T>, io.aura.port.BaseExceptionHandler<T>);
   public abstract void resultWrapper(java.util.function.Function<java.lang.Object, java.lang.Object>);
-  public abstract void admissionPolicy(io.aura.web.AdmissionPolicy);
+  public abstract void admissionPolicy(io.aura.port.AdmissionPolicy);
   public abstract void healthCheck(io.aura.contract.HealthCheck);
   public abstract io.aura.contract.PermissionRegistry permissions();
   public abstract java.lang.String property(java.lang.String);
@@ -619,6 +619,212 @@ public interface io.aura.annotation.Size extends java.lang.annotation.Annotation
   public abstract int min();
   public abstract int max();
   public abstract java.lang.String message();
+}
+### aura-core:io.aura.port.AdmissionDecision
+public final class io.aura.port.AdmissionDecision implements java.lang.AutoCloseable {
+  public static io.aura.port.AdmissionDecision allow();
+  public static io.aura.port.AdmissionDecision allow(java.lang.Runnable);
+  public static io.aura.port.AdmissionDecision reject(int, java.lang.String, int);
+  public boolean allowed();
+  public int status();
+  public java.lang.String code();
+  public int retryAfterSeconds();
+  public void close();
+}
+### aura-core:io.aura.port.AdmissionPolicy
+public interface io.aura.port.AdmissionPolicy {
+  public abstract io.aura.port.AdmissionDecision admit(io.aura.port.AdmissionRequest);
+}
+### aura-core:io.aura.port.AdmissionRequest
+public final class io.aura.port.AdmissionRequest extends java.lang.Record {
+  public io.aura.port.AdmissionRequest(java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String);
+  public final java.lang.String toString();
+  public final int hashCode();
+  public final boolean equals(java.lang.Object);
+  public java.lang.String method();
+  public java.lang.String path();
+  public java.lang.String routePattern();
+  public java.lang.String clientIp();
+  public java.lang.String apiKey();
+}
+### aura-core:io.aura.port.BaseContext
+public interface io.aura.port.BaseContext {
+  public abstract java.lang.String path(java.lang.String);
+  public abstract java.lang.String query(java.lang.String);
+  public abstract java.lang.String query(java.lang.String, java.lang.String);
+  public abstract java.lang.String header(java.lang.String);
+  public abstract java.lang.String cookie(java.lang.String);
+  public default java.lang.String bodyText() throws java.lang.Exception;
+  public abstract <T> T body(java.lang.Class<T>) throws java.lang.Exception;
+  public default <T> T body(java.lang.reflect.Type) throws java.lang.Exception;
+  public abstract java.lang.String method();
+  public abstract java.lang.String url();
+  public abstract int statusCode();
+  public default boolean isResponseStarted();
+  public default io.aura.AuraWebRuntime app();
+  public abstract io.aura.port.BaseContext status(int);
+  public abstract void json(java.lang.Object);
+  public abstract void jsonRaw(java.lang.String);
+  public abstract void text(java.lang.String);
+  public abstract void html(java.lang.String);
+  public abstract void raw(java.lang.String);
+  public abstract void redirect(java.lang.String);
+  public abstract io.aura.port.BaseContext header(java.lang.String, java.lang.String);
+  public abstract io.aura.port.BaseContext cookie(java.lang.String, java.lang.String, int);
+  public abstract <T> void set(T);
+  public abstract <T> T get(java.lang.Class<T>);
+  public abstract void set(java.lang.String, java.lang.Object);
+  public abstract <T> T get(java.lang.String, java.lang.Class<T>);
+  public default <T> T bodyOrThrow(java.lang.Class<T>) throws java.lang.Exception;
+  public default <T> T bodyOrThrow(java.lang.reflect.Type) throws java.lang.Exception;
+  public default java.lang.String queryRequired(java.lang.String);
+  public default int pathInt(java.lang.String);
+  public default long pathLong(java.lang.String);
+  public default int queryInt(java.lang.String, int);
+  public default long queryLong(java.lang.String, long);
+  public default boolean queryBool(java.lang.String, boolean);
+  public default int pageNum();
+  public default int pageSize();
+  public default io.aura.port.UploadedFile file(java.lang.String) throws java.lang.Exception;
+  public default java.lang.String formField(java.lang.String) throws java.lang.Exception;
+  public default void sendFile(java.lang.String, byte[]) throws java.lang.Exception;
+  public default void sendFile(java.lang.String, byte[], java.lang.String) throws java.lang.Exception;
+  public default java.lang.String userId();
+  public default io.aura.port.SseEmitter sse() throws java.lang.Exception;
+  public abstract void abort();
+  public abstract boolean isAborted();
+  public default java.lang.String requestId();
+  public default java.lang.String ip();
+  public default io.aura.contract.CancellationToken cancellationToken();
+  public default boolean isCancelled();
+}
+### aura-core:io.aura.port.BaseExceptionHandler
+public interface io.aura.port.BaseExceptionHandler<T extends java.lang.Exception> {
+  public abstract void handle(T, io.aura.port.BaseContext);
+}
+### aura-core:io.aura.port.BaseHandler
+public interface io.aura.port.BaseHandler {
+  public abstract void handle(io.aura.port.BaseContext) throws java.lang.Exception;
+}
+### aura-core:io.aura.port.BaseRouteBuilder
+public class io.aura.port.BaseRouteBuilder {
+  public io.aura.contract.Route route;
+  public final java.util.Map<java.lang.String, java.lang.String> paramDescriptions;
+  public io.aura.port.BaseRouteBuilder(io.aura.contract.Route);
+  public io.aura.port.BaseRouteBuilder describe(java.lang.String);
+  public io.aura.port.BaseRouteBuilder streaming();
+  public io.aura.port.BaseRouteBuilder param(java.lang.String, java.lang.String);
+  public io.aura.port.BaseRouteBuilder param(java.lang.String, java.lang.String, java.lang.String, boolean, java.lang.String);
+  public io.aura.port.BaseRouteBuilder param(io.aura.contract.ApiParameter);
+  public java.util.List<io.aura.contract.ApiParameter> parameters();
+}
+### aura-core:io.aura.port.BaseRouter$Group
+public final class io.aura.port.BaseRouter$Group extends java.lang.Record {
+  public io.aura.port.BaseRouter$Group(java.lang.String, io.aura.port.BaseRouter);
+  public final java.lang.String toString();
+  public final int hashCode();
+  public final boolean equals(java.lang.Object);
+  public java.lang.String prefix();
+  public io.aura.port.BaseRouter router();
+}
+### aura-core:io.aura.port.BaseRouter$WsRoute
+public final class io.aura.port.BaseRouter$WsRoute extends java.lang.Record {
+  public io.aura.port.BaseRouter$WsRoute(io.aura.contract.Route);
+  public java.lang.String path();
+  public io.aura.port.WsHandler handler();
+  public final java.lang.String toString();
+  public final int hashCode();
+  public final boolean equals(java.lang.Object);
+  public io.aura.contract.Route route();
+}
+### aura-core:io.aura.port.BaseRouter
+public class io.aura.port.BaseRouter {
+  public final java.util.List<io.aura.port.BaseRouteBuilder> routeBuilders;
+  public final java.util.List<io.aura.port.BaseHandler> beforeHandlers;
+  public final java.util.List<io.aura.port.BaseHandler> afterHandlers;
+  public final java.util.List<io.aura.port.BaseRouter$Group> groups;
+  public final java.util.List<io.aura.port.BaseRouter$WsRoute> wsRoutes;
+  public io.aura.port.BaseRouter();
+  public io.aura.port.BaseRouteBuilder get(java.lang.String, io.aura.port.BaseHandler);
+  public io.aura.port.BaseRouteBuilder get(java.lang.String, java.lang.Object, java.lang.String);
+  public io.aura.port.BaseRouteBuilder post(java.lang.String, io.aura.port.BaseHandler);
+  public io.aura.port.BaseRouteBuilder post(java.lang.String, java.lang.Object, java.lang.String);
+  public io.aura.port.BaseRouteBuilder put(java.lang.String, io.aura.port.BaseHandler);
+  public io.aura.port.BaseRouteBuilder put(java.lang.String, java.lang.Object, java.lang.String);
+  public io.aura.port.BaseRouteBuilder delete(java.lang.String, io.aura.port.BaseHandler);
+  public io.aura.port.BaseRouteBuilder delete(java.lang.String, java.lang.Object, java.lang.String);
+  public io.aura.port.BaseRouteBuilder patch(java.lang.String, io.aura.port.BaseHandler);
+  public io.aura.port.BaseRouteBuilder patch(java.lang.String, java.lang.Object, java.lang.String);
+  public io.aura.port.BaseRouteBuilder head(java.lang.String, io.aura.port.BaseHandler);
+  public io.aura.port.BaseRouteBuilder head(java.lang.String, java.lang.Object, java.lang.String);
+  public io.aura.port.BaseRouteBuilder options(java.lang.String, io.aura.port.BaseHandler);
+  public io.aura.port.BaseRouteBuilder options(java.lang.String, java.lang.Object, java.lang.String);
+  public io.aura.port.BaseRouter crud(java.lang.String, java.lang.Object);
+  public io.aura.port.BaseRouter crud(java.lang.String, java.lang.Object, java.lang.String...);
+  public io.aura.port.BaseRouter before(io.aura.port.BaseHandler);
+  public io.aura.port.BaseRouter after(io.aura.port.BaseHandler);
+  public io.aura.port.BaseRouter group(java.lang.String, java.util.function.Consumer<io.aura.port.BaseRouter>);
+  public io.aura.port.BaseRouter ws(java.lang.String, java.util.function.Consumer<io.aura.port.WsHandler>);
+  public io.aura.port.BaseRouter ws(io.aura.contract.Route);
+  public io.aura.port.BaseRouteBuilder addRoute(java.lang.String, java.lang.String, io.aura.port.BaseHandler);
+}
+### aura-core:io.aura.port.RequestType
+public final class io.aura.port.RequestType {
+  public static java.lang.reflect.Type parameterized(java.lang.Class<?>, java.lang.reflect.Type...);
+}
+### aura-core:io.aura.port.RouteResponse
+public final class io.aura.port.RouteResponse {
+  public static void write(io.aura.port.BaseContext, java.lang.Object);
+}
+### aura-core:io.aura.port.SseEmitter
+public interface io.aura.port.SseEmitter extends java.io.Closeable {
+  public abstract void send(java.lang.String) throws java.lang.Exception;
+  public abstract void send(java.lang.String, java.lang.String) throws java.lang.Exception;
+  public abstract void send(java.lang.String, java.lang.String, java.lang.String) throws java.lang.Exception;
+  public abstract void close();
+}
+### aura-core:io.aura.port.UploadedFile
+public final class io.aura.port.UploadedFile extends java.lang.Record {
+  public io.aura.port.UploadedFile(java.lang.String, byte[], java.lang.String);
+  public java.lang.String name();
+  public long size();
+  public final java.lang.String toString();
+  public final int hashCode();
+  public final boolean equals(java.lang.Object);
+  public java.lang.String fileName();
+  public byte[] data();
+  public java.lang.String contentType();
+}
+### aura-core:io.aura.port.WsConnection
+public interface io.aura.port.WsConnection {
+  public abstract void send(java.lang.String);
+  public abstract boolean isOpen();
+  public abstract void close();
+  public abstract void close(int, java.lang.String);
+  public abstract java.lang.String path(java.lang.String);
+  public abstract java.lang.String query(java.lang.String);
+  public abstract void set(java.lang.String, java.lang.Object);
+  public abstract <T> T get(java.lang.String, java.lang.Class<T>);
+}
+### aura-core:io.aura.port.WsHandler$CloseHandler
+public interface io.aura.port.WsHandler$CloseHandler {
+  public abstract void handle(io.aura.port.WsConnection, int, java.lang.String);
+}
+### aura-core:io.aura.port.WsHandler$ErrorHandler
+public interface io.aura.port.WsHandler$ErrorHandler {
+  public abstract void handle(io.aura.port.WsConnection, java.lang.Throwable);
+}
+### aura-core:io.aura.port.WsHandler
+public class io.aura.port.WsHandler {
+  public io.aura.port.WsHandler();
+  public io.aura.port.WsHandler onOpen(java.util.function.Consumer<io.aura.port.WsConnection>);
+  public io.aura.port.WsHandler onMessage(java.util.function.BiConsumer<io.aura.port.WsConnection, java.lang.String>);
+  public io.aura.port.WsHandler onClose(io.aura.port.WsHandler$CloseHandler);
+  public io.aura.port.WsHandler onError(io.aura.port.WsHandler$ErrorHandler);
+  public java.util.function.Consumer<io.aura.port.WsConnection> openHandler();
+  public java.util.function.BiConsumer<io.aura.port.WsConnection, java.lang.String> messageHandler();
+  public io.aura.port.WsHandler$CloseHandler closeHandler();
+  public io.aura.port.WsHandler$ErrorHandler errorHandler();
 }
 ### aura-core:io.aura.security.IpSafety
 public final class io.aura.security.IpSafety {
@@ -812,208 +1018,6 @@ public class io.aura.snapshot.SnapshotScope {
   public void response(int, java.lang.String, java.lang.Object);
   public io.aura.snapshot.ExceptionSnapshot$ExternalCallSnapshot nextReplayExternalCall(java.lang.String, java.lang.String, java.lang.String);
 }
-### aura-core:io.aura.web.AdmissionDecision
-public final class io.aura.web.AdmissionDecision implements java.lang.AutoCloseable {
-  public static io.aura.web.AdmissionDecision allow();
-  public static io.aura.web.AdmissionDecision allow(java.lang.Runnable);
-  public static io.aura.web.AdmissionDecision reject(int, java.lang.String, int);
-  public boolean allowed();
-  public int status();
-  public java.lang.String code();
-  public int retryAfterSeconds();
-  public void close();
-}
-### aura-core:io.aura.web.AdmissionPolicy
-public interface io.aura.web.AdmissionPolicy {
-  public abstract io.aura.web.AdmissionDecision admit(io.aura.web.AdmissionRequest);
-}
-### aura-core:io.aura.web.AdmissionRequest
-public final class io.aura.web.AdmissionRequest extends java.lang.Record {
-  public io.aura.web.AdmissionRequest(java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String);
-  public final java.lang.String toString();
-  public final int hashCode();
-  public final boolean equals(java.lang.Object);
-  public java.lang.String method();
-  public java.lang.String path();
-  public java.lang.String routePattern();
-  public java.lang.String clientIp();
-  public java.lang.String apiKey();
-}
-### aura-core:io.aura.web.BaseContext
-public interface io.aura.web.BaseContext {
-  public abstract java.lang.String path(java.lang.String);
-  public abstract java.lang.String query(java.lang.String);
-  public abstract java.lang.String query(java.lang.String, java.lang.String);
-  public abstract java.lang.String header(java.lang.String);
-  public abstract java.lang.String cookie(java.lang.String);
-  public default java.lang.String bodyText() throws java.lang.Exception;
-  public abstract <T> T body(java.lang.Class<T>) throws java.lang.Exception;
-  public default <T> T body(java.lang.reflect.Type) throws java.lang.Exception;
-  public abstract java.lang.String method();
-  public abstract java.lang.String url();
-  public abstract int statusCode();
-  public default boolean isResponseStarted();
-  public default io.aura.AuraWebRuntime app();
-  public abstract io.aura.web.BaseContext status(int);
-  public abstract void json(java.lang.Object);
-  public abstract void jsonRaw(java.lang.String);
-  public abstract void text(java.lang.String);
-  public abstract void html(java.lang.String);
-  public abstract void raw(java.lang.String);
-  public abstract void redirect(java.lang.String);
-  public abstract io.aura.web.BaseContext header(java.lang.String, java.lang.String);
-  public abstract io.aura.web.BaseContext cookie(java.lang.String, java.lang.String, int);
-  public abstract <T> void set(T);
-  public abstract <T> T get(java.lang.Class<T>);
-  public abstract void set(java.lang.String, java.lang.Object);
-  public abstract <T> T get(java.lang.String, java.lang.Class<T>);
-  public default <T> T bodyOrThrow(java.lang.Class<T>) throws java.lang.Exception;
-  public default <T> T bodyOrThrow(java.lang.reflect.Type) throws java.lang.Exception;
-  public default java.lang.String queryRequired(java.lang.String);
-  public default int pathInt(java.lang.String);
-  public default long pathLong(java.lang.String);
-  public default int queryInt(java.lang.String, int);
-  public default long queryLong(java.lang.String, long);
-  public default boolean queryBool(java.lang.String, boolean);
-  public default int pageNum();
-  public default int pageSize();
-  public default io.aura.web.UploadedFile file(java.lang.String) throws java.lang.Exception;
-  public default java.lang.String formField(java.lang.String) throws java.lang.Exception;
-  public default void sendFile(java.lang.String, byte[]) throws java.lang.Exception;
-  public default void sendFile(java.lang.String, byte[], java.lang.String) throws java.lang.Exception;
-  public default java.lang.String userId();
-  public default io.aura.web.SseEmitter sse() throws java.lang.Exception;
-  public abstract void abort();
-  public abstract boolean isAborted();
-  public default java.lang.String requestId();
-  public default java.lang.String ip();
-  public default io.aura.contract.CancellationToken cancellationToken();
-  public default boolean isCancelled();
-}
-### aura-core:io.aura.web.BaseExceptionHandler
-public interface io.aura.web.BaseExceptionHandler<T extends java.lang.Exception> {
-  public abstract void handle(T, io.aura.web.BaseContext);
-}
-### aura-core:io.aura.web.BaseHandler
-public interface io.aura.web.BaseHandler {
-  public abstract void handle(io.aura.web.BaseContext) throws java.lang.Exception;
-}
-### aura-core:io.aura.web.BaseRouteBuilder
-public class io.aura.web.BaseRouteBuilder {
-  public io.aura.contract.Route route;
-  public final java.util.Map<java.lang.String, java.lang.String> paramDescriptions;
-  public io.aura.web.BaseRouteBuilder(io.aura.contract.Route);
-  public io.aura.web.BaseRouteBuilder describe(java.lang.String);
-  public io.aura.web.BaseRouteBuilder streaming();
-  public io.aura.web.BaseRouteBuilder param(java.lang.String, java.lang.String);
-  public io.aura.web.BaseRouteBuilder param(java.lang.String, java.lang.String, java.lang.String, boolean, java.lang.String);
-  public io.aura.web.BaseRouteBuilder param(io.aura.contract.ApiParameter);
-  public java.util.List<io.aura.contract.ApiParameter> parameters();
-}
-### aura-core:io.aura.web.BaseRouter$Group
-public final class io.aura.web.BaseRouter$Group extends java.lang.Record {
-  public io.aura.web.BaseRouter$Group(java.lang.String, io.aura.web.BaseRouter);
-  public final java.lang.String toString();
-  public final int hashCode();
-  public final boolean equals(java.lang.Object);
-  public java.lang.String prefix();
-  public io.aura.web.BaseRouter router();
-}
-### aura-core:io.aura.web.BaseRouter$WsRoute
-public final class io.aura.web.BaseRouter$WsRoute extends java.lang.Record {
-  public io.aura.web.BaseRouter$WsRoute(io.aura.contract.Route);
-  public java.lang.String path();
-  public io.aura.web.WsHandler handler();
-  public final java.lang.String toString();
-  public final int hashCode();
-  public final boolean equals(java.lang.Object);
-  public io.aura.contract.Route route();
-}
-### aura-core:io.aura.web.BaseRouter
-public class io.aura.web.BaseRouter {
-  public final java.util.List<io.aura.web.BaseRouteBuilder> routeBuilders;
-  public final java.util.List<io.aura.web.BaseHandler> beforeHandlers;
-  public final java.util.List<io.aura.web.BaseHandler> afterHandlers;
-  public final java.util.List<io.aura.web.BaseRouter$Group> groups;
-  public final java.util.List<io.aura.web.BaseRouter$WsRoute> wsRoutes;
-  public io.aura.web.BaseRouter();
-  public io.aura.web.BaseRouteBuilder get(java.lang.String, io.aura.web.BaseHandler);
-  public io.aura.web.BaseRouteBuilder get(java.lang.String, java.lang.Object, java.lang.String);
-  public io.aura.web.BaseRouteBuilder post(java.lang.String, io.aura.web.BaseHandler);
-  public io.aura.web.BaseRouteBuilder post(java.lang.String, java.lang.Object, java.lang.String);
-  public io.aura.web.BaseRouteBuilder put(java.lang.String, io.aura.web.BaseHandler);
-  public io.aura.web.BaseRouteBuilder put(java.lang.String, java.lang.Object, java.lang.String);
-  public io.aura.web.BaseRouteBuilder delete(java.lang.String, io.aura.web.BaseHandler);
-  public io.aura.web.BaseRouteBuilder delete(java.lang.String, java.lang.Object, java.lang.String);
-  public io.aura.web.BaseRouteBuilder patch(java.lang.String, io.aura.web.BaseHandler);
-  public io.aura.web.BaseRouteBuilder patch(java.lang.String, java.lang.Object, java.lang.String);
-  public io.aura.web.BaseRouteBuilder head(java.lang.String, io.aura.web.BaseHandler);
-  public io.aura.web.BaseRouteBuilder head(java.lang.String, java.lang.Object, java.lang.String);
-  public io.aura.web.BaseRouteBuilder options(java.lang.String, io.aura.web.BaseHandler);
-  public io.aura.web.BaseRouteBuilder options(java.lang.String, java.lang.Object, java.lang.String);
-  public io.aura.web.BaseRouter crud(java.lang.String, java.lang.Object);
-  public io.aura.web.BaseRouter crud(java.lang.String, java.lang.Object, java.lang.String...);
-  public io.aura.web.BaseRouter before(io.aura.web.BaseHandler);
-  public io.aura.web.BaseRouter after(io.aura.web.BaseHandler);
-  public io.aura.web.BaseRouter group(java.lang.String, java.util.function.Consumer<io.aura.web.BaseRouter>);
-  public io.aura.web.BaseRouter ws(java.lang.String, java.util.function.Consumer<io.aura.web.WsHandler>);
-  public io.aura.web.BaseRouter ws(io.aura.contract.Route);
-  public io.aura.web.BaseRouteBuilder addRoute(java.lang.String, java.lang.String, io.aura.web.BaseHandler);
-}
-### aura-core:io.aura.web.RequestType
-public final class io.aura.web.RequestType {
-  public static java.lang.reflect.Type parameterized(java.lang.Class<?>, java.lang.reflect.Type...);
-}
-### aura-core:io.aura.web.RouteResponse
-public final class io.aura.web.RouteResponse {
-  public static void write(io.aura.web.BaseContext, java.lang.Object);
-}
-### aura-core:io.aura.web.SseEmitter
-public interface io.aura.web.SseEmitter extends java.io.Closeable {
-  public abstract void send(java.lang.String) throws java.lang.Exception;
-  public abstract void send(java.lang.String, java.lang.String) throws java.lang.Exception;
-  public abstract void send(java.lang.String, java.lang.String, java.lang.String) throws java.lang.Exception;
-  public abstract void close();
-}
-### aura-core:io.aura.web.UploadedFile
-public final class io.aura.web.UploadedFile extends java.lang.Record {
-  public io.aura.web.UploadedFile(java.lang.String, byte[], java.lang.String);
-  public java.lang.String name();
-  public long size();
-  public final java.lang.String toString();
-  public final int hashCode();
-  public final boolean equals(java.lang.Object);
-  public java.lang.String fileName();
-  public byte[] data();
-  public java.lang.String contentType();
-}
-### aura-core:io.aura.web.WsConnection
-public interface io.aura.web.WsConnection {
-  public abstract void send(java.lang.String);
-  public abstract boolean isOpen();
-  public abstract void close();
-  public abstract void close(int, java.lang.String);
-  public abstract java.lang.String path(java.lang.String);
-  public abstract java.lang.String query(java.lang.String);
-  public abstract void set(java.lang.String, java.lang.Object);
-  public abstract <T> T get(java.lang.String, java.lang.Class<T>);
-}
-### aura-core:io.aura.web.WsHandler$CloseHandler
-public interface io.aura.web.WsHandler$CloseHandler {
-  public abstract void handle(io.aura.web.WsConnection, int, java.lang.String);
-}
-### aura-core:io.aura.web.WsHandler$ErrorHandler
-public interface io.aura.web.WsHandler$ErrorHandler {
-  public abstract void handle(io.aura.web.WsConnection, java.lang.Throwable);
-}
-### aura-core:io.aura.web.WsHandler
-public class io.aura.web.WsHandler {
-  public io.aura.web.WsHandler();
-  public io.aura.web.WsHandler onOpen(java.util.function.Consumer<io.aura.web.WsConnection>);
-  public io.aura.web.WsHandler onMessage(java.util.function.BiConsumer<io.aura.web.WsConnection, java.lang.String>);
-  public io.aura.web.WsHandler onClose(io.aura.web.WsHandler$CloseHandler);
-  public io.aura.web.WsHandler onError(io.aura.web.WsHandler$ErrorHandler);
-}
 ### aura-processor:io.aura.processor.AuraRouteProcessor
 public final class io.aura.processor.AuraRouteProcessor extends javax.annotation.processing.AbstractProcessor {
   public io.aura.processor.AuraRouteProcessor();
@@ -1053,7 +1057,7 @@ public interface io.aura.web.CodedException {
 }
 ### aura-web:io.aura.web.CompiledRoute
 public final class io.aura.web.CompiledRoute extends java.lang.Record {
-  public io.aura.web.CompiledRoute(java.lang.String, java.lang.String, java.util.regex.Pattern, java.util.List<java.lang.String>, java.util.List<io.aura.web.BaseHandler>, io.aura.web.BaseHandler, java.util.List<io.aura.web.BaseHandler>, io.aura.contract.Route, java.util.Map<java.lang.String, java.lang.String>);
+  public io.aura.web.CompiledRoute(java.lang.String, java.lang.String, java.util.regex.Pattern, java.util.List<java.lang.String>, java.util.List<io.aura.port.BaseHandler>, io.aura.port.BaseHandler, java.util.List<io.aura.port.BaseHandler>, io.aura.contract.Route, java.util.Map<java.lang.String, java.lang.String>);
   public final java.lang.String toString();
   public final int hashCode();
   public final boolean equals(java.lang.Object);
@@ -1061,19 +1065,19 @@ public final class io.aura.web.CompiledRoute extends java.lang.Record {
   public java.lang.String rawPath();
   public java.util.regex.Pattern pattern();
   public java.util.List<java.lang.String> paramNames();
-  public java.util.List<io.aura.web.BaseHandler> beforeHandlers();
-  public io.aura.web.BaseHandler handler();
-  public java.util.List<io.aura.web.BaseHandler> afterHandlers();
+  public java.util.List<io.aura.port.BaseHandler> beforeHandlers();
+  public io.aura.port.BaseHandler handler();
+  public java.util.List<io.aura.port.BaseHandler> afterHandlers();
   public io.aura.contract.Route contract();
   public java.util.Map<java.lang.String, java.lang.String> paramDescriptions();
 }
 ### aura-web:io.aura.web.Context
-public class io.aura.web.Context implements io.aura.web.BaseContext {
+public class io.aura.web.Context implements io.aura.port.BaseContext {
   public io.aura.AuraWebRuntime app();
   public boolean isResponseStarted();
   public java.lang.String requestId();
   public io.aura.contract.CancellationToken cancellationToken();
-  public io.aura.web.UploadedFile file(java.lang.String) throws java.lang.Exception;
+  public io.aura.port.UploadedFile file(java.lang.String) throws java.lang.Exception;
   public java.lang.String formField(java.lang.String) throws java.lang.Exception;
   public java.lang.String path(java.lang.String);
   public java.lang.String query(java.lang.String);
@@ -1099,14 +1103,14 @@ public class io.aura.web.Context implements io.aura.web.BaseContext {
   public <T> T get(java.lang.Class<T>);
   public void set(java.lang.String, java.lang.Object);
   public <T> T get(java.lang.String, java.lang.Class<T>);
-  public io.aura.web.SseEmitter sse();
+  public io.aura.port.SseEmitter sse();
   public void sendFile(java.lang.String, byte[], java.lang.String);
   public void abort();
   public boolean isAborted();
   public java.lang.String ip();
-  public io.aura.web.BaseContext cookie(java.lang.String, java.lang.String, int);
-  public io.aura.web.BaseContext header(java.lang.String, java.lang.String);
-  public io.aura.web.BaseContext status(int);
+  public io.aura.port.BaseContext cookie(java.lang.String, java.lang.String, int);
+  public io.aura.port.BaseContext header(java.lang.String, java.lang.String);
+  public io.aura.port.BaseContext status(int);
 }
 ### aura-web:io.aura.web.GuardOutcome
 public final class io.aura.web.GuardOutcome extends java.lang.Record {
@@ -1144,13 +1148,13 @@ public final class io.aura.web.HealthModule implements io.aura.AuraModule {
   public void install(io.aura.ModuleContext);
 }
 ### aura-web:io.aura.web.LambdaHandler
-public final class io.aura.web.LambdaHandler implements io.aura.web.BaseHandler {
+public final class io.aura.web.LambdaHandler implements io.aura.port.BaseHandler {
   public io.aura.web.LambdaHandler(java.lang.Object);
-  public void handle(io.aura.web.BaseContext) throws java.lang.Exception;
+  public void handle(io.aura.port.BaseContext) throws java.lang.Exception;
 }
 ### aura-web:io.aura.web.MethodRefHandler
-public final class io.aura.web.MethodRefHandler implements io.aura.web.BaseHandler {
-  public void handle(io.aura.web.BaseContext) throws java.lang.Exception;
+public final class io.aura.web.MethodRefHandler implements io.aura.port.BaseHandler {
+  public void handle(io.aura.port.BaseContext) throws java.lang.Exception;
   public java.lang.reflect.Method resolvedMethod();
   public java.lang.Object invokeWithArgs(java.util.Map<java.lang.String, java.lang.Object>) throws java.lang.Exception;
 }
@@ -1187,10 +1191,10 @@ public class io.aura.web.MockContext extends io.aura.web.Context {
   public <T> T get(java.lang.String, java.lang.Class<T>);
   public io.aura.AuraWebRuntime app();
   public java.lang.String ip();
-  public io.aura.web.SseEmitter sse();
-  public io.aura.web.BaseContext cookie(java.lang.String, java.lang.String, int);
-  public io.aura.web.BaseContext header(java.lang.String, java.lang.String);
-  public io.aura.web.BaseContext status(int);
+  public io.aura.port.SseEmitter sse();
+  public io.aura.port.BaseContext cookie(java.lang.String, java.lang.String, int);
+  public io.aura.port.BaseContext header(java.lang.String, java.lang.String);
+  public io.aura.port.BaseContext status(int);
 }
 ### aura-web:io.aura.web.OpenApiGenerator
 public final class io.aura.web.OpenApiGenerator {
@@ -1198,7 +1202,7 @@ public final class io.aura.web.OpenApiGenerator {
 }
 ### aura-web:io.aura.web.ParamResolver$Binder
 public interface io.aura.web.ParamResolver$Binder {
-  public abstract java.lang.Object resolve(io.aura.web.BaseContext) throws java.lang.Exception;
+  public abstract java.lang.Object resolve(io.aura.port.BaseContext) throws java.lang.Exception;
 }
 ### aura-web:io.aura.web.ParamResolver
 public final class io.aura.web.ParamResolver {
@@ -1206,7 +1210,7 @@ public final class io.aura.web.ParamResolver {
   public static boolean isRequired(java.lang.Class<?>, java.lang.String);
   public static java.lang.Object fromString(java.lang.String, java.lang.Class<?>);
   public static boolean isBody(java.lang.Class<?>);
-  public static java.lang.String resolveString(io.aura.web.BaseContext, java.lang.String);
+  public static java.lang.String resolveString(io.aura.port.BaseContext, java.lang.String);
   public static int parseInt(java.lang.String);
   public static java.lang.Integer parseIntBoxed(java.lang.String);
   public static long parseLong(java.lang.String);
@@ -1243,18 +1247,18 @@ public final class io.aura.web.RouteCatalog {
   public static io.aura.contract.Route describeWebSocket(io.aura.contract.Route);
 }
 ### aura-web:io.aura.web.Router
-public class io.aura.web.Router extends io.aura.web.BaseRouter {
+public class io.aura.web.Router extends io.aura.port.BaseRouter {
   public io.aura.web.Router();
-  public io.aura.web.BaseRouter group(java.lang.String, java.util.function.Consumer<io.aura.web.BaseRouter>);
-  public io.aura.web.BaseRouteBuilder get(java.lang.String, java.lang.Object, java.lang.String);
-  public io.aura.web.BaseRouteBuilder post(java.lang.String, java.lang.Object, java.lang.String);
-  public io.aura.web.BaseRouteBuilder put(java.lang.String, java.lang.Object, java.lang.String);
-  public io.aura.web.BaseRouteBuilder delete(java.lang.String, java.lang.Object, java.lang.String);
-  public io.aura.web.BaseRouteBuilder patch(java.lang.String, java.lang.Object, java.lang.String);
-  public io.aura.web.BaseRouteBuilder head(java.lang.String, java.lang.Object, java.lang.String);
-  public io.aura.web.BaseRouteBuilder options(java.lang.String, java.lang.Object, java.lang.String);
-  public io.aura.web.BaseRouter crud(java.lang.String, java.lang.Object);
-  public io.aura.web.BaseRouter crud(java.lang.String, java.lang.Object, java.lang.String...);
+  public io.aura.port.BaseRouter group(java.lang.String, java.util.function.Consumer<io.aura.port.BaseRouter>);
+  public io.aura.port.BaseRouteBuilder get(java.lang.String, java.lang.Object, java.lang.String);
+  public io.aura.port.BaseRouteBuilder post(java.lang.String, java.lang.Object, java.lang.String);
+  public io.aura.port.BaseRouteBuilder put(java.lang.String, java.lang.Object, java.lang.String);
+  public io.aura.port.BaseRouteBuilder delete(java.lang.String, java.lang.Object, java.lang.String);
+  public io.aura.port.BaseRouteBuilder patch(java.lang.String, java.lang.Object, java.lang.String);
+  public io.aura.port.BaseRouteBuilder head(java.lang.String, java.lang.Object, java.lang.String);
+  public io.aura.port.BaseRouteBuilder options(java.lang.String, java.lang.Object, java.lang.String);
+  public io.aura.port.BaseRouter crud(java.lang.String, java.lang.Object);
+  public io.aura.port.BaseRouter crud(java.lang.String, java.lang.Object, java.lang.String...);
 }
 ### aura-web:io.aura.web.SnapshotHttpClient
 public class io.aura.web.SnapshotHttpClient {
@@ -1315,11 +1319,11 @@ public final class io.aura.web.StandardAdmissionPolicy$Builder {
   public io.aura.web.StandardAdmissionPolicy build();
 }
 ### aura-web:io.aura.web.StandardAdmissionPolicy
-public final class io.aura.web.StandardAdmissionPolicy implements io.aura.web.AdmissionPolicy {
+public final class io.aura.web.StandardAdmissionPolicy implements io.aura.port.AdmissionPolicy {
   public static final java.lang.String RATE_LIMITED;
   public static final java.lang.String CONCURRENCY_LIMITED;
   public static io.aura.web.StandardAdmissionPolicy$Builder builder();
-  public io.aura.web.AdmissionDecision admit(io.aura.web.AdmissionRequest);
+  public io.aura.port.AdmissionDecision admit(io.aura.port.AdmissionRequest);
   public long rateRejections();
   public long concurrencyRejections();
   public int trackedRateKeys();

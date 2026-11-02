@@ -24,6 +24,15 @@ record, the stage-by-stage log, and the migration table.
   `AuraConfig.fromProperties(...)` and pass the result to `AuraApp.create(...)`.
 - `AuraApp.start()` collapses into the `start(String...)` overload.
 - `io.aura.HealthModule` moved to `io.aura.web.HealthModule`.
+- The 14 adapter ports moved from `io.aura.web` to `io.aura.port` in `aura-core`:
+  `BaseHandler`, `BaseContext`, `BaseRouter`, `BaseRouteBuilder`,
+  `BaseExceptionHandler`, `SseEmitter`, `UploadedFile`, `RouteResponse`,
+  `RequestType`, `WsHandler`, `WsConnection`, `AdmissionPolicy`,
+  `AdmissionRequest`, `AdmissionDecision`. `io.aura.web` now means the Undertow
+  adapter and nothing else, so `import io.aura.web.BaseHandler` is
+  `import io.aura.port.BaseHandler`. `WsHandler`'s callback fields, which the
+  adapter read across the split package, are reached through `openHandler()`,
+  `messageHandler()`, `closeHandler()` and `errorHandler()` instead.
 - The reflective MCP tool binding is removed; register
   `McpRouter.tool(Route, McpHandler)` or the `tool(name, description)` builder.
 - A present-but-blank route permission now fails at startup instead of publishing
@@ -104,6 +113,13 @@ record, the stage-by-stage log, and the migration table.
   it drops the installed `aura-*.jar` files from the compile classpath so a
   fence resolves against this tree only. Prose that names the removed
   `io.aura.HealthModule` location fails the same gate.
+- `ArchitectureTest` R1 forbids `io.aura.web..` as a dependency target for every
+  policy package, and R2's subject is `io.aura.port..` with
+  `allowEmptyShould(true)` dropped so it cannot go vacuous. The rule that can
+  actually fire lives in `aura-web`: `WebLayeringTest` runs where the policy
+  classes and the Undertow implementation are both loaded, so a policy type
+  shipped inside the adapter fails the build instead of surviving a shared
+  package name.
 
 ### Fixed
 

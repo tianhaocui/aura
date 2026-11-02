@@ -57,7 +57,7 @@ public final class AuraApp implements AutoCloseable {
         return this;
     }
 
-    public AuraApp authenticate(java.util.function.Function<io.aura.web.BaseContext, String> authenticator) {
+    public AuraApp authenticate(java.util.function.Function<io.aura.port.BaseContext, String> authenticator) {
         runtime.authenticate(authenticator);
         return this;
     }

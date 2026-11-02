@@ -1,5 +1,8 @@
 package io.aura.web;
 
+import
+io.aura.port.BaseHandler;import
+io.aura.port.WsHandler;
 import io.aura.contract.Route;
 import io.undertow.server.HttpServerExchange;
 import io.undertow.websockets.WebSocketConnectionCallback;
@@ -37,11 +40,11 @@ record CompiledWsRoute(Route contract, Pattern pattern, List<String> paramNames,
             }
             UndertowWsConnection conn = new UndertowWsConnection(
                     channel, pathParams, queryParams, () -> connections.touch(channel));
-            conn.setErrorHandler(wsHandler.onError);
+            conn.setErrorHandler(wsHandler.errorHandler());
 
-            if (wsHandler.onOpen != null) {
+            if (wsHandler.openHandler() != null) {
                 try {
-                    wsHandler.onOpen.accept(conn);
+                    wsHandler.openHandler().accept(conn);
                 } catch (Exception e) {
                     routeToError(conn, e);
                 }
@@ -58,9 +61,9 @@ record CompiledWsRoute(Route contract, Pattern pattern, List<String> paramNames,
 
                 @Override
                 protected void onFullTextMessage(WebSocketChannel ch, BufferedTextMessage msg) {
-                    if (wsHandler.onMessage != null) {
+                    if (wsHandler.messageHandler() != null) {
                         try {
-                            wsHandler.onMessage.accept(conn, msg.getData());
+                            wsHandler.messageHandler().accept(conn, msg.getData());
                         } catch (Exception e) {
                             routeToError(conn, e);
                         }
@@ -69,9 +72,9 @@ record CompiledWsRoute(Route contract, Pattern pattern, List<String> paramNames,
 
                 @Override
                 protected void onCloseMessage(CloseMessage cm, WebSocketChannel ch) {
-                    if (wsHandler.onClose != null) {
+                    if (wsHandler.closeHandler() != null) {
                         try {
-                            wsHandler.onClose.handle(conn, cm.getCode(), cm.getReason());
+                            wsHandler.closeHandler().handle(conn, cm.getCode(), cm.getReason());
                         } catch (Exception e) {
                             routeToError(conn, e);
                         }
@@ -90,9 +93,9 @@ record CompiledWsRoute(Route contract, Pattern pattern, List<String> paramNames,
     }
 
     private void routeToError(UndertowWsConnection conn, Throwable error) {
-        if (wsHandler.onError != null) {
+        if (wsHandler.errorHandler() != null) {
             try {
-                wsHandler.onError.handle(conn, error);
+                wsHandler.errorHandler().handle(conn, error);
             } catch (Exception suppressed) {
                 error.addSuppressed(suppressed);
             }

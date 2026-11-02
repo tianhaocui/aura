@@ -1,4 +1,4 @@
-package io.aura.web;
+package io.aura.port;
 
 public record UploadedFile(String fileName, byte[] data, String contentType) {
 

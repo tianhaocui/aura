@@ -1,4 +1,4 @@
-package io.aura.web;
+package io.aura.port;
 
 /** Replaceable request admission policy for rate limits and concurrency bulkheads. */
 @FunctionalInterface

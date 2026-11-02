@@ -433,7 +433,7 @@ class AuraModuleTest {
             }
 
             @Override public void install(ModuleContext context) {
-                context.admissionPolicy(request -> io.aura.web.AdmissionDecision.allow());
+                context.admissionPolicy(request -> io.aura.port.AdmissionDecision.allow());
             }
         };
     }
@@ -463,7 +463,7 @@ class AuraModuleTest {
                     // unreadable to every request/response consumer, so it cannot be left unset.
                     assertThat(route.streaming()).isTrue();
                 });
-        java.util.function.Consumer<io.aura.web.WsHandler> configure = handler -> { };
+        java.util.function.Consumer<io.aura.port.WsHandler> configure = handler -> { };
         assertThatThrownBy(() -> io.aura.contract.Route.webSocket("events", configure))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("start with");

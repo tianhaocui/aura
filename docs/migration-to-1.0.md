@@ -102,6 +102,7 @@ Applications written against the released 1.0.0 API move with the route collapse
 | `AuraApp.create(path)` / `AuraApp.create(properties)` | `AuraApp.create(AuraConfig.fromProperties(path))` |
 | `AuraApp.start()` | `start(String...)` |
 | `io.aura.HealthModule` | `io.aura.web.HealthModule` |
+| `io.aura.web.BaseHandler` and the other 13 adapter ports | `io.aura.port.BaseHandler` -- `io.aura.web` now means the Undertow adapter, nothing else |
 | `McpRouter.tool(name, service, method, description)` reflection | `McpRouter.tool(route, handler)` |
 | a blank `permission` string dropped silently | fails at startup, because dropping it would publish an unprotected route |
 

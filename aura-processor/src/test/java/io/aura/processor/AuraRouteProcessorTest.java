@@ -53,7 +53,7 @@ class AuraRouteProcessorTest {
                 .contains("GET", "/orders/{id}")
                 .contains("ctx.path(\"id\")")
                 .contains("ctx.body(sample.CreateRequest.class)")
-                .contains("io.aura.web.RouteResponse.write(ctx, service.get(")
+                .contains("io.aura.port.RouteResponse.write(ctx, service.get(")
                 .contains("new io.aura.contract.ApiParameter");
         assertThat(classes.resolve("sample/ExampleServiceAuraRoutes.class")).exists();
     }
@@ -156,7 +156,7 @@ class AuraRouteProcessorTest {
         assertThat(generatedText).contains("minimum", "maximum", "maxLength", "pattern", "required")
                 .contains("java.util.List", "\"boxed\"", "\"tags\"", "\"child\"")
                 .contains("\"name\", \"count\", \"code\", \"slug\", \"boxed\", \"tags\", \"child\"")
-                .contains("io.aura.web.RequestType.parameterized(java.util.List.class, java.lang.String.class)");
+                .contains("io.aura.port.RequestType.parameterized(java.util.List.class, java.lang.String.class)");
     }
 
     @Test

@@ -1,15 +1,17 @@
-package io.aura.web;
+package io.aura.port;
 
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 
 public class WsHandler {
 
-    // package-private: accessed by CompiledWsRoute in aura-web
-    Consumer<WsConnection> onOpen;
-    BiConsumer<WsConnection, String> onMessage;
-    CloseHandler onClose;
-    ErrorHandler onError;
+    // The adapter reads these through accessors. They used to be package-private and reachable
+    // only because aura-core and aura-web both declared io.aura.web; a port's state has to be
+    // readable across a real package boundary or the boundary is not there.
+    private Consumer<WsConnection> onOpen;
+    private BiConsumer<WsConnection, String> onMessage;
+    private CloseHandler onClose;
+    private ErrorHandler onError;
 
     public WsHandler onOpen(Consumer<WsConnection> handler) {
         this.onOpen = handler;
@@ -30,6 +32,11 @@ public class WsHandler {
         this.onError = handler;
         return this;
     }
+
+    public Consumer<WsConnection> openHandler() { return onOpen; }
+    public BiConsumer<WsConnection, String> messageHandler() { return onMessage; }
+    public CloseHandler closeHandler() { return onClose; }
+    public ErrorHandler errorHandler() { return onError; }
 
     @FunctionalInterface
     public interface CloseHandler {

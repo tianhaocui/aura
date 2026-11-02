@@ -147,7 +147,7 @@ for removed in \
   "$repo_root/aura-core/src/main/java/io/aura/AuraPlugin.java" \
   "$repo_root/aura-core/src/main/java/io/aura/Reloadable.java" \
   "$repo_root/aura-core/src/main/java/io/aura/ReloadState.java" \
-  "$repo_root/aura-core/src/main/java/io/aura/web/BeforeBuilder.java"; do
+  "$repo_root/aura-core/src/main/java/io/aura/port/BeforeBuilder.java"; do
   if test -e "$removed"; then
     echo "removed pre-1.0 API returned: $removed" >&2
     exit 1
@@ -400,5 +400,44 @@ if [ -e "$repo_root/aura-web/src/test/java/io/aura/web/SchemaProbeTest.java" ]; 
   echo "SchemaProbeTest returned: it printed the schema document and asserted nothing" >&2
   exit 1
 fi
+
+# Layering close-out: the policy ports left the adapter's package, so io.aura.web means Undertow
+# and nothing else. The split package must not come back -- while it existed, ArchUnit could not
+# forbid "io.aura.web.." without banning the ports themselves, and WsHandler's callbacks were
+# readable by the adapter simply because the two modules shared a package name.
+ports='(BaseContext|BaseHandler|BaseRouter|BaseRouteBuilder|BaseExceptionHandler|SseEmitter|UploadedFile|RouteResponse|RequestType|WsHandler|WsConnection|AdmissionPolicy|AdmissionRequest|AdmissionDecision)'
+for port in BaseContext BaseHandler BaseRouter BaseRouteBuilder BaseExceptionHandler \
+            SseEmitter UploadedFile RouteResponse RequestType WsHandler WsConnection \
+            AdmissionPolicy AdmissionRequest AdmissionDecision; do
+  if ! test -f "$repo_root/aura-core/src/main/java/io/aura/port/$port.java"; then
+    echo "policy port is not in io.aura.port: $port" >&2
+    exit 1
+  fi
+done
+for tree in aura-core/src/main/java aura-core/src/test/java; do
+  if test -e "$repo_root/$tree/io/aura/web"; then
+    echo "the split io.aura.web package returned in $tree; core ports live in io.aura.port" >&2
+    exit 1
+  fi
+done
+if rg -qn "io\.aura\.web\.$ports" --glob '*.java' \
+    "$repo_root/aura-"*/src "$repo_root/examples"; then
+  echo "a policy port was addressed through the adapter package: io.aura.web is mechanism" >&2
+  exit 1
+fi
+if rg -n "io\.aura\.web\.$ports" \
+    "$repo_root/README.md" "$repo_root/README_CN.md" "$repo_root/AI_GUIDE.md" \
+    "$repo_root/docs/aura-core.md" "$repo_root/docs/aura-web.md" "$repo_root/docs/aura-module.md" \
+    "$repo_root/docs/DOCUMENTATION.md" "$repo_root/.claude/skills/aura/SKILL.md"; then
+  echo "canonical documentation still points a policy port at io.aura.web" >&2
+  exit 1
+fi
+ws_handler="$repo_root/aura-core/src/main/java/io/aura/port/WsHandler.java"
+if ! rg -q 'private Consumer<WsConnection> onOpen;' "$ws_handler" \
+   || rg -qn '^    (Consumer|BiConsumer|CloseHandler|ErrorHandler) on(Open|Message|Close|Error);' "$ws_handler"; then
+  echo "WsHandler callbacks are package-private again: the adapter reads them through accessors" >&2
+  exit 1
+fi
+rg -q 'openHandler()' "$repo_root/aura-web/src/main/java/io/aura/web/CompiledWsRoute.java"
 
 echo "Aura module and documentation contracts passed (version $root_version)"

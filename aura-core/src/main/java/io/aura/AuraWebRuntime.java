@@ -3,8 +3,8 @@ package io.aura;
 import io.aura.contract.McpRouterSpec;
 import io.aura.contract.Route;
 import io.aura.snapshot.SnapshotOptions;
-import io.aura.web.BaseExceptionHandler;
-import io.aura.web.BaseHandler;
+import io.aura.port.BaseExceptionHandler;
+import io.aura.port.BaseHandler;
 
 import java.io.PrintStream;
 import java.util.List;
@@ -67,12 +67,12 @@ public interface AuraWebRuntime extends AuraMcpRuntime {
     void emit(AuraEvent event);
     String prop(String key);
     <T> T getBean(Class<T> type);
-    Function<io.aura.web.BaseContext, String> authFunction();
+    Function<io.aura.port.BaseContext, String> authFunction();
     java.util.function.BiPredicate<String, String> permissionChecker();
     Map<Class<? extends Exception>, BaseExceptionHandler<?>> exceptionHandlers();
     List<BaseHandler> beforeHandlers();
     List<BaseHandler> afterHandlers();
     Function<Object, Object> resultWrapper();
-    io.aura.web.AdmissionPolicy admissionPolicy();
+    io.aura.port.AdmissionPolicy admissionPolicy();
     SnapshotOptions snapshotOptions();
 }

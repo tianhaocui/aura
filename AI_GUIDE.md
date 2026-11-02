@@ -78,7 +78,7 @@ import io.aura.AuraModule;
 import io.aura.ModuleContext;
 import io.aura.contract.ModuleMetadata;
 import io.aura.contract.Route;
-import io.aura.web.BaseHandler;
+import io.aura.port.BaseHandler;
 
 public final class AiModuleComposition {
     private AiModuleComposition() { }

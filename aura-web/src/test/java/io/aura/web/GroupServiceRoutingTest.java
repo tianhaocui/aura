@@ -1,5 +1,7 @@
 package io.aura.web;
 
+import
+io.aura.port.BaseRouter;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;

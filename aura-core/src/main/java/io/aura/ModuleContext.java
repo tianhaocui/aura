@@ -30,22 +30,22 @@ public interface ModuleContext extends io.aura.contract.CapabilityLookup {
      * {@code Route.webSocket(path, configure).requireAuth(permission)} through
      * {@link #route} instead.
      */
-    void webSocket(String path, java.util.function.Consumer<io.aura.web.WsHandler> configure);
+    void webSocket(String path, java.util.function.Consumer<io.aura.port.WsHandler> configure);
 
     /** Adds middleware applied before every assembled HTTP route and WebSocket handshake. */
-    void before(io.aura.web.BaseHandler handler);
+    void before(io.aura.port.BaseHandler handler);
 
     /** Adds middleware applied after every assembled HTTP route. */
-    void after(io.aura.web.BaseHandler handler);
+    void after(io.aura.port.BaseHandler handler);
 
     /** Registers structured handling for one application exception type. */
-    <T extends Exception> void exception(Class<T> type, io.aura.web.BaseExceptionHandler<T> handler);
+    <T extends Exception> void exception(Class<T> type, io.aura.port.BaseExceptionHandler<T> handler);
 
     /** Installs the single application-wide successful return-value wrapper. */
     void resultWrapper(java.util.function.Function<Object, Object> wrapper);
 
     /** Replaces the default global admission controls with one module-owned policy. */
-    void admissionPolicy(io.aura.web.AdmissionPolicy policy);
+    void admissionPolicy(io.aura.port.AdmissionPolicy policy);
 
     void healthCheck(io.aura.contract.HealthCheck healthCheck);
 

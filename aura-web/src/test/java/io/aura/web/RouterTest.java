@@ -1,5 +1,7 @@
 package io.aura.web;
 
+import
+io.aura.port.BaseHandler;
 import org.junit.jupiter.api.Test;
 
 import java.util.concurrent.atomic.AtomicBoolean;

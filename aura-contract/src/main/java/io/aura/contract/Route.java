@@ -12,7 +12,7 @@ import java.util.Map;
  * OpenAPI, and MCP.
  *
  * <p>{@code handler} is intentionally {@link Object} at the contract layer so
- * aura-contract stays free of {@link io.aura.web.BaseHandler}. Runtime consumers
+ * aura-contract stays free of {@link io.aura.port.BaseHandler}. Runtime consumers
  * (aura-web) cast to their handler shape; author-facing helpers accept a
  * typed {@code BaseHandler} overload in the web layer.
  *

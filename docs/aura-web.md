@@ -4,6 +4,11 @@
 contributed by `AuraModule`s and uses that single record for real HTTP,
 `TestClient`, `/__schema__`, OpenAPI, and MCP discovery.
 
+Everything in this package is mechanism. The handler and context types a module
+implements -- `BaseHandler`, `BaseContext`, `SseEmitter`, `WsHandler`,
+`AdmissionPolicy` -- are ports in `io.aura.port` (`aura-core`), so the package
+name alone tells you whether a type carries Undertow with it.
+
 ## Routes
 
 ```java

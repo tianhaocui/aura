@@ -1,7 +1,7 @@
 package io.aura.mcp;
 
 import io.aura.contract.CancellationToken;
-import io.aura.web.SseEmitter;
+import io.aura.port.SseEmitter;
 import org.junit.jupiter.api.Test;
 
 import java.time.Duration;

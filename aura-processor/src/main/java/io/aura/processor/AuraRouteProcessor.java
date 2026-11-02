@@ -111,7 +111,7 @@ public final class AuraRouteProcessor extends AbstractProcessor {
         String path = prefix + route.path;
         if (path.isEmpty()) path = "/";
         source.append("      io.aura.contract.Route.of(\"").append(route.method).append("\", \"")
-                .append(escape(path)).append("\", (io.aura.web.BaseHandler) ctx -> {");
+                .append(escape(path)).append("\", (io.aura.port.BaseHandler) ctx -> {");
 
         List<? extends VariableElement> parameters = method.getParameters();
         List<String> args = new ArrayList<>();
@@ -141,7 +141,7 @@ public final class AuraRouteProcessor extends AbstractProcessor {
         }
         String invocation = "service." + method.getSimpleName() + "(" + String.join(", ", args) + ")";
         if (method.getReturnType().getKind() == TypeKind.VOID) source.append(invocation).append(";");
-        else source.append("io.aura.web.RouteResponse.write(ctx, ").append(invocation).append(");");
+        else source.append("io.aura.port.RouteResponse.write(ctx, ").append(invocation).append(");");
         source.append("})");
         source.append(".withParams(java.util.List.of(");
         List<String> contracts = new ArrayList<>();
@@ -224,7 +224,7 @@ public final class AuraRouteProcessor extends AbstractProcessor {
 
     private boolean isContext(TypeMirror type) {
         String name = type.toString();
-        return "io.aura.web.Context".equals(name) || "io.aura.web.BaseContext".equals(name);
+        return "io.aura.web.Context".equals(name) || "io.aura.port.BaseContext".equals(name);
     }
 
     private boolean isBody(TypeMirror type) {
@@ -264,7 +264,7 @@ public final class AuraRouteProcessor extends AbstractProcessor {
         TypeElement raw = (TypeElement) type.asElement();
         List<String> arguments = type.getTypeArguments().stream()
                 .map(this::typeExpression).toList();
-        return "io.aura.web.RequestType.parameterized(" + raw.getQualifiedName() + ".class, "
+        return "io.aura.port.RequestType.parameterized(" + raw.getQualifiedName() + ".class, "
                 + String.join(", ", arguments) + ")";
     }
 

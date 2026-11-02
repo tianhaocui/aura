@@ -45,7 +45,7 @@ import io.aura.AuraApp;
 import io.aura.AuraModule;
 import io.aura.contract.ModuleMetadata;
 import io.aura.contract.Route;
-import io.aura.web.BaseHandler;
+import io.aura.port.BaseHandler;
 
 AuraApp app = AuraApp.create()
     .use(new AuraModule() {
@@ -71,7 +71,7 @@ import io.aura.AuraModule;
 import io.aura.ModuleContext;
 import io.aura.contract.ModuleMetadata;
 import io.aura.contract.Route;
-import io.aura.web.BaseHandler;
+import io.aura.port.BaseHandler;
 
 public final class DocumentationComposition {
     private DocumentationComposition() { }

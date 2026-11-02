@@ -1,5 +1,7 @@
 package io.aura.web;
 
+import
+io.aura.port.SseEmitter;
 import com.alibaba.fastjson2.JSON;
 import io.aura.AuraWebRuntime;
 import io.aura.snapshot.Snapshot;

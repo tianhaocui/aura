@@ -6,7 +6,7 @@ import io.aura.AuraModule;
 import io.aura.ModuleContext;
 import io.aura.contract.ModuleMetadata;
 import io.aura.contract.Route;
-import io.aura.web.BaseHandler;
+import io.aura.port.BaseHandler;
 
 import java.util.Map;
 import java.util.concurrent.Executors;

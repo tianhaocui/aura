@@ -6,9 +6,9 @@ import io.aura.contract.PermissionRegistry;
 import io.aura.contract.Route;
 import io.aura.contract.RuntimeState;
 import io.aura.snapshot.SnapshotOptions;
-import io.aura.web.BaseContext;
-import io.aura.web.BaseExceptionHandler;
-import io.aura.web.BaseHandler;
+import io.aura.port.BaseContext;
+import io.aura.port.BaseExceptionHandler;
+import io.aura.port.BaseHandler;
 
 import java.io.PrintStream;
 import java.util.List;
@@ -57,7 +57,7 @@ final class ModularRuntime implements AuraWebRuntime {
     private io.aura.contract.McpAuthorizer mcpAuthorizer;
     private Function<Object, Object> resultWrapper;
     private String resultWrapperModule;
-    private io.aura.web.AdmissionPolicy admissionPolicy;
+    private io.aura.port.AdmissionPolicy admissionPolicy;
     private String admissionPolicyModule;
     private int mcpPort = -1;
     private PrintStream mcpStdout;
@@ -374,7 +374,7 @@ final class ModularRuntime implements AuraWebRuntime {
     @Override public List<BaseHandler> beforeHandlers() { return List.copyOf(beforeHandlers); }
     @Override public List<BaseHandler> afterHandlers() { return List.copyOf(afterHandlers); }
     @Override public Function<Object, Object> resultWrapper() { return resultWrapper; }
-    @Override public io.aura.web.AdmissionPolicy admissionPolicy() { return admissionPolicy; }
+    @Override public io.aura.port.AdmissionPolicy admissionPolicy() { return admissionPolicy; }
     @Override public SnapshotOptions snapshotOptions() { return config.snapshotOptions(); }
 
     private void failStart(Throwable failure, List<ShutdownFailure> failures) {
@@ -526,7 +526,7 @@ final class ModularRuntime implements AuraWebRuntime {
             if (route == null) throw new ModuleException("AURA_ROUTE_CONTRIBUTION_INVALID", descriptor.id(), "Route contribution must not be null");
             directRoutes.add(route);
         }
-        @Override public void webSocket(String path, java.util.function.Consumer<io.aura.web.WsHandler> configure) {
+        @Override public void webSocket(String path, java.util.function.Consumer<io.aura.port.WsHandler> configure) {
             route(Route.webSocket(path, configure));
         }
         @Override public void before(BaseHandler handler) {
@@ -552,7 +552,7 @@ final class ModularRuntime implements AuraWebRuntime {
             resultWrapper = wrapper;
             resultWrapperModule = descriptor.id();
         }
-        @Override public void admissionPolicy(io.aura.web.AdmissionPolicy policy) {
+        @Override public void admissionPolicy(io.aura.port.AdmissionPolicy policy) {
             if (policy == null) throw new ModuleException("AURA_ADMISSION_POLICY_INVALID", descriptor.id(), "Admission policy must not be null");
             if (admissionPolicy != null) {
                 throw new ModuleException("AURA_ADMISSION_POLICY_DUPLICATE", descriptor.id(),

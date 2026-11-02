@@ -12,7 +12,7 @@ verifiable in memory in milliseconds. Every stage below is a commit on
 | Minimize the model's choices | one route record, one contribution call, one application entry point, one string→value binder, one tool-schema builder |
 | Millisecond self-verification | `TestClient` and the fake AI providers run the real contract without sockets; `prepare()` installs modules without opening listeners |
 | One contract, many consumers | `Route` is read by HTTP dispatch, `TestClient`, `/__schema__`, OpenAPI, and MCP; each fact is declared once |
-| Policy in Core, mechanism in Web | the guard chain and admission policy are decided in core types and executed by the Undertow adapter; the health module moved to the adapter |
+| Policy in Core, mechanism in Web | the guard chain and admission policy are decided in core types and executed by the Undertow adapter; the health module moved to the adapter; the ports the adapter implements live in `io.aura.port`, so a package name means exactly one thing |
 
 ## Stages
 
@@ -37,6 +37,7 @@ verifiable in memory in milliseconds. Every stage below is a commit on
 | review-E | `9dfb9c2` | the schema token, OpenAPI switch and WebSocket Origin allow-list moved into the shared guard chain, so `TestClient` proves them without a port |
 | review-F | `cfa665a` | `required` became the binder's single rule on both transports, MCP stopped inventing types, and OpenAPI/examples joined `ScalarType` |
 | review-G | `dca32d3` | a refused contribution names the module or the route instead of throwing `NullPointerException`; the wire documents are read through typed getters, and `SchemaProbeTest` (zero assertions) is gone |
+| review-H | `6cbf8de` | the added types are documented in their module docs, and `verify-docs-code.sh` compiles the documentation against this tree instead of quoting it |
 
 ## Decisions that differed from the plan
 
@@ -172,6 +173,35 @@ markers found, so deleting a fence could not fail a whole-list floor. Prose is
 covered by the same gate now too, because only the fence compiles and a reader
 copies the sentence next to it.
 
+**The ports left `io.aura.web`, and the split package was load-bearing.** The
+plan recorded R1's missing `io.aura.web..` entry as a chore deferred because the
+package name meant two things at once. It was worse than a naming problem:
+`WsHandler`'s four callback fields were package-private and `CompiledWsRoute`, in
+another module, read them directly -- which compiled only because `aura-core` and
+`aura-web` agreed on the package name. A boundary the compiler can cross is not
+a boundary, and the source said so in a comment. The 14 port types (`BaseHandler`,
+`BaseContext`, `BaseRouter`, `BaseRouteBuilder`, `BaseExceptionHandler`,
+`SseEmitter`, `UploadedFile`, `RouteResponse`, `RequestType`, `WsHandler`,
+`WsConnection`, and the three `Admission*` types) now live in `io.aura.port` in
+`aura-core`, and the adapter reads the handler fields through accessors.
+
+`io.aura.contract` was the other candidate, rejected on a constraint rather than
+taste: the ports depend only on `java.*` and `io.aura.contract.*` today, so they
+would pass R3 now, but a port that ever needs a core type -- a cancellation
+token, a runtime handle -- would become unmovable, because R3 is what makes
+`aura-contract` the zero-dependency vocabulary. `io.aura.port` keeps that door
+open and leaves R3 untouched.
+
+The tightened rules say what they can and cannot catch. In `aura-core`, R1's new
+`io.aura.web..` entry is a tripwire, not the guarantee: `aura-core` has no
+compile dependency on `aura-web`, so the real bar is Maven's and the rule cannot
+fire there. What does fire is the same rule copied into `aura-web`
+(`WebLayeringTest`), where the policy classes and the Undertow implementation are
+both loaded -- that is where "a policy type shipped inside the adapter" becomes a
+build failure. R2 dropped its `allowEmptyShould(true)`, and neither R2 nor
+`WebLayeringTest` carries one: a rule whose subject set went empty has stopped
+checking something, and a green build would report that as a pass.
+
 ## Deleted or moved public surface
 
 | 1.0.0 | now |
@@ -188,6 +218,7 @@ copies the sentence next to it.
 | `AuraApp.start()` | `start(String...)` |
 | `AuraApp::authenticate` reflection route scanning | unchanged; `@Get`/`@Post` + `aura-processor` is the production path |
 | `io.aura.HealthModule` | `io.aura.web.HealthModule` |
+| `io.aura.web.BaseHandler`, `BaseContext`, `BaseRouter`, `BaseRouteBuilder`, `BaseExceptionHandler`, `SseEmitter`, `UploadedFile`, `RouteResponse`, `RequestType`, `WsHandler`, `WsConnection`, `AdmissionPolicy`, `AdmissionRequest`, `AdmissionDecision` | same types in `io.aura.port`; `io.aura.web` is the Undertow adapter only |
 | `McpRouter.tool(String name, Object service, String method, String description)` reflective binding | `McpRouter.tool(Route, McpHandler)` |
 | `McpParam(String, String, String, List)` and `McpParam(String, String, String, List, boolean)` | `McpParam(ApiParameter, List<McpEnumValue>)` — a tool argument is declared with the shared parameter record, so it cannot carry its own Java-to-JSON opinion |
 
@@ -307,6 +338,36 @@ per-document floor is what makes the second one fail: under the earlier total
 floor the mutation was invisible, because the count of markers found dropped with
 the count of fences compiled.
 
+The ports move was checked at the new rule and at the baseline. `WebLayeringTest`
+was proven to bite rather than merely pass by shipping a temporary
+`io.aura.snapshot.LeakProbe` inside `aura-web` -- a policy-named class with an
+`io.aura.web.Router` parameter and return type -- which failed
+`policyStaysOutOfTheAdapter` on both of those lines; deleting the probe returned
+one green case, so the rule has a subject set and a trigger. The probe was never
+committed. The API baseline was regenerated with the generator's own first 140
+lines (the `jq`-free half, as before) rather than edited: its type set is 244
+entries both before and after, the only members that changed are the 18
+`io.aura.web.*` port entries (14 types plus 4 nested), and after sorting the body
+lines every one of the 248 differing lines names `io.aura.web` or `io.aura.port`
+-- proof the move carried no other surface with it. Hand-editing the baseline
+first and comparing against the generated file was deliberate: it showed the two
+disagree on ordering, which is the difference between a rename and a regeneration.
+
+`verify-aura-contracts.sh` now refuses the old arrangement on five independent
+grounds, and each was falsified by reintroducing exactly the drift it names:
+adding back `aura-core/src/main/java/io/aura/web/BaseContext.java` failed with
+`the split io.aura.web package returned`; a core source file importing
+`io.aura.web.BaseHandler` failed with `a policy port was addressed through the
+adapter package`; a `docs/aura-core.md` line naming `io.aura.web.BaseHandler`
+failed with `canonical documentation still points a policy port at io.aura.web`;
+making `WsHandler.onOpen` package-private again failed with `WsHandler callbacks
+are package-private again`; and moving `SseEmitter.java` out of `io.aura.port`
+failed with `policy port is not in io.aura.port: SseEmitter`. Restoring each file
+returned the gate to green. The last two cases initially exited 1 silently, because
+they were written as bare `rg -q` assertions: a release gate that fails without
+naming the invariant is a gate someone has to debug at 2 a.m., so both now carry
+their own message.
+
 Known flake: `LiquibaseSchemaMigratorTest.concurrentFirstStartsSerializeChangesetsAcrossIndependentPools`
 allows 15 seconds for two serialized Liquibase runs and timed out once on this
 Intel machine while passing twice. It is timing, not behaviour, but the budget
@@ -348,11 +409,10 @@ lines, `jq` dropped from the tool check); the classification half still needs
   `McpRouter.tool(Route, McpHandler)` does not ask for. Deleting the builder is
   the review's stronger remedy and stays open with the MCP/`aura-web` dependency
   cleanup.
-- `io.aura.web` is a split package: the core ports and the Undertow
-  implementation share it, which is why R1 cannot forbid `io.aura.web..` yet.
-  Renaming the ports to `io.aura.port..` is the next layering step.
 - `aura-mcp` still declares a compile dependency on `aura-web`; R6 documents it
-  and stays vacuous until copied into an aura-mcp test.
+  and stays vacuous until copied into an aura-mcp test. Now that
+  `io.aura.web` means only the adapter, that copy has somewhere unambiguous to
+  point at, and `WebLayeringTest` shows the mechanism works.
 - `scripts/verify-public-api.sh` needs `jq`, which this machine does not have, so
   step 5 of `verify-local-readiness.sh` stops there. The baseline this branch was
   checked against came from a `jq`-free copy of the generator, not from that

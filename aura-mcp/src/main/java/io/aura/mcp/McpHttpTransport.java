@@ -4,7 +4,7 @@ import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONObject;
 import com.alibaba.fastjson2.JSONArray;
 import io.aura.AuraMcpRuntime;
-import io.aura.web.BaseContext;
+import io.aura.port.BaseContext;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -99,7 +99,7 @@ final class McpHttpTransport {
                 context.status(404).raw("MCP session not found, closed, or expired");
                 return;
             }
-            io.aura.web.SseEmitter emitter = context.sse();
+            io.aura.port.SseEmitter emitter = context.sse();
             McpSseHub.Attachment attachment = sseHub.attachWithHandle(
                     sessionId, emitter, context.cancellationToken(), lastEventId);
             if (attachment.result() != McpSseHub.AttachResult.ATTACHED) {
@@ -687,7 +687,7 @@ final class McpHttpTransport {
             writeOversizeSseError(context, id);
             return;
         }
-        io.aura.web.SseEmitter emitter = null;
+        io.aura.port.SseEmitter emitter = null;
         try {
             emitter = context.sse();
             emitter.send("message", json);
@@ -711,7 +711,7 @@ final class McpHttpTransport {
             String fallback = BoundedJson.encode(
                     rpcError(id, -32009, "MCP response exceeds the configured byte limit"),
                     payloadBudget);
-            io.aura.web.SseEmitter emitter = context.sse();
+            io.aura.port.SseEmitter emitter = context.sse();
             try {
                 emitter.send("message", fallback);
             } finally {

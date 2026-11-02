@@ -1,5 +1,7 @@
 package io.aura.web;
 
+import
+io.aura.port.BaseHandler;
 import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
 import io.aura.contract.ApiParameter;

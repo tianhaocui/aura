@@ -5,7 +5,7 @@ import io.aura.ModuleContext;
 import io.aura.contract.ModuleMetadata;
 import io.aura.contract.McpRouterSpec;
 import io.aura.contract.Route;
-import io.aura.web.BaseHandler;
+import io.aura.port.BaseHandler;
 
 import java.time.Duration;
 import java.util.Map;

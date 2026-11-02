@@ -1,5 +1,7 @@
 package io.aura.web;
 
+import
+io.aura.port.BaseHandler;
 import io.aura.contract.Route;
 
 import java.util.ArrayList;
