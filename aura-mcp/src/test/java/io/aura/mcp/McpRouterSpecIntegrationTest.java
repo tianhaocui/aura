@@ -16,6 +16,7 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BiPredicate;
+import io.aura.contract.Route;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -141,9 +142,10 @@ class McpRouterSpecIntegrationTest {
     @Test
     void stdioRefusesARequiredArgumentTheToolAdvertised() throws Exception {
         McpRouter router = new McpRouter();
-        router.tool("get_order", "Get order")
-                .param("id", int.class, "order id")
-                .handler(ctx -> "should not run");
+        router.tool(Route.of("GET", "/order", (McpHandler) ctx -> "should not run")
+                .describedAs("Get order")
+                .withParams(java.util.List.of(new io.aura.contract.ApiParameter(
+                        "id", "int", "query", true, "order id"))));
         AuraMcpRuntime runtime = (AuraMcpRuntime) AuraApp.create()
                 .use(McpModule.create(router))
                 .prepare().runtimeView();

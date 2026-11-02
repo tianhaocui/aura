@@ -8,16 +8,14 @@ import java.util.Map;
 public class McpContext {
 
     private final Map<String, Object> args;
-    private final Map<String, Map<String, Object>> mappings;
     private final String userId;
 
-    McpContext(Map<String, Object> args, Map<String, Map<String, Object>> mappings) {
-        this(args, mappings, null);
+    McpContext(Map<String, Object> args) {
+        this(args, null);
     }
 
-    McpContext(Map<String, Object> args, Map<String, Map<String, Object>> mappings, String userId) {
+    McpContext(Map<String, Object> args, String userId) {
         this.args = args;
-        this.mappings = mappings;
         this.userId = userId;
     }
 
@@ -25,8 +23,7 @@ public class McpContext {
     public String userId() { return userId; }
 
     public Object get(String name) {
-        Object val = args.get(name);
-        return resolve(name, val);
+        return args.get(name);
     }
 
     public String getString(String name) {
@@ -74,14 +71,5 @@ public class McpContext {
         Object val = args.get(name);
         if (val == null) return null;
         return Enum.valueOf(type, val.toString());
-    }
-
-    private Object resolve(String name, Object val) {
-        if (val == null) return null;
-        var mapping = mappings.get(name);
-        if (mapping != null && mapping.containsKey(val.toString())) {
-            return mapping.get(val.toString());
-        }
-        return val;
     }
 }

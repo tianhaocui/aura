@@ -1,5 +1,6 @@
 package io.aura.mcp;
 
+import io.aura.contract.Route;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.io.TempDir;
@@ -139,7 +140,7 @@ class McpSecurityTest {
             System.setProperty("aura.mcp.output-root", tempDir.toString());
             Path output = tempDir.resolve("generated");
             McpRouter router = new McpRouter();
-            router.tool("ping", "ping").handler(ctx -> "ok");
+            router.tool(Route.of("GET", "/ping", (McpHandler) ctx -> "ok").describedAs("ping"));
 
             McpPackager.generate("http://localhost:8080", "@aura/test-mcp", output.toString(), router, true);
 
@@ -191,7 +192,7 @@ class McpSecurityTest {
             System.setProperty(McpPackager.ALLOW_PRIVATE_URL_PROPERTY, "true");
             Path output = link.resolve("generated");
             McpRouter router = new McpRouter();
-            router.tool("ping", "ping").handler(ctx -> "ok");
+            router.tool(Route.of("GET", "/ping", (McpHandler) ctx -> "ok").describedAs("ping"));
 
             assertThatThrownBy(() -> McpPackager.generate(
                     "http://localhost:8080", "@aura/test-mcp", output.toString(), router))

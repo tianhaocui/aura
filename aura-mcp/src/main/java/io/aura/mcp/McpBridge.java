@@ -379,7 +379,7 @@ public class McpBridge {
                         ? Map.of() : p.getJSONObject("schema").toJavaObject(Map.class);
                 list.add(new McpParam(new io.aura.contract.ApiParameter(p.getString("name"),
                         p.getString("type"), source, required == null || required,
-                        p.getString("description"), bodySchema), List.of()));
+                        p.getString("description"), bodySchema)));
             }
         }
         return McpUtil.inputSchema(list);

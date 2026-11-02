@@ -1,5 +1,7 @@
 package io.aura.mcp;
 
+import io.aura.contract.ApiParameter;
+import io.aura.contract.Route;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -33,15 +35,32 @@ class McpRouterIntegrationTest {
         public User get(int id) { return new User(id, "Alice"); }
     }
 
+    // --- declared parameters ---
+
+    private static ApiParameter id() {
+        return new ApiParameter("id", "int", "query", true, "订单号");
+    }
+
+    /** The choices an enum parameter accepts, declared the way the route catalog declares them. */
+    private static ApiParameter status() {
+        return new ApiParameter("status", "OrderStatus", "query", true, "订单状态",
+                Map.of("type", "string", "enum", List.of("NEW", "PROCESSING", "DONE", "CANCEL")));
+    }
+
+    @SuppressWarnings("unchecked")
+    private static List<String> choices(McpParam param) {
+        return (List<String>) param.contract().schema().get("enum");
+    }
+
     // === 1. service 方法绑定 ===
 
     @Test
     void serviceMethod_get_bindsAndInvokes() throws Exception {
         McpRouter mcp = new McpRouter();
         OrderService orders = new OrderService();
-        mcp.tool("get_order", "获取订单")
-                .param("id", int.class, "订单号")
-                .handler(ctx -> orders.get(ctx.getInt("id")));
+        mcp.tool(Route.of("GET", "/order", (McpHandler) ctx -> orders.get(ctx.getInt("id")))
+                .describedAs("获取订单")
+                .withParams(List.of(id())));
 
         McpTool tool = mcp.tools().get(0);
         assertThat(tool.name()).isEqualTo("get_order");
@@ -58,10 +77,11 @@ class McpRouterIntegrationTest {
     void serviceMethod_list_noParams() throws Exception {
         McpRouter mcp = new McpRouter();
         OrderService orders = new OrderService();
-        mcp.tool("list_orders", "订单列表").handler(ctx -> orders.list());
+        mcp.tool(Route.of("GET", "/orders", (McpHandler) ctx -> orders.list())
+                .describedAs("订单列表"));
 
         assertThat(mcp.tools().get(0).params()).isEmpty();
-        Object result = mcp.invoke("list_orders", Map.of());
+        Object result = mcp.invoke("get_orders", Map.of());
         assertThat(result).isInstanceOf(List.class);
         assertThat((List<?>) result).hasSize(2);
     }
@@ -69,79 +89,59 @@ class McpRouterIntegrationTest {
     // === 2. enum 参数 — schema + invoke ===
 
     @Test
-    void enumParam_schemaContainsAllValues() {
+    void enumParam_publishesTheChoicesItsContractDeclares() {
         McpRouter mcp = new McpRouter();
-        mcp.tool("query_orders", "按状态查询订单")
-           .param("status", OrderStatus.class, "订单状态")
-           .handler(ctx -> null);
+        mcp.tool(Route.of("POST", "/query", (McpHandler) ctx -> null)
+                .describedAs("按状态查询订单")
+                .withParams(List.of(status())));
 
         McpParam param = mcp.tools().get(0).params().get(0);
-        assertThat(param.isEnum()).isTrue();
-        assertThat(param.enumValues()).hasSize(4);
-
-        List<String> labels = param.enumValues().stream().map(McpEnumValue::label).toList();
-        assertThat(labels).anyMatch(l -> l.contains("NEW") && l.contains("新建"));
-        assertThat(labels).anyMatch(l -> l.contains("CANCEL") && l.contains("已取消"));
+        assertThat(param.contract().type()).isEqualTo("OrderStatus");
+        assertThat(param.contract().schema()).containsEntry("type", "string");
+        assertThat(choices(param)).containsExactly("NEW", "PROCESSING", "DONE", "CANCEL");
     }
 
     @Test
     void enumParam_invokeConvertsNameToEnum() throws Exception {
         McpRouter mcp = new McpRouter();
-        mcp.tool("query_orders", "按状态查询订单")
-           .param("status", OrderStatus.class, "订单状态")
-           .handler(ctx -> {
-               OrderStatus s = ctx.getEnum("status", OrderStatus.class);
-               return "code=" + s.code;
-           });
+        mcp.tool(Route.of("POST", "/query", (McpHandler) ctx -> {
+                    OrderStatus s = ctx.getEnum("status", OrderStatus.class);
+                    return "code=" + s.code;
+                })
+                .describedAs("按状态查询订单")
+                .withParams(List.of(status())));
 
-        Object result = mcp.invoke("query_orders", Map.of("status", "PROCESSING"));
+        Object result = mcp.invoke("post_query", Map.of("status", "PROCESSING"));
         assertThat(result).isEqualTo("code=2");
     }
 
     @Test
     void enumParam_invalidName_throwsIllegalArgument() {
         McpRouter mcp = new McpRouter();
-        mcp.tool("query_orders", "按状态查询订单")
-           .param("status", OrderStatus.class, "订单状态")
-           .handler(ctx -> ctx.getEnum("status", OrderStatus.class));
+        mcp.tool(Route.of("POST", "/query",
+                (McpHandler) ctx -> ctx.getEnum("status", OrderStatus.class))
+                .describedAs("按状态查询订单")
+                .withParams(List.of(status())));
 
-        assertThatThrownBy(() -> mcp.invoke("query_orders", Map.of("status", "INVALID")))
+        assertThatThrownBy(() -> mcp.invoke("post_query", Map.of("status", "INVALID")))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
-    // === 3. Map mapping — label→code 转换 ===
+    // === 3. label→code 转换属于 handler ===
 
     @Test
-    void mapMapping_labelToCode_works() throws Exception {
+    void labelMapping_livesInTheHandlerThatUsesIt() throws Exception {
         McpRouter mcp = new McpRouter();
-        mcp.tool("query_by_city", "按城市查询")
-           .param("city", String.class, "城市", Map.of("北京", "010", "上海", "021", "广州", "020"))
-           .handler(ctx -> "code:" + ctx.getString("city"));
+        Map<String, String> cityCodes = Map.of("北京", "010", "上海", "021", "广州", "020");
+        mcp.tool(Route.of("POST", "/city",
+                (McpHandler) ctx -> "code:" + cityCodes.getOrDefault(ctx.getString("city"), ctx.getString("city")))
+                .describedAs("按城市查询")
+                .withParams(List.of(new ApiParameter("city", "String", "query", true, "城市",
+                        Map.of("type", "string", "enum", List.of("北京", "上海", "广州"))))));
 
-        assertThat(mcp.invoke("query_by_city", Map.of("city", "北京"))).isEqualTo("code:010");
-        assertThat(mcp.invoke("query_by_city", Map.of("city", "上海"))).isEqualTo("code:021");
-    }
-
-    @Test
-    void mapMapping_unknownLabel_passesThrough() throws Exception {
-        McpRouter mcp = new McpRouter();
-        mcp.tool("query_by_city", "按城市查询")
-           .param("city", String.class, "城市", Map.of("北京", "010"))
-           .handler(ctx -> ctx.getString("city"));
-
-        assertThat(mcp.invoke("query_by_city", Map.of("city", "深圳"))).isEqualTo("深圳");
-    }
-
-    @Test
-    void mapMapping_schemaShowsEnumOptions() {
-        McpRouter mcp = new McpRouter();
-        mcp.tool("query_by_city", "按城市查询")
-           .param("city", String.class, "城市", Map.of("北京", "010", "上海", "021"))
-           .handler(ctx -> null);
-
-        McpParam param = mcp.tools().get(0).params().get(0);
-        assertThat(param.isEnum()).isTrue();
-        assertThat(param.enumValues()).hasSize(2);
+        assertThat(mcp.invoke("post_city", Map.of("city", "北京"))).isEqualTo("code:010");
+        assertThat(mcp.invoke("post_city", Map.of("city", "上海"))).isEqualTo("code:021");
+        assertThat(mcp.invoke("post_city", Map.of("city", "深圳"))).isEqualTo("code:深圳");
     }
 
     // === 4. 多 API 聚合 ===
@@ -153,14 +153,14 @@ class McpRouterIntegrationTest {
         var orderService = new OrderService();
 
         McpRouter mcp = new McpRouter();
-        mcp.tool("get_user_profile", "获取用户完整资料")
-           .param("id", int.class, "用户ID")
-           .handler(ctx -> {
-               int id = ctx.getInt("id");
-               User user = userService.get(id);
-               List<Order> orders = orderService.list();
-               return Map.of("user", user, "orders", orders);
-           });
+        mcp.tool(Route.of("GET", "/user/profile", (McpHandler) ctx -> {
+                    int id = ctx.getInt("id");
+                    User user = userService.get(id);
+                    List<Order> orders = orderService.list();
+                    return Map.of("user", user, "orders", orders);
+                })
+                .describedAs("获取用户完整资料")
+                .withParams(List.of(new ApiParameter("id", "int", "query", true, "用户ID"))));
 
         Object result = mcp.invoke("get_user_profile", Map.of("id", "1"));
         assertThat(result).isInstanceOf(Map.class);
@@ -177,13 +177,13 @@ class McpRouterIntegrationTest {
     void buildSchema_conformsToMcpProtocol() {
         McpRouter mcp = new McpRouter();
         var orders = new OrderService();
-        mcp.tool("get_order", "获取订单")
-           .param("id", int.class, "订单号")
-           .handler(ctx -> orders.get(ctx.getInt("id")));
-        mcp.tool("query_orders", "按状态查询订单")
-           .param("status", OrderStatus.class, "订单状态")
-           .param("limit", int.class, "返回数量")
-           .handler(ctx -> null);
+        mcp.tool(Route.of("GET", "/order", (McpHandler) ctx -> orders.get(ctx.getInt("id")))
+                .describedAs("获取订单")
+                .withParams(List.of(id())));
+        mcp.tool(Route.of("POST", "/query", (McpHandler) ctx -> null)
+                .describedAs("按状态查询订单")
+                .withParams(List.of(status(),
+                        new ApiParameter("limit", "int", "query", true, "返回数量"))));
 
         Map<String, Object> schema = mcp.buildSchema();
         assertThat(schema).containsKey("tools");
@@ -202,16 +202,16 @@ class McpRouterIntegrationTest {
         assertThat(inputSchema0).containsKey("properties");
         assertThat(inputSchema0).containsKey("required");
 
-        // tool 1: query_orders — enum param
+        // tool 1: post_query — enum param rendered from the declared schema, and a scalar
+        // rendered from the shared Java-to-JSON table.
         Map<String, Object> t1 = tools.get(1);
         Map<String, Object> inputSchema1 = (Map<String, Object>) t1.get("inputSchema");
         Map<String, Object> properties = (Map<String, Object>) inputSchema1.get("properties");
         Map<String, Object> statusProp = (Map<String, Object>) properties.get("status");
 
         assertThat(statusProp.get("type")).isEqualTo("string");
-        assertThat(statusProp).containsKey("enum");
         assertThat((List<String>) statusProp.get("enum")).hasSize(4);
-        assertThat(statusProp.get("description").toString()).contains("新建");
+        assertThat(statusProp.get("description")).isEqualTo("订单状态");
 
         Map<String, Object> limitProp = (Map<String, Object>) properties.get("limit");
         assertThat(limitProp.get("type")).isEqualTo("integer");
@@ -225,20 +225,17 @@ class McpRouterIntegrationTest {
         var orderService = new OrderService();
         var userService = new UserService();
 
-        mcp.tool("get_order", "获取订单")
-           .param("id", int.class, "订单号")
-           .handler(ctx -> orderService.get(ctx.getInt("id")));
-        mcp.tool("get_user", "获取用户")
-           .param("id", int.class, "用户号")
-           .handler(ctx -> userService.get(ctx.getInt("id")));
-        mcp.tool("search", "搜索")
-           .param("keyword", String.class, "关键词")
-           .handler(ctx -> "found:" + ctx.getString("keyword"));
+        mcp.tool(Route.of("GET", "/order", (McpHandler) ctx -> orderService.get(ctx.getInt("id")))
+                .withParams(List.of(id())));
+        mcp.tool(Route.of("GET", "/user", (McpHandler) ctx -> userService.get(ctx.getInt("id")))
+                .withParams(List.of(new ApiParameter("id", "int", "query", true, "用户号"))));
+        mcp.tool(Route.of("POST", "/search", (McpHandler) ctx -> "found:" + ctx.getString("keyword"))
+                .withParams(List.of(new ApiParameter("keyword", "String", "query", true, "关键词"))));
 
         assertThat(mcp.tools()).hasSize(3);
 
         assertThat(mcp.invoke("get_order", Map.of("id", "1"))).isInstanceOf(Order.class);
         assertThat(mcp.invoke("get_user", Map.of("id", "2"))).isInstanceOf(User.class);
-        assertThat(mcp.invoke("search", Map.of("keyword", "test"))).isEqualTo("found:test");
+        assertThat(mcp.invoke("post_search", Map.of("keyword", "test"))).isEqualTo("found:test");
     }
 }

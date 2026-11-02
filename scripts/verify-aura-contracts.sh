@@ -286,8 +286,6 @@ rg -q 'JSON\.toJSONString\(validatedAppUrl\.toString\(\)\)' \
   "$repo_root/aura-mcp/src/main/java/io/aura/mcp/McpPackager.java"
 rg -q 'x-aura-permission' \
   "$repo_root/aura-mcp/src/main/java/io/aura/mcp/McpRouter.java"
-rg -q 'permission\(String permission\)' \
-  "$repo_root/aura-mcp/src/main/java/io/aura/mcp/McpToolBuilder.java"
 rg -q 'DEFAULT_MAX_RESPONSE_BYTES' \
   "$repo_root/aura-mcp/src/main/java/io/aura/mcp/McpHttpTransport.java"
 rg -q 'MCP_RESPONSE_TOO_LARGE' \
@@ -352,27 +350,72 @@ for door in McpRouter AuraMcpStarter McpHttpTransport McpBridge; do
 done
 # A declaration site that hard-codes required=true is a second rule: it publishes a promise the
 # binder may not keep. Ask the binder instead.
-for declaration in "$repo_root/aura-web/src/main/java/io/aura/web/RouteCatalog.java" \
-                   "$repo_root/aura-mcp/src/main/java/io/aura/mcp/McpToolBuilder.java"; do
-  if rg -q 'new ApiParameter\([^)]*\btrue\b' "$declaration" \
-     && ! rg -q 'isRequired\(' "$declaration"; then
-    echo "required invented outside the binder rule: $declaration" >&2
-    exit 1
-  fi
-done
+declaration="$repo_root/aura-web/src/main/java/io/aura/web/RouteCatalog.java"
+if rg -q 'new ApiParameter\([^)]*\btrue\b' "$declaration" \
+   && ! rg -q 'isRequired\(' "$declaration"; then
+  echo "required invented outside the binder rule: $declaration" >&2
+  exit 1
+fi
 
 # One Java-to-JSON table: a private switch in a consumer is how the same parameter became a
 # string here and an integer there.
 rg -q 'ScalarType\.jsonTypeName' "$repo_root/aura-web/src/main/java/io/aura/web/OpenApiGenerator.java"
 rg -q 'ScalarType\.jsonTypeName' "$repo_root/aura-web/src/main/java/io/aura/web/RouteContract.java"
 rg -q 'ScalarType\.jsonTypeName' "$repo_root/aura-mcp/src/main/java/io/aura/mcp/McpUtil.java"
-rg -q 'ScalarType\.isScalar' "$repo_root/aura-mcp/src/main/java/io/aura/mcp/McpToolBuilder.java"
 if rg -q 'case "int", "Integer"' "$repo_root/aura-web/src/main" "$repo_root/aura-mcp/src/main"; then
   echo "a Java-to-JSON type table was recreated outside ScalarType" >&2
   exit 1
 fi
 if [ "$(rg -c 'public McpParam\(' "$repo_root/aura-mcp/src/main/java/io/aura/mcp/McpParam.java")" != "1" ]; then
   echo "McpParam grew a second way to declare an argument besides ApiParameter" >&2
+  exit 1
+fi
+if ! rg -q 'public McpParam\(ApiParameter contract\)' \
+    "$repo_root/aura-mcp/src/main/java/io/aura/mcp/McpParam.java"; then
+  echo "McpParam takes something other than the shared ApiParameter contract again" >&2
+  exit 1
+fi
+
+# One door publishes a tool. The builder was a second description of the same parameters, and the
+# two descriptions disagreed: the same enum published "NEW(新建)" through the builder and "NEW"
+# through a route, and a route handed over beside a separate handler had its own handler ignored.
+for deleted_surface in McpToolBuilder McpEnumValue; do
+  if test -f "$repo_root/aura-mcp/src/main/java/io/aura/mcp/$deleted_surface.java"; then
+    echo "the second MCP declaration door returned: $deleted_surface" >&2
+    exit 1
+  fi
+done
+if [ "$(rg -c 'public McpRouter tool\(' "$repo_root/aura-mcp/src/main/java/io/aura/mcp/McpRouter.java")" != "1" ]; then
+  echo "McpRouter grew a second tool registration door" >&2
+  exit 1
+fi
+if ! rg -q 'AURA_MCP_HANDLER_MISMATCH' \
+    "$repo_root/aura-mcp/src/main/java/io/aura/mcp/McpRouter.java"; then
+  echo "McpRouter accepts a route whose handler it cannot invoke without naming the mistake" >&2
+  exit 1
+fi
+# A parameter the shared table cannot render is refused where every tool argument is built --
+# both the route door and the bridge pass through McpParam, so neither can publish a record to a
+# model as a string it cannot send.
+if ! rg -q 'McpUtil\.rendersWithoutSchema' "$repo_root/aura-mcp/src/main/java/io/aura/mcp/McpParam.java" \
+   || ! rg -q 'AURA_MCP_PARAM_SCHEMA_MISSING' "$repo_root/aura-mcp/src/main/java/io/aura/mcp/McpParam.java"; then
+  echo "an undescribable MCP parameter reaches the model as a string again" >&2
+  exit 1
+fi
+# Enum choices and body shapes are projected, never invented: the schema the route catalog and
+# the annotation processor attach is the only source of an MCP "enum" list.
+if rg -q 'prop\.put\("enum"' "$repo_root/aura-mcp/src/main/java/io/aura/mcp/McpUtil.java"; then
+  echo "MCP invented enum values instead of projecting the contract's schema" >&2
+  exit 1
+fi
+if ! rg -q '\? TypeSchema\.describe\(type\) : Map\.of\(\)' \
+    "$repo_root/aura-web/src/main/java/io/aura/web/RouteCatalog.java"; then
+  echo "the route catalog stopped declaring the parameter schema that MCP and OpenAPI project" >&2
+  exit 1
+fi
+if ! rg -q 'bodySchema\(parameter\.asType\(\)\)' \
+    "$repo_root/aura-processor/src/main/java/io/aura/processor/AuraRouteProcessor.java"; then
+  echo "the annotation processor stopped declaring the parameter schema that MCP and OpenAPI project" >&2
   exit 1
 fi
 

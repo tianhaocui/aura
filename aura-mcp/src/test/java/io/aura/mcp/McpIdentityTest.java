@@ -1,5 +1,6 @@
 package io.aura.mcp;
 
+import io.aura.contract.Route;
 import org.junit.jupiter.api.Test;
 
 import java.util.Map;
@@ -10,10 +11,10 @@ class McpIdentityTest {
     @Test
     void authenticatedIdentityIsAvailableToToolHandlers() throws Exception {
         McpRouter router = new McpRouter();
-        router.tool("whoami", "Return the authenticated identity")
-                .handler(context -> context.userId());
+        router.tool(Route.of("GET", "/whoami",
+                (McpHandler) context -> context.userId()).describedAs("Return the authenticated identity"));
 
-        Object result = router.invoke("whoami", Map.of(), "service-42",
+        Object result = router.invoke("get_whoami", Map.of(), "service-42",
                 (user, permission) -> true);
 
         assertThat(result).isEqualTo("service-42");
@@ -22,12 +23,12 @@ class McpIdentityTest {
     @Test
     void permissionedToolStillFailsClosedWithoutTransportAuthorizer() {
         McpRouter router = new McpRouter();
-        router.tool("delete", "Delete an item")
-                .permission("items.delete")
-                .handler(context -> "deleted");
+        router.tool(Route.of("DELETE", "/item", (McpHandler) context -> "deleted")
+                .describedAs("Delete an item")
+                .requireAuth("items.delete"));
 
         org.assertj.core.api.Assertions.assertThatThrownBy(() ->
-                router.invoke("delete", Map.of(), "service-42", null))
+                router.invoke("delete_item", Map.of(), "service-42", null))
                 .isInstanceOf(SecurityException.class);
     }
 }

@@ -79,7 +79,8 @@ done
 
 canonical_docs=(
   "$repo_root/README.md" "$repo_root/README_CN.md" "$repo_root/AI_GUIDE.md"
-  "$repo_root/docs/DOCUMENTATION.md" "$repo_root/docs/aura-core.md"
+  "$repo_root/AI_GUIDE_MCP.md" "$repo_root/docs/DOCUMENTATION.md"
+  "$repo_root/docs/aura-core.md"
   "$repo_root/docs/aura-module.md" "$repo_root/docs/aura-web.md"
   "$repo_root/docs/aura-db.md" "$repo_root/docs/aura-workflow.md"
   "$repo_root/docs/aura-ai.md" "$repo_root/docs/aura-mcp.md"
@@ -95,6 +96,15 @@ fi
 # reader copies.
 if rg -n '\bio\.aura\.HealthModule\b' "${canonical_docs[@]}"; then
   echo "documentation names the removed io.aura.HealthModule location" >&2
+  exit 1
+fi
+
+# A tool is declared once, as a Route. The builder that described the same parameters a second
+# time is deleted, so documentation that still spells `tool("name", "description").param(...)`
+# would teach a door no longer in the product.
+if rg -n '\bMcpToolBuilder\b|mcp\.tool\("|router\.tool\("' "${canonical_docs[@]}" \
+    "$repo_root/.claude/skills/aura/SKILL.md"; then
+  echo "documentation teaches the deleted MCP tool builder" >&2
   exit 1
 fi
 

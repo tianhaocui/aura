@@ -1679,15 +1679,6 @@ public class io.aura.mcp.McpContext {
   public double getDouble(java.lang.String);
   public <E extends java.lang.Enum<E>> E getEnum(java.lang.String, java.lang.Class<E>);
 }
-### aura-mcp:io.aura.mcp.McpEnumValue
-public final class io.aura.mcp.McpEnumValue extends java.lang.Record {
-  public io.aura.mcp.McpEnumValue(java.lang.String, java.lang.Object);
-  public final java.lang.String toString();
-  public final int hashCode();
-  public final boolean equals(java.lang.Object);
-  public java.lang.String label();
-  public java.lang.Object code();
-}
 ### aura-mcp:io.aura.mcp.McpHandler
 public interface io.aura.mcp.McpHandler {
   public abstract java.lang.Object handle(io.aura.mcp.McpContext) throws java.lang.Exception;
@@ -1741,14 +1732,12 @@ public class io.aura.mcp.McpPackager {
 }
 ### aura-mcp:io.aura.mcp.McpParam
 public final class io.aura.mcp.McpParam {
-  public io.aura.mcp.McpParam(io.aura.contract.ApiParameter, java.util.List<io.aura.mcp.McpEnumValue>);
+  public io.aura.mcp.McpParam(io.aura.contract.ApiParameter);
   public io.aura.contract.ApiParameter contract();
   public java.lang.String name();
   public java.lang.String type();
   public java.lang.String description();
   public boolean required();
-  public java.util.List<io.aura.mcp.McpEnumValue> enumValues();
-  public boolean isEnum();
 }
 ### aura-mcp:io.aura.mcp.McpPrompt
 public final class io.aura.mcp.McpPrompt extends java.lang.Record {
@@ -1795,8 +1784,7 @@ public final class io.aura.mcp.McpResourceLink extends java.lang.Record implemen
 ### aura-mcp:io.aura.mcp.McpRouter
 public class io.aura.mcp.McpRouter implements io.aura.contract.McpRouterSpec {
   public io.aura.mcp.McpRouter();
-  public io.aura.mcp.McpToolBuilder tool(java.lang.String, java.lang.String);
-  public io.aura.mcp.McpRouter tool(io.aura.contract.Route, io.aura.mcp.McpHandler);
+  public io.aura.mcp.McpRouter tool(io.aura.contract.Route);
   public java.util.List<io.aura.mcp.McpTool> tools();
   public io.aura.mcp.McpRouter resource(java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String);
   public io.aura.mcp.McpRouter prompt(java.lang.String, java.lang.String, java.lang.String, java.lang.String...);
@@ -1900,8 +1888,6 @@ public final class io.aura.mcp.McpText extends java.lang.Record implements io.au
 }
 ### aura-mcp:io.aura.mcp.McpTool
 public final class io.aura.mcp.McpTool extends java.lang.Record {
-  public io.aura.mcp.McpTool(java.lang.String, java.lang.String, java.util.List<io.aura.mcp.McpParam>, io.aura.mcp.McpHandler);
-  public io.aura.mcp.McpTool(java.lang.String, java.lang.String, java.util.List<io.aura.mcp.McpParam>, io.aura.mcp.McpHandler, java.lang.String);
   public io.aura.mcp.McpTool(java.lang.String, java.lang.String, java.util.List<io.aura.mcp.McpParam>, io.aura.mcp.McpHandler, java.lang.String, boolean);
   public final java.lang.String toString();
   public final int hashCode();
@@ -1913,18 +1899,12 @@ public final class io.aura.mcp.McpTool extends java.lang.Record {
   public java.lang.String permission();
   public boolean authenticated();
 }
-### aura-mcp:io.aura.mcp.McpToolBuilder
-public class io.aura.mcp.McpToolBuilder {
-  public io.aura.mcp.McpToolBuilder param(java.lang.String, java.lang.Class<?>, java.lang.String);
-  public io.aura.mcp.McpToolBuilder optional(java.lang.String, java.lang.Class<?>, java.lang.String);
-  public io.aura.mcp.McpToolBuilder param(java.lang.String, java.lang.Class<?>, java.lang.String, java.util.Map<java.lang.String, ?>);
-  public io.aura.mcp.McpToolBuilder handler(io.aura.mcp.McpHandler);
-  public io.aura.mcp.McpToolBuilder permission(java.lang.String);
-}
 ### aura-mcp:io.aura.mcp.McpUtil
 public final class io.aura.mcp.McpUtil {
   public static java.lang.String buildToolName(java.lang.String, java.lang.String);
   public static java.lang.String jsonType(java.lang.String);
+  public static boolean isWireName(java.lang.String);
+  public static boolean rendersWithoutSchema(java.lang.String);
   public static java.util.Map<java.lang.String, java.lang.Object> inputSchema(java.util.List<io.aura.mcp.McpParam>);
 }
 ### aura-ai:io.aura.ai.AiBudget$Builder

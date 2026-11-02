@@ -6,43 +6,54 @@
 // Install MCP explicitly in Aura 1.0
 AuraApp.create().use(McpModule.create(router)).start("--mcp-stdio");
 
-// Selective exposure via McpRouter
+// Selective exposure via McpRouter: a tool is a Route whose handler speaks MCP.
 McpRouter mcp = new McpRouter();
-mcp.tool("get_user", "Get user by ID")
-   .param("id", long.class, "User ID")
-   .handler(ctx -> userService.get(ctx.getLong("id")));
+mcp.tool(Route.of("GET", "/user", (McpHandler) ctx -> userService.get(ctx.getLong("id")))
+    .describedAs("Get user by ID")
+    .withParams(List.of(new ApiParameter("id", "long", "query", true, "User ID"))));
 
 // A tool that is already an HTTP route reuses that contract verbatim —
-// name, description, parameter types and auth all transfer, nothing to re-declare.
-mcp.tool(getOrderRoute, ctx -> orderService.get(ctx.getLong("id")));
+// description, parameter types, permission and auth all transfer. Only the handler
+// shape differs, and withHandler says so.
+mcp.tool(getOrderRoute.withHandler((McpHandler) ctx -> orderService.get(ctx.getLong("id"))));
 
 // Custom handler with explicit params
-mcp.tool("create_order", "Create order")
-   .param("product", String.class, "Product name")
-   .param("quantity", int.class, "Quantity")
-   .handler(ctx -> orderService.create(ctx.getString("product"), ctx.getInt("quantity")));
+mcp.tool(Route.of("POST", "/orders", (McpHandler) ctx ->
+        orderService.create(ctx.getString("product"), ctx.getInt("quantity")))
+    .describedAs("Create order")
+    .withParams(List.of(new ApiParameter("product", "String", "query", true, "Product name"),
+                        new ApiParameter("quantity", "int", "query", true, "Quantity"))));
 
-// Enum auto-mapping: AI sees "NEW(新建)", code gets OrderStatus.NEW
-mcp.tool("query_orders", "Query by status")
-   .param("status", OrderStatus.class, "Order status")
-   .handler(ctx -> orderService.findByStatus(ctx.getEnum("status", OrderStatus.class).code));
+// An enum publishes the names its own contract declares — the same list OpenAPI
+// shows, and the same names ctx.getEnum() binds.
+mcp.tool(Route.of("GET", "/orders", (McpHandler) ctx ->
+        orderService.findByStatus(ctx.getEnum("status", OrderStatus.class).code))
+    .describedAs("Query by status")
+    .withParams(List.of(new ApiParameter("status", "OrderStatus", "query", true, "Order status",
+        Map.of("type", "string", "enum", List.of("NEW", "PAID", "CANCEL")))));
 
-// Map mapping: AI sees "北京", code gets "010"
-mcp.tool("query_city", "Query city")
-   .param("city", String.class, "City", Map.of("北京", "010", "上海", "021"))
-   .handler(ctx -> cityService.findByCode(ctx.getString("city")));
+// A label that is not a domain value ("北京" for "010") is translated by the handler
+// that uses it, next to the table it comes from.
+mcp.tool(Route.of("GET", "/city", (McpHandler) ctx ->
+        cityService.findByCode(cityCodes.getOrDefault(ctx.getString("city"), ctx.getString("city"))))
+    .describedAs("Query city")
+    .withParams(List.of(new ApiParameter("city", "String", "query", true, "City",
+        Map.of("type", "string", "enum", List.of("北京", "上海"))))));
 
 // Multi-API aggregation: one tool, multiple services
-mcp.tool("order_detail", "Full order info")
-   .param("id", int.class, "Order ID")
-   .handler(ctx -> {
-       var order = orderService.get(ctx.getInt("id"));
-       return Map.of("order", order, "user", userService.get(order.userId()));
-   });
+mcp.tool(Route.of("GET", "/order/detail", (McpHandler) ctx -> {
+        var order = orderService.get(ctx.getInt("id"));
+        return Map.of("order", order, "user", userService.get(order.userId()));
+    }).describedAs("Full order info")
+    .withParams(List.of(new ApiParameter("id", "int", "query", true, "Order ID"))));
 
 AuraApp.create().use(McpModule.create(mcp)).start("--mcp-stdio");
 // Run: java -jar app.jar --mcp-stdio
 ```
+
+The tool name comes from the route: `GET /user` is `get_user`, `DELETE /order/{id}` is
+`delete_order_by_id`. A name derived from the contract is a name the model and the registry
+cannot disagree about; there is no second place to state it.
 
 For a custom catalog or dispatcher, implement dependency-neutral
 `io.aura.contract.McpRouterSpec` and compose it explicitly:

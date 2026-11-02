@@ -104,137 +104,143 @@ HTTP response budget 控制；超过 retention byte limit 的事件会触发 ove
 
 ## McpRouter (Selective Tool Exposure)
 
-For a route already described by the shared `Route` contract, use
-`McpRouter.tool(route, handler)`. Every declared parameter fact transfers
-unchanged — name, type, required flag, description, source, and the JSON Schema
-of a structured body — so the tool stays aligned with HTTP Schema and OpenAPI
-output. Use the string-based builder below for MCP-only tools.
+A tool is a `Route` whose handler speaks MCP. `McpRouter.tool(route)` is the only
+registration door, so the parameter contract a model sees is the parameter contract HTTP
+sees: name, type, required flag, description, source, and the JSON Schema of a structured
+body all transfer unchanged, and the tool name is derived from the method and path instead
+of invented alongside them.
 
-Not all APIs should be MCP tools. McpRouter lets you explicitly choose which operations to expose, with AI-friendly parameter mapping.
+Not all APIs should be MCP tools. McpRouter lets you choose which operations to expose.
 
 ```java
 McpRouter mcp = new McpRouter();
 
-// MCP-only tool: declare each parameter the model has to fill in
-mcp.tool("create_order", "Create a new order")
-   .param("product", String.class, "Product name")
-   .param("quantity", int.class, "Quantity")
-   .handler(ctx -> orderService.create(ctx.getString("product"), ctx.getInt("quantity")));
+// MCP-only tool: a Route nobody serves, declared with the same ApiParameter the
+// route catalog produces
+mcp.tool(Route.of("POST", "/orders", (McpHandler) ctx ->
+            orderService.create(ctx.getString("product"), ctx.getInt("quantity")))
+    .describedAs("Create a new order")
+    .withParams(List.of(
+        new ApiParameter("product", "String", "query", true, "Product name"),
+        new ApiParameter("quantity", "int", "query", true, "Quantity")));
 
-// Route already exported over HTTP: reuse the contract instead of re-declaring it
-mcp.tool(getUserRoute, ctx -> userService.get(ctx.getLong("id")));
+// Route already exported over HTTP: keep every declared fact, rebind only the handler
+mcp.tool(getUserRoute.withHandler((McpHandler) ctx -> userService.get(ctx.getLong("id"))));
 
 AuraApp.create()
     .use(McpModule.create(mcp))
     .start(args);
 ```
 
-A `param(...)` is required and an `optional(...)` is not, and the tool refuses the
-call before the handler runs when a required argument is absent: the answer is
-`MCP_MISSING_ARGUMENT` on stdio, the HTTP transport and the bridge alike, so a
-model that skipped an argument it was told to fill in learns that instead of
-watching the handler run on `0`. Arguments are scalars — `param` and `optional`
-reject a record, class or collection when the tool is registered, because a tool
-argument arrives as a JSON scalar and publishing `"type": "string"` for an object
-the handler cannot receive is the failure that refusal prevents. A tool with a
-structured body is an HTTP route exported with `McpRouter.tool(route, handler)`,
-where the body's shape already lives in the contract.
+A parameter whose `required` flag is true is refused before the handler runs when the
+argument is absent: the answer is `MCP_MISSING_ARGUMENT` on stdio, the HTTP transport and
+the bridge alike, so a model that skipped an argument it was told to fill in learns that
+instead of watching the handler run on `0`.
 
-Binding a tool to a service method by reflection is not an entry point: parameter
-names are erased without `-parameters`, the declared types arrive as `string`, and
-the tool silently disagrees with the same route's HTTP schema.
+Passing a `Route` whose handler belongs to another transport fails at registration with
+`AURA_MCP_HANDLER_MISMATCH` and names the route. Accepting it and ignoring its handler was
+how a tool published a contract whose behaviour lived somewhere else.
 
-Declare a permission for tools that mutate protected state. Permissioned tools
-fail closed when invoked without an authenticated identity:
+A parameter whose type the Java-to-JSON table cannot render — a record, a class, an enum —
+has to declare its schema, or registration fails with `AURA_MCP_PARAM_SCHEMA_MISSING`.
+`{"type": "object"}` for a body and `{"type": "string", "enum": [...]}` for an enum is what
+the route catalog and the annotation processor already attach, which is why a served route
+never trips this; a hand-declared parameter has to say the same.
+
+Binding a tool to a service method by reflection is not an entry point either: parameter
+names are erased without `-parameters`, the declared types arrive as `string`, and the tool
+silently disagrees with the same route's HTTP schema.
+
+Declare a permission for tools that mutate protected state. Permissioned tools fail closed
+when invoked without an authenticated identity:
 
 ```java
-mcp.tool("delete_order", "Delete an order")
-   .param("id", long.class, "Order ID")
-   .permission("orders.delete")
-   .handler(ctx -> orderService.delete(ctx.getLong("id")));
+mcp.tool(Route.of("DELETE", "/order/{id}", (McpHandler) ctx -> orderService.delete(ctx.getLong("id")))
+    .describedAs("Delete an order")
+    .withParams(List.of(new ApiParameter("id", "long", "path", true, "Order ID")))
+    .requireAuth("orders.delete"));
 
-mcp.invoke("delete_order", args, userId,
+mcp.invoke("delete_order_by_id", args, userId,
         (user, permission) -> acl.allows(user, permission));
 ```
 
-The generated tool schema includes `x-aura-permission`. The four-argument
-`invoke` overload is the authenticated transport boundary; the two-argument
-overload does not bypass a declared permission.
+The generated tool schema includes `x-aura-permission`. The four-argument `invoke` overload
+is the authenticated transport boundary; the two-argument overload does not bypass a
+declared permission. When a tool is registered from a `Route`, its authentication and
+permission metadata are copied automatically, so a protected HTTP route cannot silently
+become an anonymous MCP tool.
 
-When a tool is registered from a `Route`, its authentication and permission
-metadata are copied automatically. A protected HTTP route therefore cannot
-silently become an anonymous MCP tool.
+When McpRouter is provided, MCP runs in-process (no HTTP roundtrip). Only registered tools
+are exposed.
 
-When McpRouter is provided, MCP runs in-process (no HTTP roundtrip). Only registered tools are exposed.
+Handlers can return explicit content blocks with `McpText`, `McpStructured`, `McpImage`, or
+`McpResourceLink` when plain text is not sufficient. Existing String and POJO return values
+remain supported.
 
-Handlers can return explicit content blocks with `McpText`, `McpStructured`,
-`McpImage`, or `McpResourceLink` when plain text is not sufficient. Existing
-String and POJO return values remain supported.
+### Enum Parameters
 
-### Enum Auto-Mapping
-
-Java enums with a `label` field are automatically converted to AI-friendly descriptions:
-
-```java
-enum OrderStatus {
-    NEW(1, "新建"), PAID(2, "已支付"), CANCEL(9, "已取消");
-    final int code;
-    final String label;
-    OrderStatus(int code, String label) { this.code = code; this.label = label; }
-}
-
-mcp.tool("query_orders", "Query orders by status")
-   .param("status", OrderStatus.class, "Order status")
-   .handler(ctx -> {
-       OrderStatus s = ctx.getEnum("status", OrderStatus.class);
-       return orderService.findByStatus(s.code);
-   });
-```
-
-Generated schema shows: `"enum": ["NEW(新建)", "PAID(已支付)", "CANCEL(已取消)"]`
-AI sends `"PAID"` → `ctx.getEnum()` resolves to `OrderStatus.PAID`.
-
-### Map Mapping (Label → Code)
-
-For non-enum parameters where AI should see friendly labels but code needs internal values:
+An enum publishes the constant names its contract declares — the same list OpenAPI shows,
+and the same names `ctx.getEnum(...)` binds, so a value a model sends means the same thing
+on both transports:
 
 ```java
-mcp.tool("query_city", "Query city info")
-   .param("city", String.class, "City name", Map.of("北京", "010", "上海", "021", "广州", "020"))
-   .handler(ctx -> cityService.findByCode(ctx.getString("city")));
+mcp.tool(Route.of("GET", "/orders", (McpHandler) ctx -> {
+            OrderStatus status = ctx.getEnum("status", OrderStatus.class);
+            return orderService.findByStatus(status.code);
+        })
+    .describedAs("Query orders by status")
+    .withParams(List.of(new ApiParameter("status", "OrderStatus", "query", true, "Order status",
+        Map.of("type", "string", "enum", List.of("NEW", "PAID", "CANCEL")))));
 ```
 
-AI sees: `"enum": ["北京", "上海", "广州"]`
-AI sends `"北京"` → `ctx.getString("city")` returns `"010"`.
-Unknown labels pass through unchanged.
+### Friendly Labels That Are Not Domain Values
+
+A label a model sends that is not a domain value (`"北京"` for `"010"`) is mapped in the
+handler that uses it, next to the table it comes from, rather than in a framework-side
+lookup the transport applies on the way in:
+
+```java
+Map<String, String> cityCodes = Map.of("北京", "010", "上海", "021", "广州", "020");
+mcp.tool(Route.of("GET", "/city",
+        (McpHandler) ctx -> cityService.findByCode(
+                cityCodes.getOrDefault(ctx.getString("city"), ctx.getString("city"))))
+    .describedAs("Query city info")
+    .withParams(List.of(new ApiParameter("city", "String", "query", true, "City name",
+        Map.of("type", "string", "enum", List.of("北京", "上海", "广州")))));
+```
+
+The accepted values still reach the model through the declared schema; only the translation
+moved to where the value is interpreted.
 
 ### Multi-API Aggregation
 
 One MCP tool can orchestrate multiple services:
 
 ```java
-mcp.tool("full_order_detail", "Get order with user and payment info")
-   .param("orderId", int.class, "Order ID")
-   .handler(ctx -> {
-       int id = ctx.getInt("orderId");
-       var order = orderService.get(id);
-       var user = userService.get(order.userId());
-       var payment = paymentService.getByOrder(id);
-       return Map.of("order", order, "user", user, "payment", payment);
-   });
+mcp.tool(Route.of("GET", "/order/detail", (McpHandler) ctx -> {
+            int id = ctx.getInt("orderId");
+            var order = orderService.get(id);
+            var user = userService.get(order.userId());
+            var payment = paymentService.getByOrder(id);
+            return Map.of("order", order, "user", user, "payment", payment);
+        })
+    .describedAs("Get order with user and payment info")
+    .withParams(List.of(new ApiParameter("orderId", "int", "query", true, "Order ID"))));
 ```
 
 ### McpContext API
 
 | Method | Description |
 |--------|-------------|
-| `getString(name)` | Get param as String (with mapping applied) |
+| `getString(name)` | Get param as String |
 | `getInt(name)` | Get param as int (0 if absent) |
 | `getLong(name)` | Get param as long (0 if absent) |
-| `getEnum(name, type)` | Get param as enum constant |
-| `get(name)` | Get raw value (with mapping applied) |
+| `getDouble(name)` | Get param as double (0 if absent) |
+| `getBoolean(name)` | Get param as boolean (false if absent) |
+| `getEnum(name, type)` | Bind the sent name with `Enum.valueOf` |
+| `get(name)` | Get the raw value |
+| `userId()` | Identity resolved by the transport, null when anonymous |
 
----
 
 ## Deployment Modes
 
@@ -409,7 +415,7 @@ McpUtil.jsonType("double");   // → "number"
 
 // Schema generation — the one builder every MCP entry point uses
 List<McpParam> params = List.of(
-    new McpParam("id", "int", "User ID", null)
+    new McpParam(new ApiParameter("id", "int", "query", true, "User ID"))
 );
 Map<String, Object> schema = McpUtil.inputSchema(params);
 ```

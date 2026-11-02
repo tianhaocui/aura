@@ -33,8 +33,8 @@ record, the stage-by-stage log, and the migration table.
   `import io.aura.port.BaseHandler`. `WsHandler`'s callback fields, which the
   adapter read across the split package, are reached through `openHandler()`,
   `messageHandler()`, `closeHandler()` and `errorHandler()` instead.
-- The reflective MCP tool binding is removed; register
-  `McpRouter.tool(Route, McpHandler)` or the `tool(name, description)` builder.
+- The reflective MCP tool binding is removed; `McpRouter.tool(Route)` is the only
+  tool registration door.
 - A present-but-blank route permission now fails at startup instead of publishing
   an unprotected route.
 - `io.aura.WebSocketContribution` and `AuraWebRuntime.webSocketContributions()`
@@ -46,11 +46,33 @@ record, the stage-by-stage log, and the migration table.
   `400 AURA_PARAMETER_REQUIRED` naming the parameter, not a handler running on
   `0` or `false`. Applications that relied on the default must declare the
   boxed type instead.
-- `McpParam(String, String, String, List)` and
-  `McpParam(String, String, String, List, boolean)` are removed;
-  `McpParam(ApiParameter, List<McpEnumValue>)` is the only constructor, and a
-  hand-authored tool argument that is not a JSON scalar is refused when the tool
-  is registered.
+- `McpToolBuilder` and `McpEnumValue` are removed, together with every
+  `tool(name, description).param(...).handler(...)` chain they supported. A
+  hand-authored tool is declared the same way an endpoint is:
+  `McpRouter.tool(Route.of("GET", "/user", (McpHandler) ctx -> ...).describedAs(...).withParams(List.of(new ApiParameter(...))))`.
+  The tool name is derived from the route (`GET /user` is `get_user`, `DELETE
+  /order/{id}` is `delete_order_by_id`), so a registry and a model cannot keep
+  separate spellings of it.
+- `McpParam(ApiParameter, List<McpEnumValue>)` becomes `McpParam(ApiParameter)`,
+  and `enumValues()` and `isEnum()` go with it. A parameter that the Java-to-JSON
+  table cannot render and that declares no schema now fails at registration with
+  `AURA_MCP_PARAM_SCHEMA_MISSING` instead of reaching `tools/list` as a string.
+- `McpRouter.tool(Route)` refuses a route whose handler is not an `McpHandler`
+  with `AURA_MCP_HANDLER_MISMATCH`. The previous two-argument overload accepted
+  `route.handler()` without reading it, and the `tool(name, description)` builder
+  was the door that let a second, differently-spelled declaration stand beside a
+  route. Project a route served in another transport with
+  `route.withHandler((McpHandler) ctx -> ...)` — it keeps every declared fact.
+- Enum choices are published from the contract, not invented by MCP. A route
+  catalog or an annotation processor puts `{"type":"string","enum":[names]}` on
+  the parameter; `tools/list` renders it verbatim, exactly as OpenAPI does. The
+  builder's `NEW(新建)` label form is gone — bind the value with
+  `ctx.getEnum("status", OrderStatus.class)`.
+- A hand-authored mapping from a friendly label to a code moves into the handler
+  that uses it. `McpContext` no longer holds a framework-side mapping table, so
+  `getString`/`getInt`/`getLong` return the argument the model sent.
+- `McpTool`'s four- and five-argument convenience constructors are removed; the
+  six-component record constructor is the only way to build one.
 - The string-to-value table moved from `io.aura.web.ParamResolver` to
   `io.aura.contract.ScalarType`, beside the JSON names it must match.
   `ParamResolver.fromString`, `ParamResolver.isBody` and its sixteen
@@ -101,10 +123,11 @@ record, the stage-by-stage log, and the migration table.
 - `McpRouter.invoke` enforces what `tools/list` advertises, and stdio, the HTTP
   transport and the bridge answer `MCP_MISSING_ARGUMENT` instead of invoking a
   tool whose required argument was withheld.
-- A hand-authored MCP tool declares `ApiParameter` records and refuses a
-  non-scalar argument at registration, so `tools/list` cannot publish
-  `"type": "string"` for an object the handler will never receive. `McpParam`
-  lost its string-typed constructors.
+- A tool argument's declared type and its accepted values are read from the same
+  `ApiParameter` the HTTP side reads, so `tools/list` and OpenAPI cannot
+  disagree. `McpParam` takes nothing but that contract, and
+  `McpUtil.inputSchema` renders a parameter's declared schema instead of
+  assembling enum values of its own.
 - OpenAPI parameter types come from `ScalarType` too, a parameter that described
   its own shape publishes that shape to OpenAPI (an enum keeps its accepted
   values), and the `example` in `/__schema__` is generated from the same table,
@@ -125,6 +148,9 @@ record, the stage-by-stage log, and the migration table.
   it drops the installed `aura-*.jar` files from the compile classpath so a
   fence resolves against this tree only. Prose that names the removed
   `io.aura.HealthModule` location fails the same gate.
+- `AI_GUIDE_MCP.md` joined the canonical documents the gate reads, and the gate
+  fails if any of them teaches `McpToolBuilder` or a `tool("name", ...)` chain.
+  A guide that names the deleted door is as broken as code that calls it.
 - `ArchitectureTest` R1 forbids `io.aura.web..` as a dependency target for every
   policy package, and R2's subject is `io.aura.port..` with
   `allowEmptyShould(true)` dropped so it cannot go vacuous. The rule that can

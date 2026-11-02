@@ -2,6 +2,7 @@ package io.aura.mcp;
 
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONObject;
+import io.aura.contract.Route;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -19,12 +20,16 @@ class McpBridgeProtocolTest {
     @BeforeEach
     void setup() {
         router = new McpRouter();
-        router.tool("get_user", "获取用户")
-              .param("id", int.class, "用户号")
-              .handler(ctx -> new UserService().get(ctx.getInt("id")));
-        router.tool("greet", "打招呼")
-              .param("name", String.class, "名字")
-              .handler(ctx -> "hello " + ctx.getString("name"));
+        router.tool(Route.of("GET", "/user",
+                      (McpHandler) ctx -> new UserService().get(ctx.getInt("id")))
+                .describedAs("获取用户")
+                .withParams(java.util.List.of(new io.aura.contract.ApiParameter(
+                        "id", "int", "query", true, "用户号"))));
+        router.tool(Route.of("POST", "/greet",
+                      (McpHandler) ctx -> "hello " + ctx.getString("name"))
+                .describedAs("打招呼")
+                .withParams(java.util.List.of(new io.aura.contract.ApiParameter(
+                        "name", "String", "query", true, "名字"))));
     }
 
     static class UserService {
@@ -48,7 +53,7 @@ class McpBridgeProtocolTest {
         var tools = result.getJSONArray("tools");
         assertThat(tools).hasSize(2);
         assertThat(tools.getJSONObject(0).getString("name")).isEqualTo("get_user");
-        assertThat(tools.getJSONObject(1).getString("name")).isEqualTo("greet");
+        assertThat(tools.getJSONObject(1).getString("name")).isEqualTo("post_greet");
     }
 
     @Test

@@ -1,22 +1,31 @@
 package io.aura.mcp;
 
 import io.aura.contract.ApiParameter;
+import io.aura.contract.ContractException;
 
-import java.util.List;
+import java.util.Objects;
 
-/** A shared API parameter plus the MCP enum metadata that has no HTTP equivalent. */
+/**
+ * One tool argument. {@link ApiParameter} is the whole of it: a tool parameter is a route
+ * parameter, so an MCP argument has no metadata of its own to invent — not an enum label set,
+ * not a Java-to-JSON type, not a required flag.
+ */
 public final class McpParam {
     private final ApiParameter contract;
-    private final List<McpEnumValue> enumValues;
 
-    /**
-     * {@link ApiParameter} is the only way to describe an argument: the builder, a route
-     * contract, and the HTTP bridge all hand over the same record, so no entry point can
-     * carry its own Java-to-JSON opinion.
-     */
-    public McpParam(ApiParameter contract, List<McpEnumValue> enumValues) {
-        this.contract = java.util.Objects.requireNonNull(contract, "contract");
-        this.enumValues = enumValues == null ? List.of() : List.copyOf(enumValues);
+    public McpParam(ApiParameter contract) {
+        this.contract = Objects.requireNonNull(contract, "contract");
+        // Every tool parameter in the system — a route contract or the HTTP bridge — passes
+        // through here, so refusing to describe an undescribable type is stated once. Publishing
+        // {"type":"string"} for a record or an enum tells the model to send a value the handler
+        // can never receive.
+        if (contract.schema().isEmpty() && !McpUtil.rendersWithoutSchema(contract.type())) {
+            throw new ContractException("AURA_MCP_PARAM_SCHEMA_MISSING",
+                    "MCP parameter '" + contract.name() + "' is declared as " + contract.type()
+                            + ", which the Java-to-JSON table cannot render; declare its schema on the"
+                            + " route (the route catalog does this for a body or enum parameter) or"
+                            + " tools/list would describe it as a string.");
+        }
     }
 
     public ApiParameter contract() { return contract; }
@@ -24,6 +33,4 @@ public final class McpParam {
     public String type() { return contract.type(); }
     public String description() { return contract.description(); }
     public boolean required() { return contract.required(); }
-    public List<McpEnumValue> enumValues() { return enumValues; }
-    public boolean isEnum() { return !enumValues.isEmpty(); }
 }

@@ -39,6 +39,7 @@ verifiable in memory in milliseconds. Every stage below is a commit on
 | review-G | `dca32d3` | a refused contribution names the module or the route instead of throwing `NullPointerException`; the wire documents are read through typed getters, and `SchemaProbeTest` (zero assertions) is gone |
 | review-H | `6cbf8de` | the added types are documented in their module docs, and `verify-docs-code.sh` compiles the documentation against this tree instead of quoting it |
 | stage2-i | `6c4f93b` | the 14 policy ports left `io.aura.web` for `io.aura.port`, so R1 can forbid the adapter package, R2 has a real subject set, and `WebLayeringTest` enforces the boundary where both sides are on the classpath |
+| stage2-j1 | `66bff04` | the string-to-value table moved from `io.aura.web.ParamResolver` to `io.aura.contract.ScalarType`, beside the JSON names it must match, and `aura-mcp` dropped its compile-scope dependency on the Undertow adapter |
 
 ## Decisions that differed from the plan
 
@@ -48,6 +49,19 @@ builder is the only hand-authored MCP entry a user needs when a tool has no HTTP
 route, while the reflective overload was a *second* way to describe the same
 tool. Deleting the duplicate, not the ergonomics, is what the constraint asks
 for.
+
+*That reasoning expired in `stage2-j2`, and the builder is gone.* Two premises
+failed: `Route` is a record, so a tool with no HTTP route is still a route —
+`Route.of("GET", "/user", (McpHandler) ctx -> ...)` is authorable without ever
+being assembled or served, which is exactly what the builder was for — and the
+two-argument door it was kept in favour of did not read `route.handler()` at
+all, so tests could hand it `new Object()` and pass. The ergonomics the paragraph
+defended were not the builder's: a tool's name, parameters, description and
+permission are all spelled by the same contract the HTTP side spells, and the
+builder's two remaining capabilities moved to where the fact already lives
+(accepted enum values → the parameter's declared `schema()`, friendly
+label→code translation → the handler that uses it). `McpRouter.tool(Route)` is
+one door now.
 
 **`ParamResolver` throws `NumberFormatException`, not a new exception type.**
 Unifying the binder risked turning a 400 on one transport into a silent zero on
@@ -109,7 +123,8 @@ way round. Both MCP doors now keep the promise `tools/list` makes:
 transport and the bridge all answer `MCP_MISSING_ARGUMENT` instead of invoking
 a tool with a zero.
 
-**`McpToolBuilder` lost its private type table; the door itself is still open.**
+**`McpToolBuilder` lost its private type table; the door itself closed one stage
+later.**
 The same review note recorded that the builder is a second *declaration* path,
 and unlike the other findings this one is only half-closed, so it is written
 down: hand-authored tools still name their arguments in Java rather than
@@ -126,6 +141,10 @@ string while the schema document called it a number), a parameter that
 described its own shape now publishes that shape to OpenAPI instead of an
 unbounded string, and `RouteContract.exampleValue` comes from the same table so
 the example a model copies is a value the binder accepts.
+`stage2-j2` finished the half that was left open: the builder, `McpEnumValue` and
+`McpRouter.tool(String, String)` are deleted, `McpParam` takes the contract alone,
+and the sentence above about naming arguments in Java is now history rather than
+a known gap.
 
 **The built-in endpoint gates joined the chain rather than staying in the
 dispatch.** Review found three decisions living inside
@@ -228,6 +247,52 @@ bridge jar is smaller for it: `aura-mcp-bridge.jar` went from 1560
 6,172,757 bytes to 2,354,235 -- the adapter was being shipped inside a bridge that
 only speaks HTTP to an application running it somewhere else.
 
+**MCP got one declaration door, and the two facts the builder kept moved to the
+places that already held them.** `McpRouter.tool(String, String)` and
+`McpToolBuilder` are deleted, so a tool is a `Route` -- and a `Route` is a record
+that can be built without being served, which removes the only reason the builder
+was defended. What the builder still did for itself had to go somewhere, and each
+destination was already in the system:
+
+- *Accepted values.* The builder turned an enum class or a `Map` of labels into
+  `McpEnumValue` records and `McpUtil.inputSchema` published them as `enum`, so
+  the same set of choices existed in three representations with MCP owning one of
+  them. Now `RouteCatalog` and `AuraRouteProcessor` put
+  `{"type":"string","enum":[names]}` in the parameter's `schema()` for a body or
+  an enum, OpenAPI renders it, and MCP renders the identical map through the
+  identical `ApiParameter`. `ctx.getEnum(name, Type.class)` binds by `name()`, so
+  the strings a model is told to send are the strings the handler accepts. Two
+  mutations, one per link: `RouteCatalog`'s `body || type.isEnum` reduced to
+  `body` turned exactly `RouteCatalogTest.describesCollectionAndEnumParametersWhereTheBinderReadsThem`
+  red (`expected: "string" but was: null`), which is the declaration side; and
+  `McpUtil.inputSchema` made to ignore `contract.schema()` turned exactly 5
+  aura-mcp cases red -- the enum projection in `McpRouterTest`,
+  `McpUtilTest.inputSchema_projectsTheEnumChoicesItsContractDeclares`, the body
+  passthrough in both, and the protocol conformance case -- which is the render
+  side. `OpenApiGeneratorTest` stayed green under the first mutation because it
+  declares the schema itself in the fixture, so the assertion there is the
+  generator's, not the catalog's; the catalog line is the one the release gate
+  checks.
+- *Label-to-code translation.* The builder's `param("city", String.class, "城市",
+  Map.of("北京","010"))` stored a framework-side map and `McpContext.resolve`
+  applied it before every getter, which meant `getString("city")` returned a
+  value the model never sent. The mapping is the handler's business now -- a plain
+  lookup in the lambda that uses it -- and `McpContext` has no mapping table, so
+  the arguments it exposes are the arguments that arrived.
+- *The name.* `McpUtil.buildToolName(method, path)` derives `get_user` from
+  `GET /user`, the way the HTTP bridge already named a proxied route. A name an
+  author types and a name the registry derives are two spellings that can drift;
+  there is one spelling now, and `Route.withHandler(...)` is what projects an
+  already-served endpoint instead of re-declaring it.
+
+Both refusals are coded, because both were silent before: a route whose handler
+belongs to another transport failed as a `ClassCastException` at invoke time
+(`AURA_MCP_HANDLER_MISMATCH` names the method, the path and the fix), and a
+parameter the Java-to-JSON table cannot render published itself as a string
+(`AURA_MCP_PARAM_SCHEMA_MISSING` names the parameter and its declared type). The
+second lives on `McpParam`'s constructor so the HTTP bridge cannot skip it, and
+`McpRouter.tool` re-throws it with the route that produced it.
+
 ## Deleted or moved public surface
 
 | 1.0.0 | now |
@@ -246,8 +311,12 @@ only speaks HTTP to an application running it somewhere else.
 | `io.aura.HealthModule` | `io.aura.web.HealthModule` |
 | `io.aura.web.BaseHandler`, `BaseContext`, `BaseRouter`, `BaseRouteBuilder`, `BaseExceptionHandler`, `SseEmitter`, `UploadedFile`, `RouteResponse`, `RequestType`, `WsHandler`, `WsConnection`, `AdmissionPolicy`, `AdmissionRequest`, `AdmissionDecision` | same types in `io.aura.port`; `io.aura.web` is the Undertow adapter only |
 | `io.aura.web.ParamResolver.fromString`, `.isBody`, `.parseInt`/`.parseLong`/`.parseBool`/`.parseDouble`/`.parseFloat`/`.parseShort`/`.parseByte`/`.parseChar` and the eight boxed overloads | `io.aura.contract.ScalarType.fromString(value, type)` and `ScalarType.isBody(type)`; the coercion rules are private, so no transport asks a parse method for one type again |
-| `McpRouter.tool(String name, Object service, String method, String description)` reflective binding | `McpRouter.tool(Route, McpHandler)` |
-| `McpParam(String, String, String, List)` and `McpParam(String, String, String, List, boolean)` | `McpParam(ApiParameter, List<McpEnumValue>)` — a tool argument is declared with the shared parameter record, so it cannot carry its own Java-to-JSON opinion |
+| `McpRouter.tool(String name, Object service, String method, String description)` reflective binding | `McpRouter.tool(Route)` |
+| `McpRouter.tool(String, String)` and the `McpToolBuilder` it returned | the same `Route` spelling an endpoint uses: `Route.of("GET", "/user", (McpHandler) ctx -> ...).describedAs(...).withParams(List.of(new ApiParameter(...)))` — one declaration door, with the name derived from method and path |
+| `io.aura.mcp.McpEnumValue`, `McpParam.enumValues()`, `McpParam.isEnum()` | the parameter's declared `schema()`, which `RouteCatalog`/`AuraRouteProcessor` fill from `TypeSchema.describe` and both OpenAPI and `tools/list` render |
+| `McpParam(String, String, String, List)` and `McpParam(String, String, String, List, boolean)` | `McpParam(ApiParameter)` — a tool argument is declared with the shared parameter record and nothing else, so it cannot carry its own Java-to-JSON opinion |
+| `McpTool(String, String, List, McpHandler)` and the five-argument overload | the record's six-component constructor; `permission` and `authenticated` are no longer optional at the type level |
+| `McpContext`'s label→code `mappings` table and `resolve()` | a lookup in the handler that needs it; `getString`/`getInt`/`getLong` now return the argument the model sent |
 
 `/__schema__` keeps its JSON keys — `method`, `path`, `description`,
 `returnType`, `params`, `example`, `responseSchema`, `authenticated`,
@@ -299,6 +368,31 @@ binding to `0` or `false`.
   and the `toString().contains` form matched text that had nothing to do with the
   field its name claimed.
 
+- `McpToolBuilderTest` (21 cases) and 8 cases of `McpContextTest` disappeared with
+  the surfaces they tested, and the facts they pinned are asserted again at the
+  door that replaced them: the builder's parameter-type, enum-projection and
+  required/optional cases are now `McpRouterTest`/`McpRouterIntegrationTest`
+  cases spelled as a `Route`, and the label→code behaviour is
+  `labelMapping_livesInTheHandlerThatUsesIt` plus
+  `tool_handlerOwnsTheLabelToCodeMapping`. Four cases went for the reason they
+  should be said out loud: `McpRouterTest` had both
+  `tool_enumParam_schemaContainsEnumValues` and `tool_enumParam_schemaOutputCorrect`
+  for one projection, and they are one case now
+  (`tool_enumParam_projectsTheChoicesItsContractDeclares`);
+  `tool_enumWithoutLabel_usesNameOnly` tested a label format the system no longer
+  produces. Two new refusals joined them --
+  `tool_routeHandledByAnotherTransport_failsAndNamesTheRoute` and
+  `tool_paramTheJsonTableCannotRender_failsInsteadOfCallingItAString` -- neither
+  of which had a builder equivalent, because the builder could not express the
+  mistake. aura-mcp goes 215 to 182 and the per-class deltas account for all 33:
+  -21 the deleted class, -8 the mapping table's own tests in `McpContextTest`,
+  -7/+4 in `McpRouterTest` (four `tool_mapMapping_*` cases and
+  `tool_enumWithoutLabel_usesNameOnly` gone, the two enum-schema cases merged),
+  -4/+2 in `McpRouterIntegrationTest` (two renames plus the two cases whose
+  subject was a mapping the framework applied), +1 in `McpUtilTest`.
+
+No assertion was weakened to make a stage pass.
+
 No assertion was weakened to make a stage pass.
 
 ## Verification actually run
@@ -326,7 +420,9 @@ and the jacoco `check` rules. Two traps cost real time and are worth repeating:
 time and the new cases were run again: removing the required loop in
 `McpRouter.invoke` and the scalar refusal in `McpToolBuilder.declared` turned
 exactly 8 aura-mcp cases red (`McpRouterTest` ×4, the stdio door, the HTTP
-transport door, the two registration refusals); removing the binder's
+transport door, the two registration refusals -- `McpToolBuilder.declared` was
+that refusal's home when review-F ran, and `stage2-j2` moved it to `McpParam`,
+which the HTTP bridge passes through as well); removing the binder's
 `RequiredParameterException` and `RouteCatalog`'s use of
 `ParamResolver.isRequired` turned exactly 11 aura-web cases red, including the
 wire-document pair in `RequiredParameterTest` and the 400 that decays to
@@ -412,6 +508,70 @@ value names itself, enums bind by `name()`, and `isBody` is the mirror of the sc
 table), which is the same rule review-G applied to the wire documents: a check
 belongs next to the code it covers.
 
+`stage2-j2` was falsified at the gate, because its subject is a surface that no
+longer exists to be called. Eight assertions, one mutation apiece, each green
+again on restore: reintroducing a `McpParam(ApiParameter, List)` constructor
+failed with `McpParam grew a second way to declare an argument besides
+ApiParameter`; re-adding a `McpToolBuilder.java` failed with
+`the second MCP declaration door returned: McpToolBuilder`, and the same check
+fired for `McpEnumValue.java`; adding a `tool(String name, String description)`
+overload back to `McpRouter` failed with `McpRouter grew a second tool
+registration door`; deleting the `AURA_MCP_HANDLER_MISMATCH` refusal failed with
+`McpRouter accepts a route whose handler it cannot invoke without naming the mistake`;
+removing `AURA_MCP_PARAM_SCHEMA_MISSING` from `McpParam` failed with
+`an undescribable MCP parameter reaches the model as a string again`; putting
+`prop.put("enum", ...)` back into `McpUtil` failed with
+`MCP invented enum values instead of projecting the contract's schema`; and
+dropping the schema declaration failed with its own message at each producer --
+`the route catalog stopped declaring the parameter schema that MCP and OpenAPI
+project`, and `the annotation processor stopped declaring ...`.
+
+Two of those runs taught something about how tight a `rg` assertion should be,
+and both are recorded rather than smoothed over. The first attempt at the
+`RouteCatalog` check matched on `TypeSchema.describe` alone and stayed green:
+the method appears twice in the file, once for a parameter and once for a
+response, so the pattern was tightened to the parameter ternary
+`? TypeSchema.describe(type) : Map.of()`. Even then, narrowing the condition
+(`body || type.isEnum` down to `body`) leaves the declaration site standing and
+so leaves the gate green -- correctly, because a gate pins where a fact is
+declared and a test pins what the declaration says. That second case is the
+`RouteCatalogTest` red described below, and the pair is what makes the check
+worth keeping.
+
+The control mutation renamed `rendersWithoutSchema` in `McpUtil` and its caller
+together: the gate stayed green, because the invariant still held -- a rename is
+not a regression, and a check that fired on one would be a check on spelling.
+
+Every new check is written `if ! rg -q ...; then echo "<the invariant>" >&2; exit
+1; fi`. The two bare `rg -q` assertions from the ports stage exited 1 silently and
+were rewritten for the same reason; the J2 block was written in the named form
+from the start.
+
+The projection itself was falsified at both links: `RouteCatalogTest` ×1 and five
+aura-mcp cases, described in the decision above.
+
+The documentation half was falsified at its own gate. `AI_GUIDE_MCP.md` -- the file
+that taught the builder chain to every reader who came through MCP -- joined
+`canonical_docs`, and one line of builder prose written back into
+`docs/aura-mcp.md` failed `verify-docs-code.sh` with
+`documentation teaches the deleted MCP tool builder` and exit 1 after the line's
+file and number; removing it returned the gate to `7 compiled fences`. The ban
+covers `McpToolBuilder`, `mcp.tool("` and `router.tool("` in the fourteen canonical
+documents and in `.claude/skills/aura/SKILL.md`, which is the file an AI actually
+reads.
+
+`mvn -o clean verify` at the end of `stage2-j2` is green with no failure-ignore:
+aura-contract 30, aura-core 213, aura-processor 5, aura-web 479, aura-db 182,
+aura-mcp 182, aura-ai 93, aura-workflow 53, examples 2 + 2, zero `[ERROR]` lines.
+Both gates pass, and the API baseline was regenerated rather than edited: 2683
+lines to 2663, with the diff exactly 24 removals and 4 additions -- `McpEnumValue`
+and `McpToolBuilder` in full, `McpParam(ApiParameter, List)`, `enumValues()`,
+`isEnum()`, `McpRouter.tool(String, String)`, `McpRouter.tool(Route, McpHandler)`
+and the two extra `McpTool` constructors out; `McpParam(ApiParameter)`,
+`McpRouter.tool(Route)`, `McpUtil.isWireName` and `McpUtil.rendersWithoutSchema`
+in. Nothing else moved, which is the check that says a deletion deleted only what
+it named.
+
 Verified without `-Dmaven.test.failure.ignore` (`mvn -o verify`), and note the trap
 that run avoids: `mvn -o -pl aura-mcp test` without `-am` resolves `aura-core` from
 `~/.m2`, where the installed 1.0.0 jar still has the ports in `io.aura.web`, and the
@@ -455,13 +615,6 @@ lines, `jq` dropped from the tool check); the classification half still needs
   two wire documents it could reach (`TestClient.schema()`/`openApi()` and
   `OpenApiGenerator.generate(...)`); the MCP tool schema is a third projection
   of the same `Route` and belongs with them.
-- `McpToolBuilder` is still a second declaration door for hand-authored tools.
-  Its disagreements with the route path are gone (`ApiParameter` in, one
-  `McpUtil.inputSchema` render, non-scalar arguments refused at registration),
-  and it no longer reaches into the adapter for a coercion rule, but naming
-  arguments in Java is still a choice an AI makes that
-  `McpRouter.tool(Route, McpHandler)` does not ask for. Deleting the builder is
-  the review's stronger remedy and stays open.
 - `scripts/verify-public-api.sh` needs `jq`, which this machine does not have, so
   step 5 of `verify-local-readiness.sh` stops there. The baseline this branch was
   checked against came from a `jq`-free copy of the generator, not from that

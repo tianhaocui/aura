@@ -397,10 +397,10 @@ visible; provider callback lifecycle violations fail with
 MCP tools are explicitly selected and can declare permissions:
 
 ```java
-mcp.tool("delete_order", "Delete an order")
-   .param("id", long.class, "Order ID")
-   .permission("orders.delete")
-   .handler(ctx -> orderService.delete(ctx.getLong("id")));
+mcp.tool(Route.of("DELETE", "/order/{id}", (McpHandler) ctx -> orderService.delete(ctx.getLong("id")))
+    .describedAs("Delete an order")
+    .withParams(List.of(new ApiParameter("id", "long", "path", true, "Order ID")))
+    .requireAuth("orders.delete"));
 ```
 
 Permissioned tools fail closed unless an authenticated transport calls the

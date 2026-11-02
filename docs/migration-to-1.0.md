@@ -104,7 +104,10 @@ Applications written against the released 1.0.0 API move with the route collapse
 | `io.aura.HealthModule` | `io.aura.web.HealthModule` |
 | `io.aura.web.BaseHandler` and the other 13 adapter ports | `io.aura.port.BaseHandler` -- `io.aura.web` now means the Undertow adapter, nothing else |
 | `ParamResolver.fromString(...)`, `ParamResolver.isBody(...)`, `ParamResolver.parseInt(...)` | `ScalarType.fromString(value, type)` and `ScalarType.isBody(type)` -- the string-to-value table sits beside the JSON names it must match; `ParamResolver` keeps `create`, `isRequired` and `resolveString` |
-| `McpRouter.tool(name, service, method, description)` reflection | `McpRouter.tool(route, handler)` |
+| `McpRouter.tool(name, service, method, description)` reflection | `McpRouter.tool(route)` |
+| `McpRouter.tool(name, description).param(...).handler(...)` | `McpRouter.tool(Route.of(method, path, (McpHandler) ctx -> ...).withParams(List.of(new ApiParameter(...))))` -- the name comes from the route, the parameters come from the contract, and `route.withHandler(mcpHandler)` projects a route already served over HTTP |
+| `param(name, type, description, Map.of("北京", "010"))` label-to-code mapping | a `Map` lookup in the handler that uses the value, with the accepted labels declared in the parameter's schema |
+| an enum parameter whose labels MCP rendered as `NEW(新建)` | the constant names the contract declares, which is what OpenAPI shows and what `ctx.getEnum(...)` binds on both transports |
 | a blank `permission` string dropped silently | fails at startup, because dropping it would publish an unprotected route |
 
 ## Configuration and permissions

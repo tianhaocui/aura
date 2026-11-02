@@ -19,20 +19,36 @@ public final class McpUtil {
         if (javaType == null) return "string";
         String scalar = ScalarType.jsonTypeName(javaType);
         if (scalar != null) return scalar;
-        return switch (javaType) {
-            case "string", "integer", "number", "boolean", "object", "array" -> javaType;
-            default -> "string";
+        return isWireName(javaType) ? javaType : "string";
+    }
+
+    /** A name that already speaks JSON, as opposed to a Java type the table has to translate. */
+    public static boolean isWireName(String typeName) {
+        return switch (typeName) {
+            case "string", "integer", "number", "boolean", "object", "array" -> true;
+            default -> false;
         };
     }
 
     /**
-     * The one {@code tools/list} {@code inputSchema} builder. Every MCP entry point —
-     * the declarative builder, a shared route contract, and the HTTP bridge — funnels
-     * through here, so a parameter can never render differently per path.
+     * Whether {@link #jsonType} can give this type a JSON type on its own. A type it cannot —
+     * a record, an enum, anything the table has no entry for — only looks like a {@code string}
+     * on the wire, which is the lie this answers.
+     */
+    public static boolean rendersWithoutSchema(String javaType) {
+        return javaType != null
+                && (ScalarType.jsonTypeName(javaType) != null || isWireName(javaType));
+    }
+
+    /**
+     * The one {@code tools/list} {@code inputSchema} builder. Both MCP entry points — the route
+     * contract and the HTTP bridge — funnel through here, so a parameter can never render
+     * differently per path.
      *
-     * <p>A parameter's declared JSON Schema wins; {@link #jsonType} is only the fallback
-     * for parameters that never described a shape. Enum labels are what the model emits,
-     * so they appear both in {@code enum} and inline in the description.
+     * <p>A parameter's declared JSON Schema wins and {@link #jsonType} is only the fallback for
+     * parameters that never described a shape. That is how an enum publishes its accepted values:
+     * the contract's schema carries them, exactly as OpenAPI's does, and this renderer adds no
+     * vocabulary of its own.
      */
     public static Map<String, Object> inputSchema(List<McpParam> params) {
         Map<String, Object> schema = new LinkedHashMap<>();
@@ -48,13 +64,6 @@ public final class McpUtil {
                 prop.putAll(contract.schema());
             }
             String description = contract.description();
-            if (param.isEnum()) {
-                List<String> labels = param.enumValues().stream().map(McpEnumValue::label).toList();
-                prop.put("enum", labels);
-                if (description != null) {
-                    description = description + ": " + String.join(", ", labels);
-                }
-            }
             if (description != null) prop.put("description", description);
             properties.put(contract.name(), prop);
             if (contract.required()) required.add(contract.name());

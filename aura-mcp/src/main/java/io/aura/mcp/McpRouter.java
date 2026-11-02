@@ -1,5 +1,6 @@
 package io.aura.mcp;
 
+import io.aura.contract.ContractException;
 import io.aura.contract.McpRouterSpec;
 
 import java.util.*;
@@ -11,21 +12,39 @@ public class McpRouter implements McpRouterSpec {
     private final Map<String, McpResource> resources = Collections.synchronizedMap(new LinkedHashMap<>());
     private final Map<String, McpPrompt> prompts = Collections.synchronizedMap(new LinkedHashMap<>());
 
-    public McpToolBuilder tool(String name, String description) {
-        return new McpToolBuilder(this, name, description);
-    }
-
     /**
-     * Exposes a shared HTTP route contract as a deterministic MCP tool. Parameters are
-     * carried verbatim: re-declaring them here is what used to strip the source and the
-     * body POJO schema, collapsing a structured request into {@code {"type":"string"}}.
+     * The only way to publish a tool: a shared {@link io.aura.contract.Route} contract whose
+     * handler is an {@link McpHandler}.
+     *
+     * <p>Parameters are carried verbatim because re-declaring them is what used to strip the
+     * source and the body POJO schema, collapsing a structured request into
+     * {@code {"type":"string"}} — and because a second declaration is a second place the same
+     * tool can be wrong. A tool with no HTTP endpoint is still a {@code Route}; it is simply a
+     * {@code Route} nobody serves.
+     *
+     * <p>To expose a route that is already served over HTTP, rebind its handler with
+     * {@link io.aura.contract.Route#withHandler(Object)}, which keeps every declared fact. A
+     * route contract and an MCP handler passed side by side would leave the contract's own
+     * handler silently unused, so this door takes neither a name nor a second handler.
      */
-    public McpRouter tool(io.aura.contract.Route route, McpHandler handler) {
+    public McpRouter tool(io.aura.contract.Route route) {
         Objects.requireNonNull(route, "route");
-        Objects.requireNonNull(handler, "handler");
-        List<McpParam> params = route.params().stream()
-                .map(parameter -> new McpParam(parameter, List.of()))
-                .toList();
+        if (!(route.handler() instanceof McpHandler handler)) {
+            throw new ContractException("AURA_MCP_HANDLER_MISMATCH",
+                    "MCP tool " + route.method() + " " + route.path() + " has a "
+                            + route.handler().getClass().getName() + " handler; MCP invokes a Route"
+                            + " whose handler is an McpHandler — use route.withHandler(mcpHandler)"
+                            + " to project a route served in another transport.");
+        }
+        List<McpParam> params;
+        try {
+            params = route.params().stream().map(McpParam::new).toList();
+        } catch (ContractException e) {
+            // McpParam owns the rule so the bridge cannot skip it; the door that knows which
+            // route broke it is the one that can say so.
+            throw new ContractException(e.error().code(), e.error().message()
+                    + " (tool " + route.method() + " " + route.path() + ")");
+        }
         register(new McpTool(McpUtil.buildToolName(route.method(), route.path()),
                 route.description(), params, handler, route.permission(), route.authenticated()));
         return this;
@@ -149,21 +168,7 @@ public class McpRouter implements McpRouterSpec {
                 throw new McpMissingArgument(param.name());
             }
         }
-        McpContext ctx = new McpContext(args, collectMappings(tool), userId);
+        McpContext ctx = new McpContext(args, userId);
         return tool.handler().handle(ctx);
-    }
-
-    private Map<String, Map<String, Object>> collectMappings(McpTool tool) {
-        Map<String, Map<String, Object>> result = new LinkedHashMap<>();
-        for (McpParam param : tool.params()) {
-            if (param.isEnum()) {
-                Map<String, Object> map = new LinkedHashMap<>();
-                for (McpEnumValue ev : param.enumValues()) {
-                    map.put(ev.label(), ev.code());
-                }
-                result.put(param.name(), map);
-            }
-        }
-        return result;
     }
 }

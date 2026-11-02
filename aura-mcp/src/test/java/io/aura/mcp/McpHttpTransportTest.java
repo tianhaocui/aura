@@ -3,6 +3,9 @@ package io.aura.mcp;
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONObject;
 import io.aura.AuraApp;
+import io.aura.contract.ApiParameter;
+import io.aura.contract.Route;
+import java.util.List;
 import io.aura.web.TestClient;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -24,13 +27,14 @@ class McpHttpTransportTest {
     @BeforeEach
     void setUp() {
         McpRouter router = new McpRouter();
-        router.tool("whoami", "Return identity").handler(ctx -> ctx.userId());
-        router.tool("delete_order", "Delete order")
-                .permission("orders.delete")
-                .handler(ctx -> "deleted");
-        router.tool("get_order", "Get order")
-                .param("id", int.class, "order id")
-                .handler(ctx -> "should not run");
+        router.tool(Route.of("GET", "/whoami", (McpHandler) ctx -> ctx.userId())
+                .describedAs("Return identity"));
+        router.tool(Route.of("DELETE", "/order", (McpHandler) ctx -> "deleted")
+                .describedAs("Delete order")
+                .requireAuth("orders.delete"));
+        router.tool(Route.of("GET", "/order", (McpHandler) ctx -> "should not run")
+                .describedAs("Get order")
+                .withParams(List.of(new ApiParameter("id", "int", "query", true, "order id"))));
         module = McpModule.create(router).http("/mcp", 2, Duration.ofMinutes(5));
         AuraApp app = AuraApp.create()
                 .mcpAuthenticate(metadata -> {
@@ -287,7 +291,7 @@ class McpHttpTransportTest {
             port = socket.getLocalPort();
         }
         McpRouter router = new McpRouter();
-        router.tool("ping_tool", "Ping").handler(ctx -> "pong");
+        router.tool(Route.of("GET", "/ping_tool", (McpHandler) ctx -> "pong").describedAs("Ping"));
         AuraApp app = AuraApp.create(new io.aura.AuraConfig().port(port))
                 .mcpAuthenticate(metadata -> "alice")
                 .use(McpModule.create(router).http());
@@ -334,7 +338,7 @@ class McpHttpTransportTest {
             assertThat(listed.statusCode()).isEqualTo(200);
             assertThat(JSON.parseObject(listed.body()).getJSONObject("result")
                     .getJSONArray("tools").getJSONObject(0).getString("name"))
-                    .isEqualTo("ping_tool");
+                    .isEqualTo("get_ping_tool");
 
             HttpResponse<String> streamed = http.send(
                     HttpRequest.newBuilder(endpoint)
@@ -366,7 +370,7 @@ class McpHttpTransportTest {
             port = socket.getLocalPort();
         }
         McpRouter router = new McpRouter();
-        router.tool("ping_tool", "Ping").handler(ctx -> "pong");
+        router.tool(Route.of("GET", "/ping_tool", (McpHandler) ctx -> "pong").describedAs("Ping"));
         AuraApp app = AuraApp.create(new io.aura.AuraConfig().port(port))
                 .mcpAuthenticate(metadata -> "Bearer alice".equals(metadata.get("authorization"))
                         ? "alice" : null)
@@ -438,7 +442,7 @@ class McpHttpTransportTest {
             port = socket.getLocalPort();
         }
         McpRouter router = new McpRouter();
-        router.tool("ping_tool", "Ping").handler(ctx -> "pong");
+        router.tool(Route.of("GET", "/ping_tool", (McpHandler) ctx -> "pong").describedAs("Ping"));
         McpModule sseModule = McpModule.create(router).http("/mcp", 2,
                 Duration.ofMinutes(5), 16 * 1024).sse();
         AuraApp app = AuraApp.create(new io.aura.AuraConfig().port(port))
@@ -529,7 +533,7 @@ class McpHttpTransportTest {
                 .getString("protocolVersion")).isEqualTo(McpHttpTransport.PROTOCOL_VERSION);
 
         TestClient.Response call = request("Bearer alice", session, 2, "tools/call",
-                Map.of("name", "whoami", "arguments", Map.of())).expect(200);
+                Map.of("name", "get_whoami", "arguments", Map.of())).expect(200);
         JSONObject result = JSON.parseObject(call.body()).getJSONObject("result");
         assertThat(result.getJSONArray("content").getJSONObject(0).getString("text"))
                 .isEqualTo("alice");
@@ -625,11 +629,11 @@ class McpHttpTransportTest {
         java.util.concurrent.CountDownLatch started = new java.util.concurrent.CountDownLatch(1);
         java.util.concurrent.CountDownLatch release = new java.util.concurrent.CountDownLatch(1);
         McpRouter router = new McpRouter();
-        router.tool("block", "Block until released").handler(ctx -> {
+        router.tool(Route.of("GET", "/block", (McpHandler) ctx -> {
             started.countDown();
             release.await();
             return "done";
-        });
+        }).describedAs("Block until released"));
         McpModule draining = McpModule.create(router).http();
         TestClient local = TestClient.of(AuraApp.create()
                 .mcpAuthenticate(metadata -> "alice")
@@ -651,7 +655,7 @@ class McpHttpTransportTest {
                 .header(McpHttpTransport.SESSION_HEADER, session)
                 .header(McpHttpTransport.PROTOCOL_VERSION_HEADER, McpHttpTransport.PROTOCOL_VERSION)
                 .body(Map.of("jsonrpc", "2.0", "id", 2, "method", "tools/call",
-                        "params", Map.of("name", "block", "arguments", Map.of())))
+                        "params", Map.of("name", "get_block", "arguments", Map.of())))
                 .execute()));
         caller.start();
         assertThat(started.await(1, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
@@ -753,7 +757,7 @@ class McpHttpTransportTest {
     @Test
     void configuredOriginCanUseTheAuthenticatedTransport() {
         McpRouter router = new McpRouter();
-        router.tool("ping", "Ping").handler(ctx -> "pong");
+        router.tool(Route.of("GET", "/ping", (McpHandler) ctx -> "pong").describedAs("Ping"));
         McpModule allowed = McpModule.create(router).http();
         AuraApp app = AuraApp.create()
                 .property("aura.mcp.http.origins", "https://trusted.example")
@@ -771,8 +775,8 @@ class McpHttpTransportTest {
     @Test
     void oversizedToolResponsesAreRejectedBeforeBeingReturned() {
         McpRouter router = new McpRouter();
-        router.tool("large", "Large response")
-                .handler(ctx -> "x".repeat(1024));
+        router.tool(Route.of("GET", "/large", (McpHandler) ctx -> "x".repeat(1024))
+                .describedAs("Large response"));
         McpModule bounded = McpModule.create(router).http("/mcp", 2,
                 Duration.ofMinutes(5), 512);
         AuraApp app = AuraApp.create()
@@ -792,7 +796,7 @@ class McpHttpTransportTest {
                 .header("Authorization", "Bearer anything")
                 .header(McpHttpTransport.SESSION_HEADER, session)
                 .body(Map.of("jsonrpc", "2.0", "id", 2, "method", "tools/call",
-                        "params", Map.of("name", "large", "arguments", Map.of())))
+                        "params", Map.of("name", "get_large", "arguments", Map.of())))
                 .expect(502);
         assertThat(response.body()).contains("MCP_RESPONSE_TOO_LARGE");
 
@@ -801,7 +805,7 @@ class McpHttpTransportTest {
                 .header("Accept", "text/event-stream")
                 .header(McpHttpTransport.SESSION_HEADER, session)
                 .body(Map.of("jsonrpc", "2.0", "id", 3, "method", "tools/call",
-                        "params", Map.of("name", "large", "arguments", Map.of())))
+                        "params", Map.of("name", "get_large", "arguments", Map.of())))
                 .expect(502);
         assertThat(streamed.body()).contains(
                 "event: message", "\"id\":3", "\"code\":-32009");
@@ -812,8 +816,8 @@ class McpHttpTransportTest {
     @Test
     void oversizedFallbackErrorNeverExceedsConfiguredResponseBudget() {
         McpRouter router = new McpRouter();
-        router.tool("large", "Large response")
-                .handler(ctx -> "x".repeat(1024));
+        router.tool(Route.of("GET", "/large", (McpHandler) ctx -> "x".repeat(1024))
+                .describedAs("Large response"));
         McpModule bounded = McpModule.create(router).http("/mcp", 2,
                 Duration.ofMinutes(5), 1);
         AuraApp app = AuraApp.create()

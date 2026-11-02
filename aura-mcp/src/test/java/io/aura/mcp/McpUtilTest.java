@@ -84,8 +84,8 @@ class McpUtilTest {
     @Test
     void inputSchema_withParams_correctStructure() {
         List<McpParam> params = List.of(
-                new McpParam(new ApiParameter("id", "int", "tool", true, "the item id"), List.of()),
-                new McpParam(new ApiParameter("name", "String", "tool", true, null), List.of())
+                new McpParam(new ApiParameter("id", "int", "query", true, "the item id")),
+                new McpParam(new ApiParameter("name", "String", "query", true, null))
         );
         Map<String, Object> schema = McpUtil.inputSchema(params);
 
@@ -114,8 +114,8 @@ class McpUtilTest {
     @Test
     void inputSchema_preservesOptionalParameters() {
         List<McpParam> params = List.of(
-                new McpParam(new ApiParameter("query", "String", "query", true, null), List.of()),
-                new McpParam(new ApiParameter("page", "int", "query", false, null), List.of()));
+                new McpParam(new ApiParameter("query", "String", "query", true, null)),
+                new McpParam(new ApiParameter("page", "int", "query", false, null)));
 
         @SuppressWarnings("unchecked")
         List<String> required = (List<String>) McpUtil.inputSchema(params).get("required");
@@ -129,7 +129,7 @@ class McpUtilTest {
         body.put("type", "object");
         body.put("properties", Map.of("name", Map.of("type", "string")));
         List<McpParam> params = List.of(new McpParam(
-                new ApiParameter("request", "CreateRequest", "body", true, null, body), List.of()));
+                new ApiParameter("request", "CreateRequest", "body", true, null, body)));
 
         Map<String, Object> properties = (Map<String, Object>) McpUtil.inputSchema(params).get("properties");
         Map<String, Object> request = (Map<String, Object>) properties.get("request");
@@ -139,15 +139,24 @@ class McpUtilTest {
 
     @Test
     @SuppressWarnings("unchecked")
-    void inputSchema_declaresEnumLabelsTheModelCanEmit() {
+    void inputSchema_projectsTheEnumChoicesItsContractDeclares() {
         List<McpParam> params = List.of(new McpParam(
-                new ApiParameter("status", "String", "tool", true, "Order status"),
-                List.of(new McpEnumValue("PAID(已支付)", "PAID"),
-                        new McpEnumValue("NEW(新建)", "NEW"))));
+                new ApiParameter("status", "OrderStatus", "query", true, "Order status",
+                        Map.of("type", "string", "enum", List.of("PAID", "NEW")))));
 
         Map<String, Object> properties = (Map<String, Object>) McpUtil.inputSchema(params).get("properties");
         Map<String, Object> status = (Map<String, Object>) properties.get("status");
-        assertThat(status).containsEntry("enum", List.of("PAID(已支付)", "NEW(新建)"));
-        assertThat(status.get("description")).isEqualTo("Order status: PAID(已支付), NEW(新建)");
+        assertThat(status).containsEntry("enum", List.of("PAID", "NEW"));
+        assertThat(status.get("description")).isEqualTo("Order status");
+    }
+
+    @Test
+    void inputSchema_refusesAParameterItWouldHaveToCallAString() {
+        // jsonType() has no entry for an unknown type name and defaults to "string", which is how
+        // a hand-declared record parameter used to reach the model as a string it could not send.
+        assertThatThrownBy(() -> new McpParam(
+                new ApiParameter("request", "CreateRequest", "body", true, null)))
+                .isInstanceOf(io.aura.contract.ContractException.class)
+                .hasMessageContaining("'request' is declared as CreateRequest");
     }
 }
