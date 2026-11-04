@@ -18,6 +18,7 @@ class LiquibaseExternalDatabaseTest {
         DatabaseModule module = DatabaseModule.create(db)
                 .migrateWith(LiquibaseSchemaMigrator.classpath("db/liquibase/changelog.xml"));
         try {
+            dropMigrationState(db);
             module.start(null);
             assertThat(module.migrationResult())
                     .contains(new SchemaMigrationResult(LiquibaseSchemaMigrator.ID, 2));
@@ -28,12 +29,26 @@ class LiquibaseExternalDatabaseTest {
                     .get(0).getLong("item_count")).isEqualTo(1L);
         } finally {
             try {
-                db.execute("DROP TABLE IF EXISTS items");
-                db.execute("DROP TABLE IF EXISTS databasechangeloglock");
-                db.execute("DROP TABLE IF EXISTS databasechangelog");
+                dropMigrationState(db);
             } finally {
                 db.close();
             }
         }
+    }
+
+    /**
+     * The first assertion is only true of an empty schema, so the state it needs is established before
+     * the run and not only after it; a run aborted inside its own teardown would otherwise make every
+     * later run fail for the wrong reason. Both spellings of the bookkeeping tables are dropped because
+     * Liquibase creates them in upper case, MySQL on Linux matches identifiers case-sensitively, and
+     * PostgreSQL folds unquoted names to lower case -- one spelling silently leaves them behind on the
+     * first engine while `DROP TABLE IF EXISTS` reports success.
+     */
+    private static void dropMigrationState(Db db) throws Exception {
+        db.execute("DROP TABLE IF EXISTS items");
+        db.execute("DROP TABLE IF EXISTS databasechangeloglock");
+        db.execute("DROP TABLE IF EXISTS DATABASECHANGELOGLOCK");
+        db.execute("DROP TABLE IF EXISTS databasechangelog");
+        db.execute("DROP TABLE IF EXISTS DATABASECHANGELOG");
     }
 }
