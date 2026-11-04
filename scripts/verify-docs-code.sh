@@ -20,12 +20,15 @@ doc_modules=(aura-contract aura-core aura-web aura-ai aura-workflow aura-db aura
 compile_modules=(aura-web aura-ai aura-workflow aura-db aura-mcp)
 selected="$(IFS=,; echo "${compile_modules[*]}")"
 
-"${maven[@]}" -q -f "$repo_root/pom.xml" \
-  -pl "$selected" -am -DskipTests package
+# One invocation, both goals: `package` runs before `dependency:build-classpath` in the same reactor
+# session, so a sibling module's freshly built output satisfies the dependency graph. Split across two
+# invocations, the second one has no session to resolve from and demands the artifact from the
+# repository, which fails for every module that has never been installed, and a clean clone has never
+# installed any of them.
 # A relative outputFile keeps each module's dependency list in its own target directory; an
 # absolute path would let the last module in the reactor overwrite every earlier one.
 "${maven[@]}" -q -f "$repo_root/pom.xml" \
-  -pl "$selected" -am dependency:build-classpath \
+  -pl "$selected" -am -DskipTests package dependency:build-classpath \
   -Dmdep.outputFile=target/aura-docs-classpath.txt
 
 classpath=""
