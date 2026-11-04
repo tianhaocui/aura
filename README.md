@@ -13,10 +13,9 @@ refuted it: the staged context cut prompt tokens by about 68% but cost a repair
 round on both tasks and lost a first-time-successful task (`pilot-20261103`).
 After the documentation hole behind that failure was fixed, a second run cut
 prompt tokens 84.2% with no repair round and no lost answer (`pilot-20261104`).
-It is still not accepted evidence: one sample per arm cannot size an effect, and
-the staged arm costs more than the token budget the task declares, which is why
-`docs/1.0-readiness.md` keeps the item unchecked until the gate reports it green
-on a real sample.
+It is still not accepted evidence: one sample per arm shows a difference without
+sizing one, which is why `docs/1.0-readiness.md` keeps the item unchecked until
+the gate reports it green on three samples per arm.
 
 Aura 1.0 has one application model: reusable capability modules and business
 modules are composed explicitly with `use(...)`. One `Route` record is the route

@@ -5,6 +5,10 @@ import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
 import org.junit.jupiter.api.Test;
 
+import java.io.IOException;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Set;
@@ -31,7 +35,7 @@ class AiEvaluationManifestTest {
     void manifestCoversTheCanonicalTaskSetAndMetrics() throws Exception {
         Path root = repoRoot();
         JSONObject manifest = JSON.parseObject(Files.readString(root.resolve("evals/tasks.json")));
-        assertThat(manifest.getInteger("schemaVersion")).isEqualTo(1);
+        assertThat(manifest.getInteger("schemaVersion")).isEqualTo(2);
         // The repair loop has to be capped, or repairRounds stops meaning the same thing across runs.
         assertThat(manifest.getIntValue("maxRepairRounds")).isBetween(1, 10);
         JSONArray tasks = manifest.getJSONArray("tasks");
@@ -45,9 +49,6 @@ class AiEvaluationManifestTest {
             JSONObject task = (JSONObject) value;
             assertThat(task.getString("id")).isNotBlank();
             assertThat(task.getString("prompt")).contains("Aura");
-            // maxTokens is the total input-plus-output budget the staged arm has to stay inside;
-            // it is not a prompt length limit.
-            assertThat(task.getIntValue("maxTokens")).isBetween(1, 10_000);
             assertThat(task.getJSONArray("verificationTests")).isNotEmpty();
         }
 
@@ -59,6 +60,36 @@ class AiEvaluationManifestTest {
                 // final outcome it belongs to cannot be compared with anything, so the measurement dies
                 // the moment one of these becomes optional.
                 "schemaVersion", "variant", "contextId", "finalSuccess", "taskSetHash");
+    }
+
+    /**
+     * A budget is the one number in the task set that can quietly decide the experiment: the pilot
+     * recorded 18,679 tokens against a 4,000 `maxTokens` that nothing had derived, and no staged recipe
+     * shipping `AI_GUIDE.md` can fit inside such a number, because its own first call is already about
+     * 8,100 prompt tokens. So the budget is recomputed here from the declared context and the declared
+     * repair allowance, and a hand-typed value fails the manifest instead of silently grading a cohort.
+     */
+    @Test
+    void everyTokenBudgetIsTheDerivedWorstCaseOfItsOwnTask() throws Exception {
+        Path root = repoRoot();
+        JSONObject manifest = JSON.parseObject(Files.readString(root.resolve("evals/tasks.json")));
+        JSONObject budget = manifest.getJSONObject("budget");
+        assertThat(budget).as("evals/tasks.json declares no budget derivation").isNotNull();
+        BigDecimal tokensPerByte = budget.getBigDecimal("tokensPerByte");
+        int outputPerCall = budget.getIntValue("maxOutputTokensPerCall");
+        assertThat(tokensPerByte).as("budget.tokensPerByte").isPositive();
+        assertThat(outputPerCall).as("budget.maxOutputTokensPerCall").isPositive();
+        int contextBytes = stagedContextBytes(root, budget.getJSONArray("stagedContext"));
+        int calls = 1 + manifest.getIntValue("maxRepairRounds");
+        for (Object value : manifest.getJSONArray("tasks")) {
+            JSONObject task = (JSONObject) value;
+            int promptBytes = contextBytes + task.getString("prompt").getBytes(StandardCharsets.UTF_8).length;
+            int perCall = ceilMultiply(promptBytes, tokensPerByte) + outputPerCall;
+            assertThat(task.getIntValue("maxTokens"))
+                    .as("task '%s' budget: %d calls x %d tokens, recomputed from the declared context",
+                            task.getString("id"), calls, perCall)
+                    .isEqualTo(calls * perCall);
+        }
     }
 
     @Test
@@ -73,6 +104,24 @@ class AiEvaluationManifestTest {
                         .matches(FULLY_QUALIFIED);
             }
         }
+    }
+
+    private static int stagedContextBytes(Path root, JSONArray declaredFiles) throws IOException {
+        assertThat(declaredFiles).as("budget.stagedContext names no files").isNotEmpty();
+        int bytes = 0;
+        for (Object file : declaredFiles) {
+            Path context = root.resolve((String) file);
+            assertThat(context)
+                    .as("budget.stagedContext names %s, which the tree does not hold", context)
+                    .isRegularFile();
+            bytes += Files.readAllBytes(context).length;
+        }
+        return bytes;
+    }
+
+    /** Byte counts are exact and the ratio is a declared decimal, so this never goes through a double. */
+    private static int ceilMultiply(int bytes, BigDecimal ratio) {
+        return ratio.multiply(BigDecimal.valueOf(bytes)).setScale(0, RoundingMode.CEILING).intValueExact();
     }
 
     private static Path repoRoot() {

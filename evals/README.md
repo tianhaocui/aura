@@ -28,8 +28,10 @@ The claim holds only if, per task, the staged arm's median `inputTokens` is at
 most 90% of the baseline median, its median `repairRounds` is not higher, its
 final success rate is not lower, its first-pass compile rate is not lower, no
 task that succeeds under full docs fails to ever succeed staged, and every
-staged record stays inside that task's `maxTokens` budget, which is a total
-input-plus-output budget. Both arms repair at most `maxRepairRounds` rounds from
+staged record stays inside that task's `maxTokens` budget -- a total
+input-plus-output budget the manifest derives from the declared context rather than
+a number anyone types (see "The budget, restated with its derivation"). Both arms
+repair at most `maxRepairRounds` rounds from
 `tasks.json`; an uncapped loop would make `repairRounds` incomparable across
 runners, and a run capped *below* that number has not tested the claim the task
 set declares, so it is a different experiment and must say so in its conditions.
@@ -162,24 +164,54 @@ bash scripts/record-ai-eval.sh \
 
 ## Decisions taken from the pilot
 
-`maxTokens` stays as written. It describes the budget the staged recipe is
-supposed to fit inside, so the answer to "the staged arm spent 18,679 against
-4,000" is to shrink the recipe, not to raise the number; raising it would delete
-the only check that measures this project's second design red line. `pilot-20261104`
-sharpened what that costs: the staged arm's first call alone is about 8,100 prompt
-tokens, so no recipe that ships `AI_GUIDE.md` -- 17,333 bytes, roughly 4,480 tokens
-at the calibration this run's own usage counts give -- can fit any budget in the
-2,500-to-5,000 range the task set declares. A criterion that no candidate can meet
-is not a criterion, so this number is now known to be wrong at its provenance: it
-was written before anything was measured.
+### The budget, restated with its derivation
 
-Restating it is a design step, not a scoring step, and the order is fixed: the new
-budget and its derivation go into `evals/tasks.json` *before* the cohort that is
-graded against it, never in the change that reports that cohort passing. Editing
-`tasks.json` also changes `taskSetHash`, which is what marks a record as belonging
-to the task set it was measured against, so any restatement strands the cohorts
-recorded so far into `evals/results/archive/` -- another reason it happens as the
-opening of an experiment rather than as its conclusion.
+`maxTokens` was restated on 2026-11-04, before the cohort that is graded against
+it, because the number it carried was never derived from anything. It described
+the budget the staged recipe is supposed to fit inside, so the honest answer to
+"the staged arm spent 18,679 against 4,000" was to check whether 4,000 could be
+reached at all: the staged arm's first call alone is about 8,100 prompt tokens, so
+no recipe that ships `AI_GUIDE.md` -- 18,826 bytes, and 13,695 more in the module
+guide it selects -- fits any budget in the 2,500-to-5,000 range the task set used
+to declare. A criterion no candidate can meet is not a criterion, and it graded
+nothing: it reported the same red for a wasteful recipe and a working one.
+
+The restated budget is the worst declared cost of the experiment, not an
+aspiration. Per task:
+
+```
+calls        = 1 + maxRepairRounds                       (the declared repair allowance)
+prompt_tokens = ceil((staged_context_bytes + prompt_bytes) x tokensPerByte)
+maxTokens    = calls x (prompt_tokens + maxOutputTokensPerCall)
+```
+
+Every input is declared in `evals/tasks.json` under `budget` rather than remembered
+in prose: `stagedContext` is the recipe's files, `tokensPerByte` is 0.2586 --
+measured from the pilot's own usage counts (50,317 prompt tokens over 194,564
+context bytes), which makes the derived budget 3% conservative against the staged
+arm's measured 8,185 tokens for 32,717 bytes -- and `maxOutputTokensPerCall` is
+3,000, the output ceiling the pilot runner already passes. That puts every task's
+budget at about 45,800 tokens, `crud-module` at 45,844.
+
+The budgets are now nearly identical to each other, and that is the finding: under
+a recipe whose fixed prompt is 8,461 tokens, a per-task number differing by 1,000
+was measuring nothing but the author's guess about task difficulty.
+
+What the number refuses has changed, and `example.AiEvaluationManifestTest` now
+computes it from the tree instead of trusting the file: it adds up the bytes of
+`budget.stagedContext`, applies the declared ratio and ceiling, and fails any task
+whose `maxTokens` is not exactly that product. So a budget cannot be lowered to
+grade a cohort, and it moves on its own only when the recipe or the declared repair
+allowance moves -- which is the point of deriving it. What it now guards is a
+runaway: a staged record inside budget means the run stayed within the calls the
+task set declared, at the context the task set declared. Efficiency is graded by
+the paired comparison against the baseline arm, which is where a relative claim
+belongs; an absolute budget cannot express one.
+
+Restating it also changed `taskSetHash`, which is what marks a record as belonging
+to the task set it was measured against, so `pilot-20261104` is stranded: it stays
+in `evals/results/` until the cohort recorded after this change lands, and the
+consumer reports it as stale rather than comparing it to a budget it never faced.
 
 The staged corpus is renamed, not reused, when its content changes. `contextId`
 names a recipe but the record carries no hash of the bytes behind that name, so
