@@ -1,12 +1,13 @@
 {
   "schemaVersion": 1,
+  "maxRepairRounds": 3,
   "tasks": [
     {
       "id": "crud-module",
       "category": "crud",
       "maxTokens": 4000,
       "prompt": "Create an Aura 1.0 business module with list/get/create/update/delete order routes, explicit route metadata, and TestClient verification. Use AuraApp and use(...); do not use removed Builder APIs.",
-      "verificationTests": ["io.aura.web.ServiceTest", "example.generated.GeneratedAppTest"]
+      "verificationTests": ["example.ComposedAppTest", "example.generated.GeneratedAppTest"]
     },
     {
       "id": "route-authorization",
