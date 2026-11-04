@@ -46,6 +46,14 @@ class AiEvaluationResultsTest {
     private static final String BASELINE = "baseline";
     private static final String TREATMENT = "treatment";
 
+    /**
+     * A median over one sample is that sample, so a single run per arm can show a difference but
+     * cannot size one. Reduction legs are not allowed to declare the claim supported below this
+     * many records per arm per task; the gate stays red at n = 1 even when every direction points
+     * the right way, because "plumbing evidence" and "verdict" must not be the same green light.
+     */
+    private static final int MIN_SAMPLES_PER_ARM = 3;
+
     @Test
     void everyRecordSatisfiesTheDeclaredSchema() {
         List<Record> records = loadRecords();
@@ -112,6 +120,66 @@ class AiEvaluationResultsTest {
                             entry.getKey(), BASELINE, baselineModels, TREATMENT, treatmentModels)
                     .isEqualTo(baselineModels);
         }
+    }
+
+    @Test
+    void everyMeasuredTaskCarriesEnoughSamplesPerArm() {
+        Map<String, List<Record>> byTask = loadByTaskId();
+        List<String> thin = new ArrayList<>();
+        for (Map.Entry<String, List<Record>> entry : byTask.entrySet()) {
+            int baseline = filter(entry.getValue(), BASELINE).size();
+            int treatment = filter(entry.getValue(), TREATMENT).size();
+            if (baseline < MIN_SAMPLES_PER_ARM || treatment < MIN_SAMPLES_PER_ARM) {
+                thin.add(String.format("%s: %d baseline, %d staged (need %d each)",
+                        entry.getKey(), baseline, treatment, MIN_SAMPLES_PER_ARM));
+            }
+        }
+        assertThat(thin)
+                .as("a median of one sample is that sample, so these tasks show a difference"
+                        + " without sizing one; run more samples before reading any green here as"
+                        + " support for the claim")
+                .isEmpty();
+    }
+
+    @Test
+    void noRecordContradictsItself() {
+        for (Record record : loadRecords()) {
+            JSONObject json = record.json();
+            int rounds = json.getIntValue("repairRounds");
+            boolean firstPass = json.getBooleanValue("firstPassSuccess");
+            boolean finalSuccess = json.getBooleanValue("finalSuccess");
+            if (firstPass) {
+                assertThat(rounds)
+                        .as("%s claims a first-pass success that still needed %d repair rounds",
+                                record.label(), rounds)
+                        .isZero();
+                assertThat(finalSuccess)
+                        .as("%s claims the first answer passed and the run never succeeded", record.label())
+                        .isTrue();
+            }
+            assertThat(json.getIntValue("inputTokens"))
+                    .as("%s records no prompt charge, which means no model call was made to measure",
+                            record.label())
+                    .isPositive();
+        }
+    }
+
+    @Test
+    void stagedContextDoesNotLoseFirstPassAnswers() {
+        Map<String, List<Record>> byTask = loadByTaskId();
+        List<String> violations = new ArrayList<>();
+        for (String taskId : byTask.keySet()) {
+            double baselineRate = firstPassRate(filter(byTask.get(taskId), BASELINE));
+            double treatmentRate = firstPassRate(filter(byTask.get(taskId), TREATMENT));
+            if (treatmentRate < baselineRate) {
+                violations.add(String.format("%s: baseline %.2f -> staged %.2f first-pass compile rate",
+                        taskId, baselineRate, treatmentRate));
+            }
+        }
+        assertThat(violations)
+                .as("the staged recipe answers fewer tasks right the first time,"
+                        + " which is the cost a cheaper prompt can hide")
+                .isEmpty();
     }
 
     @Test
@@ -404,6 +472,11 @@ class AiEvaluationResultsTest {
     private static double successRate(List<Record> records) {
         long succeeded = records.stream().filter(record -> record.json().getBooleanValue("finalSuccess")).count();
         return (double) succeeded / records.size();
+    }
+
+    private static double firstPassRate(List<Record> records) {
+        long passed = records.stream().filter(record -> record.json().getBooleanValue("firstPassSuccess")).count();
+        return (double) passed / records.size();
     }
 
     private static boolean anySucceeded(List<Record> records) {
