@@ -3,20 +3,26 @@
   "title": "Aura AI evaluation result",
   "type": "object",
   "required": [
-    "taskId", "runId", "model", "inputTokens", "outputTokens",
-    "firstPassSuccess", "repairRounds", "errorCodes", "durationMs", "commit"
+    "schemaVersion", "taskId", "runId", "model", "variant", "contextId",
+    "inputTokens", "outputTokens", "firstPassSuccess", "finalSuccess",
+    "repairRounds", "errorCodes", "durationMs", "commit", "taskSetHash"
   ],
   "properties": {
+    "schemaVersion": {"type": "integer", "enum": [2]},
     "taskId": {"type": "string", "minLength": 1},
     "runId": {"type": "string", "minLength": 1},
     "model": {"type": "string", "minLength": 1},
+    "variant": {"type": "string", "enum": ["baseline", "treatment"]},
+    "contextId": {"type": "string", "minLength": 2},
     "inputTokens": {"type": "integer", "minimum": 0},
     "outputTokens": {"type": "integer", "minimum": 0},
     "firstPassSuccess": {"type": "boolean"},
+    "finalSuccess": {"type": "boolean"},
     "repairRounds": {"type": "integer", "minimum": 0},
     "errorCodes": {"type": "array", "items": {"type": "string"}},
     "durationMs": {"type": "integer", "minimum": 0},
-    "commit": {"type": "string", "minLength": 7}
+    "commit": {"type": "string", "minLength": 7},
+    "taskSetHash": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
   },
   "additionalProperties": false
 }

@@ -127,6 +127,20 @@ test -f "$repo_root/evals/tasks.json"
 test -f "$repo_root/evals/result.schema.json"
 test -x "$repo_root/scripts/verify-ai-evals.sh"
 test -x "$repo_root/scripts/record-ai-eval.sh"
+# The recorded metrics are only a claim until something reads them, so the consumer is a required
+# file and the gate is required to invoke it.
+test -f "$repo_root/examples/aura-composed/src/test/java/example/AiEvaluationResultsTest.java"
+rg -q 'example\.AiEvaluationResultsTest' "$repo_root/scripts/verify-ai-evals.sh"
+rg -q 'aura\.eval\.results=true' "$repo_root/scripts/verify-ai-evals.sh"
+# A record is only repeatable if the thing that produced it is in the repository. The runner has to
+# take the endpoint, the model, and both context recipes as arguments: a default baked in here would
+# let a run inherit its recipe from the machine instead of from the evidence file.
+test -x "$repo_root/scripts/run-ai-pilot.sh"
+if rg -n 'https?://|(claude|gpt)-[a-z0-9.]' "$repo_root/scripts/run-ai-pilot.sh"; then
+  echo "the pilot runner must not embed an endpoint or a model id" >&2
+  exit 1
+fi
+rg -q 'run-ai-pilot\.sh' "$repo_root/evals/README.md"
 test -f "$repo_root/docs/DOCUMENTATION.md"
 test -f "$repo_root/docs/legacy-documentation-0.6.md"
 test -f "$repo_root/aura-processor/src/main/java/io/aura/processor/AuraRouteProcessor.java"
