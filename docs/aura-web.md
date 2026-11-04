@@ -89,18 +89,58 @@ limits. Upload APIs do not expose an unbounded `readAllBytes()` path.
 
 ## TestClient
 
+`io.aura.web.TestClient` is the in-memory adapter, and `TestClient.Request` and
+`TestClient.Response` are nested in it, so one import names all three types.
+
+<!-- aura:compile name=web-test-client-usage -->
 ```java
-AuraApp app = AuraApp.create()
-        .use(new OrdersModule())
-        .prepare();
+package docs.example;
 
-TestClient client = TestClient.of(app);
-client.post("/orders")
-        .body(new CreateOrder("sku-1", 2))
-        .expect(201);
+import io.aura.AuraApp;
+import io.aura.AuraModule;
+import io.aura.ModuleContext;
+import io.aura.contract.ModuleMetadata;
+import io.aura.contract.Route;
+import io.aura.port.BaseHandler;
+import io.aura.web.TestClient;
+import java.util.Map;
 
-Map<String, Object> schema = client.schema();
-Map<String, Object> openApi = client.openApi();
+public final class WebTestClientUsage {
+    private WebTestClientUsage() { }
+
+    record CreateOrder(String sku, int quantity) { }
+
+    public static void check() {
+        AuraApp app = AuraApp.create()
+                .use(new OrdersModule())
+                .prepare();
+
+        TestClient client = TestClient.of(app);
+        client.get("/orders").expect(200).bodyContains("orders");
+
+        TestClient.Response created = client.post("/orders")
+                .body(new CreateOrder("sku-1", 2))
+                .expect(201);
+        String text = created.body();
+        int code = created.status();
+
+        Map<String, Object> schema = client.schema();
+        Map<String, Object> openApi = client.openApi();
+    }
+
+    private static final class OrdersModule implements AuraModule {
+        @Override public ModuleMetadata descriptor() {
+            return ModuleMetadata.of("orders", "1.0.0");
+        }
+
+        @Override public void install(ModuleContext context) {
+            context.route(Route.of("GET", "/orders",
+                    (BaseHandler) ctx -> ctx.json(java.util.List.of("orders"))));
+            context.route(Route.of("POST", "/orders",
+                    (BaseHandler) ctx -> ctx.status(201)));
+        }
+    }
+}
 ```
 
 `Request.remoteAddr(ip)` names the TCP peer and `Request.secure(true)` marks the

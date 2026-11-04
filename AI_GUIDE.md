@@ -276,16 +276,52 @@ CSRF, CORS), parameter binding, middleware, and error semantics as Undertow. A
 rejected request is rejected in the test, so security policy is verifiable in
 milliseconds instead of only over a socket.
 
+`TestClient` is `io.aura.web.TestClient`, and its request and response types are
+nested inside it — `TestClient.Request` and `TestClient.Response` — so one import
+covers all three. Read a response with `status()`, `body()`, `json(Class)` or
+`bodyContains(String)`, and assert a code with `expect(int)`.
+
+<!-- aura:compile name=ai-test-client-usage -->
 ```java
-AuraApp app = AuraApp.create().use(new OrderModule());
-TestClient test = TestClient.of(app);
+package docs.example;
 
-test.get("/orders/1").expect(200);
-test.post("/orders").body(order).expect(201);
-test.get("/missing").expect(404);
+import io.aura.AuraApp;
+import io.aura.AuraModule;
+import io.aura.ModuleContext;
+import io.aura.contract.ModuleMetadata;
+import io.aura.contract.Route;
+import io.aura.port.BaseHandler;
+import io.aura.web.TestClient;
+import java.util.Map;
 
-Map<String, Object> schema = test.schema();
-Map<String, Object> openApi = test.openApi();
+public final class AiTestClientUsage {
+    private AiTestClientUsage() { }
+
+    public static void check() {
+        AuraApp app = AuraApp.create().use(new OrdersModule()).prepare();
+        TestClient test = TestClient.of(app);
+
+        test.get("/orders").expect(200).bodyContains("ready");
+        test.post("/orders").body("{\"sku\":\"abc\"}").expect(201);
+        test.get("/missing").expect(404);
+
+        Map<String, Object> schema = test.schema();
+        Map<String, Object> openApi = test.openApi();
+    }
+
+    private static final class OrdersModule implements AuraModule {
+        @Override public ModuleMetadata descriptor() {
+            return ModuleMetadata.of("orders", "1.0.0");
+        }
+
+        @Override public void install(ModuleContext context) {
+            context.route(Route.of("GET", "/orders",
+                    (BaseHandler) ctx -> ctx.text("ready")));
+            context.route(Route.of("POST", "/orders",
+                    (BaseHandler) ctx -> ctx.status(201)));
+        }
+    }
+}
 ```
 
 The same contract is served at `/__schema__` and `/openapi.json`. Run the

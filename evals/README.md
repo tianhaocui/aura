@@ -26,11 +26,23 @@ Two arms, same model, same task prompt, same verification loop:
 
 The claim holds only if, per task, the staged arm's median `inputTokens` is at
 most 90% of the baseline median, its median `repairRounds` is not higher, its
-final success rate is not lower, no task that succeeds under full docs fails to
-ever succeed staged, and every staged record stays inside that task's
-`maxTokens` budget, which is a total input-plus-output budget. Both arms repair
-at most `maxRepairRounds` rounds from `tasks.json`; an uncapped loop would make
-`repairRounds` incomparable across runners.
+final success rate is not lower, its first-pass compile rate is not lower, no
+task that succeeds under full docs fails to ever succeed staged, and every
+staged record stays inside that task's `maxTokens` budget, which is a total
+input-plus-output budget. Both arms repair at most `maxRepairRounds` rounds from
+`tasks.json`; an uncapped loop would make `repairRounds` incomparable across
+runners, and a run capped *below* that number has not tested the claim the task
+set declares, so it is a different experiment and must say so in its conditions.
+
+Three further legs hold the measurement up rather than the claim. Each measured
+task needs at least three records per arm before any reduction leg may be read as
+support, because a median of one sample is that sample: it can show a difference
+but cannot size one, and the gate is meant to stay red on plumbing evidence. No
+record may contradict itself (`firstPassSuccess` with a nonzero
+`repairRounds`, a first-pass success that never succeeded, or a zero prompt
+charge meaning no call was made), since the recorder accepts all three and only
+the consumer can refuse them. And each arm is pinned to exactly one model and one
+`contextId`, so the cheapest arm cannot simply be a cheaper model.
 
 `maxTokens` is graded against the staged arm only. If the experiment fails the
 claim, withdraw the claim or change the design — do not edit the data, and do
@@ -122,15 +134,32 @@ silencing this one.
 
 The next experiment is a documentation fix, not more sampling. Both staged
 failures invented `io.aura.test.TestClient`, and the staged corpus names
-`TestClient` fifteen times without ever giving its package — the qualified name
-`io.aura.web.TestClient` appears only in `docs/DOCUMENTATION.md` and
-`docs/REFACTOR_LOG.md`, neither of which the staged arm reads. That is a plain
-coverage hole in the guide. The second failure is weaker evidence: the staged
-docs do show `resp.body()` and `resp.status()` in examples, yet the model still
-called a `bodyString()` that exists in no document, which one repair round did
-not fix. So fix the guide's qualified names first, and treat example-vs-table
-coverage as its own open question rather than assuming a table would have
-helped. Then rerun paired: both arms of a task must be recorded under one
-`contextId` set, or the consumer reads the mixed recipes as an invalid
-comparison rather than a result.
+`TestClient` thirteen times (counted in `AI_GUIDE.md` plus `docs/aura-web.md` at
+`5d793bb` and again at HEAD) without ever giving its package — the qualified name
+`io.aura.web.TestClient` appears zero times there and lives only in
+`docs/DOCUMENTATION.md` and `docs/REFACTOR_LOG.md`, neither of which the staged
+arm reads. That is a plain coverage hole in the guide. The second failure is
+weaker evidence: the staged docs show response reads only inside unmarked
+sketches, yet the model still called a `bodyString()` that exists in no document,
+which one repair round did not fix.
+
+The hole is now closed in the shape a model can actually copy. Both `TestClient`
+examples are marked `aura:compile` units (`ai-test-client-usage`,
+`web-test-client-usage`) that carry their own `package`, their
+`import io.aura.web.TestClient;` and a call that reads a body, and the prose
+beside them names the nested `TestClient.Request` / `TestClient.Response` and the
+`status()` / `body()` / `json(Class)` / `bodyContains(String)` accessors. The
+documentation gate compiles fifteen fences instead of thirteen, so a reader
+copying the staged guide gets an import line that was checked against this tree.
+Marking the sketch also fixed the deeper defect: the fences a model imitates were
+the ones no gate verified.
+
+Because those two files sit in both recipes, the next run pairs
+`all-canonical-docs-v2` against `staged-guide-v2`; recording it under the v1 ids
+would pair two different recipes as one. When v2 records land, the v1 file moves
+to `evals/results/archive/` with its bytes and run ids untouched — the consumer
+scans one directory, so an archived cohort stops being compared against a live one
+while staying in the history that shows the claim was refuted once. Both arms of a
+task must be recorded in the same sitting, or the consumer reads the mixed recipes
+as an invalid comparison rather than a result.
 
