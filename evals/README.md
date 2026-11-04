@@ -12,17 +12,23 @@ stable error codes encountered, duration, and commit.
 
 ## The claim, stated so it can fail
 
-Reducing context while preserving stability is a hypothesis under test, not an
-established result. `example.AiEvaluationResultsTest` scores it and the gate
-stays red until `evals/results/` holds real records; adding sample data to make
-it pass would defeat the point.
+Reducing context while preserving stability was a hypothesis under test, and
+`example.AiEvaluationResultsTest` scores it: three samples per arm on two tasks now
+support it inside that scope, and the gate stays red whenever `evals/results/` stops
+holding records that meet it. Adding sample data to make it pass would defeat the
+point.
 
 Two arms, same model, same task prompt, same verification loop:
 
-- `baseline`, `contextId=all-canonical-docs-v1`: every canonical Aura document is
+- `baseline`, `contextId=all-canonical-docs-v2`: every canonical Aura document is
   placed in the context at once.
-- `treatment`, `contextId=staged-guide-v1`: `AI_GUIDE.md` plus only the one module
-  guide `.claude/skills/aura/SKILL.md` selects for the task.
+- `treatment`, `contextId=staged-guide-v2`: `AI_GUIDE.md` plus the one module guide
+  the task needs -- `docs/aura-web.md` for both measured tasks, which is what
+  `.claude/skills/aura/SKILL.md` selects for them.
+
+The suffix is not decoration: it changes whenever the bytes behind a recipe change,
+because a record names a recipe by id and carries no hash of its files. `pilot-20261103`
+ran under the v1 ids; the two cohorts after it run under v2.
 
 The claim holds only if, per task, the staged arm's median `inputTokens` is at
 most 90% of the baseline median, its median `repairRounds` is not higher, its
@@ -118,6 +124,39 @@ the sample floor exists to refuse to pretend about.
 So the honest reading is: the refuted half of the claim was a documentation hole,
 not a property of small context, and the remaining disagreement is with a budget
 number nobody measured when it was written.
+
+## Third measurement: `cohort-20261104-n3` (n = 3 per arm, `claude-opus-4-5`)
+
+Twelve runs -- the same two tasks, both arms, three repetitions each -- against the
+same v2 recipes as `pilot-20261104`, at the declared repair cap, compiled at
+`986001a`, the commit that restated the budget. Nothing about the experiment changed
+except the task set, which is why this is the first cohort the current manifest
+accepts and why `pilot-20261104` now sits in `evals/results/archive/`.
+
+| task | arm | median input | median output | first pass | final | rounds |
+|------|-----|-------------:|--------------:|:----------:|:-----:|:------:|
+| `crud-module` | baseline | 51,679 | 1,368 | 3/3 | 3/3 | 0 |
+| `crud-module` | staged | 8,185 | 1,422 | 3/3 | 3/3 | 0 |
+| `route-authorization` | baseline | 51,662 | 420 | 3/3 | 3/3 | 0 |
+| `route-authorization` | staged | 8,168 | 543 | 3/3 | 3/3 | 0 |
+
+Input cost falls 84.2% on both tasks, no arm needed a repair round, no arm lost a
+first-pass compile, and the worst staged record (9,665 tokens) sits at 21% of its
+derived budget. `scripts/verify-ai-evals.sh` passes: 18 golden classes, the manifest
+guard, and all ten legs of the results consumer, each proven by a surefire report
+that only that invocation wrote.
+
+The repetitions were not one answer counted three times. The twelve generated
+sources hash twelve different ways -- including within a single arm and task, at
+`temperature: 0` -- and every one of them compiled on the first attempt, so three
+independent samples per arm agreeing is the strongest form this evidence comes in.
+
+What the cohort does not buy: two of the ten measured tasks, one model, one day, one
+endpoint. The reps are still draws from the same generator, so agreement among them
+says nothing about `claude-opus-4-5` being replaced, and nothing at all about the
+other eight tasks -- `authenticated-mcp` and `workflow-variant` in particular, whose
+prompts are longer than twice the size of the two measured here. The claim accepted
+in `docs/1.0-readiness.md` is exactly as wide as this table and no wider.
 
 Run the golden behavioral baseline:
 
@@ -255,10 +294,9 @@ while staying in the history that shows the claim was refuted once. Both arms of
 task must be recorded in the same sitting, or the consumer reads the mixed recipes
 as an invalid comparison rather than a result.
 
-That is what `pilot-20261104` did, and the fix held. What is left is the two red
-legs, and they have opposite directions: the sample floor wants more runs, the
-budget leg wants a smaller context and an honest number. The next cohort is these
-same four runs repeated three times per arm -- twelve runs, with the baseline arm
-costing about 51,700 prompt tokens each -- and the `maxTokens` derivation above
-goes in front of it, not after it.
+That is what `pilot-20261104` did, and the fix held. Its two red legs went the way
+each one deserved: the sample floor was answered by `cohort-20261104-n3`, three
+samples per arm, and the budget was answered by the derivation above, published in
+the commit *before* that cohort ran rather than in the one reporting it. Twelve runs,
+with the baseline arm costing about 51,700 prompt tokens each.
 
