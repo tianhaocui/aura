@@ -56,8 +56,10 @@ public final class GeneratedOrderService {
 }
 ```
 
-Do not also register the same service through the reflection-based service
-registrar; that would contribute duplicate routes and fail startup validation.
+Contribute a service's routes once — either through the generated
+`<ServiceName>AuraRoutes` class or a handwritten `Route`. There is no
+reflection-based service registrar, and a duplicate `method`+`path` pair fails
+startup validation.
 
 The first generator scope intentionally supports public annotated methods with:
 
@@ -72,5 +74,6 @@ validation annotations `@NotBlank`, `@NotNull`, `@Min`, `@Max`, `@Size`, and
 is descriptive and lets AI clients construct valid payloads before sending a
 request.
 
-Unsupported or complex binding shapes should remain on the reflection prototype
-path until a generated binding rule is added with a contract test.
+Unsupported or complex binding shapes should be contributed as a handwritten
+`Route` — the same binder (`ParamResolver` through `LambdaHandler`) handles them
+— until a generated binding rule is added with a contract test.

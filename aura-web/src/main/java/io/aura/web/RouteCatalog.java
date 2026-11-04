@@ -19,8 +19,8 @@ public final class RouteCatalog {
         Route contract = route.contract();
         List<ApiParameter> parameters = new ArrayList<>(contract.params());
         if (parameters.isEmpty()) {
-            if (route.handler() instanceof MethodRefHandler methodHandler) {
-                Method method = methodHandler.resolvedMethod();
+            if (route.handler() instanceof LambdaHandler methodHandler) {
+                Method method = methodHandler.samMethod();
                 for (Parameter parameter : method.getParameters()) {
                     Class<?> type = parameter.getType();
                     if (type == Context.class || type == BaseContext.class) continue;
@@ -69,8 +69,8 @@ public final class RouteCatalog {
 
     private static Map<String, Object> responseSchema(CompiledRoute route, Route contract) {
         if (!contract.responseSchema().isEmpty()) return contract.responseSchema();
-        if (!(route.handler() instanceof MethodRefHandler methodHandler)) return Map.of();
-        Method method = methodHandler.resolvedMethod();
+        if (!(route.handler() instanceof LambdaHandler methodHandler)) return Map.of();
+        Method method = methodHandler.samMethod();
         if (method.getReturnType() == void.class || method.getReturnType() == Void.class
                 || method.getReturnType() == Context.class || method.getReturnType() == BaseContext.class) {
             return Map.of();

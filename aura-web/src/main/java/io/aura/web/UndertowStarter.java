@@ -1,8 +1,8 @@
 package io.aura.web;
 
-import io.aura.port.BaseHandler;import
-io.aura.port.BaseRouteBuilder;import
-io.aura.port.BaseRouter;
+import io.aura.port.BaseHandler;
+import io.aura.port.BaseRouteBuilder;
+import io.aura.port.BaseRouter;
 import com.alibaba.fastjson2.JSON;
 import io.aura.AuraWebRuntime;
 import io.aura.contract.CancellationToken;
@@ -77,9 +77,9 @@ public class UndertowStarter implements AuraStarter {
             log.info("Routes:");
             for (CompiledRoute cr : compiledRoutes) {
                 String source = "";
-                if (cr.handler() instanceof MethodRefHandler mh && mh.resolvedMethod() != null) {
-                    source = " — " + mh.resolvedMethod().getDeclaringClass().getSimpleName()
-                            + "." + mh.resolvedMethod().getName();
+                if (cr.handler() instanceof LambdaHandler lh) {
+                    source = " — " + lh.samMethod().getDeclaringClass().getSimpleName()
+                            + "." + lh.samMethod().getName();
                 }
                 log.info("  {} {}{}", cr.method(), cr.rawPath(), source);
             }

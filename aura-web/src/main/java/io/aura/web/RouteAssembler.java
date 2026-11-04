@@ -1,8 +1,8 @@
 package io.aura.web;
 
-import io.aura.port.BaseHandler;import
-io.aura.port.BaseRouteBuilder;import
-io.aura.port.WsHandler;
+import io.aura.port.BaseHandler;
+import io.aura.port.BaseRouteBuilder;
+import io.aura.port.WsHandler;
 import io.aura.AuraWebRuntime;
 import io.aura.contract.Route;
 
@@ -18,9 +18,6 @@ final class RouteAssembler {
             else registerDirectRoute(app, router, entry);
         }
 
-        for (Object service : app.services()) {
-            ServiceRegistrar.register(service, router);
-        }
         return router;
     }
 

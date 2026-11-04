@@ -8,6 +8,12 @@ aura-site 项目验证了 Aura 的核心价值：2000 行 Java 实现了 Spring 
 
 **核心原则：Aura 的竞争力是轻和快，任何拓展不能违背这一点。**
 
+> **时代背景（重要）：** 本文写于 stage1 重构之前，示例中的反射式入口
+> —— `ServiceRegistrar`、`MethodRefHandler`、`Router.crud(...)` 与
+> `app.service(...)` —— 已随「单一门」重构移除。如今路由只有一条门：显式贡献的
+> `Route`（手写或 `aura-processor` 生成）。下文这些示例只作演进思路保留，落地前需
+> 改写为显式 `Route` 贡献，不可当作现行 API。
+
 ---
 
 ## 一、短期补充（提升日常开发体验）

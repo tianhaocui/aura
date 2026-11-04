@@ -407,7 +407,6 @@ public interface io.aura.AuraWebRuntime extends io.aura.AuraMcpRuntime {
   public abstract int port();
   public abstract java.lang.String env();
   public abstract int workers();
-  public abstract java.util.List<java.lang.Object> services();
   public abstract java.util.List<io.aura.contract.Route> directRoutes();
   public abstract java.lang.String staticFilesPath();
   public abstract boolean spa();
@@ -493,7 +492,6 @@ public interface io.aura.ModuleContext extends io.aura.contract.CapabilityLookup
   public abstract <T> java.util.Optional<T> find(java.lang.Class<T>);
   public abstract void register(java.lang.Object);
   public abstract void register(java.lang.String, java.lang.Object);
-  public abstract void service(java.lang.Object);
   public abstract void route(io.aura.contract.Route);
   public abstract void webSocket(java.lang.String, java.util.function.Consumer<io.aura.port.WsHandler>);
   public abstract void before(io.aura.port.BaseHandler);
@@ -749,21 +747,12 @@ public class io.aura.port.BaseRouter {
   public final java.util.List<io.aura.port.BaseRouter$WsRoute> wsRoutes;
   public io.aura.port.BaseRouter();
   public io.aura.port.BaseRouteBuilder get(java.lang.String, io.aura.port.BaseHandler);
-  public io.aura.port.BaseRouteBuilder get(java.lang.String, java.lang.Object, java.lang.String);
   public io.aura.port.BaseRouteBuilder post(java.lang.String, io.aura.port.BaseHandler);
-  public io.aura.port.BaseRouteBuilder post(java.lang.String, java.lang.Object, java.lang.String);
   public io.aura.port.BaseRouteBuilder put(java.lang.String, io.aura.port.BaseHandler);
-  public io.aura.port.BaseRouteBuilder put(java.lang.String, java.lang.Object, java.lang.String);
   public io.aura.port.BaseRouteBuilder delete(java.lang.String, io.aura.port.BaseHandler);
-  public io.aura.port.BaseRouteBuilder delete(java.lang.String, java.lang.Object, java.lang.String);
   public io.aura.port.BaseRouteBuilder patch(java.lang.String, io.aura.port.BaseHandler);
-  public io.aura.port.BaseRouteBuilder patch(java.lang.String, java.lang.Object, java.lang.String);
   public io.aura.port.BaseRouteBuilder head(java.lang.String, io.aura.port.BaseHandler);
-  public io.aura.port.BaseRouteBuilder head(java.lang.String, java.lang.Object, java.lang.String);
   public io.aura.port.BaseRouteBuilder options(java.lang.String, io.aura.port.BaseHandler);
-  public io.aura.port.BaseRouteBuilder options(java.lang.String, java.lang.Object, java.lang.String);
-  public io.aura.port.BaseRouter crud(java.lang.String, java.lang.Object);
-  public io.aura.port.BaseRouter crud(java.lang.String, java.lang.Object, java.lang.String...);
   public io.aura.port.BaseRouter before(io.aura.port.BaseHandler);
   public io.aura.port.BaseRouter after(io.aura.port.BaseHandler);
   public io.aura.port.BaseRouter group(java.lang.String, java.util.function.Consumer<io.aura.port.BaseRouter>);
@@ -1155,12 +1144,6 @@ public final class io.aura.web.LambdaHandler implements io.aura.port.BaseHandler
   public io.aura.web.LambdaHandler(java.lang.Object);
   public void handle(io.aura.port.BaseContext) throws java.lang.Exception;
 }
-### aura-web:io.aura.web.MethodRefHandler
-public final class io.aura.web.MethodRefHandler implements io.aura.port.BaseHandler {
-  public void handle(io.aura.port.BaseContext) throws java.lang.Exception;
-  public java.lang.reflect.Method resolvedMethod();
-  public java.lang.Object invokeWithArgs(java.util.Map<java.lang.String, java.lang.Object>) throws java.lang.Exception;
-}
 ### aura-web:io.aura.web.MockContext
 public class io.aura.web.MockContext extends io.aura.web.Context {
   public io.aura.web.MockContext(java.util.Map<java.lang.String, java.lang.String>, java.util.Map<java.lang.String, java.lang.String>, java.util.Map<java.lang.String, java.lang.String>, java.lang.String, io.aura.AuraWebRuntime);
@@ -1235,15 +1218,6 @@ public final class io.aura.web.RouteCatalog {
 public class io.aura.web.Router extends io.aura.port.BaseRouter {
   public io.aura.web.Router();
   public io.aura.port.BaseRouter group(java.lang.String, java.util.function.Consumer<io.aura.port.BaseRouter>);
-  public io.aura.port.BaseRouteBuilder get(java.lang.String, java.lang.Object, java.lang.String);
-  public io.aura.port.BaseRouteBuilder post(java.lang.String, java.lang.Object, java.lang.String);
-  public io.aura.port.BaseRouteBuilder put(java.lang.String, java.lang.Object, java.lang.String);
-  public io.aura.port.BaseRouteBuilder delete(java.lang.String, java.lang.Object, java.lang.String);
-  public io.aura.port.BaseRouteBuilder patch(java.lang.String, java.lang.Object, java.lang.String);
-  public io.aura.port.BaseRouteBuilder head(java.lang.String, java.lang.Object, java.lang.String);
-  public io.aura.port.BaseRouteBuilder options(java.lang.String, java.lang.Object, java.lang.String);
-  public io.aura.port.BaseRouter crud(java.lang.String, java.lang.Object);
-  public io.aura.port.BaseRouter crud(java.lang.String, java.lang.Object, java.lang.String...);
 }
 ### aura-web:io.aura.web.SnapshotHttpClient
 public class io.aura.web.SnapshotHttpClient {

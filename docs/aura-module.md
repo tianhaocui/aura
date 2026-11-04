@@ -191,9 +191,10 @@ message.
   Use `app.runtimeView()` when an adapter needs the stable runtime contract.
 - `aura-db` provides `DatabaseModule.create(db)`. A business module can declare `requires("db")` and obtain the same `Db` instance with `context.require(Db.class)`.
 - `AuraApp` is the only application entry point in 1.0.
-- The optional `aura-processor` mirrors the reflection CRUD convention for
-  `@Path` services and emits direct route code. Do not install generated and
-  reflection routes for the same service.
+- The optional `aura-processor` emits direct route code for `@Path` services,
+  including the get/list/create/update/delete convention. There is no
+  reflection-based route registration; contribute each route once, generated or
+  handwritten.
 - Request bodies may be concrete records/POJOs or parameterized collections.
   Use `RequestType.parameterized(List.class, Item.class)` for a generic body;
   empty bodies remain nullable unless the handler rejects them.

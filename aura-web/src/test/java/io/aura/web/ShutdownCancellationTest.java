@@ -1,7 +1,7 @@
 package io.aura.web;
 
-import io.aura.port.BaseHandler;import
-io.aura.port.SseEmitter;
+import io.aura.port.BaseHandler;
+import io.aura.port.SseEmitter;
 import io.aura.AuraApp;
 import io.aura.AuraConfig;
 import io.aura.contract.Route;

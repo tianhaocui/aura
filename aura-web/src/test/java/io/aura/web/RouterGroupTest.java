@@ -9,19 +9,13 @@ import static org.assertj.core.api.Assertions.*;
 
 class RouterGroupTest {
 
-    public static class FakeService {
-        public String get(int id) { return "user-" + id; }
-        public String list() { return "all"; }
-    }
-
     @Test
-    void group_supportsServiceMethodRouting() {
+    void group_supportsExplicitRoutes() {
         Router router = new Router();
-        FakeService service = new FakeService();
 
         router.group("/api", api -> {
-            api.get("/user/{id}", service, "get");
-            api.get("/user", service, "list");
+            api.get("/user/{id}", ctx -> ctx.text("user"));
+            api.get("/user", ctx -> ctx.text("all"));
         });
 
         List<CompiledRoute> routes = UndertowStarter.compileRoutes(router);

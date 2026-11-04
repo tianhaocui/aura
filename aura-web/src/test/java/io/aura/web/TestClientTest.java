@@ -339,32 +339,4 @@ class TestClientTest {
         TestClient.Response resp = client.get("/secret").execute();
         assertThat(resp.status()).isEqualTo(403);
     }
-
-    // --- crud selective ---
-
-    @Test
-    void crud_selective_onlyRegistersSpecifiedMethods() {
-        Router router = new Router();
-        router.crud("/item", new CrudService(), "get", "list");
-        TestClient client = TestApplications.client(router);
-        assertThat(client.get("/item").execute().status()).isEqualTo(200);
-        assertThat(client.get("/item/1").execute().status()).isEqualTo(200);
-        assertThat(client.post("/item").body("{}").execute().status()).isEqualTo(404);
-        assertThat(client.delete("/item/1").execute().status()).isEqualTo(404);
-    }
-
-    @Test
-    void crud_invalidMethodName_throws() {
-        Router router = new Router();
-        assertThatThrownBy(() -> router.crud("/item", new CrudService(), "get", "patch"))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("patch");
-    }
-
-    static class CrudService {
-        public String get(int id) { return "item-" + id; }
-        public java.util.List<String> list() { return java.util.List.of("a", "b"); }
-        public String create(String body) { return "created"; }
-        public void delete(int id) {}
-    }
 }

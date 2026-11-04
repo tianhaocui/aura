@@ -18,11 +18,11 @@ class SnapshotRedactionTest {
     Path tempDir;
 
     @Test
-    void writtenSnapshotRedactsAbsolutePathsAndPrivateStackFrames() throws Exception {
+    void writtenSnapshotKeepsApplicationFramesButRedactsAbsolutePath() throws Exception {
         AuraConfig config = new AuraConfig().snapshot(s -> s.enabled(true).async(false).dir(tempDir));
         RuntimeException failure = new RuntimeException("boom");
         failure.setStackTrace(new StackTraceElement[]{
-                new StackTraceElement("com.acme.private.VaultService", "charge",
+                new StackTraceElement("com.acme.billing.VaultService", "charge",
                         "/Users/foo/secretpath/VaultService.java", 42),
                 new StackTraceElement("io.aura.web.Router", "handle", "Router.java", 10)
         });
@@ -34,34 +34,44 @@ class SnapshotRedactionTest {
         TestApplications.client(config, router).get("/vault").execute();
 
         String json = Files.readString(Files.list(tempDir).findFirst().orElseThrow());
+        // The application frame is what makes the failure diagnosable, so it survives; only the
+        // absolute source path -- which can expose the deployment layout -- is scrubbed.
         assertThat(json)
-                .doesNotContain("com.acme.private", "secretpath", "VaultService")
-                .contains("<redacted-frame>", "<redacted-path>")
-                .contains("io.aura.web.Router");
+                .contains("com.acme.billing.VaultService", "charge", "io.aura.web.Router")
+                .doesNotContain("secretpath")
+                .contains("<redacted-path>")
+                .doesNotContain("<redacted-frame>");
     }
 
     @Test
-    void stackTextRedactsSecretsPathsAndNonFrameworkFrames() {
+    void stackTextRedactsPathsAndSecretsButKeepsEveryFrame() {
         SnapshotRedactor redactor = new SnapshotRedactor(new SnapshotOptions());
         String stack = "java.lang.RuntimeException\n"
-                + "\\tat com.acme.private.Class.run(/Users/foo/secretpath/config.yml:1)\n"
+                + "\\tat com.acme.billing.Class.run(/Users/foo/secretpath/config.yml:1)\n"
                 + "\\tat java.base/java.lang.Thread.run(Thread.java:840)\n"
-                + "Caused by: com.acme.private.RootCause.fail\n";
+                + "Caused by: com.acme.billing.RootCause.fail\n";
 
         String result = redactor.stackText(stack);
 
         assertThat(result)
-                .doesNotContain("com.acme.private", "secretpath", "config.yml")
-                .contains("<redacted-frame>", "<redacted-path>", "java.base/java.lang.Thread.run");
+                .doesNotContain("secretpath", "config.yml")
+                .contains("<redacted-path>")
+                .contains("com.acme.billing.Class.run", "java.base/java.lang.Thread.run",
+                        "com.acme.billing.RootCause.fail")
+                .doesNotContain("<redacted-frame>");
         assertThat(redactor.stackText(result)).isEqualTo(result);
     }
 
     @Test
-    void stackTextRedactsWindowsPaths() {
+    void stackTextRedactsFileAndWindowsPaths() {
         SnapshotRedactor redactor = new SnapshotRedactor(new SnapshotOptions());
-        String result = redactor.stackText("\\tat com.acme.Loader.load(C:\\aura\\secretpath\\Loader.java:7)");
-        assertThat(result).doesNotContain("secretpath", "com.acme")
-                .contains("<redacted-path>", "<redacted-frame>");
+        String unix = redactor.stackText(
+                "Caused by: java.io.FileNotFoundException: file:/home/deploy/secretpath/app.properties");
+        assertThat(unix).doesNotContain("secretpath").contains("<redacted-path>");
+
+        String windows = redactor.stackText("\\tat com.acme.Loader.load(C:\\aura\\secretpath\\Loader.java:7)");
+        assertThat(windows).doesNotContain("secretpath").contains("<redacted-path>")
+                .contains("com.acme.Loader.load");
     }
 
     @Test

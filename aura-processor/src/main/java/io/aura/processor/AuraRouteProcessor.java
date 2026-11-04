@@ -154,7 +154,7 @@ public final class AuraRouteProcessor extends AbstractProcessor {
                     || "path".equals(sourceName);
             String description = annotationValue(parameter, "io.aura.annotation.Desc", "value");
             // Enums are bound from the request line but still have to publish their
-            // accepted values, exactly like the reflective catalog does.
+            // accepted values, exactly as a handwritten LambdaHandler route's schema does.
             String schema = isBody(parameter.asType()) || asEnum(parameter.asType()) != null
                     ? bodySchema(parameter.asType()) : "java.util.Map.of()";
             contracts.add("new io.aura.contract.ApiParameter(\"" + escape(name) + "\", \""

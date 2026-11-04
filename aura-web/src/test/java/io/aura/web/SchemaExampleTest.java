@@ -15,7 +15,10 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 class SchemaExampleTest {
 
-    static class ReportService {
+    @FunctionalInterface
+    interface Report { String report(BigDecimal rate); }
+
+    static class ReportService implements Report {
         public String report(BigDecimal rate) {
             return "rate=" + rate;
         }
@@ -24,7 +27,7 @@ class SchemaExampleTest {
     @Test
     void publishedExampleIsAValueTheBinderAccepts() {
         Router router = new Router();
-        router.get("/report", new ReportService(), "report");
+        router.get("/report", new LambdaHandler(new ReportService()));
         TestClient client = TestApplications.client(router);
 
         JSONObject route = SchemaWire.route(client, "/report");

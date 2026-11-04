@@ -27,7 +27,6 @@ public interface AuraWebRuntime extends AuraMcpRuntime {
     int port();
     String env();
     int workers();
-    List<Object> services();
     /**
      * Routes contributed directly by modules, in the unified {@link Route} shape.
      * Stage ②-B made this the single metadata source for HTTP dispatch, TestClient,

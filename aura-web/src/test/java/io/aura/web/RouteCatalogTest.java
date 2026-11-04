@@ -1,7 +1,7 @@
 package io.aura.web;
 
-import io.aura.port.BaseHandler;import
-io.aura.port.BaseRouter;
+import io.aura.port.BaseHandler;
+import io.aura.port.BaseRouter;
 import io.aura.contract.ApiParameter;
 import org.junit.jupiter.api.Test;
 
@@ -12,7 +12,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 class RouteCatalogTest {
     record User(long id, String name) { }
 
-    static class UserService {
+    @FunctionalInterface
+    interface UserGet { User get(long id); }
+
+    static class UserService implements UserGet {
         public User get(long id) { return new User(id, "name"); }
     }
     @Test
@@ -47,14 +50,17 @@ class RouteCatalogTest {
 
     enum Direction { UP, DOWN }
 
-    static class SearchService {
+    @FunctionalInterface
+    interface Search { String search(List<String> tags, Direction direction); }
+
+    static class SearchService implements Search {
         public String search(List<String> tags, Direction direction) { return tags + "/" + direction; }
     }
 
     @Test
     void describesCollectionAndEnumParametersWhereTheBinderReadsThem() {
         Router router = new Router();
-        router.post("/search", new SearchService(), "search");
+        router.post("/search", new LambdaHandler(new SearchService()));
 
         CompiledRoute route = UndertowStarter.compileRoutes(router).get(0);
         io.aura.contract.Route description = RouteCatalog.describe(route);
@@ -76,7 +82,7 @@ class RouteCatalogTest {
     @Test
     void reflectsResponseRecordSchemaForServiceRoutes() {
         Router router = new Router();
-        router.get("/users/{id}", new UserService(), "get");
+        router.get("/users/{id}", new LambdaHandler(new UserService()));
 
         CompiledRoute route = UndertowStarter.compileRoutes(router).get(0);
         io.aura.contract.Route description = RouteCatalog.describe(route);

@@ -22,14 +22,16 @@ class SnapshotRedactor {
     /** Fuzzy fragments; a header whose lowercased name contains any of these is treated as sensitive. */
     private static final List<String> SENSITIVE_HEADER_FRAGMENTS = List.of(
             "authorization", "cookie", "token", "secret", "key", "credential", "bearer", "apikey");
-    /** Absolute filesystem paths (unix two-or-more segments, windows drive paths) leaking through stack traces. */
+    /**
+     * Absolute filesystem paths (unix two-or-more segments, windows drive paths) leaking through
+     * stack traces. A leading `:` is allowed before the path so a {@code file:/home/deploy/secret}
+     * or {@code classpath:/config/prod.yml} URL is scrubbed too -- the URL pass has already turned
+     * real network URLs into a hash, so what remains before a slash is a local-file scheme, not a
+     * host worth keeping.
+     */
     private static final Pattern ABSOLUTE_PATH_PATTERN =
-            Pattern.compile("(?<![\\w./:-])(?:/[A-Za-z0-9._~-]+){2,}");
+            Pattern.compile("(?<![\\w./-])(?:/[A-Za-z0-9._~-]+){2,}");
     private static final Pattern WINDOWS_PATH_PATTERN = Pattern.compile("[A-Za-z]:\\\\(?:[^\\\\\\s\"'()]+)(?:\\\\[^\\\\\\s\"'()]+)*\\\\?");
-    /** Matches the leading "at <class>" / "Caused by: <class>" token of a stack frame line. */
-    private static final Pattern FRAME_CLASS_PATTERN =
-            Pattern.compile("(?m)^([ \\t]*(?:\\\\t)?(?:at\\s+|Caused by:\\s+))([\\w.$/]+)");
-    private static final List<String> FRAME_ALLOWLIST_PREFIXES = List.of("java.", "javax.", "jdk.", "sun.", "io.aura.");
     private final SnapshotOptions options;
 
     SnapshotRedactor(SnapshotOptions options) {
@@ -106,15 +108,16 @@ class SnapshotRedactor {
     }
 
     /**
-     * Redacts a recorded stack trace: field/URL secrets plus absolute filesystem paths and
-     * frame classes outside the framework allowlist, then re-applies the configured size cap.
+     * Redacts a recorded stack trace. The frames themselves are kept -- an application
+     * {@code class.method} is the first thing a reader needs to diagnose a failure, and it is not
+     * a secret -- while every absolute filesystem path and every configured field/URL secret is
+     * removed, then the size cap is re-applied.
      */
     String stackText(String value) {
         if (value == null) return null;
         String sanitized = redactText(value);
         sanitized = scrubMatches(ABSOLUTE_PATH_PATTERN.matcher(sanitized), "<redacted-path>");
         sanitized = scrubMatches(WINDOWS_PATH_PATTERN.matcher(sanitized), "<redacted-path>");
-        sanitized = scrubFrames(sanitized);
         return truncate(sanitized, options.maxStackTraceSize());
     }
 
@@ -125,27 +128,6 @@ class SnapshotRedactor {
         }
         matcher.appendTail(out);
         return out.toString();
-    }
-
-    private String scrubFrames(String text) {
-        Matcher matcher = FRAME_CLASS_PATTERN.matcher(text);
-        StringBuffer out = new StringBuffer();
-        while (matcher.find()) {
-            String className = matcher.group(2);
-            String replacement = isAllowedFrame(className)
-                    ? matcher.group()
-                    : matcher.group(1) + "<redacted-frame>";
-            matcher.appendReplacement(out, Matcher.quoteReplacement(replacement));
-        }
-        matcher.appendTail(out);
-        return out.toString();
-    }
-
-    private static boolean isAllowedFrame(String className) {
-        for (String prefix : FRAME_ALLOWLIST_PREFIXES) {
-            if (className.startsWith(prefix)) return true;
-        }
-        return false;
     }
 
     Object body(Object body, int maxSize) {

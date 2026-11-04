@@ -18,7 +18,32 @@ import java.util.*;
 
 public class McpBridge {
 
-    private static final int MAX_RESPONSE_BYTES = 1024 * 1024;
+    /**
+     * Resource bounds, configurable so the bridge honours the same "bounded resources, set
+     * explicitly" rule the rest of Aura does. The defaults are the values these constants held
+     * before, so an unconfigured bridge behaves identically; the properties only let an operator
+     * tighten or loosen a bound they can see the need for.
+     */
+    private static final int MAX_RESPONSE_BYTES =
+            boundedInt("aura.mcp.bridge.max-response-bytes", 1024 * 1024);
+    private static final int CONNECT_TIMEOUT_SECONDS =
+            boundedInt("aura.mcp.bridge.connect-timeout-seconds", 10);
+    private static final int REQUEST_TIMEOUT_SECONDS =
+            boundedInt("aura.mcp.bridge.request-timeout-seconds", 30);
+    private static final int SCHEMA_TIMEOUT_SECONDS =
+            boundedInt("aura.mcp.bridge.schema-timeout-seconds", 10);
+
+    /** Reads a positive bound from a system property, falling back to {@code defaultValue}. */
+    private static int boundedInt(String property, int defaultValue) {
+        String raw = System.getProperty(property);
+        if (raw == null || raw.isBlank()) return defaultValue;
+        try {
+            int value = Integer.parseInt(raw.trim());
+            return value > 0 ? value : defaultValue;
+        } catch (NumberFormatException ignored) {
+            return defaultValue;
+        }
+    }
 
     /** Seam that lets tests script DNS answers to prove the DNS-rebinding defence. */
     @FunctionalInterface
@@ -131,7 +156,7 @@ public class McpBridge {
         if (client == null) {
             client = HttpClient.newBuilder()
                     .followRedirects(HttpClient.Redirect.NEVER)
-                    .connectTimeout(Duration.ofSeconds(10))
+                    .connectTimeout(Duration.ofSeconds(CONNECT_TIMEOUT_SECONDS))
                     .build();
             httpClient = client;
         }
@@ -239,7 +264,7 @@ public class McpBridge {
         URI target = resolveRouteUri(path, query.toString());
         requirePublicAtConnect(target.getHost());
         HttpRequest.Builder request = HttpRequest.newBuilder(target)
-                .timeout(Duration.ofSeconds(30));
+                .timeout(Duration.ofSeconds(REQUEST_TIMEOUT_SECONDS));
         request.method(httpMethod, body == null
                 ? HttpRequest.BodyPublishers.noBody()
                 : HttpRequest.BodyPublishers.ofString(body, StandardCharsets.UTF_8));
@@ -330,7 +355,7 @@ public class McpBridge {
         URI target = URI.create(baseUrl + "/__schema__");
         requirePublicAtConnect(target.getHost());
         HttpRequest.Builder request = HttpRequest.newBuilder(target)
-                .timeout(Duration.ofSeconds(10))
+                .timeout(Duration.ofSeconds(SCHEMA_TIMEOUT_SECONDS))
                 .GET();
         if (schemaToken != null) request.header("X-Aura-Schema-Token", schemaToken);
         HttpResponse<InputStream> response = http().send(request.build(),

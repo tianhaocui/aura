@@ -1,15 +1,14 @@
 package io.aura.web;
 
-import io.aura.annotation.Get;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 class ScalarBindingTest {
     @Test
-    void reflectionRoutesBindEverySupportedJavaScalarFromQueryParameters() {
+    void lambdaRoutesBindEverySupportedJavaScalarFromQueryParameters() {
         Router router = new Router();
-        ServiceRegistrar.register(new ScalarService(), router);
+        router.get("/scalars", new LambdaHandler(new ScalarService()));
         TestClient client = TestApplications.client(router);
 
         client.get("/scalars")
@@ -26,9 +25,9 @@ class ScalarBindingTest {
     }
 
     @Test
-    void reflectionRoutesBindEnumsAndBigDecimalFromQueryParameters() {
+    void lambdaRoutesBindEnumsAndBigDecimalFromQueryParameters() {
         Router router = new Router();
-        ServiceRegistrar.register(new MoneyService(), router);
+        router.get("/money", new LambdaHandler(new MoneyService()));
 
         TestApplications.client(router).get("/money")
                 .query("direction", "UP")
@@ -37,8 +36,13 @@ class ScalarBindingTest {
                 .bodyContains("UP/12.50");
     }
 
-    static final class ScalarService {
-        @Get("/scalars")
+    @FunctionalInterface
+    interface Scalars {
+        String values(float floatValue, Float boxedFloat, short shortValue, Short boxedShort,
+                      byte byteValue, Byte boxedByte, char charValue, Character boxedChar);
+    }
+
+    static final class ScalarService implements Scalars {
         public String values(float floatValue, Float boxedFloat, short shortValue, Short boxedShort,
                              byte byteValue, Byte boxedByte, char charValue, Character boxedChar) {
             return floatValue + "/" + boxedFloat + "/" + shortValue + "/" + boxedShort + "/"
@@ -48,8 +52,12 @@ class ScalarBindingTest {
 
     enum Direction { UP, DOWN }
 
-    static final class MoneyService {
-        @Get("/money")
+    @FunctionalInterface
+    interface Money {
+        String values(Direction direction, java.math.BigDecimal amount);
+    }
+
+    static final class MoneyService implements Money {
         public String values(Direction direction, java.math.BigDecimal amount) {
             return direction + "/" + amount;
         }

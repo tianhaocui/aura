@@ -67,48 +67,6 @@ class BaseRouterTest {
     }
 
     @Test
-    void crud_throwsUnsupported() {
-        BaseRouter router = new BaseRouter();
-        assertThatThrownBy(() -> router.crud("/item", new Object()))
-            .isInstanceOf(UnsupportedOperationException.class);
-    }
-
-    @Test
-    void crud_withMethods_throwsUnsupported() {
-        BaseRouter router = new BaseRouter();
-        assertThatThrownBy(() -> router.crud("/item", new Object(), "get", "list"))
-            .isInstanceOf(UnsupportedOperationException.class);
-    }
-
-    @Test
-    void serviceMethodRouting_get_throwsUnsupported() {
-        BaseRouter router = new BaseRouter();
-        assertThatThrownBy(() -> router.get("/path", new Object(), "method"))
-            .isInstanceOf(UnsupportedOperationException.class);
-    }
-
-    @Test
-    void serviceMethodRouting_post_throwsUnsupported() {
-        BaseRouter router = new BaseRouter();
-        assertThatThrownBy(() -> router.post("/path", new Object(), "method"))
-            .isInstanceOf(UnsupportedOperationException.class);
-    }
-
-    @Test
-    void serviceMethodRouting_put_throwsUnsupported() {
-        BaseRouter router = new BaseRouter();
-        assertThatThrownBy(() -> router.put("/path", new Object(), "method"))
-            .isInstanceOf(UnsupportedOperationException.class);
-    }
-
-    @Test
-    void serviceMethodRouting_delete_throwsUnsupported() {
-        BaseRouter router = new BaseRouter();
-        assertThatThrownBy(() -> router.delete("/path", new Object(), "method"))
-            .isInstanceOf(UnsupportedOperationException.class);
-    }
-
-    @Test
     void addRoute_returnsBuilder_withDescribe() {
         BaseRouter router = new BaseRouter();
         BaseRouteBuilder rb = router.addRoute("GET", "/test", ctx -> {});

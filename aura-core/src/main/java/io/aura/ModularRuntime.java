@@ -36,7 +36,6 @@ final class ModularRuntime implements AuraWebRuntime {
     private final Map<String, String> properties = new ConcurrentHashMap<>();
     private final Map<Class<?>, Object> registry = new ConcurrentHashMap<>();
     private final Map<String, Object> namedRegistry = new ConcurrentHashMap<>();
-    private final List<Object> services = new CopyOnWriteArrayList<>();
     private final List<Route> directRoutes = new CopyOnWriteArrayList<>();
     private final List<AutoCloseable> closeables = new CopyOnWriteArrayList<>();
     private final List<io.aura.contract.HealthCheck> healthChecks = new CopyOnWriteArrayList<>();
@@ -227,7 +226,6 @@ final class ModularRuntime implements AuraWebRuntime {
             moduleManager.install(this::moduleContext, true,
                     moduleFailureCollector(rollbackFailures));
             if (completeRequestedStop()) return;
-            StartupCheck.requireParameterNames(services);
             starter = java.util.ServiceLoader.load(AuraStarter.class).findFirst()
                     .orElseThrow(() -> new IllegalStateException("No AuraStarter found. Add aura-web to your dependencies."));
             starter.start(this);
@@ -316,7 +314,6 @@ final class ModularRuntime implements AuraWebRuntime {
     @Override public int port() { return config.port(); }
     @Override public String env() { return config.env(); }
     @Override public int workers() { return config.workers(); }
-    @Override public List<Object> services() { return List.copyOf(services); }
     @Override public List<Route> directRoutes() { return List.copyOf(directRoutes); }
     @Override public String staticFilesPath() { return config.staticFilesPath(); }
     @Override public boolean spa() { return config.spa(); }
@@ -547,7 +544,6 @@ final class ModularRuntime implements AuraWebRuntime {
         }
         @Override public void register(Object value) { ModularRuntime.this.register(value); }
         @Override public void register(String name, Object value) { ModularRuntime.this.register(name, value); }
-        @Override public void service(Object service) { ModularRuntime.this.register(service); services.add(service); }
         @Override public void route(Route route) {
             if (route == null) throw new ModuleException("AURA_ROUTE_CONTRIBUTION_INVALID", descriptor.id(), "Route contribution must not be null");
             directRoutes.add(route);

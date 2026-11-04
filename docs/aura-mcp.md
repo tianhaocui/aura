@@ -337,6 +337,17 @@ bridge.run(); // reads stdin, writes stdout
 java -jar aura-mcp-bridge.jar http://localhost:8080
 ```
 
+The bridge bounds its own resources. Each bound has the default shown and can be
+set with `-D<property>=<value>`; a non-positive or unparseable value falls back to
+the default, so leaving them unset behaves exactly as before.
+
+| Property | Default | Bound |
+|----------|---------|-------|
+| `aura.mcp.bridge.max-response-bytes` | `1048576` | largest upstream response body read |
+| `aura.mcp.bridge.connect-timeout-seconds` | `10` | TCP connect timeout |
+| `aura.mcp.bridge.request-timeout-seconds` | `30` | per-`tools/call` request timeout |
+| `aura.mcp.bridge.schema-timeout-seconds` | `10` | `/__schema__` fetch timeout |
+
 ### How it works
 
 1. Fetches `/__schema__` from the app

@@ -33,10 +33,12 @@ Description, parameters, return type, response schema, streaming, and auth are
 typed fields on the same `Route`; there is no metadata map, so a misspelled key
 cannot drop a route from the schema.
 
-Generated and reflective routes both contribute `Route` values, and
-`ApiParameter` declarations supply the request metadata the compiler cannot see.
-Prefer the optional `aura-processor` for production builds and keep
-reflection for prototypes.
+A route is contributed either by the optional `aura-processor` (annotations
+compiled into a `Route` set) or by hand through `context.route(...)` and the
+router; `ApiParameter` declarations supply the request metadata the compiler
+cannot see. There is no reflection-based route registration — the `Route` value
+is the only thing the runtime reads, so what you contribute is exactly what is
+published.
 
 ## Parameter binding and `required`
 

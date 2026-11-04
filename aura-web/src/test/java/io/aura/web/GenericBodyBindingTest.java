@@ -1,7 +1,5 @@
 package io.aura.web;
 
-import io.aura.annotation.Post;
-import io.aura.annotation.Path;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -11,7 +9,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class GenericBodyBindingTest {
     @Test
-    void reflectionRoutesDecodeParameterizedCollections() {
+    void lambdaRoutesDecodeParameterizedCollections() {
         TestClient client = client();
 
         assertThat(client.post("/batch")
@@ -30,19 +28,25 @@ class GenericBodyBindingTest {
 
     private static TestClient client() {
         Router router = new Router();
-        ServiceRegistrar.register(new CollectionService(), router);
+        router.post("/batch", new LambdaHandler(new BatchService()));
+        router.post("/lookup", new LambdaHandler(new LookupService()));
         return TestApplications.client(router);
     }
 
-    @Path("")
-    static final class CollectionService {
-        @Post("/batch")
+    @FunctionalInterface
+    interface Batch { String batch(List<Item> items); }
+
+    static final class BatchService implements Batch {
         public String batch(List<Item> items) {
             if (items == null) return "null";
             return items.stream().map(Item::name).reduce((left, right) -> left + "," + right).orElse("");
         }
+    }
 
-        @Post("/lookup")
+    @FunctionalInterface
+    interface Lookup { String lookup(Map<String, Integer> values); }
+
+    static final class LookupService implements Lookup {
         public String lookup(Map<String, Integer> values) {
             return String.valueOf(values.get("b"));
         }

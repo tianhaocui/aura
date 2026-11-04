@@ -17,13 +17,19 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 class RequiredParameterTest {
 
-    static class RankService {
+    @FunctionalInterface
+    interface Rank { String rank(int limit, String tag); }
+
+    static class RankService implements Rank {
         public String rank(int limit, String tag) {
             return "limit=" + limit + " tag=" + tag;
         }
     }
 
-    static class FeedService {
+    @FunctionalInterface
+    interface Feed { String feed(List<String> tags); }
+
+    static class FeedService implements Feed {
         public String feed(List<String> tags) {
             return "tags=" + tags;
         }
@@ -31,8 +37,8 @@ class RequiredParameterTest {
 
     private static TestClient client() {
         Router router = new Router();
-        router.get("/rank", new RankService(), "rank");
-        router.post("/feed", new FeedService(), "feed");
+        router.get("/rank", new LambdaHandler(new RankService()));
+        router.post("/feed", new LambdaHandler(new FeedService()));
         return TestApplications.client(router);
     }
 

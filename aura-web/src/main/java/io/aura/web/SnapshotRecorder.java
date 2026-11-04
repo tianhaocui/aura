@@ -335,8 +335,9 @@ class SnapshotRecorder {
     }
 
     private static boolean isTraceKey(String key) {
-        String k = key.toLowerCase(java.util.Locale.ROOT);
-        return k.equals("trace") || k.equals("stacktrace") || k.equals("stack") || k.equals("cause");
+        String normalized = key.toLowerCase(java.util.Locale.ROOT).replace("_", "").replace("-", "");
+        return normalized.equals("trace") || normalized.equals("stacktrace")
+                || normalized.equals("stack") || normalized.equals("cause");
     }
 
     private void evictExpired(Path dir) {
@@ -488,8 +489,8 @@ class SnapshotRecorder {
     }
 
     private static String handlerName(CompiledRoute route) {
-        if (route.handler() instanceof MethodRefHandler mh && mh.resolvedMethod() != null) {
-            var method = mh.resolvedMethod();
+        if (route.handler() instanceof LambdaHandler lh) {
+            var method = lh.samMethod();
             return method.getDeclaringClass().getName() + "." + method.getName();
         }
         return route.handler().getClass().getName();

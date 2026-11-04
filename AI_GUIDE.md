@@ -121,8 +121,10 @@ as a `runtime.cron.failure` event while its next occurrence stays armed.
 For production services with route annotations, add the optional
 `aura-processor` annotation processor. It emits an inspectable
 `<ServiceName>AuraRoutes` contributor with direct method calls and fixed
-parameter binding. Reflection registration remains useful for prototypes; do
-not combine both registrations for the same service.
+parameter binding. Where you do not use the processor, contribute routes by hand
+with `context.route(...)` or the router. There is no reflection-based route
+registration: a route exists only as a `Route` the processor emitted or you
+contributed explicitly.
 
 ```xml
 <dependency>
@@ -174,8 +176,8 @@ any handwritten module code.
 For annotated services, the processor also preserves the convention routes
 get/list/create/update/delete: GET /orders/{id}, GET /orders, POST /orders,
 PUT /orders/{id}, and DELETE /orders/{id}. Mark the service with `@Path` so
-generation is explicit; do not register the same service through both
-reflection and generated routes.
+generation is explicit; a route is contributed once, by the generated
+`...AuraRoutes` class or by a handwritten `Route`, never both.
 
 ## Configuration
 

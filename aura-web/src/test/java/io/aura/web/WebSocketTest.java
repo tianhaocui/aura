@@ -45,17 +45,20 @@ class WebSocketTest {
     @Test
     void connectionLimitRejectsExcessAndReleasesPermitOnClose() throws Exception {
         int port = nextPort();
-        var opens = new AtomicInteger();
+        var accepted = new AtomicInteger();
+        var live = new AtomicInteger();
         var app = app(new AuraConfig().port(port)
                         .maxWebSocketConnections(1)
                         .webSocketIdleTimeout(30),
-                context -> context.webSocket("/ws/limited", ws -> ws.onOpen(conn -> opens.incrementAndGet())));
+                context -> context.webSocket("/ws/limited", ws -> ws
+                        .onOpen(conn -> { accepted.incrementAndGet(); live.incrementAndGet(); })
+                        .onClose((conn, code, reason) -> live.decrementAndGet())));
         app.start();
         try {
             var first = HttpClient.newHttpClient().newWebSocketBuilder()
                     .buildAsync(URI.create("ws://localhost:" + port + "/ws/limited"), requestingListener())
                     .join();
-            awaitCount(opens, 1);
+            awaitCount(accepted, 1);
 
             var rejectedCode = new CompletableFuture<Integer>();
             var rejected = HttpClient.newHttpClient().newWebSocketBuilder()
@@ -63,19 +66,45 @@ class WebSocketTest {
                             closeListener(rejectedCode)).join();
             assertThat(rejectedCode.get(3, TimeUnit.SECONDS))
                     .isEqualTo(WebSocketConnectionRegistry.LIMIT_CLOSE_CODE);
-            assertThat(opens).hasValue(1);
+            // A rejected channel never reaches an open handler: registration failed, so the
+            // upgrade returned before the handlers were installed.
+            assertThat(accepted).hasValue(1);
 
             first.sendClose(WebSocket.NORMAL_CLOSURE, "done").join();
+            awaitValue(live, 0);
+
+            // Acceptance is the permit's release and a close code means the limit still holds it, so
+            // every attempt resolves before the next starts. An unresolved candidate fails instead of
+            // being aborted: aborting one whose open handler is still queued is what used to land a
+            // third open after the count it was checked against.
             WebSocket replacement = null;
-            for (int attempt = 0; attempt < 20 && opens.get() < 2; attempt++) {
-                Thread.sleep(25);
-                replacement = HttpClient.newHttpClient().newWebSocketBuilder()
-                        .buildAsync(URI.create("ws://localhost:" + port + "/ws/limited"), requestingListener())
+            for (int attempt = 0; attempt < 20 && replacement == null; attempt++) {
+                var closeCode = new CompletableFuture<Integer>();
+                // Take the baseline before the handshake: an admitted connection increments it during
+                // the upgrade, so reading after join() could never observe the attempt's own acceptance.
+                int acceptedBefore = accepted.get();
+                var candidate = HttpClient.newHttpClient().newWebSocketBuilder()
+                        .buildAsync(URI.create("ws://localhost:" + port + "/ws/limited"), closeListener(closeCode))
                         .join();
-                if (opens.get() < 2) replacement.abort();
+                for (int tick = 0;
+                        tick < 120 && accepted.get() == acceptedBefore && !closeCode.isDone(); tick++) {
+                    Thread.sleep(25);
+                }
+                if (accepted.get() > acceptedBefore) {
+                    replacement = candidate;
+                } else if (closeCode.isDone()) {
+                    candidate.abort();
+                    Thread.sleep(25);
+                } else {
+                    candidate.abort();
+                    fail("handshake on /ws/limited was neither admitted nor rejected within 3s");
+                }
             }
-            assertThat(opens).hasValue(2);
-            if (replacement != null) replacement.sendClose(WebSocket.NORMAL_CLOSURE, "done");
+
+            assertThat(replacement).isNotNull();
+            awaitCount(accepted, 2);
+            awaitValue(live, 1);
+            replacement.sendClose(WebSocket.NORMAL_CLOSURE, "done");
             rejected.abort();
         } finally {
             app.stop();
@@ -133,6 +162,13 @@ class WebSocketTest {
     /** The handler's open runs on an Undertow thread; the client's join() only proves the handshake. */
     private static void awaitCount(AtomicInteger counter, int expected) throws InterruptedException {
         for (int attempt = 0; attempt < 120 && counter.get() < expected; attempt++) {
+            Thread.sleep(25);
+        }
+        assertThat(counter).hasValue(expected);
+    }
+
+    private static void awaitValue(AtomicInteger counter, int expected) throws InterruptedException {
+        for (int attempt = 0; attempt < 120 && counter.get() != expected; attempt++) {
             Thread.sleep(25);
         }
         assertThat(counter).hasValue(expected);

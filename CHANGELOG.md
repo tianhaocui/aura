@@ -35,6 +35,14 @@ record, the stage-by-stage log, and the migration table.
   `messageHandler()`, `closeHandler()` and `errorHandler()` instead.
 - The reflective MCP tool binding is removed; `McpRouter.tool(Route)` is the only
   tool registration door.
+- The reflective route door is removed. `ModuleContext.service(Object)`,
+  `AuraWebRuntime.services()`, `StartupCheck`, and the reflective
+  `router.<verb>(path, target, "method")` overloads and `crud(...)` on `BaseRouter`
+  and `Router` are gone, together with `ServiceRegistrar`, `MethodRefHandler` and the
+  reflective DI auto-wiring in `ServiceResolver`. A route is contributed with
+  `context.route(Route.of(method, path, handler))` — or, for a service instance,
+  `router.<verb>(path, new LambdaHandler(service))` — and nothing scans a class or
+  dispatches by method name to find one.
 - A present-but-blank route permission now fails at startup instead of publishing
   an unprotected route.
 - `io.aura.WebSocketContribution` and `AuraWebRuntime.webSocketContributions()`

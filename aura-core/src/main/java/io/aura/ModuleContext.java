@@ -14,8 +14,6 @@ public interface ModuleContext extends io.aura.contract.CapabilityLookup {
 
     void register(String name, Object value);
 
-    void service(Object service);
-
     /**
      * Adds one route. This is the only route contribution entry point: a bundle of
      * generated routes is installed with {@code routes().forEach(context::route)}.
