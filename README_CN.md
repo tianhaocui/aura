@@ -7,6 +7,11 @@
 Aura 是面向 AI 开发的 Java 17+ 后端运行时。稳定性是第一条红线；第二条红线是让 AI
 开发更准确、更快、更少出错、可验证、省 Token、易学习。
 
+其中「省 Token」只实测过一次，那一次并不支持它：分级上下文把 prompt token 降了
+约 68%，但两个任务都多花了一轮修复，`route-authorization` 原本能一次成功、改用
+分级上下文后没有成功（见 `evals/README.md`，run `pilot-20261103`）。
+`docs/1.0-readiness.md` 在门禁拿到真实样本并报绿之前，保持该项未勾选。
+
 Aura 1.0 只有一种应用模型：能力模块与业务模块通过 `use(...)` 显式组装。唯一的
 `Route` 记录就是路由契约，它同时驱动内存测试、Undertow、`/__schema__`、OpenAPI、
 生成代码和 MCP，避免多套定义漂移。

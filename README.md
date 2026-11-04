@@ -8,6 +8,12 @@ Aura is an AI-native Java 17+ backend runtime. Stability is the first design
 constraint. The second is making AI development accurate, fast, verifiable,
 token-efficient, and easy to learn.
 
+The token-cost reduction this aims at has been measured once, and that run does
+not support it: the staged context cut prompt tokens by about 68% but cost a
+repair round on both tasks and lost a first-time-successful task
+(`evals/README.md`, run `pilot-20261103`). `docs/1.0-readiness.md` keeps the
+item unchecked until the gate reports it green on a real sample.
+
 Aura 1.0 has one application model: reusable capability modules and business
 modules are composed explicitly with `use(...)`. One `Route` record is the route
 contract; it drives in-memory tests, Undertow, `/__schema__`, OpenAPI, generated
