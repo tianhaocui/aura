@@ -72,6 +72,51 @@ reliability, or dropping the "preserving stability" half of the claim; neither
 may be done by editing these numbers or the thresholds. n = 1 computes no real
 median, so this is plumbing evidence, not a verdict on the effect size.
 
+Its records now live in `evals/results/archive/pilot-20261103.jsonl`, bytes and
+run ids unchanged: a `staged-guide-v1` arm may not be paired with a
+`staged-guide-v2` baseline cohort in one median, because the two recipes are two
+experiments.
+
+## Second measurement: `pilot-20261104` (n = 1 per arm, `claude-opus-4-5`, v2 recipes)
+
+Same two tasks, both arms, same runner and conditions, with two changes: the
+recipes are the post-fix documents (`all-canonical-docs-v2`, `staged-guide-v2`),
+and the repair loop is capped at the task set's declared `maxRepairRounds = 3`
+instead of the pilot's one, so a staged arm that needed two more rounds to compile
+would have been recorded as what it is rather than as a failure of the claim. The
+answers were compiled against this reactor at `28d8fc1`, after the reflection door
+was removed.
+
+Every claim leg is green at this size:
+
+| task | arm | input | output | first pass | final | rounds |
+|------|-----|-------:|-------:|:----------:|:-----:|:------:|
+| `crud-module` | baseline | 51,679 | 1,453 | yes | yes | 0 |
+| `crud-module` | staged | 8,185 | 1,456 | yes | yes | 0 |
+| `route-authorization` | baseline | 51,662 | 423 | yes | yes | 0 |
+| `route-authorization` | staged | 8,168 | 568 | yes | yes | 0 |
+
+Prompt tokens fell 84.2% on both tasks, no arm needed a repair round, and no arm
+lost first-pass or final success. The cause the pilot pointed at is now closed with
+mechanism visible in the evidence: both staged answers open with
+`import io.aura.web.TestClient;` and contribute `(BaseHandler) ctx -> ...` through
+`Route.of(...)`, which is the fence `28d8fc1` added to the staged corpus, where the
+v1 answers had invented `io.aura.test.TestClient`.
+
+Two legs stay red, and both are the point. The `maxTokens` budget is not met:
+`crud-module`'s staged run cost 9,641 tokens against a 4,000 budget and
+`route-authorization` 8,736 against 3,000 -- and it cannot be met by any recipe of
+this shape, because the staged arm's *first* call is already about 8,100 prompt
+tokens, so a single successful answer overruns every declared budget before a
+repair round is even considered. `everyMeasuredTaskCarriesEnoughSamplesPerArm` is
+red because n = 1 is one sample: four runs on one model at `temperature: 0` cannot
+distinguish the fix working from a favorable draw, which is exactly the difference
+the sample floor exists to refuse to pretend about.
+
+So the honest reading is: the refuted half of the claim was a documentation hole,
+not a property of small context, and the remaining disagreement is with a budget
+number nobody measured when it was written.
+
 Run the golden behavioral baseline:
 
 ```bash
@@ -120,7 +165,21 @@ bash scripts/record-ai-eval.sh \
 `maxTokens` stays as written. It describes the budget the staged recipe is
 supposed to fit inside, so the answer to "the staged arm spent 18,679 against
 4,000" is to shrink the recipe, not to raise the number; raising it would delete
-the only check that measures this project's second design red line.
+the only check that measures this project's second design red line. `pilot-20261104`
+sharpened what that costs: the staged arm's first call alone is about 8,100 prompt
+tokens, so no recipe that ships `AI_GUIDE.md` -- 17,333 bytes, roughly 4,480 tokens
+at the calibration this run's own usage counts give -- can fit any budget in the
+2,500-to-5,000 range the task set declares. A criterion that no candidate can meet
+is not a criterion, so this number is now known to be wrong at its provenance: it
+was written before anything was measured.
+
+Restating it is a design step, not a scoring step, and the order is fixed: the new
+budget and its derivation go into `evals/tasks.json` *before* the cohort that is
+graded against it, never in the change that reports that cohort passing. Editing
+`tasks.json` also changes `taskSetHash`, which is what marks a record as belonging
+to the task set it was measured against, so any restatement strands the cohorts
+recorded so far into `evals/results/archive/` -- another reason it happens as the
+opening of an experiment rather than as its conclusion.
 
 The staged corpus is renamed, not reused, when its content changes. `contextId`
 names a recipe but the record carries no hash of the bytes behind that name, so
@@ -132,7 +191,8 @@ existing records invalid, and those records are the only current evidence that
 the claim fails, so the bump ships with the next experiment rather than
 silencing this one.
 
-The next experiment is a documentation fix, not more sampling. Both staged
+The experiment after the pilot was a documentation fix, not more sampling, because
+the failure had a nameable cause. Both staged
 failures invented `io.aura.test.TestClient`, and the staged corpus names
 `TestClient` thirteen times (counted in `AI_GUIDE.md` plus `docs/aura-web.md` at
 `5d793bb` and again at HEAD) without ever giving its package — the qualified name
@@ -162,4 +222,11 @@ scans one directory, so an archived cohort stops being compared against a live o
 while staying in the history that shows the claim was refuted once. Both arms of a
 task must be recorded in the same sitting, or the consumer reads the mixed recipes
 as an invalid comparison rather than a result.
+
+That is what `pilot-20261104` did, and the fix held. What is left is the two red
+legs, and they have opposite directions: the sample floor wants more runs, the
+budget leg wants a smaller context and an honest number. The next cohort is these
+same four runs repeated three times per arm -- twelve runs, with the baseline arm
+costing about 51,700 prompt tokens each -- and the `maxTokens` derivation above
+goes in front of it, not after it.
 
