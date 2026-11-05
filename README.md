@@ -153,6 +153,12 @@ inspect structured failures, and only then start the real server.
 - Deterministic `NEW -> STARTING -> RUNNING -> STOPPING -> STOPPED` lifecycle.
 - Bounded request bodies, uploads, external responses, executors, snapshots,
   MCP batches/replay, and rate-limit keys.
+- Streaming downloads through `sendFile(Path)` and `sendStream`, so a large
+  attachment does not have to be materialised as a `byte[]`, with `Range`
+  requests answered as `206`/`416` for video seeking and resumable transfers.
+  Only a single range is served; a multi-range request falls back to the full
+  `200` (RFC 9110 permits ignoring `Range`), and a chunked stream reports
+  `Accept-Ranges: none` because it cannot seek.
 - Cancellation propagation for timeouts, disconnects, shutdown, workflows,
   database work, and AI calls.
 - Explicit CORS, WebSocket Origin, trusted proxy, Host, TLS, and schema controls.
@@ -165,7 +171,7 @@ inspect structured failures, and only then start the real server.
 | `aura-contract` | Dependency-light module, route, error, health, and cancellation contracts |
 | `aura-core` | Configuration, lifecycle, module graph, capability registry |
 | `aura-web` | Undertow adapter, routing, schema/OpenAPI, snapshots, `TestClient` |
-| `aura-db` | Lightweight SQL, transactions, pagination, schema migrator SPI |
+| `aura-db` | Lightweight SQL, transactions, pagination, schema migrator SPI, `jsonb`/`pgvector` sugar |
 | `aura-db-migration-flyway` | Optional Flyway adapter for production migrations |
 | `aura-db-migration-liquibase` | Optional Liquibase adapter for production migrations |
 | `aura-bom` | Aligns every Aura module to one tested release |

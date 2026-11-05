@@ -24,6 +24,8 @@ public interface AuraRuntime extends AutoCloseable, io.aura.contract.CapabilityL
     void start();
     void start(String[] args);
     void stop();
+    /** Actual listening port after start, or {@code -1} when no adapter is running. */
+    default int boundPort() { return -1; }
     List<ModuleMetadata> moduleDescriptors();
     PermissionRegistry permissions();
     @Override <T> Optional<T> find(Class<T> type);

@@ -85,6 +85,12 @@ public final class AuraApp implements AutoCloseable {
     public void stop() { runtime.stop(); }
     @Override public void close() { stop(); }
 
+    /**
+     * The port the started adapter actually listens on. With
+     * {@code new AuraConfig().port(0)} this is the ephemeral port the OS assigned.
+     */
+    public int boundPort() { return runtime.boundPort(); }
+
     public io.aura.contract.RuntimeState state() { return runtime.state(); }
     /** Stable runtime view for optional adapters. */
     public AuraRuntime runtimeView() { return runtime; }

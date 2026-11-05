@@ -19,14 +19,21 @@ import io.undertow.util.Headers;
 import io.undertow.util.HttpString;
 
 import java.io.IOException;
+import java.io.OutputStream;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import io.undertow.io.IoCallback;
+import io.undertow.io.Sender;
 
 public class Context implements BaseContext {
 
@@ -439,13 +446,75 @@ public class Context implements BaseContext {
     @Override
     public void sendFile(String filename, byte[] data, String contentType) {
         if (aborted || isResponseStarted()) return;
+        announceDownload(filename, contentType, data.length);
+        Snapshot.response(exchange.getStatusCode(), contentType, Map.of("filename", filename, "bytes", data.length));
+        exchange.getResponseSender().send(ByteBuffer.wrap(data));
+    }
+
+    @Override
+    public void sendFile(String filename, Path path, String contentType) throws Exception {
+        if (aborted || isResponseStarted()) return;
+        if (path == null) throw new IllegalArgumentException("path must not be null");
+        if (!Files.isRegularFile(path)) {
+            throw new IllegalArgumentException("Download source is not a regular file: " + path);
+        }
+        long length = Files.size(path);
+        FileChannel content = FileChannel.open(path, StandardOpenOption.READ);
+        try {
+            announceDownload(filename, contentType, length);
+            Snapshot.response(exchange.getStatusCode(), contentType,
+                    Map.of("filename", filename, "bytes", length));
+            // Undertow transfers the channel without copying it through the heap. The callback
+            // owns the descriptor because the transfer outlives this handler invocation.
+            exchange.getResponseSender().transferFrom(content, new IoCallback() {
+                @Override public void onComplete(HttpServerExchange exchange, Sender sender) {
+                    closeContent(content);
+                    exchange.endExchange();
+                }
+
+                @Override public void onException(HttpServerExchange exchange, Sender sender,
+                                                  IOException exception) {
+                    closeContent(content);
+                    exchange.endExchange();
+                }
+            });
+        } catch (RuntimeException | Error failure) {
+            closeContent(content);
+            throw failure;
+        }
+    }
+
+    @Override
+    public void sendStream(String filename, long contentLength, String contentType,
+                           StreamWriter writer) throws Exception {
+        if (aborted || isResponseStarted()) return;
+        if (writer == null) throw new IllegalArgumentException("writer must not be null");
+        if (contentLength < -1) {
+            throw new IllegalArgumentException("contentLength must be -1 or non-negative");
+        }
+        announceDownload(filename, contentType, contentLength);
+        Snapshot.response(exchange.getStatusCode(), contentType,
+                Map.of("filename", filename, "bytes", contentLength));
+        exchange.startBlocking();
+        try (OutputStream output = exchange.getOutputStream()) {
+            writer.write(output);
+            output.flush();
+        }
+    }
+
+    private void announceDownload(String filename, String contentType, long contentLength) {
         exchange.getResponseHeaders().put(Headers.CONTENT_TYPE, contentType);
         String safeName = filename.replaceAll("[\\r\\n\"]", "");
         exchange.getResponseHeaders().put(new HttpString("Content-Disposition"),
                 "attachment; filename=\"" + safeName + "\"");
-        exchange.setResponseContentLength(data.length);
-        Snapshot.response(exchange.getStatusCode(), contentType, Map.of("filename", filename, "bytes", data.length));
-        exchange.getResponseSender().send(ByteBuffer.wrap(data));
+        if (contentLength >= 0) exchange.setResponseContentLength(contentLength);
+    }
+
+    private static void closeContent(FileChannel content) {
+        try {
+            content.close();
+        } catch (IOException ignored) {
+        }
     }
 
     @Override

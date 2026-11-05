@@ -14,6 +14,7 @@ import io.aura.snapshot.SnapshotScope;
 import io.undertow.Undertow;
 import io.undertow.server.HttpHandler;
 import io.undertow.server.HttpServerExchange;
+import io.undertow.server.handlers.ByteRangeHandler;
 import io.undertow.server.handlers.GracefulShutdownHandler;
 import io.undertow.server.handlers.encoding.ContentEncodingRepository;
 import io.undertow.server.handlers.encoding.EncodingHandler;
@@ -54,7 +55,7 @@ public class UndertowStarter implements AuraStarter {
                     .thenComparing(Comparator.comparingLong(
                             (CompiledRoute r) -> r.rawPath().chars().filter(c -> c == '/').count())
                             .reversed());
-    private Undertow server;
+    private volatile Undertow server;
     private GracefulShutdownHandler shutdownHandler;
     private ScheduledExecutorService timeoutScheduler;
     private AuraWebRuntime app;
@@ -126,10 +127,17 @@ public class UndertowStarter implements AuraStarter {
                                 if (ct == null) return false;
                                 if (ct.contains("text/event-stream")) return false;
                                 if (!ct.contains("text") && !ct.contains("json") && !ct.contains("xml")) return false;
+                                // Content-Range describes the identity representation; a gzipped
+                                // partial response would not match the byte offsets the client asked for.
+                                if (ex.getRequestHeaders().contains(Headers.RANGE)) return false;
                                 long len = ex.getResponseContentLength();
                                 return len == -1 || len >= app.gzipMinSize();
                             }));
         }
+
+        // 206/416 for GET and HEAD once the response declares its full length; chunked
+        // streams cannot seek and keep answering 200 with Accept-Ranges: none.
+        rootHandler = new ByteRangeHandler(rootHandler, true);
 
         if (app.requestTimeout() > 0) {
             timeoutScheduler = new ScheduledThreadPoolExecutor(1, r -> {
@@ -166,8 +174,21 @@ public class UndertowStarter implements AuraStarter {
             }
             throw e;
         }
-        log.info("Aura started on port {} in {}ms", app.port(),
+        int bound = boundPort();
+        log.info("Aura started on port {} in {}ms", bound > 0 ? bound : app.port(),
                 System.currentTimeMillis() - t0);
+    }
+
+    @Override
+    public int boundPort() {
+        Undertow current = server;
+        if (current == null) return -1;
+        List<Undertow.ListenerInfo> listeners = current.getListenerInfo();
+        if (listeners.isEmpty()) return -1;
+        if (listeners.get(0).getAddress() instanceof java.net.InetSocketAddress address) {
+            return address.getPort();
+        }
+        return -1;
     }
 
     @Override
@@ -192,8 +213,10 @@ public class UndertowStarter implements AuraStarter {
         }
         connectionCancellations.values().forEach(tokens ->
                 tokens.forEach(CancellationToken::cancel));
-        if (server != null) {
-            server.stop();
+        Undertow current = server;
+        server = null;
+        if (current != null) {
+            current.stop();
             log.info("Aura stopped");
         }
         connectionCancellations.clear();

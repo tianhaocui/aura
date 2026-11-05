@@ -211,6 +211,7 @@ public final class io.aura.AuraApp implements java.lang.AutoCloseable {
   public io.aura.AuraApp prepare();
   public void stop();
   public void close();
+  public int boundPort();
   public io.aura.contract.RuntimeState state();
   public io.aura.AuraRuntime runtimeView();
   public boolean isRunning();
@@ -387,6 +388,7 @@ public interface io.aura.AuraRuntime extends java.lang.AutoCloseable,io.aura.con
   public abstract void start();
   public abstract void start(java.lang.String[]);
   public abstract void stop();
+  public default int boundPort();
   public abstract java.util.List<io.aura.contract.ModuleMetadata> moduleDescriptors();
   public abstract io.aura.contract.PermissionRegistry permissions();
   public abstract <T> java.util.Optional<T> find(java.lang.Class<T>);
@@ -398,6 +400,7 @@ public interface io.aura.AuraRuntime extends java.lang.AutoCloseable,io.aura.con
 public interface io.aura.AuraStarter {
   public abstract void start(io.aura.AuraWebRuntime);
   public abstract void stop();
+  public default int boundPort();
   public default void reloadRoutes(io.aura.AuraWebRuntime);
 }
 ### aura-core:io.aura.AuraWebRuntime
@@ -475,6 +478,8 @@ public class io.aura.JsonConfig {
 ### aura-core:io.aura.JwtSupport
 public final class io.aura.JwtSupport {
   public io.aura.JwtSupport(java.lang.String, long);
+  public io.aura.JwtSupport(java.lang.String, long, java.lang.String, java.lang.String);
+  public io.aura.JwtSupport(java.lang.String, long, java.lang.String, java.lang.String, long);
   public java.lang.String sign(long);
   public java.lang.String sign(java.lang.String);
   public java.lang.String verify(java.lang.String);
@@ -648,8 +653,14 @@ public final class io.aura.port.AdmissionRequest extends java.lang.Record {
   public java.lang.String clientIp();
   public java.lang.String apiKey();
 }
+### aura-core:io.aura.port.BaseContext$StreamWriter
+public interface io.aura.port.BaseContext$StreamWriter {
+  public abstract void write(java.io.OutputStream) throws java.lang.Exception;
+}
 ### aura-core:io.aura.port.BaseContext
 public interface io.aura.port.BaseContext {
+  public static java.lang.String requireParameter(java.lang.String, java.lang.String);
+  public static java.lang.String requireCharacter(java.lang.String, java.lang.String);
   public abstract java.lang.String path(java.lang.String);
   public abstract java.lang.String query(java.lang.String);
   public abstract java.lang.String query(java.lang.String, java.lang.String);
@@ -690,6 +701,9 @@ public interface io.aura.port.BaseContext {
   public default java.lang.String formField(java.lang.String) throws java.lang.Exception;
   public default void sendFile(java.lang.String, byte[]) throws java.lang.Exception;
   public default void sendFile(java.lang.String, byte[], java.lang.String) throws java.lang.Exception;
+  public default void sendFile(java.lang.String, java.nio.file.Path) throws java.lang.Exception;
+  public default void sendFile(java.lang.String, java.nio.file.Path, java.lang.String) throws java.lang.Exception;
+  public default void sendStream(java.lang.String, long, java.lang.String, io.aura.port.BaseContext$StreamWriter) throws java.lang.Exception;
   public default java.lang.String userId();
   public default io.aura.port.SseEmitter sse() throws java.lang.Exception;
   public abstract void abort();
@@ -1097,6 +1111,8 @@ public class io.aura.web.Context implements io.aura.port.BaseContext {
   public <T> T get(java.lang.String, java.lang.Class<T>);
   public io.aura.port.SseEmitter sse();
   public void sendFile(java.lang.String, byte[], java.lang.String);
+  public void sendFile(java.lang.String, java.nio.file.Path, java.lang.String) throws java.lang.Exception;
+  public void sendStream(java.lang.String, long, java.lang.String, io.aura.port.BaseContext$StreamWriter) throws java.lang.Exception;
   public void abort();
   public boolean isAborted();
   public java.lang.String ip();
@@ -1171,6 +1187,8 @@ public class io.aura.web.MockContext extends io.aura.web.Context {
   public io.aura.web.Context cookie(java.lang.String, java.lang.String, int);
   public boolean isResponseStarted();
   public void sendFile(java.lang.String, byte[], java.lang.String);
+  public void sendFile(java.lang.String, java.nio.file.Path, java.lang.String) throws java.lang.Exception;
+  public void sendStream(java.lang.String, long, java.lang.String, io.aura.port.BaseContext$StreamWriter) throws java.lang.Exception;
   public <T> void set(T);
   public <T> T get(java.lang.Class<T>);
   public void set(java.lang.String, java.lang.Object);
@@ -1348,6 +1366,7 @@ public final class io.aura.web.TypeUtil {
 public class io.aura.web.UndertowStarter implements io.aura.AuraStarter {
   public io.aura.web.UndertowStarter();
   public void start(io.aura.AuraWebRuntime);
+  public int boundPort();
   public void stop();
   public void reloadRoutes(io.aura.AuraWebRuntime);
 }
@@ -1434,6 +1453,16 @@ public class io.aura.db.Db implements java.lang.AutoCloseable {
   public void close();
   public static void shutdownPool();
 }
+### aura-db:io.aura.db.Jsonb
+public final class io.aura.db.Jsonb implements io.aura.db.SqlBindable {
+  public static io.aura.db.Jsonb of(java.lang.Object);
+  public static io.aura.db.Jsonb raw(java.lang.String);
+  public java.lang.String json();
+  public void bind(java.sql.PreparedStatement, int) throws java.sql.SQLException;
+  public java.lang.String toString();
+  public boolean equals(java.lang.Object);
+  public int hashCode();
+}
 ### aura-db:io.aura.db.MigrationContext
 public final class io.aura.db.MigrationContext extends java.lang.Record {
   public io.aura.db.MigrationContext(io.aura.db.Db, javax.sql.DataSource, java.lang.String);
@@ -1476,6 +1505,19 @@ public final class io.aura.db.PaginationOrder extends java.lang.Record {
   public final int hashCode();
   public final boolean equals(java.lang.Object);
   public java.lang.String clause();
+}
+### aura-db:io.aura.db.PgVector
+public final class io.aura.db.PgVector implements io.aura.db.SqlBindable {
+  public static io.aura.db.PgVector of(float...);
+  public static io.aura.db.PgVector of(double...);
+  public static io.aura.db.PgVector parse(java.lang.Object);
+  public float[] toFloatArray();
+  public int dimensions();
+  public java.lang.String literal();
+  public void bind(java.sql.PreparedStatement, int) throws java.sql.SQLException;
+  public java.lang.String toString();
+  public boolean equals(java.lang.Object);
+  public int hashCode();
 }
 ### aura-db:io.aura.db.Query
 public class io.aura.db.Query {
@@ -1525,6 +1567,11 @@ public class io.aura.db.Row extends java.util.LinkedHashMap<java.lang.String, ja
   public double getDouble(java.lang.String, double);
   public java.lang.Boolean getBool(java.lang.String);
   public boolean getBool(java.lang.String, boolean);
+  public java.lang.String getJson(java.lang.String);
+  public <T> T getJson(java.lang.String, java.lang.Class<T>);
+  public float[] getVector(java.lang.String);
+  public io.aura.db.Row setJson(java.lang.String, java.lang.Object);
+  public io.aura.db.Row setVector(java.lang.String, float...);
   public java.lang.String table();
   public java.lang.String primaryKey();
   public static int batchInsert(io.aura.db.Db, java.util.List<io.aura.db.Row>);
@@ -1640,6 +1687,7 @@ public class io.aura.mcp.McpBridge {
   public io.aura.mcp.McpBridge(java.lang.String, java.io.PrintStream);
   public io.aura.mcp.McpBridge(java.lang.String, java.io.PrintStream, java.lang.String);
   public io.aura.mcp.McpBridge(java.lang.String, java.io.PrintStream, java.lang.String, boolean);
+  public io.aura.mcp.McpBridge(java.lang.String, java.io.PrintStream, java.lang.String, boolean, boolean);
   public void run() throws java.lang.Exception;
   public static void main(java.lang.String[]) throws java.lang.Exception;
 }
@@ -1970,8 +2018,10 @@ public final class io.aura.ai.AiProviderContractException extends java.lang.Runt
 ### aura-ai:io.aura.ai.AiProviderException
 public final class io.aura.ai.AiProviderException extends java.lang.Exception {
   public io.aura.ai.AiProviderException(java.lang.String, int, java.lang.String);
+  public io.aura.ai.AiProviderException(java.lang.String, int, java.lang.String, io.aura.ai.AiUsage);
   public java.lang.String code();
   public int status();
+  public io.aura.ai.AiUsage usage();
 }
 ### aura-ai:io.aura.ai.AiRedactor
 public interface io.aura.ai.AiRedactor {
@@ -2200,9 +2250,14 @@ public final class io.aura.ai.FakeAiProvider implements io.aura.ai.AiProvider {
 }
 ### aura-ai:io.aura.ai.InMemoryConversationStore
 public final class io.aura.ai.InMemoryConversationStore implements io.aura.ai.ConversationStore {
+  public static final int DEFAULT_MAX_CONVERSATIONS;
+  public static final int DEFAULT_MAX_ID_LENGTH;
   public io.aura.ai.InMemoryConversationStore(int, long);
+  public io.aura.ai.InMemoryConversationStore(int, long, int, int);
   public int maxMessages();
   public long maxCharacters();
+  public int maxConversations();
+  public int maxIdLength();
   public io.aura.ai.ConversationStore$ConversationSnapshot load(java.lang.String);
   public io.aura.ai.ConversationStore$ConversationSnapshot append(java.lang.String, io.aura.ai.ConversationStore$AiMessage, long);
 }
@@ -2211,7 +2266,9 @@ public final class io.aura.ai.OpenAiCompatibleProvider implements io.aura.ai.AiP
   public static final int DEFAULT_MAX_RESPONSE_BYTES;
   public io.aura.ai.OpenAiCompatibleProvider(java.net.URI, java.lang.String, java.lang.String);
   public io.aura.ai.OpenAiCompatibleProvider(java.net.URI, java.lang.String, java.lang.String, java.net.http.HttpClient, java.time.Duration, int);
+  public io.aura.ai.OpenAiCompatibleProvider(java.net.URI, java.lang.String, java.lang.String, java.net.http.HttpClient, java.time.Duration, int, boolean);
   public static io.aura.ai.OpenAiCompatibleProvider create(java.lang.String, java.lang.String, java.lang.String);
+  public static io.aura.ai.OpenAiCompatibleProvider create(java.lang.String, java.lang.String, java.lang.String, boolean);
   public java.lang.String name();
   public io.aura.ai.AiResponse chat(io.aura.ai.AiRequest) throws java.lang.Exception;
   public void stream(io.aura.ai.AiRequest, io.aura.ai.AiStreamHandler) throws java.lang.Exception;
@@ -2414,7 +2471,7 @@ public final class io.aura.workflow.WorkflowDefinition<C> implements io.aura.wor
   public static <C> io.aura.workflow.WorkflowDefinition$Builder<C> builder(java.lang.String, io.aura.workflow.WorkflowClock);
 }
 ### aura-workflow:io.aura.workflow.WorkflowException
-public class io.aura.workflow.WorkflowException extends java.lang.RuntimeException {
+public class io.aura.workflow.WorkflowException extends java.lang.RuntimeException implements io.aura.contract.CodedFailure {
   public static final java.lang.String MISSING_STEP;
   public static final java.lang.String DUPLICATE_STEP;
   public static final java.lang.String DEPENDENCY_CYCLE;

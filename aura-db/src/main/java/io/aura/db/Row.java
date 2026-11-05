@@ -191,6 +191,37 @@ public class Row extends LinkedHashMap<String, Object> {
         return value.stripTrailingZeros().scale() <= 0 && value.compareTo(min) >= 0 && value.compareTo(max) <= 0;
     }
 
+    /** The raw JSON text of a jsonb column, whether the driver returned a String or a PGobject. */
+    public String getJson(String key) {
+        Object value = get(key);
+        if (value == null) return null;
+        if (value instanceof Jsonb jsonb) return jsonb.json();
+        return value.toString();
+    }
+
+    /** Parses a jsonb column with fastjson2. {@code String.class} returns the raw text. */
+    public <T> T getJson(String key, Class<T> type) {
+        java.util.Objects.requireNonNull(type, "type");
+        String json = getJson(key);
+        if (json == null) return null;
+        if (type == String.class) return type.cast(json);
+        return com.alibaba.fastjson2.JSON.parseObject(json, type);
+    }
+
+    /** Reads a pgvector column as a float array, accepting the driver's text form. */
+    public float[] getVector(String key) {
+        Object value = get(key);
+        return value == null ? null : PgVector.parse(value).toFloatArray();
+    }
+
+    public Row setJson(String key, Object value) {
+        return set(key, Jsonb.of(value));
+    }
+
+    public Row setVector(String key, float... values) {
+        return set(key, PgVector.of(values));
+    }
+
     public String table() { return table; }
     public String primaryKey() { return primaryKey; }
 

@@ -364,9 +364,42 @@ Row.of("user").id(1).delete(db);
 | `TIMESTAMP` | `java.time.LocalDateTime` |
 | `DATE` | `java.time.LocalDate` |
 | `TIME` | `java.time.LocalTime` |
+| `JSONB` | driver text form (`PGobject`); read with `getJson` |
+| `vector` | driver text form (`PGobject`); read with `getVector` |
 
 `row.getStr("created_at")` calls `.toString()` and works fine.
 `ctx.json(row)` serializes date/time to ISO 8601 automatically.
+
+### PostgreSQL `jsonb` and `pgvector`
+
+A plain String does not bind to a `jsonb` column, and a `float[]` does not bind to a
+`vector` column. The wrappers below send an untyped parameter that PostgreSQL coerces to
+the target column's or operator's type:
+
+```java
+db.execute("INSERT INTO document (payload) VALUES (?)",
+        Jsonb.of(Map.of("kind", "note")));          // serialised with fastjson2
+db.execute("INSERT INTO document (payload) VALUES (?)",
+        Jsonb.raw("{\"kind\":\"note\"}"));          // already-serialised text
+
+db.execute("CREATE TABLE item (embedding vector(3))");
+db.execute("INSERT INTO item (embedding) VALUES (?)", PgVector.of(0.1f, 0.2f, 0.3f));
+
+Row row = db.findOne("SELECT payload, embedding FROM document, item LIMIT 1");
+Map<String, Object> payload = row.getJson("payload", Map.class);
+String raw = row.getJson("payload");
+float[] embedding = row.getVector("embedding");
+
+// Distance ordering binds the probe vector the same way.
+db.find("SELECT * FROM item ORDER BY embedding <-> ? LIMIT 5",
+        PgVector.of(0.1f, 0.2f, 0.3f));
+```
+
+`Row.setJson(key, value)` and `Row.setVector(key, ...)` store the wrappers so `Row.insert`
+binds them correctly. `Jsonb.of(Object)` serialises values, and a Java `String` therefore
+becomes a JSON string scalar; use `Jsonb.raw(String)` for text that is already JSON.
+`PgVector.of(...)` accepts float or double values, and `PgVector.parse(...)` accepts
+pgvector's text form, a list of numbers, or an array.
 
 ---
 

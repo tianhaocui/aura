@@ -6,7 +6,6 @@ import io.aura.AuraConfig;
 import io.aura.contract.Route;
 import org.junit.jupiter.api.Test;
 
-import java.net.ServerSocket;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -22,11 +21,10 @@ class DeploymentSecurityTest {
 
     @Test
     void defaultSecurityHeadersAreAppliedAndCanBeExplicitlyDisabled() throws Exception {
-        int securePort = availablePort();
-        AuraApp secure = app(new AuraConfig().port(securePort), "secure-headers");
+        AuraApp secure = app(new AuraConfig().port(0), "secure-headers");
         try {
             secure.start();
-            HttpResponse<String> response = get(securePort);
+            HttpResponse<String> response = get(secure.boundPort());
             assertThat(response.statusCode()).isEqualTo(200);
             assertThat(response.headers().firstValue("X-Content-Type-Options")).contains("nosniff");
             assertThat(response.headers().firstValue("X-Frame-Options")).contains("DENY");
@@ -35,11 +33,10 @@ class DeploymentSecurityTest {
             secure.stop();
         }
 
-        int disabledPort = availablePort();
-        AuraApp disabled = app(new AuraConfig().port(disabledPort).securityHeaders(false), "disabled-headers");
+        AuraApp disabled = app(new AuraConfig().port(0).securityHeaders(false), "disabled-headers");
         try {
             disabled.start();
-            HttpResponse<String> response = get(disabledPort);
+            HttpResponse<String> response = get(disabled.boundPort());
             assertThat(response.headers().firstValue("X-Content-Type-Options")).isEmpty();
             assertThat(response.headers().firstValue("X-Frame-Options")).isEmpty();
         } finally {
@@ -48,12 +45,25 @@ class DeploymentSecurityTest {
     }
 
     @Test
-    void hostAllowlistRejectsUnexpectedHost() throws Exception {
-        int port = availablePort();
-        AuraApp app = app(new AuraConfig().port(port).allowedHosts("api.example"), "host-allowlist");
+    void boundPortReportsTheEphemeralListenerAndIsUnboundAfterStop() throws Exception {
+        AuraApp app = app(new AuraConfig().port(0), "bound-port");
+        assertThat(app.boundPort()).isEqualTo(-1);
         try {
             app.start();
-            assertThat(get(port).statusCode()).isEqualTo(421);
+            assertThat(app.boundPort()).isPositive();
+            assertThat(get(app.boundPort()).statusCode()).isEqualTo(200);
+        } finally {
+            app.stop();
+        }
+        assertThat(app.boundPort()).isEqualTo(-1);
+    }
+
+    @Test
+    void hostAllowlistRejectsUnexpectedHost() throws Exception {
+        AuraApp app = app(new AuraConfig().port(0).allowedHosts("api.example"), "host-allowlist");
+        try {
+            app.start();
+            assertThat(get(app.boundPort()).statusCode()).isEqualTo(421);
         } finally {
             app.stop();
         }
@@ -61,12 +71,12 @@ class DeploymentSecurityTest {
 
     @Test
     void schemaTokenGateIsOneDecisionForBothTransports() throws Exception {
-        int port = availablePort();
-        AuraApp app = app(new AuraConfig().port(port)
+        AuraApp app = app(new AuraConfig().port(0)
                 .property("aura.schema.auth-token", "s3cret"), "schema-token");
         TestClient inMemory = TestClient.of(app);
         try {
             app.start();
+            int port = app.boundPort();
             assertThat(schema(port, null).statusCode()).isEqualTo(401);
             assertThat(schema(port, "wrong").statusCode()).isEqualTo(401);
             HttpResponse<String> allowed = schema(port, "s3cret");
@@ -85,12 +95,12 @@ class DeploymentSecurityTest {
 
     @Test
     void csrfUsesTheConfiguredOriginNotTheForwardedHost() throws Exception {
-        int port = availablePort();
-        AuraApp app = postApp(new AuraConfig().port(port).env("prod")
+        AuraApp app = postApp(new AuraConfig().port(0).env("prod")
                 .publicOrigin("http://127.0.0.1")
                 .trustedProxies("127.0.0.1"), "configured-origin");
         try {
             app.start();
+            int port = app.boundPort();
             assertThat(csrfPost(port, "http://127.0.0.1", "api.example").statusCode()).isEqualTo(200);
             // A trusted proxy explains forwarding, not which origin the operator intended.
             assertThat(csrfPost(port, "https://evil.example", "evil.example").statusCode()).isEqualTo(403);
@@ -101,11 +111,11 @@ class DeploymentSecurityTest {
 
     @Test
     void rateLimitUsesValidatedClientIpBehindTrustedProxy() throws Exception {
-        int trustedPort = availablePort();
-        AuraApp trusted = app(new AuraConfig().port(trustedPort)
+        AuraApp trusted = app(new AuraConfig().port(0)
                 .rateLimitPerSecond(1).trustedProxies("127.0.0.1"), "trusted-rate-limit");
         try {
             trusted.start();
+            int trustedPort = trusted.boundPort();
             List<Integer> statuses = new ArrayList<>();
             for (int i = 1; i <= 10; i++) statuses.add(get(trustedPort, "203.0.113." + i).statusCode());
             assertThat(statuses).containsOnly(200);
@@ -113,11 +123,11 @@ class DeploymentSecurityTest {
             trusted.stop();
         }
 
-        int untrustedPort = availablePort();
-        AuraApp untrusted = app(new AuraConfig().port(untrustedPort).rateLimitPerSecond(1),
+        AuraApp untrusted = app(new AuraConfig().port(0).rateLimitPerSecond(1),
                 "untrusted-rate-limit");
         try {
             untrusted.start();
+            int untrustedPort = untrusted.boundPort();
             List<Integer> statuses = new ArrayList<>();
             for (int i = 1; i <= 10; i++) statuses.add(get(untrustedPort, "203.0.113." + i).statusCode());
             assertThat(statuses).contains(429);
@@ -128,12 +138,11 @@ class DeploymentSecurityTest {
 
     @Test
     void moduleAdmissionPolicyUsesRouteTemplatesAndReplacesDefaultControl() throws Exception {
-        int port = availablePort();
         StandardAdmissionPolicy policy = StandardAdmissionPolicy.builder()
                 .routeRate("/orders/{id}", 1)
                 .perApiKey(100, 16)
                 .build();
-        AuraConfig config = new AuraConfig().port(port).rateLimitPerSecond(1);
+        AuraConfig config = new AuraConfig().port(0).rateLimitPerSecond(1);
         AuraApp app = AuraApp.create(config).use(new io.aura.AuraModule() {
             @Override public io.aura.contract.ModuleMetadata descriptor() {
                 return io.aura.contract.ModuleMetadata.of("admission", "1.0.0");
@@ -149,6 +158,7 @@ class DeploymentSecurityTest {
         });
         try {
             app.start();
+            int port = app.boundPort();
             HttpResponse<String> first = getPath(port, "/orders/1", "key-1");
             HttpResponse<String> second = getPath(port, "/orders/2", "key-2");
             assertThat(first.statusCode()).isEqualTo(200);
@@ -205,11 +215,5 @@ class DeploymentSecurityTest {
         HttpRequest.Builder request = HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port + "/__schema__")).GET();
         if (token != null) request.header("X-Aura-Schema-Token", token);
         return http.send(request.build(), HttpResponse.BodyHandlers.ofString());
-    }
-
-    private static int availablePort() throws Exception {
-        try (ServerSocket socket = new ServerSocket(0)) {
-            return socket.getLocalPort();
-        }
     }
 }

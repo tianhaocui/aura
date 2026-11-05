@@ -5,6 +5,9 @@ import com.alibaba.fastjson2.JSON;
 import io.aura.AuraWebRuntime;
 import io.aura.snapshot.Snapshot;
 
+import java.io.ByteArrayOutputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -174,19 +177,63 @@ public class MockContext extends Context {
     byte[] fileBytes;
     String fileName;
     String fileContentType;
+    long fileLength;
 
     @Override public void sendFile(String filename, byte[] data, String contentType) {
         if (responded || isAborted()) return;
+        announceDownload(filename, contentType, data.length);
         this.fileName = filename;
         this.fileBytes = data;
         this.fileContentType = contentType;
+        this.fileLength = data.length;
+        responded = true;
+        Snapshot.response(statusCode(), contentType, java.util.Map.of("filename", filename, "bytes", data.length));
+    }
+
+    @Override public void sendFile(String filename, Path path, String contentType) throws Exception {
+        if (responded || isAborted()) return;
+        if (path == null) throw new IllegalArgumentException("path must not be null");
+        if (!Files.isRegularFile(path)) {
+            throw new IllegalArgumentException("Download source is not a regular file: " + path);
+        }
+        byte[] data = Files.readAllBytes(path);
+        announceDownload(filename, contentType, data.length);
+        this.fileName = filename;
+        this.fileBytes = data;
+        this.fileContentType = contentType;
+        this.fileLength = data.length;
+        responded = true;
+        Snapshot.response(statusCode(), contentType, java.util.Map.of("filename", filename, "bytes", data.length));
+    }
+
+    @Override public void sendStream(String filename, long contentLength, String contentType,
+                                     StreamWriter writer) throws Exception {
+        if (responded || isAborted()) return;
+        if (writer == null) throw new IllegalArgumentException("writer must not be null");
+        if (contentLength < -1) {
+            throw new IllegalArgumentException("contentLength must be -1 or non-negative");
+        }
+        announceDownload(filename, contentType, contentLength);
+        this.fileName = filename;
+        this.fileContentType = contentType;
+        this.fileLength = contentLength;
+        responded = true;
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        try {
+            writer.write(output);
+        } finally {
+            this.fileBytes = output.toByteArray();
+        }
+        Snapshot.response(statusCode(), contentType,
+                java.util.Map.of("filename", filename, "bytes", contentLength));
+    }
+
+    private void announceDownload(String filename, String contentType, long contentLength) {
         // The download is announced by these two headers, so a test that never sees them cannot
         // tell a served file from a blob, and the name is sanitised exactly as the socket does.
         header("Content-Type", contentType);
         header("Content-Disposition",
                 "attachment; filename=\"" + filename.replaceAll("[\\r\\n\"]", "") + "\"");
-        responded = true;
-        Snapshot.response(statusCode(), contentType, java.util.Map.of("filename", filename, "bytes", data.length));
     }
 
     @Override public <T> void set(T instance) { attrs.put(instance.getClass(), instance); }

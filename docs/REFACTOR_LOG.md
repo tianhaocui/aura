@@ -768,17 +768,16 @@ invariant the case checks is which pool applied the changesets -- exactly one,
 because the lock serialises them -- so a timeout is a deadlock guard, and a
 deadline that a slow changelog parse can cross tests machine speed instead.
 
-Known flake: `DeploymentSecurityTest.hostAllowlistRejectsUnexpectedHost` answered
+Fixed flake: `DeploymentSecurityTest.hostAllowlistRejectsUnexpectedHost` answered
 `404` where it asserts `421` once, during the run that followed three aborted
 `-Dmaven.test.failure.ignore` reactor runs, and passed on the full reactor and
-three further aura-web runs before and after. `availablePort()` reserves a port
-and releases it before the app binds, so a listener that outlived one of those
-abandoned runs could own it — and a server without that route answers `404` for a
-Host the allowlist would have rejected. The cause is not proven, only the shape
-that fits: a `404` says a different process answered, not that the guard missed.
-The class proves behaviour over a real socket, so the port cannot be dropped; the
-fix is to bind the accepted socket rather than pick a number, and it belongs with
-the rest of the socket-backed tests.
+three further aura-web runs before and after. The cause was never proven, but
+only one mechanism explains a `404` from a different server: `availablePort()`
+reserved a port and released it before the app bound it, so a listener left over
+from an abandoned run could answer on the loopback address while Undertow's
+wildcard bind succeeded. The class now configures `port(0)` and reads the
+OS-assigned port back from the started adapter (`AuraApp.boundPort()`), so there
+is no number to lose; the allowlist handler itself was never at fault.
 
 `scripts/verify-public-api.sh` needs `jq`, which is not installed here. The
 regenerated baseline came from the script's own generation half (its first 141

@@ -123,6 +123,25 @@ record, the stage-by-stage log, and the migration table.
   fields, is out of range, or selects an empty day
   (`AURA_CRON_EXPRESSION_INVALID`) and a contribution made after the schedule was
   armed (`AURA_CRON_CONTRIBUTION_TOO_LATE`) fail at the door and name the module.
+- `BaseContext.sendFile(String, Path, String)` streams a file from disk without
+  reading it into a byte array, and `sendStream(...)` streams generated content
+  with either a declared length or chunked transfer. The socket adapter transfers
+  the file asynchronously, closes the channel or stream, and the in-memory adapter
+  captures the bytes for tests.
+- Downloads answer `Range` requests. A single `bytes=` range returns `206` with
+  `Content-Range`, an unsatisfiable one returns `416` with `Content-Range:
+  bytes */<size>`, length-delimited responses (downloads and static resources)
+  advertise `Accept-Ranges: bytes`, and a chunked stream answers `Accept-Ranges:
+  none`. Multiple ranges fall back to the full `200`, and gzip is skipped for a
+  ranged request so the offsets describe the identity bytes.
+- `aura-db` has PostgreSQL type sugar: `Jsonb.of(value)` / `Jsonb.raw(json)` bind
+  `jsonb` parameters, `PgVector.of(...)` binds pgvector `vector` parameters,
+  `Row.getJson`/`getJson(type)` and `Row.getVector` read both back from a
+  driver's text form, and `Row.setJson`/`setVector` feed the same wrappers
+  through `insert`, `execute` and `batch`.
+- `AuraApp.boundPort()` reports the port the started adapter actually bound, so
+  tests and embedded deployments can configure `port(0)` and still address the
+  server. An in-memory or stopped runtime reports `-1`.
 
 ### Changed
 

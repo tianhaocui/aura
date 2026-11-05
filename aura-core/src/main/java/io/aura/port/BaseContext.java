@@ -152,6 +152,32 @@ public interface BaseContext {
         throw new UnsupportedOperationException("sendFile not supported in this context");
     }
 
+    /**
+     * Streams a file from disk. The adapter must not read it into a byte array first; use the
+     * {@code byte[]} overload only for payloads that are already in memory.
+     */
+    default void sendFile(String filename, java.nio.file.Path path) throws Exception {
+        sendFile(filename, path, "application/octet-stream");
+    }
+    default void sendFile(String filename, java.nio.file.Path path, String contentType) throws Exception {
+        throw new UnsupportedOperationException("sendFile not supported in this context");
+    }
+
+    /**
+     * Streams an application-generated body. A {@code contentLength} of {@code -1} uses chunked
+     * transfer; a non-negative value is sent as {@code Content-Length}. The adapter owns and closes
+     * the output stream, so {@code writer} must not close it.
+     */
+    default void sendStream(String filename, long contentLength, String contentType,
+                            StreamWriter writer) throws Exception {
+        throw new UnsupportedOperationException("sendStream not supported in this context");
+    }
+
+    @FunctionalInterface
+    interface StreamWriter {
+        void write(java.io.OutputStream output) throws Exception;
+    }
+
     // --- auth ---
     default String userId() {
         Object id = get("_userId", Object.class);

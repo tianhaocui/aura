@@ -65,7 +65,7 @@ final class ModularRuntime implements AuraWebRuntime {
     private PrintStream originalSystemOut;
     private PrintStream redirectedSystemOut;
     private McpRouterSpec mcpRouter;
-    private AuraStarter starter;
+    private volatile AuraStarter starter;
     private McpStarter mcpStarter;
     private CronScheduler cronScheduler;
     private volatile Thread keepAliveThread;
@@ -278,6 +278,11 @@ final class ModularRuntime implements AuraWebRuntime {
             failStart(failure, rollbackFailures);
             throw failure;
         }
+    }
+
+    @Override public int boundPort() {
+        AuraStarter current = starter;
+        return current == null ? -1 : current.boundPort();
     }
 
     @Override public synchronized void stop() {

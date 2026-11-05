@@ -358,9 +358,7 @@ public class Db implements AutoCloseable {
         try {
             conn = getConnection();
             try (PreparedStatement ps = conn.prepareStatement(sql, java.sql.Statement.RETURN_GENERATED_KEYS)) {
-                if (params != null) {
-                    for (int i = 0; i < params.length; i++) ps.setObject(i + 1, params[i]);
-                }
+                bind(ps, params);
                 ps.executeUpdate();
                 try (java.sql.ResultSet keys = ps.getGeneratedKeys()) {
                     return keys.next() ? keys.getObject(1) : null;
@@ -412,7 +410,7 @@ public class Db implements AutoCloseable {
             conn = getConnection();
             try (PreparedStatement ps = conn.prepareStatement(sql)) {
                 for (Object[] params : paramsList) {
-                    for (int i = 0; i < params.length; i++) ps.setObject(i + 1, params[i]);
+                    bind(ps, params);
                     ps.addBatch();
                 }
                 return ps.executeBatch();
@@ -777,10 +775,17 @@ public class Db implements AutoCloseable {
 
     private PreparedStatement prepare(Connection conn, String sql, Object[] params) throws SQLException {
         PreparedStatement ps = conn.prepareStatement(sql);
-        if (params != null) {
-            for (int i = 0; i < params.length; i++) ps.setObject(i + 1, params[i]);
-        }
+        bind(ps, params);
         return ps;
+    }
+
+    private static void bind(PreparedStatement ps, Object[] params) throws SQLException {
+        if (params == null) return;
+        for (int i = 0; i < params.length; i++) {
+            Object param = params[i];
+            if (param instanceof SqlBindable bindable) bindable.bind(ps, i + 1);
+            else ps.setObject(i + 1, param);
+        }
     }
 
     private static void cancel(java.sql.Statement statement) {
