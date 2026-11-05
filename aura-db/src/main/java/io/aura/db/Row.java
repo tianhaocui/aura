@@ -6,6 +6,12 @@ import java.util.Map;
 
 public class Row extends LinkedHashMap<String, Object> {
 
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(Row.class);
+    private static final java.math.BigDecimal INT_MIN = java.math.BigDecimal.valueOf(Integer.MIN_VALUE);
+    private static final java.math.BigDecimal INT_MAX = java.math.BigDecimal.valueOf(Integer.MAX_VALUE);
+    private static final java.math.BigDecimal LONG_MIN = java.math.BigDecimal.valueOf(Long.MIN_VALUE);
+    private static final java.math.BigDecimal LONG_MAX = java.math.BigDecimal.valueOf(Long.MAX_VALUE);
+
     private String table;
     private String primaryKey = "id";
     private final java.util.Set<String> excluded = new java.util.HashSet<>();
@@ -75,28 +81,28 @@ public class Row extends LinkedHashMap<String, Object> {
     public Integer getInt(String key) {
         Object v = get(key);
         if (v == null) return null;
-        if (v instanceof Number n) return n.intValue();
+        if (v instanceof Number n) return intValue(key, n);
         return Integer.parseInt(v.toString());
     }
 
     public int getInt(String key, int defaultValue) {
         Object v = get(key);
         if (v == null) return defaultValue;
-        if (v instanceof Number n) return n.intValue();
+        if (v instanceof Number n) return intValue(key, n);
         return Integer.parseInt(v.toString());
     }
 
     public Long getLong(String key) {
         Object v = get(key);
         if (v == null) return null;
-        if (v instanceof Number n) return n.longValue();
+        if (v instanceof Number n) return longValue(key, n);
         return Long.parseLong(v.toString());
     }
 
     public long getLong(String key, long defaultValue) {
         Object v = get(key);
         if (v == null) return defaultValue;
-        if (v instanceof Number n) return n.longValue();
+        if (v instanceof Number n) return longValue(key, n);
         return Long.parseLong(v.toString());
     }
 
@@ -117,15 +123,72 @@ public class Row extends LinkedHashMap<String, Object> {
     public Boolean getBool(String key) {
         Object v = get(key);
         if (v == null) return null;
-        if (v instanceof Boolean b) return b;
-        return Boolean.parseBoolean(v.toString());
+        return boolValue(v);
     }
 
     public boolean getBool(String key, boolean defaultValue) {
         Object v = get(key);
         if (v == null) return defaultValue;
-        if (v instanceof Boolean b) return b;
-        return Boolean.parseBoolean(v.toString());
+        return boolValue(v);
+    }
+
+    private static boolean boolValue(Object value) {
+        if (value instanceof Boolean b) return b;
+        if (value instanceof Number n) return n.doubleValue() != 0;
+        return Boolean.parseBoolean(value.toString());
+    }
+
+    private static int intValue(String key, Number value) {
+        if (value instanceof Byte || value instanceof Short || value instanceof Integer) return value.intValue();
+        if (value instanceof java.math.BigInteger integer) {
+            if (integer.bitLength() < 32) return integer.intValue();
+            return truncatedInt(key, value);
+        }
+        if (value instanceof java.math.BigDecimal decimal) {
+            if (isIntegral(decimal, INT_MIN, INT_MAX)) return value.intValue();
+            return truncatedInt(key, value);
+        }
+        if (value instanceof Long number) {
+            if (number >= Integer.MIN_VALUE && number <= Integer.MAX_VALUE) return value.intValue();
+            return truncatedInt(key, value);
+        }
+        double d = value.doubleValue();
+        // Doubles cannot represent Integer.MAX_VALUE exactly; 2^31 itself is the first out-of-range value.
+        if (d != Math.rint(d) || d < -2147483648.0 || d >= 2147483648.0) return truncatedInt(key, value);
+        return value.intValue();
+    }
+
+    private static int truncatedInt(String key, Number value) {
+        log.warn("Row.getInt('{}') converts {} with truncation or overflow", key, value);
+        return value.intValue();
+    }
+
+    private static long longValue(String key, Number value) {
+        if (value instanceof Byte || value instanceof Short || value instanceof Integer || value instanceof Long) {
+            return value.longValue();
+        }
+        if (value instanceof java.math.BigInteger integer) {
+            if (integer.bitLength() < 64) return integer.longValue();
+            return truncatedLong(key, value);
+        }
+        if (value instanceof java.math.BigDecimal decimal) {
+            if (isIntegral(decimal, LONG_MIN, LONG_MAX)) return value.longValue();
+            return truncatedLong(key, value);
+        }
+        double d = value.doubleValue();
+        // 2^63 is representable as a double while Long.MAX_VALUE is not, so the upper bound is exclusive.
+        if (d != Math.rint(d) || d < -0x1p63 || d >= 0x1p63) return truncatedLong(key, value);
+        return value.longValue();
+    }
+
+    private static long truncatedLong(String key, Number value) {
+        log.warn("Row.getLong('{}') converts {} with truncation or overflow", key, value);
+        return value.longValue();
+    }
+
+    private static boolean isIntegral(java.math.BigDecimal value, java.math.BigDecimal min,
+                                      java.math.BigDecimal max) {
+        return value.stripTrailingZeros().scale() <= 0 && value.compareTo(min) >= 0 && value.compareTo(max) <= 0;
     }
 
     public String table() { return table; }

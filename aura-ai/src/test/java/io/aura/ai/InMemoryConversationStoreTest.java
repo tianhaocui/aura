@@ -43,4 +43,18 @@ class InMemoryConversationStoreTest {
         assertThat(snapshot.messages()).isEmpty();
         assertThat(snapshot.characterCount()).isZero();
     }
+
+    @Test
+    void boundsConversationCountAndIdentifierLength() {
+        InMemoryConversationStore store = new InMemoryConversationStore(4, 100, 1, 8);
+        store.append("first", new ConversationStore.AiMessage("user", "one"));
+
+        assertThatThrownBy(() -> store.append("second", new ConversationStore.AiMessage("user", "two")))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("full");
+        assertThatThrownBy(() -> store.load("identifier-that-is-too-long"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("maxIdLength");
+        assertThat(store.load("first").messages()).hasSize(1);
+    }
 }

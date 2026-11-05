@@ -2,6 +2,19 @@ package io.aura.port;
 
 public interface BaseContext {
 
+    /** Returns a required scalar parameter or rejects the request the way reflective binding does. */
+    static String requireParameter(String value, String name) {
+        if (value == null) throw new io.aura.Validate.ValidationException("Missing required parameter: " + name);
+        return value;
+    }
+
+    static String requireCharacter(String value, String name) {
+        if (value == null || value.isEmpty()) {
+            throw new io.aura.Validate.ValidationException("Missing required parameter: " + name);
+        }
+        return value;
+    }
+
     // --- request ---
     String path(String name);
     String query(String name);
@@ -49,14 +62,14 @@ public interface BaseContext {
     // --- body with validation ---
     default <T> T bodyOrThrow(Class<T> type) throws Exception {
         T obj = body(type);
-        if (obj == null) throw new IllegalArgumentException("Request body is required");
+        if (obj == null) throw new io.aura.Validate.ValidationException("Request body is required");
         io.aura.BeanValidator.validate(obj);
         return obj;
     }
 
     default <T> T bodyOrThrow(java.lang.reflect.Type type) throws Exception {
         T obj = body(type);
-        if (obj == null) throw new IllegalArgumentException("Request body is required");
+        if (obj == null) throw new io.aura.Validate.ValidationException("Request body is required");
         io.aura.BeanValidator.validate(obj);
         return obj;
     }
@@ -64,23 +77,23 @@ public interface BaseContext {
     // --- required params ---
     default String queryRequired(String name) {
         String v = query(name);
-        if (v == null || v.isBlank()) throw new IllegalArgumentException("Missing required query parameter: " + name);
+        if (v == null || v.isBlank()) throw new io.aura.Validate.ValidationException("Missing required query parameter: " + name);
         return v;
     }
 
     default int pathInt(String name) {
         String v = path(name);
-        if (v == null || v.isBlank()) throw new IllegalArgumentException("Missing path parameter: " + name);
+        if (v == null || v.isBlank()) throw new io.aura.Validate.ValidationException("Missing path parameter: " + name);
         try { return Integer.parseInt(v.trim()); } catch (NumberFormatException e) {
-            throw new IllegalArgumentException("Path parameter '" + name + "' must be an integer, got: " + v);
+            throw new io.aura.Validate.ValidationException("Path parameter '" + name + "' must be an integer, got: " + v);
         }
     }
 
     default long pathLong(String name) {
         String v = path(name);
-        if (v == null || v.isBlank()) throw new IllegalArgumentException("Missing path parameter: " + name);
+        if (v == null || v.isBlank()) throw new io.aura.Validate.ValidationException("Missing path parameter: " + name);
         try { return Long.parseLong(v.trim()); } catch (NumberFormatException e) {
-            throw new IllegalArgumentException("Path parameter '" + name + "' must be a long, got: " + v);
+            throw new io.aura.Validate.ValidationException("Path parameter '" + name + "' must be a long, got: " + v);
         }
     }
 
@@ -109,9 +122,9 @@ public interface BaseContext {
         if (v == null || v.isBlank()) return 1;
         try {
             int page = Integer.parseInt(v.trim());
-            if (page < 1) throw new IllegalArgumentException("page must be positive");
+            if (page < 1) throw new io.aura.Validate.ValidationException("page must be positive");
             return page;
-        } catch (NumberFormatException e) { throw new IllegalArgumentException("page must be an integer", e); }
+        } catch (NumberFormatException e) { throw new io.aura.Validate.ValidationException("page must be an integer"); }
     }
 
     default int pageSize() {
@@ -122,9 +135,9 @@ public interface BaseContext {
             int max = 500;
             Object configuredApp = get("_app", Object.class);
             if (configuredApp instanceof io.aura.AuraWebRuntime app) max = app.config().pageSizeMax();
-            if (size < 1 || size > max) throw new IllegalArgumentException("pageSize must be between 1 and " + max);
+            if (size < 1 || size > max) throw new io.aura.Validate.ValidationException("pageSize must be between 1 and " + max);
             return size;
-        } catch (NumberFormatException e) { throw new IllegalArgumentException("pageSize must be an integer", e); }
+        } catch (NumberFormatException e) { throw new io.aura.Validate.ValidationException("pageSize must be an integer"); }
     }
 
     // --- file upload ---

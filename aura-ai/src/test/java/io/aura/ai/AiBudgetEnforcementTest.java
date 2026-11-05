@@ -196,6 +196,31 @@ class AiBudgetEnforcementTest {
     }
 
     @Test
+    void retryAttemptsChargeProviderReportedUsageAgainstTheBudget() {
+        AtomicInteger calls = new AtomicInteger();
+        AiProvider provider = request -> {
+            calls.incrementAndGet();
+            throw new AiProviderException("TRANSIENT", 503, "retry", new AiUsage(60, 0, 60, 0));
+        };
+        AiRequest request = AiRequest.builder()
+                .prompt("prompt")
+                .budget(AiBudget.builder().maxInputTokens(100).build())
+                .retry(AiRetryPolicy.fixed(3, java.time.Duration.ZERO))
+                .build();
+
+        try (AiClient client = new AiClient(provider)) {
+            assertThatThrownBy(() -> client.chat(request))
+                    .isInstanceOf(AiBudgetExceededException.class)
+                    .satisfies(error -> assertBudgetError((AiBudgetExceededException) error,
+                            "inputTokens", 100, 120));
+            assertThat(calls).hasValue(2);
+            assertThat(client.usageTotals().inputTokens()).isEqualTo(120);
+        } catch (Exception error) {
+            throw new AssertionError(error);
+        }
+    }
+
+    @Test
     void streamingChatStopsWhenOutputCharacterBudgetIsExceeded() {
         AiProvider provider = new AiProvider() {
             @Override public AiResponse chat(AiRequest request) {

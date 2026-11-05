@@ -78,6 +78,37 @@ class CronScheduleTest {
     }
 
     @Test
+    void aFallBackOverlapResolvesToThePassTheScheduleWasArmedFrom() {
+        ZoneId newYork = ZoneId.of("America/New_York");
+        // 2026-11-01 turns 02:00 EDT back to 01:00 EST, so 01:35 is a real local time twice over.
+        CronSchedule schedule = CronSchedule.parse("35 * * * *");
+        ZonedDateTime firstPass = overlapMinute(newYork, 1, 30).withEarlierOffsetAtOverlap();
+        ZonedDateTime secondPass = overlapMinute(newYork, 1, 30).withLaterOffsetAtOverlap();
+
+        assertThat(schedule.next(firstPass))
+                .isEqualTo(overlapMinute(newYork, 1, 35).withEarlierOffsetAtOverlap());
+        // Asked naively, the second pass answers 01:35 EDT: a minute that has already gone by.
+        assertThat(schedule.next(secondPass))
+                .isEqualTo(overlapMinute(newYork, 1, 35).withLaterOffsetAtOverlap());
+    }
+
+    @Test
+    void noFireTimeEverLandsAtOrBeforeTheTimeItWasComputedFrom() {
+        ZoneId newYork = ZoneId.of("America/New_York");
+        ZonedDateTime cursor = ZonedDateTime.of(LocalDateTime.of(2026, 11, 1, 0, 30), newYork);
+        for (String expression : java.util.List.of("* * * * *", "*/5 * * * *", "35 * * * *",
+                "30 1 * * *")) {
+            CronSchedule schedule = CronSchedule.parse(expression);
+            for (int minute = 0; minute < 180; minute++) {
+                assertThat(schedule.next(cursor).isAfter(cursor))
+                        .as("%s armed from %s", expression, cursor)
+                        .isTrue();
+                cursor = cursor.plusMinutes(1);
+            }
+        }
+    }
+
+    @Test
     void rejectsAnExpressionThatIsNotFiveFields() {
         assertRejected("* * * *", "needs 5 fields");
         assertRejected("   ", "needs 5 fields");
@@ -128,6 +159,11 @@ class CronScheduleTest {
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("no fire time")
                 .hasMessageContaining("0 0 29 2 *");
+    }
+
+    /** A local time inside the 2026-11-01 New York overlap, which the zone passes through twice. */
+    private static ZonedDateTime overlapMinute(ZoneId zone, int hour, int minute) {
+        return ZonedDateTime.of(LocalDateTime.of(2026, 11, 1, hour, minute), zone);
     }
 
     private static String next(String expression, int year, int month, int day, int hour, int minute) {

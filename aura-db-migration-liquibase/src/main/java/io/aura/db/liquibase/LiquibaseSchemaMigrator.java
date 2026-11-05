@@ -30,6 +30,14 @@ public final class LiquibaseSchemaMigrator implements SchemaMigrator {
     public static final String ID = "liquibase";
     private static final int MAX_BOOTSTRAP_RETRIES = 3;
     private static final long[] RETRY_BACKOFF_MILLIS = {25, 50, 100};
+    /**
+     * Liquibase registers one CommandStep instance per command and keeps per-run state (notably
+     * LockServiceCommandStep.isDBLocked) on it. Two updates in one JVM therefore overwrite each
+     * other's lock bookkeeping, and the first run can exit without releasing the changelog lock.
+     * Separate processes are still serialized by DATABASECHANGELOGLOCK; this monitor only keeps
+     * Liquibase's shared command pipeline from being entered concurrently in one JVM.
+     */
+    private static final Object COMMAND_PIPELINE_MONITOR = new Object();
 
     private final String changelogFile;
     private final ClassLoader classLoader;
@@ -53,19 +61,21 @@ public final class LiquibaseSchemaMigrator implements SchemaMigrator {
 
     @Override public SchemaMigrationResult migrate(MigrationContext context) throws Exception {
         Objects.requireNonNull(context, "context");
-        for (int attempt = 0; ; attempt++) {
-            try {
-                return migrateOnce(context);
-            } catch (ConcurrentHistoryBootstrapException collision) {
-                if (attempt >= MAX_BOOTSTRAP_RETRIES) {
-                    throw collision.getCause();
-                }
+        synchronized (COMMAND_PIPELINE_MONITOR) {
+            for (int attempt = 0; ; attempt++) {
                 try {
-                    Thread.sleep(RETRY_BACKOFF_MILLIS[attempt]);
-                } catch (InterruptedException interrupted) {
-                    Thread.currentThread().interrupt();
-                    interrupted.addSuppressed(collision.getCause());
-                    throw interrupted;
+                    return migrateOnce(context);
+                } catch (ConcurrentHistoryBootstrapException collision) {
+                    if (attempt >= MAX_BOOTSTRAP_RETRIES) {
+                        throw collision.getCause();
+                    }
+                    try {
+                        Thread.sleep(RETRY_BACKOFF_MILLIS[attempt]);
+                    } catch (InterruptedException interrupted) {
+                        Thread.currentThread().interrupt();
+                        interrupted.addSuppressed(collision.getCause());
+                        throw interrupted;
+                    }
                 }
             }
         }

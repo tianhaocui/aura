@@ -19,6 +19,17 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class OpenAiCompatibleProviderTest {
     @Test
+    void refusesToSendAnApiKeyOverPlaintextHttpUnlessOptedIn() {
+        assertThatThrownBy(() -> OpenAiCompatibleProvider.create(
+                "http://api.example.test/chat", "secret-key", "default"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("HTTPS");
+
+        assertThat(OpenAiCompatibleProvider.create(
+                "http://api.example.test/chat", "", "default")).isNotNull();
+    }
+
+    @Test
     void postsRedactedChatRequestAndDecodesResponse() throws Exception {
         AtomicReference<String> requestBody = new AtomicReference<>();
         HttpServer server = HttpServer.create(new InetSocketAddress(0), 0);
@@ -31,7 +42,7 @@ class OpenAiCompatibleProviderTest {
         server.start();
         try {
             OpenAiCompatibleProvider provider = OpenAiCompatibleProvider.create(
-                    "http://localhost:" + server.getAddress().getPort() + "/chat", "secret-key", "default");
+                    "http://localhost:" + server.getAddress().getPort() + "/chat", "secret-key", "default", true);
             AiResponse response = provider.chat(AiRequest.builder()
                     .systemPrompt("system password=hidden")
                     .prompt("use token=hidden")

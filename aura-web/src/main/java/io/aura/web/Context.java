@@ -23,6 +23,7 @@ import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -91,6 +92,9 @@ public class Context implements BaseContext {
 
     private FormData formData() throws IOException {
         if (cachedFormData != null) return cachedFormData;
+        // An in-memory request has no socket to block on; it handed its body over when it was
+        // built, so a form it did not carry is absent here rather than unreadable.
+        if (exchange == null) return null;
         exchange.startBlocking();
         cachedFormParser = createFormParser();
         if (cachedFormParser == null) return null;
@@ -178,8 +182,8 @@ public class Context implements BaseContext {
         int read;
         while ((read = input.read(buffer)) != -1) {
             total += read;
-            if (maxSize > 0 && total > maxSize) throw new IOException("Request body exceeds maximum size");
-            if (total > Integer.MAX_VALUE) throw new IOException("Request body exceeds maximum supported size");
+            if (maxSize > 0 && total > maxSize) throw new RequestBodyTooLargeException("Request body exceeds maximum size");
+            if (total > Integer.MAX_VALUE) throw new RequestBodyTooLargeException("Request body exceeds maximum supported size");
             output.write(buffer, 0, read);
         }
         return output.toString(StandardCharsets.UTF_8);
@@ -246,6 +250,13 @@ public class Context implements BaseContext {
 
     @Override public Context header(String name, String value) {
         if (aborted || isResponseStarted()) return this;
+        if (name == null || name.isBlank()) throw new IllegalArgumentException("Header name must not be blank");
+        if (name.indexOf('\r') >= 0 || name.indexOf('\n') >= 0) {
+            throw new IllegalArgumentException("Invalid header name");
+        }
+        if (value != null && (value.indexOf('\r') >= 0 || value.indexOf('\n') >= 0)) {
+            throw new IllegalArgumentException("Invalid header value");
+        }
         exchange.getResponseHeaders().put(new HttpString(name), value);
         return this;
     }
@@ -283,47 +294,146 @@ public class Context implements BaseContext {
         exchange.getResponseHeaders().put(new HttpString("Cache-Control"), "no-cache");
         exchange.getResponseHeaders().put(new HttpString("X-Accel-Buffering"), "no");
         exchange.setPersistent(false);
-        exchange.startBlocking();
-        var out = exchange.getOutputStream();
-        return new SseEmitter() {
-            @Override
-            public void send(String data) throws Exception {
-                write(formatData(data));
-            }
+        return new AsyncSseEmitter(exchange.getResponseSender());
+    }
 
-            @Override
-            public void send(String event, String data) throws Exception {
-                write("event: " + sanitize(event) + "\n" + formatData(data));
-            }
+    /**
+     * Queues events for the response sender and keeps exactly one send in flight. The request
+     * worker only enqueues, so a consumer that stops reading cannot hold it; the callback that
+     * completes one send starts the next. The queue is bounded so the same consumer cannot turn
+     * the server into an unbounded buffer: once the backlog passes the cap the stream ends.
+     */
+    private static final class AsyncSseEmitter implements SseEmitter {
 
-            @Override
-            public void send(String event, String data, String id) throws Exception {
-                write("id: " + sanitize(id) + "\nevent: " + sanitize(event) + "\n" + formatData(data));
-            }
+        private static final int MAX_QUEUED_BYTES = 1024 * 1024;
 
-            @Override
-            public void close() {
-                try { out.close(); } catch (IOException ignored) {}
-            }
+        private final io.undertow.io.Sender sender;
+        private final Object lock = new Object();
+        private final Deque<String> queue = new ArrayDeque<>();
+        private long queuedBytes;
+        private boolean inFlight;
+        private boolean closing;
+        private boolean ended;
 
-            private String formatData(String data) {
-                StringBuilder sb = new StringBuilder();
-                for (String line : data.split("\n", -1)) {
-                    sb.append("data: ").append(line).append("\n");
+        AsyncSseEmitter(io.undertow.io.Sender sender) {
+            this.sender = sender;
+        }
+
+        @Override
+        public void send(String data) {
+            enqueue(formatData(data));
+        }
+
+        @Override
+        public void send(String event, String data) {
+            enqueue("event: " + sanitize(event) + "\n" + formatData(data));
+        }
+
+        @Override
+        public void send(String event, String data, String id) {
+            enqueue("id: " + sanitize(id) + "\nevent: " + sanitize(event) + "\n" + formatData(data));
+        }
+
+        @Override
+        public void close() {
+            synchronized (lock) {
+                closing = true;
+            }
+            pump();
+        }
+
+        private void enqueue(String text) {
+            int bytes = text.length();
+            synchronized (lock) {
+                if (ended || closing) return;
+                if (queuedBytes + bytes > MAX_QUEUED_BYTES) {
+                    // The reader is behind by more than we are willing to hold. Ending the
+                    // stream is kinder than blocking the handler or growing without bound.
+                    closing = true;
+                    queue.clear();
+                    queuedBytes = 0;
+                } else {
+                    queue.addLast(text);
+                    queuedBytes += bytes;
                 }
-                sb.append("\n");
-                return sb.toString();
             }
+            pump();
+        }
 
-            private String sanitize(String value) {
-                return value.replaceAll("[\\r\\n]", "");
+        private void pump() {
+            String next;
+            synchronized (lock) {
+                if (inFlight || ended) return;
+                next = queue.pollFirst();
+                if (next == null) {
+                    if (!closing) return;
+                    ended = true;
+                } else {
+                    inFlight = true;
+                    queuedBytes -= next.length();
+                }
             }
+            if (next == null) {
+                endExchange();
+                return;
+            }
+            try {
+                sender.send(ByteBuffer.wrap(next.getBytes(StandardCharsets.UTF_8)),
+                        new io.undertow.io.IoCallback() {
+                            @Override
+                            public void onComplete(HttpServerExchange exchange,
+                                                   io.undertow.io.Sender ignored) {
+                                sent();
+                            }
 
-            private void write(String text) throws IOException {
-                out.write(text.getBytes(StandardCharsets.UTF_8));
-                out.flush();
+                            @Override
+                            public void onException(HttpServerExchange exchange,
+                                                    io.undertow.io.Sender ignored,
+                                                    IOException failure) {
+                                failed();
+                            }
+                        });
+            } catch (RuntimeException failure) {
+                failed();
             }
-        };
+        }
+
+        private void sent() {
+            synchronized (lock) {
+                inFlight = false;
+            }
+            pump();
+        }
+
+        private void failed() {
+            synchronized (lock) {
+                inFlight = false;
+                ended = true;
+                closing = true;
+                queue.clear();
+                queuedBytes = 0;
+            }
+        }
+
+        private void endExchange() {
+            try {
+                sender.close();
+            } catch (RuntimeException ignored) {
+            }
+        }
+
+        private static String formatData(String data) {
+            StringBuilder sb = new StringBuilder();
+            for (String line : data.split("\n", -1)) {
+                sb.append("data: ").append(line).append("\n");
+            }
+            sb.append("\n");
+            return sb.toString();
+        }
+
+        private static String sanitize(String value) {
+            return value.replaceAll("[\\r\\n]", "");
+        }
     }
 
     @Override

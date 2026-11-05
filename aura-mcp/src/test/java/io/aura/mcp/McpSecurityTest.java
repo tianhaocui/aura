@@ -55,12 +55,20 @@ class McpSecurityTest {
                     .getBytes(StandardCharsets.UTF_8)));
             new McpBridge("http://localhost:" + server.getAddress().getPort(),
                     new PrintStream(new ByteArrayOutputStream(), true, StandardCharsets.UTF_8),
-                    "schema-secret", true).run();
+                    "schema-secret", true, true).run();
             assertThat(tokenSeen.get()).isTrue();
         } finally {
             System.setIn(originalIn);
             server.stop(0);
         }
+    }
+
+    @Test
+    void bridgeRefusesToSendASchemaTokenOverPlaintextHttpUnlessOptedIn() {
+        assertThatThrownBy(() -> new McpBridge("http://127.0.0.1:8080",
+                new PrintStream(new ByteArrayOutputStream()), "schema-secret", true))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("plaintext");
     }
 
     @Test

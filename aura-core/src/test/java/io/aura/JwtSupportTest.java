@@ -2,6 +2,11 @@ package io.aura;
 
 import org.junit.jupiter.api.Test;
 
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
+import java.nio.charset.StandardCharsets;
+import java.util.Base64;
+
 import static org.assertj.core.api.Assertions.*;
 
 class JwtSupportTest {
@@ -129,5 +134,79 @@ class JwtSupportTest {
         assertThatThrownBy(() -> new JwtSupport(SECRET, 0))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("positive");
+    }
+
+    @Test
+    void rejectsAnAlgorithmTheHeaderClaimsInsteadOfTheOneWeVerifyWith() {
+        String token = signatureOver("{\"alg\":\"none\",\"typ\":\"JWT\"}",
+                "{\"sub\":\"1\",\"exp\":" + (now() + 3600) + "}");
+
+        assertThat(new JwtSupport(SECRET, 3600).verify(token)).isNull();
+    }
+
+    @Test
+    void rejectsAnUnexpectedTypeHeader() {
+        String token = signatureOver("{\"alg\":\"HS256\",\"typ\":\"JWS\"}",
+                "{\"sub\":\"1\",\"exp\":" + (now() + 3600) + "}");
+
+        assertThat(new JwtSupport(SECRET, 3600).verify(token)).isNull();
+    }
+
+    @Test
+    void enforcesTheConfiguredIssuerAndAudience() {
+        JwtSupport scoped = new JwtSupport(SECRET, 3600, "aura", "web");
+        String token = scoped.sign("user-1");
+
+        assertThat(scoped.verify(token)).isEqualTo("user-1");
+        assertThat(new JwtSupport(SECRET, 3600, "other", "web").verify(token)).isNull();
+        assertThat(new JwtSupport(SECRET, 3600, "aura", "other").verify(token)).isNull();
+    }
+
+    @Test
+    void acceptsExpiredAndNotYetValidTokensOnlyWithinTheClockSkew() {
+        long now = now();
+        JwtSupport lenient = new JwtSupport(SECRET, 3600, null, null, 60);
+        JwtSupport strict = new JwtSupport(SECRET, 3600, null, null, 0);
+
+        String justExpired = signatureOver("{\"alg\":\"HS256\",\"typ\":\"JWT\"}",
+                "{\"sub\":\"u\",\"exp\":" + (now - 10) + "}");
+        assertThat(lenient.verify(justExpired)).isEqualTo("u");
+        assertThat(strict.verify(justExpired)).isNull();
+
+        String notYetValid = signatureOver("{\"alg\":\"HS256\",\"typ\":\"JWT\"}",
+                "{\"sub\":\"u\",\"exp\":" + (now + 3600) + ",\"nbf\":" + (now + 10) + "}");
+        assertThat(lenient.verify(notYetValid)).isEqualTo("u");
+        assertThat(strict.verify(notYetValid)).isNull();
+    }
+
+    @Test
+    void rejectsASubjectThatDecodesToControlCharacters() {
+        JwtSupport jwt = new JwtSupport(SECRET, 3600);
+
+        assertThat(jwt.verify(jwt.sign("user\nname"))).isNull();
+    }
+
+    private static long now() {
+        return System.currentTimeMillis() / 1000;
+    }
+
+    /** Mints a token whose signature is genuine, leaving the header and claims under test control. */
+    private static String signatureOver(String headerJson, String payloadJson) {
+        String header = encode(headerJson);
+        String payload = encode(payloadJson);
+        try {
+            Mac mac = Mac.getInstance("HmacSHA256");
+            mac.init(new SecretKeySpec(SECRET.getBytes(StandardCharsets.UTF_8), "HmacSHA256"));
+            String signature = Base64.getUrlEncoder().withoutPadding()
+                    .encodeToString(mac.doFinal((header + "." + payload).getBytes(StandardCharsets.UTF_8)));
+            return header + "." + payload + "." + signature;
+        } catch (Exception failure) {
+            throw new IllegalStateException(failure);
+        }
+    }
+
+    private static String encode(String json) {
+        return Base64.getUrlEncoder().withoutPadding()
+                .encodeToString(json.getBytes(StandardCharsets.UTF_8));
     }
 }

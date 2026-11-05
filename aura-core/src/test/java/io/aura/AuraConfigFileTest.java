@@ -27,6 +27,7 @@ class AuraConfigFileTest {
                 aura.gzip-min-size=2048
                 aura.access-log=json
                 aura.cors=https://myapp.example
+                aura.public-origin=https://myapp.example
                 aura.rate-limit-max-keys=4096
                 """);
 
@@ -63,9 +64,11 @@ class AuraConfigFileTest {
     void defaultApplicationReadsJvmDeploymentOverrides() {
         String previousPort = System.getProperty("aura.port");
         String previousEnv = System.getProperty("aura.env");
+        String previousOrigin = System.getProperty("aura.public-origin");
         try {
             System.setProperty("aura.port", "9197");
             System.setProperty("aura.env", "production");
+            System.setProperty("aura.public-origin", "https://app.example");
 
             AuraConfigSnapshot config = AuraApp.create().config();
 
@@ -74,6 +77,7 @@ class AuraConfigFileTest {
         } finally {
             restoreProperty("aura.port", previousPort);
             restoreProperty("aura.env", previousEnv);
+            restoreProperty("aura.public-origin", previousOrigin);
         }
     }
 

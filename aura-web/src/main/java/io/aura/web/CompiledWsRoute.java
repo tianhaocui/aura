@@ -19,7 +19,9 @@ record CompiledWsRoute(Route contract, Pattern pattern, List<String> paramNames,
 
     String rawPath() { return contract.path(); }
 
-    Map<String, String> match(String path) {
+    Map<String, String> match(String rawPath) {
+        String path = CompiledRoute.decodePath(rawPath);
+        if (path == null) return null;
         Matcher m = pattern.matcher(path);
         if (!m.matches()) return null;
         Map<String, String> params = new HashMap<>();
@@ -114,15 +116,20 @@ record CompiledWsRoute(Route contract, Pattern pattern, List<String> paramNames,
                                    long maxMessageBytes, WebSocketConnectionRegistry connections) {
         String path = contract.path();
         List<String> paramNames = new ArrayList<>();
-        String regex = path
-                .replace(".", "\\.")
-                .replace("+", "\\+")
-                .replaceAll("\\{([a-zA-Z_][a-zA-Z0-9_]*)}", "([^/]+)");
+        // Only the braces-hashed placeholders are regex: escaping . and + by hand left every other
+        // metacharacter live, so a path like /ws/a(b either matched paths the author never wrote
+        // or failed to compile at all.
         Pattern paramPattern = Pattern.compile("\\{([a-zA-Z_][a-zA-Z0-9_]*)}");
         Matcher m = paramPattern.matcher(path);
+        StringBuilder regex = new StringBuilder();
+        int last = 0;
         while (m.find()) {
+            regex.append(Pattern.quote(path.substring(last, m.start())));
+            regex.append("([^/]+)");
             paramNames.add(m.group(1));
+            last = m.end();
         }
+        regex.append(Pattern.quote(path.substring(last)));
         return new CompiledWsRoute(contract, Pattern.compile("^" + regex + "$"),
                 paramNames, beforeHandlers, (WsHandler) contract.handler(),
                 maxMessageBytes, connections);

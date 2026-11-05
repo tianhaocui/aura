@@ -30,7 +30,8 @@ class ApiExceptionTest {
             throw new RuntimeException("jdbc:postgresql://db/internal?password=secret");
         });
 
-        TestClient.Response resp = TestApplications.client(new AuraConfig().env("prod"), router)
+        TestClient.Response resp = TestApplications.client(
+                        new AuraConfig().env("prod").publicOrigin("https://localhost"), router)
                 .get("/fail").execute();
 
         assertThat(resp.status()).isEqualTo(500);
@@ -45,7 +46,8 @@ class ApiExceptionTest {
             throw new ApiException(503, "UPSTREAM_FAILURE", "database password=secret");
         });
 
-        TestClient.Response resp = TestApplications.client(new AuraConfig().env("prod"), router)
+        TestClient.Response resp = TestApplications.client(
+                        new AuraConfig().env("prod").publicOrigin("https://localhost"), router)
                 .get("/fail").execute();
 
         assertThat(resp.status()).isEqualTo(503);
@@ -54,8 +56,37 @@ class ApiExceptionTest {
     }
 
     @Test
+    void illegalArgumentMessagesAreNotReflectedInProduction() {
+        Router router = new Router();
+        router.get("/bad", ctx -> {
+            throw new IllegalArgumentException("table users has no column password_hash");
+        });
+
+        TestClient.Response resp = TestApplications.client(
+                        new AuraConfig().env("prod").publicOrigin("https://localhost"), router)
+                .get("/bad").execute();
+
+        assertThat(resp.status()).isEqualTo(400);
+        assertThat(resp.body()).contains("VALIDATION_ERROR");
+        assertThat(resp.body()).doesNotContain("users", "password_hash");
+    }
+
+    @Test
     void logSanitizerBoundsAndRemovesControlCharacters() {
         assertThat(UndertowStarter.safeLog("line1\r\nline2\tsecret", 12))
                 .isEqualTo("line1  line2");
+    }
+
+    @Test
+    void anOversizedBodyIsRefusedWith413RatherThanA500() {
+        // One limit is read by the application, the other is enforced by the container while the
+        // body streams in; both are the caller sending more than was agreed, which a 500 answers
+        // by inviting the same request again.
+        assertThat(ExceptionResolver.resolveDefault(TestApplications.runtime(),
+                new RequestBodyTooLargeException("Request body exceeds maximum size")).status())
+                .isEqualTo(413);
+        assertThat(ExceptionResolver.resolveDefault(TestApplications.runtime(),
+                new io.undertow.server.RequestTooBigException("UT000012: Request too big")).status())
+                .isEqualTo(413);
     }
 }

@@ -1,6 +1,8 @@
 package io.aura;
 
 import io.aura.snapshot.SnapshotOptions;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -15,13 +17,35 @@ import java.util.function.Consumer;
 
 /** Central, validated runtime configuration for an Aura application. */
 public final class AuraConfig {
+    private static final Logger log = LoggerFactory.getLogger(AuraConfig.class);
     public static final long DEFAULT_MAX_BODY_SIZE = 10L * 1024 * 1024;
     public static final long DEFAULT_MAX_UPLOAD_SIZE = 1024L * 1024;
     public static final long DEFAULT_MAX_WEBSOCKET_MESSAGE_SIZE = 1024L * 1024;
     public static final int DEFAULT_MAX_WEBSOCKET_CONNECTIONS = 10_000;
     public static final int DEFAULT_WEBSOCKET_IDLE_TIMEOUT = 60;
     public static final int DEFAULT_RATE_LIMIT_MAX_KEYS = 65_536;
+    private static final long MAX_BODY_SIZE_LIMIT = 1024L * 1024 * 1024;
     private static final String TLS_PASSWORD_PROPERTY = "aura.tls.keystore-password";
+    /**
+     * Settings the framework itself reads. Anything else under {@code aura.*} is either a module
+     * property or a typo; warning here is the difference between a deployment that fails to
+     * configure CSRF and one that silently runs with a misspelled key.
+     */
+    private static final Set<String> KNOWN_PROPERTIES = Set.of(
+            "aura.port", "aura.env", "aura.workers",
+            "aura.max-body-size", "aura.max-upload-size",
+            "aura.max-websocket-message-size", "aura.max-websocket-connections",
+            "aura.websocket-idle-timeout", "aura.shutdown-timeout", "aura.request-timeout",
+            "aura.health-check-timeout", "aura.page-size-max",
+            "aura.concurrency-limit", "aura.rate-limit-per-second", "aura.rate-limit-max-keys",
+            "aura.public-origin", "aura.allowed-hosts", "aura.trusted-proxies",
+            "aura.security-headers", "aura.openapi", "aura.dev-mode", "aura.cors",
+            "aura.static-files", "aura.spa", "aura.access-log", "aura.gzip", "aura.gzip-min-size",
+            "aura.tls.keystore-path", TLS_PASSWORD_PROPERTY,
+            "aura.csrf.enabled", "aura.csrf.header", "aura.csrf.cookie",
+            "aura.schema.enabled", "aura.schema.auth-token", "aura.schema-token",
+            "aura.websocket.origins", "aura.websocket.allow-missing-origin",
+            "aura.mcp.http.origins");
 
     /** Loads framework settings from a properties file before application creation. */
     public static AuraConfig fromProperties(Path path) throws IOException {
@@ -41,6 +65,11 @@ public final class AuraConfig {
     public static AuraConfig fromProperties(Properties properties) {
         AuraConfig config = new AuraConfig();
         if (properties == null) return config;
+        for (String key : properties.stringPropertyNames()) {
+            if (key.startsWith("aura.") && !KNOWN_PROPERTIES.contains(key) && !isModuleProperty(key)) {
+                log.warn("Unrecognized Aura setting '{}' (ignored unless a module consumes it)", key);
+            }
+        }
         properties.forEach((key, value) -> {
             if (key != null && key.toString().startsWith("aura.")
                     && !TLS_PASSWORD_PROPERTY.equals(key.toString()) && value != null) {
@@ -77,7 +106,11 @@ public final class AuraConfig {
         String devMode = value(properties, "aura.dev-mode", "AURA_DEV_MODE");
         if (devMode != null) config.devMode(parseBoolean(devMode, "aura.dev-mode"));
         String cors = value(properties, "aura.cors", "AURA_CORS");
-        if (cors != null) config.cors("true".equalsIgnoreCase(cors) ? "*" : cors);
+        if (cors != null) {
+            if ("true".equalsIgnoreCase(cors)) config.cors(true);
+            else if ("false".equalsIgnoreCase(cors)) config.cors(false);
+            else config.cors(cors);
+        }
         String staticFiles = value(properties, "aura.static-files", "AURA_STATIC_FILES");
         if (staticFiles != null) config.staticFiles(staticFiles);
         String spa = value(properties, "aura.spa", "AURA_SPA");
@@ -93,6 +126,15 @@ public final class AuraConfig {
         if (keyStorePath != null) config.tls(keyStorePath, keyStorePassword);
         else if (keyStorePassword != null) throw new IllegalArgumentException("aura.tls.keystore-path is required when a TLS password is configured");
         return config.validate();
+    }
+
+    /**
+     * {@code aura.<module>.<setting>} belongs to a module that is not installed yet, so it cannot
+     * be called a typo here. A two-segment {@code aura.*} key has no module namespace to hide in.
+     */
+    private static boolean isModuleProperty(String key) {
+        int moduleSeparator = key.indexOf('.', "aura.".length());
+        return moduleSeparator > "aura.".length() && moduleSeparator < key.length() - 1;
     }
 
     private static String value(Properties properties, String key, String envKey) {
@@ -285,7 +327,9 @@ public final class AuraConfig {
     public AuraConfig validate() {
         if (port < 0 || port > 65535) throw new IllegalArgumentException("port must be between 0 and 65535");
         if (workers < 1) throw new IllegalArgumentException("workers must be positive");
-        if (maxBodySize <= 0) throw new IllegalArgumentException("maxBodySize must be positive and bounded");
+        if (maxBodySize <= 0 || maxBodySize > MAX_BODY_SIZE_LIMIT) {
+            throw new IllegalArgumentException("maxBodySize must be between 1 byte and 1 GiB");
+        }
         if (maxUploadSize <= 0) throw new IllegalArgumentException("maxUploadSize must be positive and bounded");
         if (maxUploadSize > maxBodySize) throw new IllegalArgumentException("maxUploadSize cannot exceed maxBodySize");
         if (maxWebSocketMessageSize < 1 || maxWebSocketMessageSize > 64L * 1024 * 1024) {
@@ -308,7 +352,35 @@ public final class AuraConfig {
             throw new IllegalArgumentException("rateLimitMaxKeys must be between 1 and 1000000");
         }
         if (tlsEnabled() && (keyStorePassword == null || keyStorePassword.isEmpty())) throw new IllegalArgumentException("TLS keystore password is required");
+        if (publicOrigin != null) validatePublicOrigin(publicOrigin);
+        String csrf = properties.get("aura.csrf.enabled");
+        boolean csrfEnforced = csrf != null ? parseBoolean(csrf, "aura.csrf.enabled")
+                : !"dev".equalsIgnoreCase(env);
+        if (csrfEnforced && publicOrigin == null) {
+            throw new IllegalArgumentException("aura.public-origin is required when CSRF protection is enabled;"
+                    + " set it, or opt out with aura.csrf.enabled=false");
+        }
         return this;
+    }
+
+    /**
+     * The Host header belongs to the caller. Comparing it with itself made the CSRF origin check
+     * a formality for any client that could spell its own hostname, so the expected origin has to
+     * come from configuration and be a real origin rather than a prefix or a bare hostname.
+     */
+    private static void validatePublicOrigin(String value) {
+        java.net.URI origin;
+        try {
+            origin = java.net.URI.create(value);
+        } catch (IllegalArgumentException invalid) {
+            throw new IllegalArgumentException("aura.public-origin must be an absolute origin like https://app.example", invalid);
+        }
+        if (origin.getScheme() == null || origin.getRawAuthority() == null
+                || origin.getRawUserInfo() != null || origin.getRawQuery() != null
+                || origin.getRawFragment() != null
+                || (origin.getRawPath() != null && !origin.getRawPath().isEmpty() && !"/".equals(origin.getRawPath()))) {
+            throw new IllegalArgumentException("aura.public-origin must be an absolute origin like https://app.example");
+        }
     }
 
     private static String requireText(String value, String name) {

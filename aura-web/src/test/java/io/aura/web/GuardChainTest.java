@@ -126,24 +126,30 @@ class GuardChainTest {
     }
 
     @Test
-    void csrf_trustedProxyForwardsTheBrowserOrigin() {
-        TestClient.Response trusted = client(new AuraConfig().env("prod").trustedProxies("127.0.0.1")
-                .property("aura.csrf.enabled", "true"), POST_ORDERS)
+    void csrf_usesTheConfiguredOriginEvenBehindATrustedProxy() {
+        TestClient.Response trusted = client(new AuraConfig().env("prod")
+                .publicOrigin("https://api.example").trustedProxies("127.0.0.1"), POST_ORDERS)
                 .post("/orders").remoteAddr("127.0.0.1")
+                .header("Host", "api.example")
                 .header("Origin", "https://api.example")
                 .header("X-Forwarded-Proto", "https")
-                .header("X-Forwarded-Host", "api.example")
+                .header("X-Forwarded-Host", "evil.example")
                 .execute();
         assertThat(trusted.status()).isEqualTo(200);
+    }
 
-        TestClient.Response untrusted = client(new AuraConfig().env("prod")
-                .property("aura.csrf.enabled", "true"), POST_ORDERS)
-                .post("/orders").remoteAddr("198.51.100.9")
-                .header("Origin", "https://api.example")
+    @Test
+    void csrf_neverPromotesAForwardedHostToTheExpectedOrigin() {
+        TestClient.Response resp = client(new AuraConfig().env("prod")
+                .publicOrigin("https://api.example").trustedProxies("127.0.0.1"), POST_ORDERS)
+                .post("/orders").remoteAddr("127.0.0.1")
+                .header("Host", "api.example")
+                .header("Origin", "https://evil.example")
                 .header("X-Forwarded-Proto", "https")
-                .header("X-Forwarded-Host", "api.example")
+                .header("X-Forwarded-Host", "evil.example")
                 .execute();
-        assertThat(untrusted.status()).isEqualTo(403);
+
+        resp.expect(403);
     }
 
     @Test
@@ -155,7 +161,8 @@ class GuardChainTest {
     }
 
     private static AuraConfig csrfConfig() {
-        return new AuraConfig().property("aura.csrf.enabled", "true");
+        return new AuraConfig().publicOrigin("https://localhost")
+                .property("aura.csrf.enabled", "true");
     }
 
     // --- CORS ---
@@ -163,11 +170,21 @@ class GuardChainTest {
     @Test
     void cors_answersPreflightWithoutReachingARoute() {
         TestClient.Response resp = client(new AuraConfig().cors("https://app.example"))
-                .options("/ok").execute();
+                .options("/ok").header("Origin", "https://app.example")
+                .header("Access-Control-Request-Method", "GET").execute();
 
         resp.expect(204);
         assertThat(resp.header("Access-Control-Allow-Origin")).isEqualTo("https://app.example");
         assertThat(resp.header("Access-Control-Allow-Methods")).contains("DELETE");
+    }
+
+    @Test
+    void cors_letsAnOrdinaryOptionsRequestReachItsRoute() {
+        TestClient.Response resp = client(new AuraConfig().cors("https://app.example"),
+                Route.of("OPTIONS", "/ok", (BaseHandler) ctx -> ctx.text("options")))
+                .options("/ok").execute();
+
+        resp.expect(200).bodyContains("options");
     }
 
     @Test
@@ -347,8 +364,8 @@ class GuardChainTest {
 
     @Test
     void schemaEndpoint_isAbsentWhenUnconfiguredOutsideDev() {
-        TestClient.Response resp = client(new AuraConfig().env("prod"), GET_OK)
-                .get("/__schema__").execute();
+        TestClient.Response resp = client(new AuraConfig().env("prod").publicOrigin("https://localhost"),
+                GET_OK).get("/__schema__").execute();
 
         // 404, not 401: an endpoint that cannot be unlocked is indistinguishable from one
         // that does not exist, so a scanner learns nothing about what this app exposes.
@@ -356,22 +373,24 @@ class GuardChainTest {
         assertThat(resp.body()).isNull();
 
         // The switch alone opens it; a token is not a hidden second requirement.
-        client(new AuraConfig().env("prod").property("aura.schema.enabled", "true"), GET_OK)
+        client(new AuraConfig().env("prod").publicOrigin("https://localhost")
+                        .property("aura.schema.enabled", "true"), GET_OK)
                 .get("/__schema__").execute().expect(200).bodyContains("/ok");
     }
 
     @Test
     void openApiEndpoint_isAbsentUntilEnabledOutsideDev() {
-        client(new AuraConfig().env("prod"), GET_OK).get("/openapi.json").expect(404);
+        client(new AuraConfig().env("prod").publicOrigin("https://localhost"), GET_OK)
+                .get("/openapi.json").expect(404);
 
-        client(new AuraConfig().env("prod").openApi(true), GET_OK)
+        client(new AuraConfig().env("prod").publicOrigin("https://localhost").openApi(true), GET_OK)
                 .get("/openapi.json").execute()
                 .expect(200).bodyContains("\"openapi\":\"3.0.3\"");
     }
 
     @Test
     void webSocketUpgrade_needsAnOriginTheCorsPolicyLists() {
-        TestClient listed = client(new AuraConfig().env("prod")
+        TestClient listed = client(new AuraConfig().env("prod").publicOrigin("https://localhost")
                 .cors(cors -> cors.origins("https://allowed.example")), GET_OK);
 
         assertThat(listed.get("/ws").header("Upgrade", "websocket")
@@ -394,7 +413,8 @@ class GuardChainTest {
     void webSocketUpgrade_isLeftAloneWithoutAnUpgradeHeader() {
         // The guard judges handshakes, not ordinary GETs: a route named by a header-less
         // request must still reach its handler.
-        client(new AuraConfig().env("prod").cors(cors -> cors.origins("https://allowed.example")), GET_OK)
+        client(new AuraConfig().env("prod").publicOrigin("https://localhost")
+                        .cors(cors -> cors.origins("https://allowed.example")), GET_OK)
                 .get("/ok").execute().expect(200).bodyContains("ok");
     }
 }

@@ -16,17 +16,26 @@ class ExceptionResolver {
         Throwable cause = unwrap(e);
         if (cause instanceof Error err) throw err;
 
+        BaseExceptionHandler<?> handler = null;
+        Class<?> handlerType = null;
         for (var entry : app.exceptionHandlers().entrySet()) {
-            if (entry.getKey().isAssignableFrom(cause.getClass())) {
-                try {
-                    ((BaseExceptionHandler) entry.getValue()).handle((Exception) cause, ctx);
-                } catch (Exception inner) {
-                    org.slf4j.LoggerFactory.getLogger(ExceptionResolver.class)
-                            .error("Aura exception handler failed for {}", cause.getClass().getName(), inner);
-                    ctx.status(500).json(Map.of("error", "Internal Server Error"));
-                }
-                return true;
+            if (!entry.getKey().isAssignableFrom(cause.getClass())) continue;
+            // Most-specific wins. The registry is a hash map, so without this a handler for a
+            // superclass could shadow one registered for the exact exception on any given run.
+            if (handlerType == null || handlerType.isAssignableFrom(entry.getKey())) {
+                handlerType = entry.getKey();
+                handler = entry.getValue();
             }
+        }
+        if (handler != null) {
+            try {
+                ((BaseExceptionHandler) handler).handle((Exception) cause, ctx);
+            } catch (Exception inner) {
+                org.slf4j.LoggerFactory.getLogger(ExceptionResolver.class)
+                        .error("Aura exception handler failed for {}", cause.getClass().getName(), inner);
+                ctx.status(500).json(Map.of("error", "Internal Server Error"));
+            }
+            return true;
         }
 
         ExceptionResponse response = resolveDefault(app, cause);
@@ -55,10 +64,29 @@ class ExceptionResolver {
             return new ExceptionResponse(ce.status(), ApiError.of(message, ce.code(), ce.field(),
                     message, ApiError.hintFor(ce.code())));
         }
-        if (cause instanceof IllegalArgumentException || cause instanceof Validate.ValidationException) {
-            String message = cause.getMessage() != null ? cause.getMessage() : "Bad Request";
+        if (cause instanceof Validate.ValidationException) {
+            // Validation messages describe the caller's input, not the application's internals;
+            // they are part of the contract and stay visible.
+            String message = cause.getMessage() != null ? cause.getMessage() : "Validation failed";
             return new ExceptionResponse(400, ApiError.of(message, "VALIDATION_ERROR", null,
                     message, "Check the request fields against the API schema"));
+        }
+        if (cause instanceof IllegalArgumentException) {
+            // A raw IllegalArgumentException message is an implementation detail: it can name a
+            // table, a class, or an internal limit. The caller gets the contract, the log keeps
+            // the detail.
+            return new ExceptionResponse(400, ApiError.of("Bad Request", "VALIDATION_ERROR", null,
+                    "The request could not be processed", "Check the request fields and format against the API schema"));
+        }
+
+        // A body this application will not read is the caller's mistake, and a 500 answers it with
+        // an invitation to send the same oversized request again. Undertow raises its own type when
+        // the configured entity limit is hit mid-stream, so both limits answer the same way.
+        if (cause instanceof RequestBodyTooLargeException
+                || cause instanceof io.undertow.server.RequestTooBigException) {
+            String message = "Request body too large";
+            return new ExceptionResponse(413, ApiError.of(message, "REQUEST_BODY_TOO_LARGE", null,
+                    message, "Send a body that fits the maximum size this service documents"));
         }
 
         if ("dev".equals(app.env())) {

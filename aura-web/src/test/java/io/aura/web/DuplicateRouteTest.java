@@ -88,6 +88,20 @@ class DuplicateRouteTest {
                 .hasMessageContaining("Duplicate route: GET /api/users");
     }
 
+    @Test
+    void twoNamesForOneParameterizedPathThrowOnStart() {
+        AuraApp app = app("renamed-parameter-route",
+                route("GET", "/api/users/{id}", "first"),
+                route("GET", "/api/users/{userId}", "second"));
+
+        // The placeholder name is the only difference, so the two can only ever answer the same
+        // request and which handler does is decided by the route sort, not by the author.
+        assertThatThrownBy(app::start)
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("/api/users/{id}")
+                .hasMessageContaining("/api/users/{userId}");
+    }
+
     private static AuraApp app(String moduleId, Route... routes) {
         return TestApplications.app(new AuraConfig().port(0), moduleId, routes);
     }

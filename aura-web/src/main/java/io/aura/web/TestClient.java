@@ -30,6 +30,7 @@ public class TestClient {
         this.compiled = UndertowStarter.compileRoutes(router, app);
         UndertowStarter.detectDuplicateRoutes(compiled);
         this.webSockets = UndertowStarter.compileWsRoutes(app, router, null);
+        UndertowStarter.detectDuplicateWsRoutes(webSockets);
         this.guards = RequestGuards.standard(app, this::routePattern);
     }
 
@@ -175,6 +176,16 @@ public class TestClient {
 
         private Response handle(MockGuardedRequest guarded, String routePath,
                                 Map<String, String> queryParams) {
+            long maxBody = app.maxBodySize();
+            if (maxBody > 0 && body != null
+                    && body.getBytes(StandardCharsets.UTF_8).length > maxBody) {
+                MockContext errorCtx = new MockContext(Map.of(), queryParams, headers, body, app,
+                        routePath, guarded.peerIp(), method);
+                ExceptionResolver.apply(app, new RequestBodyTooLargeException(
+                        "Request body exceeds maximum size"), errorCtx);
+                return response(guarded, errorCtx, errorCtx.responseBody);
+            }
+
             String builtin = builtinDocument(method, routePath);
             if (builtin != null) {
                 Map<String, String> headers = new LinkedHashMap<>(guarded.responseHeaders());
@@ -198,7 +209,8 @@ public class TestClient {
                     Map<String, String> params = route.match(routePath);
                     if (params == null) continue;
 
-                    var mockCtx = new MockContext(params, queryParams, headers, body, app, routePath, guarded.peerIp());
+                    var mockCtx = new MockContext(params, queryParams, headers, body, app, routePath,
+                            guarded.peerIp(), method);
                     final Exception[] failure = new Exception[1];
                     RouteExecutor.execute(route, mockCtx, (e, c) -> {
                         failure[0] = e;
@@ -217,7 +229,8 @@ public class TestClient {
                         if (!"GET".equals(route.method())) continue;
                         Map<String, String> params = route.match(routePath);
                         if (params == null) continue;
-                        var mockCtx = new MockContext(params, queryParams, headers, body, app, routePath, guarded.peerIp());
+                        var mockCtx = new MockContext(params, queryParams, headers, body, app, routePath,
+                            guarded.peerIp(), method);
                         final Exception[] failure = new Exception[1];
                         RouteExecutor.execute(route, mockCtx, (e, c) -> {
                             failure[0] = e;

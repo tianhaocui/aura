@@ -18,6 +18,8 @@ import java.util.*;
 
 public class McpBridge {
 
+    private static final System.Logger LOG = System.getLogger(McpBridge.class.getName());
+
     /**
      * Resource bounds, configurable so the bridge honours the same "bounded resources, set
      * explicitly" rule the rest of Aura does. The defaults are the values these constants held
@@ -84,11 +86,25 @@ public class McpBridge {
 
     /** Creates a bridge with an explicit private/local target policy. */
     public McpBridge(String baseUrl, PrintStream out, String schemaToken, boolean allowPrivateUrl) {
-        this(baseUrl, out, schemaToken, allowPrivateUrl, SYSTEM_DNS);
+        this(baseUrl, out, schemaToken, allowPrivateUrl, false);
+    }
+
+    /**
+     * @param allowInsecureTokenTransport opt in to sending the schema token over plaintext HTTP.
+     *                                    Without it a token on an {@code http://} target is refused.
+     */
+    public McpBridge(String baseUrl, PrintStream out, String schemaToken, boolean allowPrivateUrl,
+                     boolean allowInsecureTokenTransport) {
+        this(baseUrl, out, schemaToken, allowPrivateUrl, SYSTEM_DNS, allowInsecureTokenTransport);
     }
 
     McpBridge(String baseUrl, PrintStream out, String schemaToken, boolean allowPrivateUrl,
               DnsResolver dnsResolver) {
+        this(baseUrl, out, schemaToken, allowPrivateUrl, dnsResolver, false);
+    }
+
+    McpBridge(String baseUrl, PrintStream out, String schemaToken, boolean allowPrivateUrl,
+              DnsResolver dnsResolver, boolean allowInsecureTokenTransport) {
         URI parsed = URI.create(Objects.requireNonNull(baseUrl, "baseUrl"));
         if (!("http".equalsIgnoreCase(parsed.getScheme()) || "https".equalsIgnoreCase(parsed.getScheme()))
                 || parsed.getHost() == null || parsed.getUserInfo() != null
@@ -114,6 +130,14 @@ public class McpBridge {
         this.baseUri = URI.create(this.baseUrl);
         this.out = out;
         this.schemaToken = schemaToken == null || schemaToken.isBlank() ? null : schemaToken;
+        if (this.schemaToken != null && "http".equalsIgnoreCase(parsed.getScheme())) {
+            if (!allowInsecureTokenTransport) {
+                throw new IllegalArgumentException("Refusing to send a schema token over plaintext HTTP;"
+                        + " use an https baseUrl or opt in explicitly");
+            }
+            LOG.log(System.Logger.Level.WARNING,
+                    "MCP schema token is being sent over plaintext HTTP to {0}", this.baseUrl);
+        }
     }
 
     private static boolean allowPrivateUrls() {

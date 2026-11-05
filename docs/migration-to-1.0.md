@@ -204,6 +204,55 @@ SSE are admitted. Adapter code that directly creates sessions must supply the
 negotiated version and perform the same activation transition. Session close is
 linearized with request admission, so no new business call starts after close.
 
+## Security defaults
+
+Outside `dev`, CSRF protection is on unless `aura.csrf.enabled=false` says
+otherwise, and the expected origin comes from configuration:
+
+```java
+AuraConfig config = new AuraConfig()
+        .env("prod")
+        .publicOrigin("https://app.example");
+```
+
+Setting `publicOrigin` also restricts accepted `Host` headers to that host. The
+request's `Host`, `X-Forwarded-Host` and `X-Forwarded-Proto` are never used to
+infer the expected origin, even when the peer is a trusted proxy.
+
+CORS answers a request as a preflight only when it carries both `Origin` and
+`Access-Control-Request-Method`; an ordinary `OPTIONS` request continues to the
+router. `aura.cors=false` disables CORS.
+
+JWT verification now requires `alg=HS256` and `typ=JWT` (when present), validates
+`exp`/`nbf` with a clock skew, and can pin `iss`/`aud`:
+
+```java
+JwtSupport jwt = new JwtSupport(secret, 3600, "https://issuer.example", "orders-api");
+```
+
+An AI provider with an API key and an MCP bridge with a schema token refuse an
+`http://` target unless the constructor's `allowInsecureHttp` /
+`allowInsecureTokenTransport` argument is explicitly `true`.
+
+## Behaviour that now fails at startup
+
+These used to be accepted and are now refused, because each one left the running
+application in a state the operator did not ask for:
+
+- Registering the same type twice, or relying on an ambiguous `require(Class)`
+  lookup. Named registrations are no longer visible as type registrations.
+- Passing `start(args)` after `prepare()` or after a module has been installed.
+- Registering two routes or WebSocket endpoints with the same shape, such as
+  `/orders/{id}` and `/orders/{name}`.
+- Setting an unknown `aura.*` property is logged; setting `maxBodySize` above
+  1 GiB or below 1 byte fails validation.
+- Binding a module property to a non-numeric number or a boolean other than
+  `true`/`false` produces `AURA_CONFIG_INVALID` naming the key.
+
+A body that exceeds `maxBodySize` now answers `413 REQUEST_BODY_TOO_LARGE`, and a
+`transactionIndependent` timeout reports whether it rolled back, committed after
+the deadline, or left the outcome unknown.
+
 ## Verification checklist
 
 1. Run `app.prepare()` or `TestClient.of(app)` to validate module installation without opening a listener.

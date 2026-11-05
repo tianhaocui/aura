@@ -113,6 +113,27 @@ class SqlMigrationRunnerTest {
                 .hasMessageContaining("location must not be blank");
     }
 
+    @Test
+    void ordersSemanticVersionsNumerically() {
+        assertThat(SqlMigrationRunner.compareVersions("1.10.0", "1.9.0")).isPositive();
+        assertThat(SqlMigrationRunner.compareVersions("2.0.0", "2.0.0-rc.1")).isPositive();
+        assertThat(SqlMigrationRunner.compareVersions("2.0.0-rc.2", "2.0.0-rc.10")).isNegative();
+        assertThat(SqlMigrationRunner.compareVersions("1.0.0", "1.0")).isZero();
+    }
+
+    @Test
+    void splitsPostgresDollarQuotedBodiesWithoutBreakingOnInnerSemicolons() {
+        List<String> anonymous = SqlMigrationRunner.splitStatements(
+                "CREATE FUNCTION f() RETURNS void AS $$ BEGIN PERFORM 1; END $$; INSERT INTO t VALUES (1);");
+        assertThat(anonymous).hasSize(2);
+        assertThat(anonymous.get(0)).contains("PERFORM 1; END $$");
+
+        List<String> tagged = SqlMigrationRunner.splitStatements(
+                "DO $body$ BEGIN RAISE NOTICE 'a;b'; END $body$;");
+        assertThat(tagged).hasSize(1);
+        assertThat(tagged.get(0)).contains("RAISE NOTICE 'a;b'");
+    }
+
     private SqlMigrationResult run(SqlMigrationSource source) {
         return new SqlMigrationRunner(db).run(source);
     }

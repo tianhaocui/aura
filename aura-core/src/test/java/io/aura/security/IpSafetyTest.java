@@ -79,6 +79,20 @@ class IpSafetyTest {
     }
 
     @Test
+    void evaluatesNat64ThroughItsEmbeddedIpv4() throws Exception {
+        assertThat(IpSafety.isPublic(InetAddress.getByName("64:ff9b::7f00:1"))).isFalse();   // 127.0.0.1
+        assertThat(IpSafety.isPublic(InetAddress.getByName("64:ff9b::a00:1"))).isFalse();    // 10.0.0.1
+        assertThat(IpSafety.isPublic(InetAddress.getByName("64:ff9b::808:808"))).isTrue();   // 8.8.8.8
+    }
+
+    @Test
+    void rejectsTeredoTunnels() throws Exception {
+        assertThat(IpSafety.isPublic(InetAddress.getByName("2001::1"))).isFalse();
+        assertThat(IpSafety.isPublic(InetAddress.getByName("2001:0:4136:e378::1"))).isFalse();
+        assertThat(IpSafety.isPublic(InetAddress.getByName("2001:4860:4860::8888"))).isTrue();
+    }
+
+    @Test
     void nullAddressIsNotPublic() {
         assertThat(IpSafety.isPublic(null)).isFalse();
     }

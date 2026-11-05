@@ -61,6 +61,35 @@ class RuntimeFoundationTest {
                 .hasMessageContaining("AuraApp.create");
     }
 
+    @Test void rejectedArgumentsDoNotPartiallyApplyEarlierFlags() {
+        AuraApp app = AuraApp.create(new AuraConfig().devMode(false));
+        assertThatThrownBy(() -> app.start("--dev", "--config=ignored.properties"))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThat(((AuraWebRuntime) app.runtimeView()).devMode()).isFalse();
+        assertThat(app.runtimeView().state()).isEqualTo(io.aura.contract.RuntimeState.NEW);
+        app.close();
+    }
+
+    @Test void startupArgumentsCannotReconfigureAnInstalledRuntime() {
+        AuraApp app = AuraApp.create().use(new AuraModule() {
+            @Override public io.aura.contract.ModuleMetadata descriptor() {
+                return io.aura.contract.ModuleMetadata.of("frozen", "1.0.0");
+            }
+
+            @Override public void install(ModuleContext context) { }
+        });
+        app.prepare();
+
+        // --dev and --mcp-stdio outlive parsing: devMode is read by the guard chain and the 404
+        // diagnostics of a running app. property() already refuses past preparation, so the whole
+        // argument set has to stop at the same freeze line.
+        assertThatThrownBy(() -> app.start("--dev"))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("before startup");
+        assertThat(((AuraWebRuntime) app.runtimeView()).devMode()).isFalse();
+        app.close();
+    }
+
     @Test void cancellationIsAtomicAndObservable() {
         CancellationToken token = new CancellationToken();
         assertThat(token.isCancelled()).isFalse();

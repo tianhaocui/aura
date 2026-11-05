@@ -103,4 +103,66 @@ class SnapshotRedactionTest {
         assertThat(json).doesNotContain("sk-live-abcdef");
         assertThat(JSON.parseObject(json)).containsEntry("api_key", "<redacted>").containsEntry("name", "ada");
     }
+
+    @Test
+    void anEscapedQuoteInsideAStringSecretDoesNotLeaveItsTail() {
+        SnapshotRedactor redactor = new SnapshotRedactor(new SnapshotOptions());
+        // This is what a double-encoded body looks like once one layer of escaping is gone: the
+        // value itself carries quoted text, so a redaction that ends at the first quote leaves
+        // the rest of the secret in the snapshot.
+        String leaf = "{\"token\":\"aura\\\"supercalifragilistic\\\"\"}";
+
+        assertThat(redactor.exceptionText(leaf)).doesNotContain("supercalifragilistic");
+    }
+
+    @Test
+    void anXmlBodyRedactsTheConfiguredFieldNames() {
+        SnapshotRedactor redactor = new SnapshotRedactor(new SnapshotOptions());
+        String xml = "<auth><token>hunter2</token><user password=\"s3cret\">ada</user></auth>";
+
+        assertThat(String.valueOf(redactor.body(xml, 1024)))
+                .doesNotContain("hunter2", "s3cret")
+                .contains("<redacted>")
+                .contains("ada");
+    }
+
+    @Test
+    void aKeyColonValueBodyRedactsTheConfiguredFieldNames() {
+        SnapshotRedactor redactor = new SnapshotRedactor(new SnapshotOptions());
+        String text = "user: ada\npassword: hunter2\nnote: visible";
+
+        assertThat(String.valueOf(redactor.body(text, 1024)))
+                .doesNotContain("hunter2")
+                .contains("user: ada", "note: visible");
+    }
+
+    @Test
+    void aMultipartPartNamedForASecretIsRedacted() {
+        SnapshotRedactor redactor = new SnapshotRedactor(new SnapshotOptions());
+        String body = "--X\r\n"
+                + "Content-Disposition: form-data; name=\"password\"\r\n\r\n"
+                + "hunter2\r\n"
+                + "--X\r\n"
+                + "Content-Disposition: form-data; name=\"note\"\r\n\r\n"
+                + "visible\r\n"
+                + "--X--\r\n";
+
+        assertThat(String.valueOf(redactor.body(body, 4096)))
+                .doesNotContain("hunter2")
+                .contains("<redacted>", "visible", "form-data; name=\"note\"");
+    }
+
+    @Test
+    void aMultipartFilePartNamedForASecretKeepsItsHeadersButNotItsContent() {
+        SnapshotRedactor redactor = new SnapshotRedactor(new SnapshotOptions());
+        String body = "--X\r\n"
+                + "Content-Disposition: form-data; name=\"api_key\"; filename=\"key.txt\"\r\n"
+                + "Content-Type: text/plain\r\n\r\n"
+                + "sk-live-abcdef\r\n"
+                + "--X--\r\n";
+
+        assertThat(String.valueOf(redactor.body(body, 4096)))
+                .doesNotContain("sk-live-abcdef")
+                .contains("filename=\"key.txt\"", "<redacted>");
+    }
 }

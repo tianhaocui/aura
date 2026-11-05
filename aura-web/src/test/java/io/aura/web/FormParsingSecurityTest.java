@@ -46,6 +46,7 @@ class FormParsingSecurityTest {
         String boundary = "aura-security-boundary";
         byte[] body = multipart(boundary, "upload", "payload.txt", "12345");
         AuraConfig config = new AuraConfig().port(port).env("prod")
+                .publicOrigin("https://localhost")
                 .maxUploadSize(4).maxBodySize(1024 * 1024);
         AuraApp app = TestApplications.app(config, "upload-limit",
                 Route.of("POST", "/upload",
@@ -54,6 +55,7 @@ class FormParsingSecurityTest {
         try {
             HttpRequest request = HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/upload"))
                     .header("Content-Type", "multipart/form-data; boundary=" + boundary)
+                    .header("Origin", "https://localhost")
                     .POST(HttpRequest.BodyPublishers.ofByteArray(body))
                     .build();
 

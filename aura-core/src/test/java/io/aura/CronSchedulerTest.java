@@ -50,6 +50,26 @@ class CronSchedulerTest {
     }
 
     @Test
+    void armingInsideTheRepeatedHourWaitsForThatMinuteInsteadOfFiringAtOnce() {
+        ZoneId newYork = ZoneId.of("America/New_York");
+        // 01:30 on the 2026-11-01 fall-back day, on the second pass through that hour. Resolved
+        // without care for the overlap, the next fire is 01:35 EDT -- an hour gone by -- and a
+        // zero-delay arm re-runs the task as fast as the pool can hand it back.
+        ZonedDateTime repeatedHour =
+                ZonedDateTime.of(LocalDateTime.of(2026, 11, 1, 1, 30), newYork)
+                        .withLaterOffsetAtOverlap();
+        Recorder executor = new Recorder();
+        AtomicInteger runs = new AtomicInteger();
+
+        CronScheduler.start(List.of(contribution("35 * * * *", runs::incrementAndGet)), executor,
+                Clock.fixed(repeatedHour.toInstant(), newYork), (task, failure) -> { });
+        executor.fire(0);
+
+        assertThat(runs).hasValue(1);
+        assertThat(executor.delays()).containsExactly(Duration.ofMinutes(5), Duration.ofMinutes(5));
+    }
+
+    @Test
     void aFailingTaskIsReportedWithItsContributionAndTheNextOccurrenceStaysArmed() {
         Recorder executor = new Recorder();
         IllegalStateException failure = new IllegalStateException("reminder query failed");

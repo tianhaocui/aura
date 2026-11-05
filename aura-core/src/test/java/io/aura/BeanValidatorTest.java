@@ -212,4 +212,28 @@ class BeanValidatorTest {
         assertThatCode(() -> BeanValidator.validate(null))
                 .doesNotThrowAnyException();
     }
+
+    static final class PojoWithValidation implements Validatable {
+        private final String value;
+
+        PojoWithValidation(String value) {
+            this.value = value;
+        }
+
+        @Override
+        public void validate() {
+            if ("bad".equals(value)) {
+                throw new Validate.ValidationException("pojo rejected");
+            }
+        }
+    }
+
+    @Test
+    void validatable_plainPojoIsValidatedToo() {
+        assertThatCode(() -> BeanValidator.validate(new PojoWithValidation("good")))
+                .doesNotThrowAnyException();
+        assertThatThrownBy(() -> BeanValidator.validate(new PojoWithValidation("bad")))
+                .isInstanceOf(Validate.ValidationException.class)
+                .hasMessageContaining("pojo rejected");
+    }
 }

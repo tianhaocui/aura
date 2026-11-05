@@ -11,6 +11,7 @@ import io.aura.port.BaseExceptionHandler;
 import io.aura.port.BaseHandler;
 
 import java.io.PrintStream;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -177,20 +178,39 @@ final class ModularRuntime implements AuraWebRuntime {
     }
 
     @Override public synchronized void start(String[] args) {
+        // The same freeze property() enforces: an argument either configures the runtime or is
+        // refused. Parsing first would let a second call flip dev mode on a live runtime, where
+        // devMode() is read by the guard chain and the 404 diagnostics.
+        if (args != null && args.length > 0
+                && (moduleManager.installed() || state.get() != RuntimeState.NEW)) {
+            throw new IllegalStateException("AuraApp arguments can only be applied before startup;"
+                    + " configuration is frozen once modules are installed");
+        }
         boolean stdio = false;
+        boolean dev = false;
+        Map<String, String> argumentProperties = new LinkedHashMap<>();
         if (args != null) for (String arg : args) {
             if (arg == null) continue;
             if (arg.startsWith("--config=")) {
                 throw new IllegalArgumentException(
                         "AuraApp configuration is frozen at creation; use AuraApp.create(Path.of(\"...\")) or AuraApp.create(Properties)");
             }
-            if ("--mcp-stdio".equals(arg)) stdio = true;
-            if ("--dev".equals(arg)) devMode = true;
-            if (arg.startsWith("--") && arg.contains("=")) {
+            if ("--mcp-stdio".equals(arg)) {
+                stdio = true;
+            } else if ("--dev".equals(arg)) {
+                dev = true;
+            } else if (arg.startsWith("--") && arg.contains("=")) {
                 int equals = arg.indexOf('=');
-                property("aura." + arg.substring(2, equals), arg.substring(equals + 1));
+                if (equals == 2) {
+                    throw new IllegalArgumentException("AuraApp argument requires a property name: " + arg);
+                }
+                argumentProperties.put("aura." + arg.substring(2, equals), arg.substring(equals + 1));
             }
         }
+        // Parse every argument before touching runtime state so a rejected argument cannot leave
+        // dev mode or a property applied from an earlier element of the same call.
+        argumentProperties.forEach(this::property);
+        if (dev) devMode = true;
         if (stdio) {
             enableStdioOutput();
         }
@@ -368,8 +388,21 @@ final class ModularRuntime implements AuraWebRuntime {
         return value != null ? value : properties.get(key);
     }
     @Override public <T> T getBean(Class<T> type) {
-        for (Map.Entry<Class<?>, Object> entry : registry.entrySet()) if (type.isAssignableFrom(entry.getKey())) return type.cast(entry.getValue());
-        return null;
+        T found = null;
+        Class<?> foundThrough = null;
+        for (Map.Entry<Class<?>, Object> entry : registry.entrySet()) {
+            if (!type.isAssignableFrom(entry.getKey())) continue;
+            if (found != null) {
+                // Iteration order of the registry is not insertion order, so which candidate would
+                // win here is luck. Naming the two is the only answer a caller can act on.
+                throw new IllegalStateException("Ambiguous capability " + type.getName() + ": "
+                        + foundThrough.getName() + " and " + entry.getKey().getName()
+                        + " both satisfy it; resolve it with find(name, type)");
+            }
+            found = type.cast(entry.getValue());
+            foundThrough = entry.getKey();
+        }
+        return found;
     }
     @Override public Function<BaseContext, String> authFunction() { return authFunction; }
     @Override public BiPredicate<String, String> permissionChecker() { return permissionChecker; }
@@ -518,15 +551,26 @@ final class ModularRuntime implements AuraWebRuntime {
 
     private <T> T register(T value) {
         if (value == null) throw new IllegalArgumentException("registered value must not be null");
-        registry.put(value.getClass(), value);
+        Object previous = registry.putIfAbsent(value.getClass(), value);
+        if (previous != null && previous != value) {
+            // Overwriting would hand the later module's object to every caller that resolved the
+            // earlier one. Two instances of one class are a naming decision, not a race.
+            throw new IllegalStateException("Capability already registered for "
+                    + value.getClass().getName() + "; contribute the second instance with"
+                    + " register(name, value) and address it by name");
+        }
         trackLifecycle(value);
         return value;
     }
     private void register(String name, Object value) {
         if (name == null || name.isBlank()) throw new IllegalArgumentException("registration name must not be blank");
-        Object registered = register(value);
-        Object existing = namedRegistry.putIfAbsent(name, registered);
-        if (existing != null) throw new IllegalStateException("Named capability already registered: " + name);
+        if (value == null) throw new IllegalArgumentException("registered value must not be null");
+        // A named capability is addressed by name only. Sharing the type registry with it would
+        // let two instances of one class decide getBean's answer by iteration order.
+        if (namedRegistry.putIfAbsent(name, value) != null) {
+            throw new IllegalStateException("Named capability already registered: " + name);
+        }
+        trackLifecycle(value);
     }
     private ModuleContext moduleContext(AuraModule module) {
         return new ModuleContextImpl(module, moduleManager.descriptor(module));

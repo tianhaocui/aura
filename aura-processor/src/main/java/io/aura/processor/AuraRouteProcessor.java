@@ -134,8 +134,8 @@ public final class AuraRouteProcessor extends AbstractProcessor {
                 String name = parameter.getSimpleName().toString();
                 String accessor = "ctx.query(\"" + escape(name) + "\")";
                 String expression = path.contains("{" + name + "}")
-                        ? scalar("ctx.path(\"" + escape(name) + "\")", type)
-                        : scalar(accessor, type);
+                        ? scalar("ctx.path(\"" + escape(name) + "\")", name, type)
+                        : scalar(accessor, name, type);
                 args.add(expression);
             }
         }
@@ -279,13 +279,33 @@ public final class AuraRouteProcessor extends AbstractProcessor {
         return type.toString() + ".class";
     }
 
-    private String scalar(String value, TypeMirror type) {
+    private String scalar(String value, String name, TypeMirror type) {
         TypeElement enumType = asEnum(type);
         if (enumType != null) {
             return "((" + value + ") == null ? null : java.lang.Enum.valueOf("
                     + enumType.getQualifiedName() + ".class, " + value + "))";
         }
-        String converted = switch (type.toString()) {
+        // Reflective binding rejects a missing primitive with 400 (RequiredParameterException).
+        // The generated route has to do the same instead of silently binding 0/false.
+        String required = "io.aura.port.BaseContext.requireParameter(" + value + ", \""
+                + escape(name) + "\")";
+        if (type.getKind().isPrimitive()) {
+            if ("char".equals(type.toString())) {
+                return "io.aura.port.BaseContext.requireCharacter(" + value + ", \""
+                        + escape(name) + "\").charAt(0)";
+            }
+            String converted = converted(required, type);
+            return converted != null ? converted : value;
+        }
+        String converted = converted(value, type);
+        if (converted == null) return value;
+        String absent = "(" + value + " == null";
+        if ("java.lang.Character".equals(type.toString())) absent += " || " + value + ".isEmpty()";
+        return absent + " ? null : " + converted + ")";
+    }
+
+    private String converted(String value, TypeMirror type) {
+        return switch (type.toString()) {
             case "int", "java.lang.Integer" -> "Integer.parseInt(" + value + ")";
             case "long", "java.lang.Long" -> "Long.parseLong(" + value + ")";
             case "boolean", "java.lang.Boolean" -> "Boolean.parseBoolean(" + value + ")";
@@ -298,24 +318,6 @@ public final class AuraRouteProcessor extends AbstractProcessor {
             case "char", "java.lang.Character" -> "(" + value + ").charAt(0)";
             default -> null;
         };
-        if (converted == null) return value;
-        if (type.getKind().isPrimitive()) {
-            String missing = switch (type.toString()) {
-                case "boolean" -> "false";
-                case "char" -> "'\\0'";
-                case "float" -> "0.0f";
-                case "double" -> "0.0d";
-                case "long" -> "0L";
-                default -> "0";
-            };
-            String absent = "(" + value + " == null";
-            if ("char".equals(type.toString())) absent += " || " + value + ".isEmpty()";
-            absent += " ? " + missing + " : " + converted + ")";
-            return absent;
-        }
-        String absent = "(" + value + " == null";
-        if ("java.lang.Character".equals(type.toString())) absent += " || " + value + ".isEmpty()";
-        return absent + " ? null : " + converted + ")";
     }
 
     private String routeDescription(ExecutableElement method) {

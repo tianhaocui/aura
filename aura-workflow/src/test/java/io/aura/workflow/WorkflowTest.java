@@ -644,6 +644,29 @@ class WorkflowTest {
     }
 
     @Test
+    void nonDurableStoreAlsoRejectsRetainedIdempotencyKeys() throws Exception {
+        WorkflowRegistry registry = new WorkflowRegistry();
+        AtomicInteger runs = new AtomicInteger();
+        registry.register(Workflow.<Object>builder("non-durable-idempotent")
+                .step("once", context -> { runs.incrementAndGet(); return "done"; })
+                .build());
+        WorkflowRuntime<Object> runtime = new WorkflowRuntime<>(registry, new NonDurableStore());
+        try {
+            assertThat(runtime.execute("non-durable-idempotent", new Object(),
+                    WorkflowSelector.defaultVariant(), new CancellationToken(), "event-once").succeeded())
+                    .isTrue();
+
+            assertThatThrownBy(() -> runtime.execute("non-durable-idempotent", new Object(),
+                    WorkflowSelector.defaultVariant(), new CancellationToken(), "event-once"))
+                    .isInstanceOf(WorkflowException.class)
+                    .extracting("code").isEqualTo(WorkflowException.IDEMPOTENCY_RETAINED);
+            assertThat(runs).hasValue(1);
+        } finally {
+            runtime.close();
+        }
+    }
+
+    @Test
     void durableLeasePreventsCrossRuntimeExecutionBeforeFirstRecordIsVisible() throws Exception {
         WorkflowRegistry registry = new WorkflowRegistry();
         AtomicInteger runs = new AtomicInteger();
@@ -1510,6 +1533,20 @@ class WorkflowTest {
         }
         private static String leaseKey(String flow, String key) {
             return flow + "\u0000" + key;
+        }
+    }
+
+    private static final class NonDurableStore implements WorkflowExecutionStore {
+        private final InMemoryWorkflowExecutionStore delegate = new InMemoryWorkflowExecutionStore();
+
+        @Override public void retainLocal(WorkflowExecution execution) { delegate.retainLocal(execution); }
+        @Override public void saveSnapshot(WorkflowExecutionSnapshot snapshot) { delegate.saveSnapshot(snapshot); }
+        @Override public java.util.Optional<WorkflowExecutionSnapshot> findSnapshot(String id) { return delegate.findSnapshot(id); }
+        @Override public java.util.List<WorkflowExecutionSnapshot> listSnapshots(String id) { return delegate.listSnapshots(id); }
+        @Override public java.util.Optional<WorkflowExecution> find(String id) { return delegate.find(id); }
+        @Override public java.util.List<WorkflowExecution> list(String id) { return delegate.list(id); }
+        @Override public java.util.Optional<WorkflowExecution> findByIdempotencyKey(String flow, String key) {
+            return delegate.findByIdempotencyKey(flow, key);
         }
     }
 

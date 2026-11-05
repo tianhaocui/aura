@@ -68,6 +68,10 @@ final class MockGuardedRequest implements GuardedRequest {
     @Override
     public String hostName() {
         String host = hostAndPort();
+        if (host.startsWith("[")) {
+            int closing = host.indexOf(']');
+            return closing > 0 ? host.substring(1, closing) : host;
+        }
         int port = host.lastIndexOf(':');
         return port > 0 ? host.substring(0, port) : host;
     }

@@ -57,6 +57,29 @@ class ModuleConfigBindingTest {
                 .extracting("code").isEqualTo("AURA_MODULE_CONFIG_TYPE");
     }
 
+    @Test
+    void unparseableNumbersNameTheKeyThatFailed() {
+        AuraApp app = AuraApp.create()
+                .property("aura.api.timeout", "soon")
+                .use(module("api", context -> context.config(ApiConfig.class)));
+
+        assertThatThrownBy(app::prepare)
+                .hasMessageContaining("AURA_CONFIG_INVALID")
+                .hasMessageContaining("aura.api.timeout")
+                .hasMessageContaining("soon");
+    }
+
+    @Test
+    void booleansMustSayTrueOrFalse() {
+        AuraApp app = AuraApp.create()
+                .property("aura.api.debug", "yes")
+                .use(module("api", context -> context.config(ApiConfig.class)));
+
+        assertThatThrownBy(app::prepare)
+                .hasMessageContaining("AURA_CONFIG_INVALID")
+                .hasMessageContaining("aura.api.debug");
+    }
+
     private static AuraModule module(String id, java.util.function.Consumer<ModuleContext> install) {
         return new AuraModule() {
             @Override public ModuleMetadata descriptor() {

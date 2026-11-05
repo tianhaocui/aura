@@ -2,6 +2,8 @@ package io.aura.web;
 
 import org.junit.jupiter.api.Test;
 
+import java.util.concurrent.atomic.AtomicBoolean;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 class HttpMethodsTest {
@@ -85,12 +87,15 @@ class HttpMethodsTest {
     @Test
     void head_fallback_runsAfterHandlers() {
         Router router = new Router();
-        router.after(ctx -> ctx.header("X-After", "ran"));
+        AtomicBoolean afterRan = new AtomicBoolean();
+        router.after(ctx -> afterRan.set(true));
         router.get("/tracked", ctx -> ctx.text("ok"));
         var client = TestApplications.client(router);
 
         var resp = client.head("/tracked").execute();
         assertThat(resp.status()).isEqualTo(200);
-        assertThat(resp.header("X-After")).isEqualTo("ran");
+        // A real server has already started the response by the time an after-handler runs, so
+        // its headers are dropped; what the after-handler itself did is what can be observed.
+        assertThat(afterRan).isTrue();
     }
 }

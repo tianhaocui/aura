@@ -4,17 +4,22 @@ import io.aura.db.DatabaseModule;
 import io.aura.db.Db;
 import io.aura.db.SchemaMigrationResult;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
+import org.testcontainers.postgresql.PostgreSQLContainer;
+import org.testcontainers.junit.jupiter.Container;
+import org.testcontainers.junit.jupiter.Testcontainers;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-@EnabledIfEnvironmentVariable(named = "AURA_MIGRATION_JDBC_URL", matches = ".+")
+@Testcontainers(disabledWithoutDocker = true)
 class LiquibaseExternalDatabaseTest {
+    @Container
+    private static final PostgreSQLContainer POSTGRES =
+            new PostgreSQLContainer("postgres:16-alpine");
+
     @Test
-    void migratesConfiguredExternalDatabaseAndIsIdempotent() throws Exception {
-        Db db = Db.create("external", System.getenv("AURA_MIGRATION_JDBC_URL"),
-                System.getenv().getOrDefault("AURA_MIGRATION_JDBC_USER", "aura"),
-                System.getenv().getOrDefault("AURA_MIGRATION_JDBC_PASSWORD", "aura"));
+    void migratesPostgresAndIsIdempotent() throws Exception {
+        Db db = Db.create("external", POSTGRES.getJdbcUrl(),
+                POSTGRES.getUsername(), POSTGRES.getPassword());
         DatabaseModule module = DatabaseModule.create(db)
                 .migrateWith(LiquibaseSchemaMigrator.classpath("db/liquibase/changelog.xml"));
         try {
@@ -40,9 +45,9 @@ class LiquibaseExternalDatabaseTest {
      * The first assertion is only true of an empty schema, so the state it needs is established before
      * the run and not only after it; a run aborted inside its own teardown would otherwise make every
      * later run fail for the wrong reason. Both spellings of the bookkeeping tables are dropped because
-     * Liquibase creates them in upper case, MySQL on Linux matches identifiers case-sensitively, and
-     * PostgreSQL folds unquoted names to lower case -- one spelling silently leaves them behind on the
-     * first engine while `DROP TABLE IF EXISTS` reports success.
+     * Liquibase may quote them in upper case on some engines while PostgreSQL folds unquoted names to
+     * lower case -- one spelling silently leaves them behind on the first engine while
+     * `DROP TABLE IF EXISTS` reports success.
      */
     private static void dropMigrationState(Db db) throws Exception {
         db.execute("DROP TABLE IF EXISTS items");

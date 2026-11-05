@@ -25,6 +25,8 @@ import java.util.TreeMap;
  */
 public final class OpenAiCompatibleProvider implements AiProvider {
     public static final int DEFAULT_MAX_RESPONSE_BYTES = 1024 * 1024;
+    private static final System.Logger LOG =
+            System.getLogger(OpenAiCompatibleProvider.class.getName());
     private final URI endpoint;
     private final String apiKey;
     private final String defaultModel;
@@ -40,6 +42,17 @@ public final class OpenAiCompatibleProvider implements AiProvider {
 
     public OpenAiCompatibleProvider(URI endpoint, String apiKey, String defaultModel,
                                     HttpClient client, Duration defaultTimeout, int maxResponseBytes) {
+        this(endpoint, apiKey, defaultModel, client, defaultTimeout, maxResponseBytes, false);
+    }
+
+    /**
+     * @param allowInsecureHttp opt in to sending the API key over plaintext HTTP. Without it an
+     *                          {@code http://} endpoint that carries a key is refused: the key
+     *                          would be readable by anything on the path.
+     */
+    public OpenAiCompatibleProvider(URI endpoint, String apiKey, String defaultModel,
+                                    HttpClient client, Duration defaultTimeout, int maxResponseBytes,
+                                    boolean allowInsecureHttp) {
         this.endpoint = validateEndpoint(endpoint);
         this.apiKey = apiKey == null ? "" : apiKey.trim();
         this.defaultModel = requireText(defaultModel, "defaultModel");
@@ -47,14 +60,32 @@ public final class OpenAiCompatibleProvider implements AiProvider {
         if (client.followRedirects() != HttpClient.Redirect.NEVER) {
             throw new IllegalArgumentException("client must not follow redirects");
         }
+        if (!this.apiKey.isEmpty() && "http".equalsIgnoreCase(this.endpoint.getScheme())) {
+            if (!allowInsecureHttp) {
+                throw new IllegalArgumentException("AI provider endpoint must use HTTPS when an API key is configured;"
+                        + " pass allowInsecureHttp to accept plaintext transport explicitly");
+            }
+            LOG.log(System.Logger.Level.WARNING,
+                    "AI API key is being sent over plaintext HTTP to {0}", this.endpoint);
+        }
         this.defaultTimeout = validateTimeout(defaultTimeout);
         if (maxResponseBytes < 1) throw new IllegalArgumentException("maxResponseBytes must be positive");
         this.maxResponseBytes = maxResponseBytes;
     }
 
     public static OpenAiCompatibleProvider create(String endpoint, String apiKey, String defaultModel) {
-        try { return new OpenAiCompatibleProvider(URI.create(endpoint), apiKey, defaultModel); }
-        catch (IllegalArgumentException error) { throw new IllegalArgumentException("Invalid AI provider endpoint", error); }
+        return create(endpoint, apiKey, defaultModel, false);
+    }
+
+    public static OpenAiCompatibleProvider create(String endpoint, String apiKey, String defaultModel,
+                                                  boolean allowInsecureHttp) {
+        try {
+            return new OpenAiCompatibleProvider(URI.create(endpoint), apiKey, defaultModel,
+                    HttpClient.newBuilder().followRedirects(HttpClient.Redirect.NEVER).build(),
+                    Duration.ofSeconds(60), DEFAULT_MAX_RESPONSE_BYTES, allowInsecureHttp);
+        } catch (IllegalArgumentException error) {
+            throw new IllegalArgumentException("Invalid AI provider endpoint: " + error.getMessage(), error);
+        }
     }
 
     @Override public String name() { return "openai-compatible"; }

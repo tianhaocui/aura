@@ -4,17 +4,22 @@ import io.aura.db.DatabaseModule;
 import io.aura.db.Db;
 import io.aura.db.SchemaMigrationResult;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
+import org.testcontainers.postgresql.PostgreSQLContainer;
+import org.testcontainers.junit.jupiter.Container;
+import org.testcontainers.junit.jupiter.Testcontainers;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-@EnabledIfEnvironmentVariable(named = "AURA_MIGRATION_JDBC_URL", matches = ".+")
+@Testcontainers(disabledWithoutDocker = true)
 class FlywayExternalDatabaseTest {
+    @Container
+    private static final PostgreSQLContainer POSTGRES =
+            new PostgreSQLContainer("postgres:16-alpine");
+
     @Test
-    void migratesConfiguredExternalDatabaseAndIsIdempotent() throws Exception {
-        Db db = Db.create("external", System.getenv("AURA_MIGRATION_JDBC_URL"),
-                System.getenv().getOrDefault("AURA_MIGRATION_JDBC_USER", "aura"),
-                System.getenv().getOrDefault("AURA_MIGRATION_JDBC_PASSWORD", "aura"));
+    void migratesPostgresAndIsIdempotent() throws Exception {
+        Db db = Db.create("external", POSTGRES.getJdbcUrl(),
+                POSTGRES.getUsername(), POSTGRES.getPassword());
         DatabaseModule module = DatabaseModule.create(db)
                 .migrateWith(FlywaySchemaMigrator.classpath("db/flyway"));
         try {
@@ -40,8 +45,9 @@ class FlywayExternalDatabaseTest {
      * Flyway writes its history table in the same case on both engines, so this only has to move the
      * cleanup before the run as well: the first assertion is true only of an empty schema, and a
      * previous run aborted inside its teardown would otherwise fail this one for a reason it did not
-     * cause. Dropping just the tables these migrations create is deliberate -- a schema-wide cleanup
-     * against whatever `AURA_MIGRATION_JDBC_URL` happens to point at would be a destructive act.
+     * cause. Dropping just the tables these migrations create is deliberate -- the container is
+     * disposable, but keeping the cleanup narrow also proves the migrator does not depend on
+     * teardown privileges over unrelated schemas.
      */
     private static void dropMigrationState(Db db) throws Exception {
         db.execute("DROP TABLE IF EXISTS items");

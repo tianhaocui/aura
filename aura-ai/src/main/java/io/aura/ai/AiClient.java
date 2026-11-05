@@ -96,6 +96,7 @@ public final class AiClient implements AutoCloseable {
         request.cancellationToken().throwIfCancelled();
         long deadline = request.timeout() == null || request.timeout().isZero()
                 ? Long.MAX_VALUE : System.nanoTime() + request.timeout().toNanos();
+        UsageLedger spend = new UsageLedger();
         try {
             for (int attempt = 1; ; attempt++) {
                 Duration remaining = remaining(request.timeout(), deadline);
@@ -106,7 +107,8 @@ public final class AiClient implements AutoCloseable {
                 try {
                     AiResponse response = await(future, remaining, request.cancellationToken());
                     recordUsage(request, response);
-                    enforceBudget(request, response);
+                    spend.add(usageOrNull(request, response));
+                    enforceBudget(request, response.content().length(), spend);
                     validateStructuredOutput(request, response);
                     return response;
                 } catch (TimeoutException error) {
@@ -123,8 +125,14 @@ public final class AiClient implements AutoCloseable {
                     if (cause instanceof AiBudgetExceededException budgetFailure) {
                         throw budgetFailure;
                     }
-                    if (attempt >= request.retryPolicy().maxAttempts()
-                            || !request.retryPolicy().shouldRetry(cause)) {
+                    AiUsage failedUsage = recordFailedAttemptUsage(request, cause);
+                    boolean retryable = attempt < request.retryPolicy().maxAttempts()
+                            && request.retryPolicy().shouldRetry(cause);
+                    if (retryable && failedUsage != null) {
+                        spend.add(failedUsage);
+                        enforceBudget(request, 0, spend);
+                    }
+                    if (!retryable) {
                         if (cause instanceof Exception exception) throw exception;
                         if (cause instanceof Error fatal) throw fatal;
                         throw new RuntimeException(cause);
@@ -173,6 +181,7 @@ public final class AiClient implements AutoCloseable {
             callbacks.error(cause);
             throwFailure(cause);
         }
+        UsageLedger spend = new UsageLedger();
         for (int attempt = 1; ; attempt++) {
             StreamAttempt state = new StreamAttempt(request, callbacks);
             Duration remaining;
@@ -195,7 +204,8 @@ public final class AiClient implements AutoCloseable {
                 AiResponse response = awaitStream(
                         future, remaining, request.cancellationToken(), state);
                 recordUsage(request, response);
-                enforceBudget(request, response);
+                spend.add(usageOrNull(request, response));
+                enforceBudget(request, response.content().length(), spend);
                 validateStreamingStructuredOutput(request, response, state.content());
                 callbacks.complete(response);
                 return;
@@ -209,9 +219,21 @@ public final class AiClient implements AutoCloseable {
             } catch (ExecutionException error) {
                 future.cancel(true);
                 Throwable cause = unwrap(error);
-                if (!state.tokenDelivered()
+                AiUsage failedUsage = recordFailedAttemptUsage(request, cause);
+                boolean retryable = !state.tokenDelivered()
                         && attempt < request.retryPolicy().maxAttempts()
-                        && request.retryPolicy().shouldRetry(cause)) {
+                        && request.retryPolicy().shouldRetry(cause);
+                if (retryable && failedUsage != null) {
+                    spend.add(failedUsage);
+                    try {
+                        enforceBudget(request, state.content().length(), spend);
+                    } catch (RuntimeException budgetFailure) {
+                        request.cancellationToken().cancel();
+                        callbacks.error(budgetFailure);
+                        throw budgetFailure;
+                    }
+                }
+                if (retryable) {
                     try {
                         sleepBackoff(request, deadline);
                     } catch (Exception backoffFailure) {
@@ -422,11 +444,11 @@ public final class AiClient implements AutoCloseable {
         private AiProviderContractException contractFailure() { return contractFailure.get(); }
     }
 
-    private static void enforceBudget(AiRequest request, AiResponse response) {
-        enforceOutputCharacters(request, response.content().length());
+    private static void enforceBudget(AiRequest request, long outputCharacters, UsageLedger spend) {
+        enforceOutputCharacters(request, outputCharacters);
         AiBudget budget = request.budget();
         if (!budget.requiresUsage()) return;
-        AiUsage usage = usageFor(request, response);
+        AiUsage usage = spend.snapshot();
         if (budget.maxInputTokens() > 0 && usage.inputTokens() < 0) {
             throw AiBudgetExceededException.missing("inputTokens", budget.maxInputTokens());
         }
@@ -502,6 +524,83 @@ public final class AiClient implements AutoCloseable {
         long estimated = request.pricing().estimateCostMicros(reported);
         return estimated < 0 ? reported : new AiUsage(reported.inputTokens(),
                 reported.outputTokens(), reported.totalTokens(), estimated);
+    }
+
+    /**
+     * Accounting tolerates provider usage it cannot parse, matching {@code recordUsage}. A request
+     * that actually spends against a token or cost budget still fails in {@code enforceBudget},
+     * which sees the missing figure in the ledger and reports it.
+     */
+    private static AiUsage usageOrNull(AiRequest request, AiResponse response) {
+        try {
+            return usageFor(request, response);
+        } catch (RuntimeException malformedUsage) {
+            return null;
+        }
+    }
+
+    /**
+     * Charges usage reported by a failed attempt. Providers usually omit usage on errors, but
+     * when they do report it the budget has to see it before another attempt is allowed.
+     */
+    private AiUsage recordFailedAttemptUsage(AiRequest request, Throwable failure) {
+        if (!(failure instanceof AiProviderException provider) || provider.usage() == null) return null;
+        AiUsage usage = provider.usage();
+        addKnown(inputTokens, usage.inputTokens());
+        addKnown(outputTokens, usage.outputTokens());
+        addKnown(totalTokens, usage.totalTokens());
+        addKnown(costMicros, usage.costMicros());
+        if (!usage.hasTokenUsage() && !usage.hasCost()) unknownUsage.incrementAndGet();
+        try {
+            usageSink.record(new AiUsageSink.UsageEvent(
+                    Instant.now(), request.model(), request.inputCharacters(), usage,
+                    usage.hasTokenUsage() || usage.hasCost()));
+        } catch (RuntimeException ignored) {
+            // Accounting must not mask the provider failure.
+        }
+        return usage;
+    }
+
+    /** Sums known usage across every attempt of one logical request. */
+    private static final class UsageLedger {
+        private long inputTokens;
+        private long outputTokens;
+        private long totalTokens;
+        private long costMicros;
+        private boolean inputKnown;
+        private boolean outputKnown;
+        private boolean totalKnown;
+        private boolean costKnown;
+
+        private void add(AiUsage usage) {
+            if (usage == null) return;
+            if (usage.inputTokens() >= 0) {
+                inputKnown = true;
+                inputTokens = saturatedAdd(inputTokens, usage.inputTokens());
+            }
+            if (usage.outputTokens() >= 0) {
+                outputKnown = true;
+                outputTokens = saturatedAdd(outputTokens, usage.outputTokens());
+            }
+            if (usage.totalTokens() >= 0) {
+                totalKnown = true;
+                totalTokens = saturatedAdd(totalTokens, usage.totalTokens());
+            }
+            if (usage.costMicros() >= 0) {
+                costKnown = true;
+                costMicros = saturatedAdd(costMicros, usage.costMicros());
+            }
+        }
+
+        private AiUsage snapshot() {
+            return new AiUsage(inputKnown ? inputTokens : -1, outputKnown ? outputTokens : -1,
+                    totalKnown ? totalTokens : -1, costKnown ? costMicros : -1);
+        }
+
+        private static long saturatedAdd(long current, long addition) {
+            long result = current + addition;
+            return result < current ? Long.MAX_VALUE : result;
+        }
     }
 
     private static void addKnown(AtomicLong target, long value) {

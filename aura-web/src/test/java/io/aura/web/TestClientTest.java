@@ -53,7 +53,7 @@ class TestClientTest {
         TestClient client = clientWithRoutes();
         TestClient.Response resp = client.get("/boom").execute();
         assertThat(resp.status()).isEqualTo(400);
-        assertThat(resp.body()).contains("oops");
+        assertThat(resp.body()).contains("VALIDATION_ERROR").doesNotContain("oops");
     }
 
     @Test
@@ -130,7 +130,7 @@ class TestClientTest {
         TestClient client = TestApplications.client(router);
         TestClient.Response resp = client.get("/bad-param").execute();
         assertThat(resp.status()).isEqualTo(400);
-        assertThat(resp.body()).contains("Invalid integer");
+        assertThat(resp.body()).contains("VALIDATION_ERROR").doesNotContain("Invalid integer");
     }
 
     // --- PUT / DELETE ---
@@ -191,8 +191,8 @@ class TestClientTest {
         TestClient client = TestApplications.client(router);
         TestClient.Response resp = client.get("/v").execute();
         assertThat(resp.status()).isEqualTo(400);
-        assertThat(resp.body()).contains("\"error\"");
-        assertThat(resp.body()).contains("bad input");
+        assertThat(resp.body()).contains("\"error\"", "VALIDATION_ERROR");
+        assertThat(resp.body()).doesNotContain("bad input");
     }
 
     // --- redirect CRLF guard ---

@@ -30,6 +30,25 @@ class ModuleGraphTest {
     }
 
     @Test
+    void caretRangesFollowSemverCompatibilityRules() {
+        assertThat(ModuleGraph.versionMatches("1.9.0", "^1.2.3")).isTrue();
+        assertThat(ModuleGraph.versionMatches("2.0.0", "^1.2.3")).isFalse();
+        assertThat(ModuleGraph.versionMatches("0.2.9", "^0.2.3")).isTrue();
+        assertThat(ModuleGraph.versionMatches("0.3.0", "^0.2.3")).isFalse();
+        assertThat(ModuleGraph.versionMatches("0.9.0", "^0.1.2")).isFalse();
+        assertThat(ModuleGraph.versionMatches("0.0.3", "^0.0.3")).isTrue();
+        assertThat(ModuleGraph.versionMatches("0.0.4", "^0.0.3")).isFalse();
+    }
+
+    @Test
+    void supportsOpenEndedRanges() {
+        assertThat(ModuleGraph.versionMatches("1.5.0", "[,2.0)")).isTrue();
+        assertThat(ModuleGraph.versionMatches("1.5.0", "[1.0,)")).isTrue();
+        assertThat(ModuleGraph.versionMatches("2.1.0", "(2.0,)")).isTrue();
+        assertThat(ModuleGraph.versionMatches("2.0.0", "(2.0,)")).isFalse();
+    }
+
+    @Test
     void reportsMissingAndCyclicDependenciesWithStableCodes() {
         assertThatThrownBy(() -> ModuleGraph.order(List.of(module("orders", List.of("db")))))
                 .isInstanceOf(ModuleException.class)

@@ -34,18 +34,36 @@ public class Db implements AutoCloseable {
     private static final AtomicLong INDEPENDENT_TX_REJECTED = new AtomicLong();
     private static final AtomicLong INDEPENDENT_TX_TIMED_OUT = new AtomicLong();
     private final ThreadLocal<TransactionContext> txContext = new ThreadLocal<>();
-    private static final ThreadPoolExecutor INDEPENDENT_TX_POOL = new ThreadPoolExecutor(
-            INDEPENDENT_TX_THREADS,
-            INDEPENDENT_TX_THREADS,
-            0L,
-            TimeUnit.MILLISECONDS,
-            new ArrayBlockingQueue<>(INDEPENDENT_TX_QUEUE_CAPACITY),
-            r -> {
-                Thread t = new Thread(r, "aura-tx-independent-" + INDEPENDENT_TX_THREAD_ID.incrementAndGet());
-                t.setDaemon(true);
-                return t;
-            },
-            new ThreadPoolExecutor.AbortPolicy());
+    private static volatile ThreadPoolExecutor independentTxPool = newIndependentTxPool();
+
+    private static ThreadPoolExecutor newIndependentTxPool() {
+        return new ThreadPoolExecutor(
+                INDEPENDENT_TX_THREADS,
+                INDEPENDENT_TX_THREADS,
+                0L,
+                TimeUnit.MILLISECONDS,
+                new ArrayBlockingQueue<>(INDEPENDENT_TX_QUEUE_CAPACITY),
+                r -> {
+                    Thread t = new Thread(r, "aura-tx-independent-" + INDEPENDENT_TX_THREAD_ID.incrementAndGet());
+                    t.setDaemon(true);
+                    return t;
+                },
+                new ThreadPoolExecutor.AbortPolicy());
+    }
+
+    /**
+     * shutdownPool() is process-wide, so a Db that opens later would inherit an executor that
+     * refuses every task. Re-arming an empty one keeps the shutdown a shutdown of the threads
+     * that existed when it was asked for.
+     */
+    private static synchronized ThreadPoolExecutor independentTxPool() {
+        ThreadPoolExecutor pool = independentTxPool;
+        if (pool.isShutdown()) {
+            pool = newIndependentTxPool();
+            independentTxPool = pool;
+        }
+        return pool;
+    }
 
     private Db(String name, HikariDataSource ds) {
         this.name = name;
@@ -494,11 +512,18 @@ public class Db implements AutoCloseable {
         Objects.requireNonNull(cancellationToken, "cancellationToken");
         if (timeout.isNegative()) throw new IllegalArgumentException("timeout cannot be negative");
         cancellationToken.throwIfCancelled();
+        Outcome outcome = new Outcome();
         java.util.concurrent.Future<T> future;
         try {
-            future = INDEPENDENT_TX_POOL.submit(() -> {
-                cancellationToken.throwIfCancelled();
-                return doTransaction(() -> block.apply(cancellationToken));
+            future = independentTxPool().submit(() -> {
+                try {
+                    cancellationToken.throwIfCancelled();
+                    T result = doTransaction(() -> block.apply(cancellationToken));
+                    outcome.markCommitted();
+                    return result;
+                } finally {
+                    outcome.markSettled();
+                }
             });
         } catch (RejectedExecutionException e) {
             INDEPENDENT_TX_REJECTED.incrementAndGet();
@@ -514,7 +539,7 @@ public class Db implements AutoCloseable {
                     INDEPENDENT_TX_TIMED_OUT.incrementAndGet();
                     cancellationToken.cancel();
                     future.cancel(true);
-                    throw new DbException("Independent transaction timed out");
+                    throw new DbException(timedOut(outcome));
                 }
                 try {
                     long waitNanos = remaining == Long.MAX_VALUE
@@ -540,11 +565,48 @@ public class Db implements AutoCloseable {
     }
 
     public static io.aura.contract.ExecutorMetrics independentTransactionMetrics() {
+        ThreadPoolExecutor pool = independentTxPool;
         return new io.aura.contract.ExecutorMetrics("db-independent-transaction", true,
-                INDEPENDENT_TX_POOL.getMaximumPoolSize(), INDEPENDENT_TX_POOL.getActiveCount(),
-                INDEPENDENT_TX_POOL.getQueue().size(), INDEPENDENT_TX_QUEUE_CAPACITY,
-                INDEPENDENT_TX_POOL.getCompletedTaskCount(), INDEPENDENT_TX_REJECTED.get(),
+                pool.getMaximumPoolSize(), pool.getActiveCount(),
+                pool.getQueue().size(), INDEPENDENT_TX_QUEUE_CAPACITY,
+                pool.getCompletedTaskCount(), INDEPENDENT_TX_REJECTED.get(),
                 INDEPENDENT_TX_TIMED_OUT.get());
+    }
+
+    /** How long a timed-out caller waits for the worker to report its own ending. */
+    private static final Duration OUTCOME_GRACE = Duration.ofMillis(250);
+
+    /**
+     * Interrupting a running task does not take back the statement its thread already handed to
+     * the driver, so "timed out" alone cannot tell a caller whether the rows landed. The block
+     * records how it ended; a short fixed grace turns a guess into an answer when the block
+     * reacts to the interrupt, and stays honest about the ones that do not finish in time.
+     */
+    private static String timedOut(Outcome outcome) {
+        if (!outcome.awaitSettled(OUTCOME_GRACE)) {
+            return "Independent transaction timed out; the block had not finished, its outcome is unknown";
+        }
+        return outcome.committed()
+                ? "Independent transaction timed out; the block committed after the deadline"
+                : "Independent transaction timed out; the block rolled back";
+    }
+
+    private static final class Outcome {
+        private final java.util.concurrent.CountDownLatch settled = new java.util.concurrent.CountDownLatch(1);
+        private volatile boolean committed;
+
+        void markCommitted() { committed = true; }
+        void markSettled() { settled.countDown(); }
+        boolean committed() { return committed; }
+
+        boolean awaitSettled(Duration grace) {
+            try {
+                return settled.await(grace.toNanos(), TimeUnit.NANOSECONDS);
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+                return false;
+            }
+        }
     }
 
     /** Manual transaction control. Caller is responsible for commit/rollback/close. */
@@ -552,15 +614,23 @@ public class Db implements AutoCloseable {
         if (isCurrentTransaction()) {
             throw new IllegalStateException("Already in a transaction; use transaction() to reuse or transactionIndependent() for independent transaction");
         }
+        Connection conn;
         try {
-            Connection conn = ds.getConnection();
-            conn.setAutoCommit(false);
-            Transaction tx = new Transaction(conn);
-            txContext.set(new TransactionContext(this, conn));
-            return tx;
+            conn = ds.getConnection();
         } catch (SQLException e) {
             throw new DbException(e);
         }
+        try {
+            conn.setAutoCommit(false);
+        } catch (SQLException e) {
+            // Nothing has taken ownership of this connection, so the caller cannot return it and
+            // the pool loses the slot for good.
+            try { conn.close(); } catch (SQLException ignored) {}
+            throw new DbException(e);
+        }
+        Transaction tx = new Transaction(conn);
+        txContext.set(new TransactionContext(this, conn));
+        return tx;
     }
 
     /** Explicitly typed alias for callers that do not depend on the nested Transaction class. */
@@ -666,7 +736,7 @@ public class Db implements AutoCloseable {
     }
 
     public static void shutdownPool() {
-        INDEPENDENT_TX_POOL.shutdownNow();
+        independentTxPool().shutdownNow();
     }
 
     // --- internal ---

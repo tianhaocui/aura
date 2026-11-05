@@ -64,6 +64,7 @@ class WebSocketOriginTest {
         AuraApp app = app(new AuraConfig()
                         .port(port)
                         .env("prod")
+                        .publicOrigin("https://localhost")
                         .cors(cors -> cors.origins("https://allowed.example")),
                 context -> context.webSocket("/ws", ws -> ws.onOpen(conn -> connected.set(true))));
 

@@ -144,6 +144,25 @@ class RowTest {
         assertThat(row.getBool("missing")).isNull();
     }
 
+    @Test
+    void getBool_treatsNumericColumnsAsFlags() {
+        assertThat(Row.of("t").set("active", (byte) 1).getBool("active")).isTrue();
+        assertThat(Row.of("t").set("active", (byte) 0).getBool("active")).isFalse();
+        assertThat(Row.of("t").set("active", 1L).getBool("active", false)).isTrue();
+        assertThat(Row.of("t").set("active", 0).getBool("active", true)).isFalse();
+    }
+
+    @Test
+    void getIntAndGetLong_acceptIntegralDecimalsAndLargeIntegers() {
+        Row row = Row.of("t")
+                .set("decimal", new java.math.BigDecimal("42.00"))
+                .set("bigInteger", new java.math.BigInteger("123456789"))
+                .set("bigLong", new java.math.BigInteger("9876543210"));
+        assertThat(row.getInt("decimal")).isEqualTo(42);
+        assertThat(row.getInt("bigInteger")).isEqualTo(123456789);
+        assertThat(row.getLong("bigLong")).isEqualTo(9876543210L);
+    }
+
     // --- table / primaryKey accessors ---
 
     @Test

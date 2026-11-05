@@ -24,7 +24,53 @@ class AuraModuleTest {
         assertThat(installed).containsExactly("dependency", "feature");
         assertThat(app.modules()).extracting(io.aura.contract.ModuleMetadata::id)
                 .containsExactly("dependency", "feature");
-        assertThat(app.require(String.class)).isEqualTo("feature");
+        assertThat(app.require("feature", String.class)).isEqualTo("feature");
+        assertThat(app.require("dependency", String.class)).isEqualTo("dependency");
+    }
+
+    @Test
+    void twoModulesCannotClaimTheSameCapabilityType() {
+        AuraModule first = capabilityModule("first-capability", "first");
+        AuraModule second = capabilityModule("second-capability", "second");
+
+        assertThatThrownBy(() -> AuraApp.create().use(first).use(second).prepare())
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("Capability already registered for java.lang.String");
+    }
+
+    @Test
+    void aTypeLookupTwoCapabilitiesSatisfyIsReportedInsteadOfGuessed() {
+        AuraApp app = AuraApp.create().use(new AuraModule() {
+            @Override public io.aura.contract.ModuleMetadata descriptor() {
+                return io.aura.contract.ModuleMetadata.of("collections", "1.0.0");
+            }
+
+            @Override public void install(ModuleContext context) {
+                context.register(new ArrayList<String>());
+                context.register(new java.util.LinkedList<String>());
+            }
+        });
+        app.prepare();
+
+        // Both keys satisfy List, and the registry does not iterate in insertion order, so the
+        // only honest answer is that the caller has to name the one it means.
+        assertThatThrownBy(() -> app.require(List.class))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("Ambiguous capability java.util.List")
+                .hasMessageContaining(ArrayList.class.getName())
+                .hasMessageContaining(java.util.LinkedList.class.getName());
+    }
+
+    private static AuraModule capabilityModule(String id, String capability) {
+        return new AuraModule() {
+            @Override public io.aura.contract.ModuleMetadata descriptor() {
+                return io.aura.contract.ModuleMetadata.of(id, "1.0.0");
+            }
+
+            @Override public void install(ModuleContext context) {
+                context.register(capability);
+            }
+        };
     }
 
     @Test
@@ -524,7 +570,7 @@ class AuraModuleTest {
 
             @Override public void install(ModuleContext context) {
                 installed.add(id);
-                context.register(id);
+                context.register(id, id);
             }
         };
     }

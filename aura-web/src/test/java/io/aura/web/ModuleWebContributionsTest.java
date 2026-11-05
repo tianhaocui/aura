@@ -9,6 +9,7 @@ import io.aura.contract.Route;
 import org.junit.jupiter.api.Test;
 
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Supplier;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -18,6 +19,7 @@ class ModuleWebContributionsTest {
 
     @Test
     void middlewareExceptionsAndResultWrapperMatchTestClientSemantics() {
+        AtomicBoolean afterRan = new AtomicBoolean();
         AuraApp app = AuraApp.create().use(new AuraModule() {
             @Override public ModuleMetadata descriptor() {
                 return ModuleMetadata.of("web-policy", "1.0.0");
@@ -25,7 +27,7 @@ class ModuleWebContributionsTest {
 
             @Override public void install(ModuleContext context) {
                 context.before(request -> request.set("before", "applied"));
-                context.after(request -> request.header("X-After", "applied"));
+                context.after(request -> afterRan.set(true));
                 context.exception(IllegalStateException.class,
                         (error, request) -> request.status(409).json(Map.of(
                                 "code", "ORDER_STATE_INVALID", "error", "invalid state")));
@@ -43,7 +45,7 @@ class ModuleWebContributionsTest {
         TestClient client = TestClient.of(app);
         TestClient.Response middleware = client.get("/middleware").execute();
         assertThat(middleware.body()).isEqualTo("applied");
-        assertThat(middleware.header("X-After")).isEqualTo("applied");
+        assertThat(afterRan).isTrue();
         assertThat(client.get("/failure").execute().status()).isEqualTo(409);
         assertThat(client.get("/failure").execute().body()).contains("ORDER_STATE_INVALID")
                 .doesNotContain("secret internal state");

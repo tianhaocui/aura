@@ -73,7 +73,7 @@ final class ModuleGraph {
         SemVer actual = SemVer.parse(version);
         if (wanted.startsWith("[") || wanted.startsWith("(")) {
             int comma = wanted.indexOf(',');
-            if (comma < 2 || !wanted.endsWith("]") && !wanted.endsWith(")")) return false;
+            if (comma < 1 || !wanted.endsWith("]") && !wanted.endsWith(")")) return false;
             String lower = wanted.substring(1, comma).trim();
             String upper = wanted.substring(comma + 1, wanted.length() - 1).trim();
             boolean lowerOk = lower.isEmpty() || actual.compareTo(SemVer.parse(lower))
@@ -84,7 +84,10 @@ final class ModuleGraph {
         }
         if (wanted.startsWith("^")) {
             SemVer lower = SemVer.parse(wanted.substring(1));
-            return actual.compareTo(lower) >= 0 && actual.major == lower.major;
+            if (actual.compareTo(lower) < 0) return false;
+            if (lower.major > 0) return actual.major == lower.major;
+            if (lower.minor > 0) return actual.major == 0 && actual.minor == lower.minor;
+            return actual.major == 0 && actual.minor == 0 && actual.patch == lower.patch;
         }
         if (wanted.startsWith("~")) {
             SemVer lower = SemVer.parse(wanted.substring(1));
@@ -113,7 +116,9 @@ final class ModuleGraph {
 
         private static int number(String[] parts, int index) {
             if (index >= parts.length || parts[index].isBlank() || "x".equalsIgnoreCase(parts[index])) return 0;
-            try { return Integer.parseInt(parts[index].replaceAll("[^0-9].*", "")); }
+            String digits = parts[index].replaceAll("^([0-9]+).*$", "$1");
+            if (digits.isEmpty() || !digits.chars().allMatch(Character::isDigit)) return 0;
+            try { return Integer.parseInt(digits); }
             catch (NumberFormatException ignored) { return 0; }
         }
 

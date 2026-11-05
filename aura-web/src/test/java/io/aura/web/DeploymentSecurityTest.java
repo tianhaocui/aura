@@ -84,27 +84,18 @@ class DeploymentSecurityTest {
     }
 
     @Test
-    void forwardedOriginIsUsedOnlyForExplicitlyTrustedPeer() throws Exception {
-        int trustedPort = availablePort();
-        AuraApp trusted = postApp(new AuraConfig().port(trustedPort).env("prod")
-                .trustedProxies("127.0.0.1").property("aura.csrf.enabled", "true"),
-                "trusted-forwarded-origin");
+    void csrfUsesTheConfiguredOriginNotTheForwardedHost() throws Exception {
+        int port = availablePort();
+        AuraApp app = postApp(new AuraConfig().port(port).env("prod")
+                .publicOrigin("http://127.0.0.1")
+                .trustedProxies("127.0.0.1"), "configured-origin");
         try {
-            trusted.start();
-            assertThat(forwardedPost(trustedPort).statusCode()).isEqualTo(200);
+            app.start();
+            assertThat(csrfPost(port, "http://127.0.0.1", "api.example").statusCode()).isEqualTo(200);
+            // A trusted proxy explains forwarding, not which origin the operator intended.
+            assertThat(csrfPost(port, "https://evil.example", "evil.example").statusCode()).isEqualTo(403);
         } finally {
-            trusted.stop();
-        }
-
-        int untrustedPort = availablePort();
-        AuraApp untrusted = postApp(new AuraConfig().port(untrustedPort).env("prod")
-                        .property("aura.csrf.enabled", "true"),
-                "untrusted-forwarded-origin");
-        try {
-            untrusted.start();
-            assertThat(forwardedPost(untrustedPort).statusCode()).isEqualTo(403);
-        } finally {
-            untrusted.stop();
+            app.stop();
         }
     }
 
@@ -195,11 +186,11 @@ class DeploymentSecurityTest {
                         .GET().build(), HttpResponse.BodyHandlers.ofString());
     }
 
-    private HttpResponse<String> forwardedPost(int port) throws Exception {
+    private HttpResponse<String> csrfPost(int port, String origin, String forwardedHost) throws Exception {
         return http.send(HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port + "/orders"))
-                        .header("Origin", "https://api.example")
+                        .header("Origin", origin)
                         .header("X-Forwarded-Proto", "https")
-                        .header("X-Forwarded-Host", "api.example")
+                        .header("X-Forwarded-Host", forwardedHost)
                         .POST(HttpRequest.BodyPublishers.noBody())
                         .build(), HttpResponse.BodyHandlers.ofString());
     }

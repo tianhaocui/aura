@@ -181,6 +181,9 @@ public class SnapshotHttpClient {
             throw e;
         } catch (CancellationException e) {
             throw e;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new CancellationException("External request interrupted");
         } catch (TimeoutException e) {
             recordFailedCall(scope, method, uri, body, 504, name.toUpperCase() + "_TIMEOUT",
                     "External call timed out: " + name, e, started, t0);
@@ -310,6 +313,10 @@ public class SnapshotHttpClient {
             }
             throw e;
         } catch (CancellationException e) {
+            readTask.cancel(true);
+            try { input.close(); } catch (IOException ignored) { }
+            throw e;
+        } catch (InterruptedException e) {
             readTask.cancel(true);
             try { input.close(); } catch (IOException ignored) { }
             throw e;

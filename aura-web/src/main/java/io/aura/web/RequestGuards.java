@@ -201,8 +201,10 @@ public final class RequestGuards {
         @Override
         public GuardOutcome evaluate(GuardedRequest request) {
             String enabled = app.prop("aura.csrf.enabled");
-            boolean enforce = enabled != null ? Boolean.parseBoolean(enabled)
-                    : (app.publicOrigin() != null && !"dev".equalsIgnoreCase(app.env()));
+            // Production protection is the default, not a switch an operator has to remember.
+            // Anything other than an explicit "false" stays on, so a typo fails closed.
+            boolean enforce = enabled != null ? !"false".equalsIgnoreCase(enabled)
+                    : !"dev".equalsIgnoreCase(app.env());
             if (!enforce || !isUnsafeMethod(request.method())) return GuardOutcome.next();
 
             String headerName = propertyOrDefault(app, "aura.csrf.header", "X-CSRF-Token");
@@ -228,7 +230,8 @@ public final class RequestGuards {
                 }
             }
             if (origin == null) return rejected();
-            return expectedOrigin(request).equalsIgnoreCase(origin)
+            String expected = expectedOrigin();
+            return expected != null && expected.equalsIgnoreCase(origin)
                     ? GuardOutcome.next()
                     : rejected();
         }
@@ -237,25 +240,22 @@ public final class RequestGuards {
             return GuardOutcome.payload(403, "{\"error\":\"CSRF validation failed\"}");
         }
 
-        private String expectedOrigin(GuardedRequest request) {
+        /**
+         * The request's own Host and forwarding headers cannot establish which origin the
+         * operator intended: the caller controls them. A missing or malformed configured origin
+         * is rejected by validation when enforcement is on, so returning null here fails closed.
+         */
+        private String expectedOrigin() {
             String configured = app.publicOrigin();
             if (configured == null) configured = app.prop("aura.public-origin");
-            if (configured != null && !configured.isBlank()) return configured.trim();
-            String scheme = request.scheme();
-            String host = request.hostAndPort();
-            String peer = request.peerIp();
-            if (Context.isTrustedProxy(String.join(",", app.trustedProxies()), peer)) {
-                String forwardedProto = request.header("X-Forwarded-Proto");
-                String forwardedHost = request.header("X-Forwarded-Host");
-                if (forwardedProto != null && forwardedProto.matches("(?i)https?")) {
-                    scheme = forwardedProto.toLowerCase();
-                }
-                if (forwardedHost != null
-                        && forwardedHost.matches("[A-Za-z0-9.-]+(?::[0-9]{1,5})?")) {
-                    host = forwardedHost;
-                }
+            if (configured == null || configured.isBlank()) return null;
+            try {
+                URI uri = URI.create(configured.trim());
+                if (uri.getScheme() == null || uri.getRawAuthority() == null) return null;
+                return uri.getScheme() + "://" + uri.getRawAuthority();
+            } catch (IllegalArgumentException invalid) {
+                return null;
             }
-            return scheme + "://" + host;
         }
     }
 
@@ -382,8 +382,25 @@ public final class RequestGuards {
                 request.responseHeader("Access-Control-Allow-Headers", allowHeaders);
                 request.responseHeader("Access-Control-Max-Age", "86400");
                 if (credentials) request.responseHeader("Access-Control-Allow-Credentials", "true");
+                String requestedHeaders = request.header("Access-Control-Request-Headers");
+                if (requestedHeaders != null && !requestedHeaders.isBlank()) {
+                    // Only a policy that allows every header may echo the request's list; an
+                    // explicit allow-list stays authoritative.
+                    boolean anyHeader = allowHeaders == null || allowHeaders.isBlank()
+                            || "*".equals(allowHeaders.trim());
+                    if (anyHeader) {
+                        request.responseHeader("Access-Control-Allow-Headers", requestedHeaders);
+                    }
+                    request.addResponseHeader("Vary", "Access-Control-Request-Headers");
+                }
             }
-            if ("OPTIONS".equals(request.method())) return GuardOutcome.stop(204);
+            // An OPTIONS request is a preflight only when it carries both headers. Answering
+            // every OPTIONS with 204 here swallowed ordinary OPTIONS routes and bypassed the
+            // router's Allow handling for non-CORS callers.
+            boolean preflight = "OPTIONS".equals(request.method())
+                    && request.header("Origin") != null
+                    && request.header("Access-Control-Request-Method") != null;
+            if (preflight && allowOrigin != null) return GuardOutcome.stop(204);
             return GuardOutcome.next();
         }
     }

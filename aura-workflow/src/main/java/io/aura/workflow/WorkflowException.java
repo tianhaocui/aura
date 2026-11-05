@@ -1,6 +1,6 @@
 package io.aura.workflow;
 
-public class WorkflowException extends RuntimeException {
+public class WorkflowException extends RuntimeException implements io.aura.contract.CodedFailure {
     public static final String MISSING_STEP = "MISSING_STEP";
     public static final String DUPLICATE_STEP = "DUPLICATE_STEP";
     public static final String DEPENDENCY_CYCLE = "DEPENDENCY_CYCLE";

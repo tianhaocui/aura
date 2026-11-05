@@ -568,6 +568,50 @@ class SnapshotReplayTest {
         }
     }
 
+    @Test
+    void snapshotHttpClientReportsInterruptionAsCancellation() throws Exception {
+        java.util.concurrent.CountDownLatch requestStarted = new java.util.concurrent.CountDownLatch(1);
+        HttpServer server = HttpServer.create(new InetSocketAddress(0), 0);
+        server.createContext("/stalled", exchange -> {
+            exchange.sendResponseHeaders(200, 1);
+            requestStarted.countDown();
+            try (OutputStream output = exchange.getResponseBody()) {
+                output.flush();
+                Thread.sleep(5_000);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        });
+        server.start();
+        try {
+            URI base = URI.create("http://localhost:" + server.getAddress().getPort());
+            SnapshotHttpClient client = new SnapshotHttpClient("local", base,
+                    HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(2)).build(),
+                    Duration.ofSeconds(5), 1024);
+            java.util.concurrent.atomic.AtomicReference<Throwable> failure =
+                    new java.util.concurrent.atomic.AtomicReference<>();
+            java.util.concurrent.atomic.AtomicBoolean interrupted =
+                    new java.util.concurrent.atomic.AtomicBoolean();
+            Thread caller = new Thread(() -> {
+                try {
+                    client.get("/stalled", String.class);
+                } catch (Throwable error) {
+                    failure.set(error);
+                    interrupted.set(Thread.currentThread().isInterrupted());
+                }
+            }, "snapshot-http-interrupt-test");
+            caller.start();
+            assertThat(requestStarted.await(3, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+            caller.interrupt();
+            caller.join(3_000);
+            assertThat(caller.isAlive()).isFalse();
+            assertThat(failure.get()).isInstanceOf(java.util.concurrent.CancellationException.class);
+            assertThat(interrupted).isTrue();
+        } finally {
+            server.stop(0);
+        }
+    }
+
     private ExceptionSnapshot recordStackSnapshot(Path dir, int maxStackTraceSize) throws Exception {
         AuraConfig config = new AuraConfig().snapshot(s -> s.enabled(true).async(false).dir(dir)
                 .maxStackTraceSize(maxStackTraceSize));

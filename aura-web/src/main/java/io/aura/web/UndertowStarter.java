@@ -44,6 +44,16 @@ import java.util.concurrent.ConcurrentHashMap;
 public class UndertowStarter implements AuraStarter {
 
     private static final Logger log = LoggerFactory.getLogger(UndertowStarter.class);
+    /**
+     * The route order every dispatch uses: fewest placeholders first, so /users/new is preferred
+     * over /users/{id}, and the deeper literal path wins when the counts tie. A dev reload has to
+     * sort by the same key or the reloaded server answers requests the booted one would not.
+     */
+    private static final Comparator<CompiledRoute> ROUTE_PRECEDENCE =
+            Comparator.comparingInt((CompiledRoute r) -> r.paramNames().size())
+                    .thenComparing(Comparator.comparingLong(
+                            (CompiledRoute r) -> r.rawPath().chars().filter(c -> c == '/').count())
+                            .reversed());
     private Undertow server;
     private GracefulShutdownHandler shutdownHandler;
     private ScheduledExecutorService timeoutScheduler;
@@ -69,8 +79,7 @@ public class UndertowStarter implements AuraStarter {
         router = RouteAssembler.assemble(app);
 
         compiledRoutes = compile(router, "", new ArrayList<>(app.beforeHandlers()), new ArrayList<>(app.afterHandlers()));
-        compiledRoutes.sort(Comparator.comparingInt((CompiledRoute r) -> r.paramNames().size())
-                .thenComparing(Comparator.comparingLong((CompiledRoute r) -> r.rawPath().chars().filter(c -> c == '/').count()).reversed()));
+        compiledRoutes.sort(ROUTE_PRECEDENCE);
         detectDuplicateRoutes(compiledRoutes);
 
         if (!compiledRoutes.isEmpty()) {
@@ -88,6 +97,7 @@ public class UndertowStarter implements AuraStarter {
         webSocketConnections = new WebSocketConnectionRegistry(
                 app.maxWebSocketConnections(), app.webSocketIdleTimeout());
         compiledWsRoutes = compileWsRoutes(router);
+        detectDuplicateWsRoutes(compiledWsRoutes);
 
         String staticPath = app.staticFilesPath();
         if (staticPath != null) {
@@ -204,12 +214,12 @@ public class UndertowStarter implements AuraStarter {
 
         var newCompiled = compile(newRouter, "",
                 new java.util.ArrayList<>(app.beforeHandlers()), new java.util.ArrayList<>(app.afterHandlers()));
-        newCompiled.sort(java.util.Comparator.comparingInt((CompiledRoute r) -> r.paramNames().size())
-                .thenComparing(CompiledRoute::rawPath));
+        newCompiled.sort(ROUTE_PRECEDENCE);
         detectDuplicateRoutes(newCompiled);
 
         this.compiledRoutes = newCompiled;
         this.compiledWsRoutes = compileWsRoutes(newRouter);
+        detectDuplicateWsRoutes(this.compiledWsRoutes);
         this.router = newRouter;
 
         log.info("[aura-dev] routes reloaded in {}ms", System.currentTimeMillis() - t0);
@@ -217,7 +227,12 @@ public class UndertowStarter implements AuraStarter {
 
     private void dispatch(HttpServerExchange exchange) {
         String method = exchange.getRequestMethod().toString();
-        String path = exchange.getRequestURI();
+        String rawPath = exchange.getRequestURI();
+        // The built-in endpoints and diagnostics read the decoded form; route matching takes the
+        // raw form so it decodes exactly once. A path that cannot be decoded still goes through
+        // matching, where it is refused, and therefore falls through to the ordinary 404.
+        String path = CompiledRoute.decodePath(rawPath);
+        if (path == null) path = rawPath;
 
         GuardOutcome guardOutcome = guards.evaluate(new HttpGuardedRequest(exchange));
         if (!guardOutcome.proceed()) {
@@ -245,7 +260,7 @@ public class UndertowStarter implements AuraStarter {
         // WebSocket upgrade
         if ("GET".equals(method) && isWebSocketUpgrade(exchange)) {
             for (CompiledWsRoute wsRoute : compiledWsRoutes) {
-                Map<String, String> params = wsRoute.match(path);
+                Map<String, String> params = wsRoute.match(rawPath);
                 if (params == null) continue;
 
                 Context ctx = new Context(exchange, params, app, null,
@@ -271,7 +286,7 @@ public class UndertowStarter implements AuraStarter {
 
         for (CompiledRoute route : compiledRoutes) {
             if (!route.method().equals(method)) continue;
-            Map<String, String> params = route.match(path);
+            Map<String, String> params = route.match(rawPath);
             if (params == null) continue;
 
             String reqId = resolveRequestId(exchange);
@@ -369,7 +384,7 @@ public class UndertowStarter implements AuraStarter {
         if ("HEAD".equals(method)) {
             for (CompiledRoute route : compiledRoutes) {
                 if (!"GET".equals(route.method())) continue;
-                Map<String, String> params = route.match(path);
+                Map<String, String> params = route.match(rawPath);
                 if (params == null) continue;
                 Context ctx = new Context(exchange, params, app, null,
                         requestCancellation(exchange));
@@ -476,15 +491,13 @@ public class UndertowStarter implements AuraStarter {
     static List<CompiledRoute> compileRoutes(BaseRouter router, AuraWebRuntime app) {
         List<CompiledRoute> routes = new UndertowStarter().compile(router, "",
                 new ArrayList<>(app.beforeHandlers()), new ArrayList<>(app.afterHandlers()));
-        routes.sort(Comparator.comparingInt((CompiledRoute r) -> r.paramNames().size())
-                .thenComparing(Comparator.comparingLong((CompiledRoute r) -> r.rawPath().chars().filter(c -> c == '/').count()).reversed()));
+        routes.sort(ROUTE_PRECEDENCE);
         return routes;
     }
 
     static List<CompiledRoute> compileRoutes(BaseRouter router) {
         List<CompiledRoute> routes = new UndertowStarter().compile(router, "", new ArrayList<>(), new ArrayList<>());
-        routes.sort(Comparator.comparingInt((CompiledRoute r) -> r.paramNames().size())
-                .thenComparing(Comparator.comparingLong((CompiledRoute r) -> r.rawPath().chars().filter(c -> c == '/').count()).reversed()));
+        routes.sort(ROUTE_PRECEDENCE);
         return routes;
     }
 
@@ -511,13 +524,41 @@ public class UndertowStarter implements AuraStarter {
         return result;
     }
 
+        /**
+     * Two templates that differ only in what the placeholder is called match exactly the same
+     * requests, so which one answers is decided by the sort above rather than by what the author
+     * declared. The name is the only thing that differs, so the comparison drops it.
+     */
+    /**
+     * WebSocket endpoints are all GET upgrades, so two templates that differ only in the name of
+     * a placeholder answer the same handshake. The HTTP table already refuses that shape; the
+     * WebSocket table has to refuse it at the same point or the winner is decided by sort order.
+     */
+    static void detectDuplicateWsRoutes(List<CompiledWsRoute> routes) {
+        java.util.Map<String, String> seen = new java.util.HashMap<>();
+        for (CompiledWsRoute route : routes) {
+            String path = route.rawPath();
+            String shape = path.replaceAll("\\{[a-zA-Z_][a-zA-Z0-9_]*}", "{}");
+            String previous = seen.putIfAbsent(shape, path);
+            if (previous == null) continue;
+            throw new IllegalStateException("Duplicate WebSocket route: " + path + " and "
+                    + previous + " match the same requests");
+        }
+    }
+
     static void detectDuplicateRoutes(List<CompiledRoute> routes) {
-        var seen = new java.util.HashSet<String>();
+        java.util.Map<String, String> seen = new java.util.HashMap<>();
         for (CompiledRoute route : routes) {
-            String key = route.method() + " " + route.rawPath();
-            if (!seen.add(key)) {
-                throw new IllegalStateException("Duplicate route: " + key);
+            String shape = route.method() + " "
+                    + route.rawPath().replaceAll("\\{[a-zA-Z_][a-zA-Z0-9_]*}", "{}");
+            String previous = seen.putIfAbsent(shape, route.rawPath());
+            if (previous == null) continue;
+            if (previous.equals(route.rawPath())) {
+                throw new IllegalStateException(
+                        "Duplicate route: " + route.method() + " " + route.rawPath());
             }
+            throw new IllegalStateException("Duplicate route: " + route.rawPath() + " and "
+                    + previous + " match the same requests");
         }
     }
 

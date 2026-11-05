@@ -88,6 +88,24 @@ record, the stage-by-stage log, and the migration table.
   `ScalarType.fromString(value, type)` and `ScalarType.isBody(type)`.
   `ParamResolver` keeps the request-shaped half: `create(Parameter)`,
   `isRequired(type, source)` and `resolveString(ctx, name)`.
+- Registering the same type twice now fails at startup instead of silently
+  replacing the first bean, and a named registration no longer doubles as a type
+  registration: `require(Class)` must see either one candidate or none, and an
+  ambiguous type fails instead of picking one. Use `require(name, Class)` or
+  `find(name, type)` for named lookups.
+- Calling `start(args)` after `prepare()` or after a module is installed is
+  refused: arguments are part of the startup decision and must be supplied before
+  the runtime freezes its configuration.
+- Two routes that match the same shape (`/orders/{id}` and `/orders/{name}`,
+  including two WebSocket templates) now fail at startup instead of one winning
+  by sort order.
+- A request body above `maxBodySize` is `413 REQUEST_BODY_TOO_LARGE`, not a 500.
+- `transactionIndependent` distinguishes a timeout that rolled back, one whose
+  commit completed after the deadline, and one whose outcome is unknown, instead
+  of reporting every timeout the same way.
+- A cron expression whose local time falls in a DST overlap fires at the later
+  occurrence, and `shutdownPool()` no longer makes the shared transaction pool
+  permanently unusable.
 
 ### Added
 
@@ -201,6 +219,38 @@ record, the stage-by-stage log, and the migration table.
   `McpWire`, at most one unchecked cast may sit in the module, and
   `toJavaObject(Map.class)` may not return.
 
+### Security
+
+- CSRF protection is enforced outside `dev` by default and grows teeth: an
+  enforced configuration must name `aura.public-origin`, and neither the request's
+  `Host` nor `X-Forwarded-Host` can stand in for it. A trusted proxy explains how
+  a request arrived, not which origin the operator intended. Opt out only with an
+  explicit `aura.csrf.enabled=false`.
+- CORS answers a preflight only when the request carries both `Origin` and
+  `Access-Control-Request-Method`. Ordinary `OPTIONS` requests now reach their
+  route, and an explicit allow-list is no longer widened by echoing every header
+  the caller asked for.
+- JWT verification pins `alg` to `HS256` and `typ` to `JWT`, checks `exp` and
+  `nbf` with a configurable clock skew, optionally matches `iss`/`aud`, and
+  refuses a subject that decodes to control characters.
+- An AI provider refuses to send an API key, and an MCP bridge refuses to send a
+  schema token, over plaintext `http://` unless the caller opts in explicitly.
+- `ctx.header()` rejects a name or value containing CR/LF instead of letting the
+  container split it into a second header.
+- A plain `IllegalArgumentException` no longer reflects its message to the client;
+  the response carries `VALIDATION_ERROR` and a generic reason.
+
+### Changed
+
+- `aura.cors=false` disables CORS instead of becoming the literal allowed origin
+  `"false"`; `maxBodySize` is bounded at 1 GiB; an unknown `aura.*` property is
+  logged at startup rather than silently ignored.
+- Module configuration binding reports `AURA_CONFIG_INVALID` with the offending
+  key, and a boolean must be `true` or `false` rather than anything non-`true`
+  becoming `false`.
+- `BeanValidator` runs the `Validatable` hook for plain objects as well as
+  records.
+
 ### Fixed
 
 - `aura.schema.enabled=true` in a non-dev environment used to be a flag that did
@@ -225,6 +275,50 @@ record, the stage-by-stage log, and the migration table.
 - `CorsConfigTest2` matched no Surefire include pattern and never ran in a normal
   build; renamed to `CorsEnforcementTest`, and `mvn verify` runs
   `ArchitectureTest` instead of excluding it.
+- `ModuleGraph` follows SemVer for caret ranges (`^0.2.3` no longer accepts
+  `0.3.0`), accepts open-ended ranges such as `[,2.0)`, and no longer reads a
+  non-numeric version suffix as a major version.
+- `AuraApp.start(String...)` parses every argument before applying any of them, so
+  a rejected `--config=` no longer leaves `--dev` or a partial property override
+  behind.
+- `HealthProbe` no longer shares one static worker pool across runtimes: each
+  invocation owns its bounded executor, and the deadline alone decides a check
+  whose task could not start in time.
+- `SnapshotRecorder` enforces its collection caps while the snapshot is written,
+  so a concurrent scope mutation cannot grow the redacted document past the
+  bound. `SnapshotHttpClient` reports caller interruption as cancellation
+  instead of a 502 dependency failure and restores the interrupt flag.
+- An AI retry charges provider-reported usage from the failed attempt against the
+  request budget before the next attempt, instead of only counting a successful
+  response.
+- `IpSafety` unwraps NAT64 (`64:ff9b::/96`) to its embedded IPv4 address and
+  refuses Teredo tunnels (`2001::/32`).
+- A retained idempotency key is `IDEMPOTENCY_RETAINED` for every
+  `WorkflowExecutionStore`, including terminal executions in stores that do not
+  implement the durable lease SPI; the previous non-durable path silently
+  returned the old result.
+- Schema migrations order non-numeric versions by SemVer, split PostgreSQL
+  dollar-quoted bodies without breaking on inner semicolons, and serialise
+  concurrent runs across processes through a `_migration_lock` row. The runner
+  creates that table on first use.
+- The Liquibase adapter serialises updates within a JVM. Liquibase keeps per-run
+  lock bookkeeping on shared command-step singletons, so two concurrent updates
+  could leave the changelog lock held and block every later run; cross-process
+  updates still serialise through Liquibase's own `DATABASECHANGELOGLOCK`.
+- `Row.getBool` reads numeric `TINYINT`/`Byte` flags as booleans, and
+  `getInt`/`getLong` accept integral `BigDecimal`/`BigInteger` values while
+  logging a warning when the conversion truncates or overflows.
+- OpenAPI generates unique `operationId` values when distinct paths normalise to
+  the same name, and publishes `400`, `401`/`403` when applicable, and `500`
+  alongside `200`.
+- Generated routes reject a missing primitive or `char` parameter with the same
+  400 as reflection (`BaseContext.requireParameter`), `MockGuardedRequest.hostName`
+  strips IPv6 brackets, an after-handler failure is logged instead of swallowed,
+  and `InMemoryConversationStore` bounds conversation count and identifier
+  length.
+- The Flyway and Liquibase adapter tests run against disposable PostgreSQL
+  containers through Testcontainers instead of skipping unless
+  `AURA_MIGRATION_JDBC_URL` is set.
 
 ## [1.0.0] - 2026-10-11
 

@@ -78,7 +78,13 @@ final class CronSchedule {
                 for (int minute = hour == earliest.getHour() ? earliest.getMinute() : 0;
                         minute < 60; minute++) {
                     if (!get(minutes, minute)) continue;
-                    return ZonedDateTime.of(LocalDateTime.of(day, LocalTime.of(hour, minute)), zone);
+                    ZonedDateTime candidate =
+                            ZonedDateTime.of(LocalDateTime.of(day, LocalTime.of(hour, minute)), zone);
+                    // A fall-back overlap resolves to the offset that was in effect before the
+                    // transition, so the candidate can name a minute that has already gone by.
+                    // The later offset is the occurrence that is still to come.
+                    if (!candidate.isAfter(from)) candidate = candidate.withLaterOffsetAtOverlap();
+                    if (candidate.isAfter(from)) return candidate;
                 }
             }
         }

@@ -19,6 +19,7 @@ public final class OpenApiGenerator {
         info.put("version", version == null || version.isBlank() ? "1.0.0" : version);
 
         Map<String, Map<String, Object>> paths = new LinkedHashMap<>();
+        java.util.Set<String> operationIds = new java.util.LinkedHashSet<>();
         if (routes != null) for (Route route : routes) {
             // OpenAPI documents request/response operations. A handshake that upgrades to a
             // persistent connection has neither, so it is skipped here on purpose rather than
@@ -26,7 +27,7 @@ public final class OpenApiGenerator {
             if (route.isWebSocket()) continue;
             Map<String, Object> operation = new LinkedHashMap<>();
             if (route.description() != null) operation.put("description", route.description());
-            operation.put("operationId", operationId(route));
+            operation.put("operationId", uniqueOperationId(operationId(route), operationIds));
             if (route.authenticated()) operation.put("x-aura-authenticated", true);
             if (route.permission() != null) operation.put("x-aura-permission", route.permission());
             List<Map<String, Object>> parameters = new ArrayList<>();
@@ -62,7 +63,13 @@ public final class OpenApiGenerator {
                 success.put("content", Map.of("application/json",
                         Map.of("schema", route.responseSchema())));
             }
-            operation.put("responses", Map.of("200", success));
+            Map<String, Object> responses = new LinkedHashMap<>();
+            responses.put("200", success);
+            responses.put("400", Map.of("description", "Bad Request"));
+            if (route.authenticated()) responses.put("401", Map.of("description", "Unauthorized"));
+            if (route.permission() != null) responses.put("403", Map.of("description", "Forbidden"));
+            responses.put("500", Map.of("description", "Internal Server Error"));
+            operation.put("responses", responses);
             paths.computeIfAbsent(route.path(), ignored -> new LinkedHashMap<>())
                     .put(route.method().toLowerCase(java.util.Locale.ROOT), operation);
         }
@@ -78,6 +85,16 @@ public final class OpenApiGenerator {
         return route.method().toLowerCase(java.util.Locale.ROOT) + "_" + route.path()
                 .replaceAll("[^A-Za-z0-9]+", "_")
                 .replaceAll("^_+|_+$", "");
+    }
+
+    /** Two paths can normalize to the same id (for example {@code /a-b} and {@code /a_b}). */
+    private static String uniqueOperationId(String base, java.util.Set<String> used) {
+        String candidate = base;
+        int suffix = 1;
+        while (!used.add(candidate)) {
+            candidate = base + "_" + (++suffix);
+        }
+        return candidate;
     }
 
     /**

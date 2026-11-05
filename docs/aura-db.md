@@ -27,9 +27,14 @@ Db analytics = Db.create("analytics", existingDataSource);
 ### Cleanup
 
 ```java
-// Shutdown the independent transaction thread pool (call on app stop)
+// Shutdown the process-wide independent transaction thread pool (call on app stop)
 Db.shutdownPool();
 ```
+
+`db.close()` closes that Db's Hikari connections but deliberately leaves the shared
+`transactionIndependent` executor alone, because several Db instances may use it. The pool is
+re-armed on demand: a Db created after `shutdownPool()` gets a fresh executor rather than one
+that rejects every task.
 
 ### Query Builder
 

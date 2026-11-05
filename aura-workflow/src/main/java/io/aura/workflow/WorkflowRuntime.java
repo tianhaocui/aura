@@ -694,9 +694,7 @@ public final class WorkflowRuntime<C> implements AutoCloseable {
             java.util.Optional<WorkflowExecution> execution = store.findByIdempotencyKey(
                     workflowId, idempotencyKey);
             if (execution.isPresent()) {
-                WorkflowExecution retained = execution.get();
-                if (isTerminal(retained.status())) return java.util.Optional.of(new WorkflowResult(retained, null));
-                throw retainedIdempotency(retained.executionId());
+                throw retainedIdempotency(execution.get().executionId());
             }
             return java.util.Optional.empty();
         } catch (WorkflowException failure) {

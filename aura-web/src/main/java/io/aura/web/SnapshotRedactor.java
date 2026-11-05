@@ -32,6 +32,10 @@ class SnapshotRedactor {
     private static final Pattern ABSOLUTE_PATH_PATTERN =
             Pattern.compile("(?<![\\w./-])(?:/[A-Za-z0-9._~-]+){2,}");
     private static final Pattern WINDOWS_PATH_PATTERN = Pattern.compile("[A-Za-z]:\\\\(?:[^\\\\\\s\"'()]+)(?:\\\\[^\\\\\\s\"'()]+)*\\\\?");
+    private static final Pattern MULTIPART_PART =
+            Pattern.compile("(?s)(--[^\\r\\n]+\\r?\\n)(.*?)(?=\\r?\\n--|\\z)");
+    private static final Pattern PART_NAME =
+            Pattern.compile("(?i)\\bname\\s*=\\s*(?:\"([^\"]*)\"|'([^']*)'|([^;\\r\\n]+))");
     private final SnapshotOptions options;
 
     SnapshotRedactor(SnapshotOptions options) {
@@ -195,14 +199,70 @@ class SnapshotRedactor {
     }
 
     private String redactFieldText(String text) {
-        String result = text;
+        String result = redactMultipart(text);
         for (String field : options.redactFields()) {
-            result = result.replaceAll("(?i)(\"" + java.util.regex.Pattern.quote(field)
-                    + "\"\\s*:\\s*\")[^\"]*(\")", "$1<redacted>$2");
-            result = result.replaceAll("(?i)(" + java.util.regex.Pattern.quote(field)
-                    + "=)[^&\\s]+", "$1<redacted>");
+            String name = java.util.regex.Pattern.quote(field);
+            // A JSON value ends at the first *unescaped* quote, so the old [^"]* cut a secret
+            // holding an escaped quote in half and left the rest of it in the snapshot.
+            result = result.replaceAll("(?i)(\"" + name + "\"\\s*:\\s*\")(?:[^\"\\\\]|\\\\.)*(\")",
+                    "$1<redacted>$2");
+            // A body that did not parse as JSON is still a body: XML elements, XML attributes and
+            // `field: value` lines carry the same secrets and have no key tree for the walk above.
+            result = result.replaceAll("(?is)(<" + name + "(?:\\s[^<>]*)?>)[^<]*(</" + name + "\\s*>)",
+                    "$1<redacted>$2");
+            result = result.replaceAll("(?i)(" + name + "[ \\t]*=[ \\t]*\")([^\"]*)(\")",
+                    "$1<redacted>$3");
+            // Quoted values are handled above, so this pass stops at markup as well as at the
+            // delimiters of a query string -- otherwise it swallows the rest of the document.
+            result = result.replaceAll("(?i)(" + name + "=)[^&\\s<>\"]+", "$1<redacted>");
+            result = result.replaceAll("(?im)^([ \\t]*" + name + "[ \\t]*:[ \\t]*)(.*)$",
+                    "$1<redacted>");
         }
         return result;
+    }
+
+    /**
+     * A multipart part names its field in a header line and puts the value after a blank line, so
+     * no {@code field=value} or {@code "field":"value"} pass can see them together. Each part is
+     * checked by name and its value replaced as one unit; the boundary and the other parts keep
+     * their shape so the snapshot still shows what was sent.
+     */
+    private String redactMultipart(String text) {
+        if (text == null) return null;
+        String lower = text.toLowerCase(Locale.ROOT);
+        if (!lower.contains("content-disposition:") || !lower.contains("name=")) return text;
+        Matcher part = MULTIPART_PART.matcher(text);
+        StringBuffer out = new StringBuffer();
+        while (part.find()) {
+            String headersAndBody = part.group(2);
+            int separator = headersAndBody.indexOf("\r\n\r\n");
+            int separatorLength = 4;
+            if (separator < 0) {
+                separator = headersAndBody.indexOf("\n\n");
+                separatorLength = 2;
+            }
+            if (separator < 0 || !hasSensitivePartName(headersAndBody.substring(0, separator))) {
+                part.appendReplacement(out, Matcher.quoteReplacement(part.group()));
+                continue;
+            }
+            String replacement = part.group(1)
+                    + headersAndBody.substring(0, separator)
+                    + headersAndBody.substring(separator, separator + separatorLength)
+                    + "<redacted>";
+            part.appendReplacement(out, Matcher.quoteReplacement(replacement));
+        }
+        part.appendTail(out);
+        return out.toString();
+    }
+
+    private boolean hasSensitivePartName(String headers) {
+        Matcher name = PART_NAME.matcher(headers);
+        while (name.find()) {
+            String value = name.group(1) != null ? name.group(1)
+                    : name.group(2) != null ? name.group(2) : name.group(3);
+            if (value != null && isSensitiveField(value.trim())) return true;
+        }
+        return false;
     }
 
     private String sanitizeRawQuery(String rawQuery) {

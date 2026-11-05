@@ -25,13 +25,14 @@ import java.util.List;
  *   <li>IPv6: {@code ::} (unspecified), {@code ::1} (loopback), {@code fc00::/7} (unique local,
  *       includes {@code fd00::/8}), {@code fe80::/10} (link-local), {@code fec0::/10} (legacy
  *       site-local), {@code ff00::/8} (multicast), {@code 2002::/16} (6to4, often tunnels back
- *       to private IPv4), {@code 2001:db8::/32} (documentation)</li>
+ *       to private IPv4), {@code 2001::/32} (Teredo, tunnels IPv4), {@code 2001:db8::/32}
+ *       (documentation), and {@code 64:ff9b::/96} (NAT64, evaluated through its embedded IPv4)</li>
  * </ul>
  *
  * <p>All checks are pure byte-range comparisons and never consult local network interfaces,
  * so results are deterministic across environments. IPv4-embedded IPv6 addresses
- * ({@code ::ffff:a.b.c.d} and deprecated compatible forms) are unwrapped and evaluated
- * against the IPv4 blacklist.</p>
+ * ({@code ::ffff:a.b.c.d}, deprecated compatible forms, and the NAT64 well-known prefix) are
+ * unwrapped and evaluated against the IPv4 blacklist.</p>
  *
  * <p>No third-party dependencies; uses only {@link InetAddress}, {@link Inet4Address} and
  * {@link Inet6Address}.</p>
@@ -57,7 +58,7 @@ public final class IpSafety {
             return isPublicIpv4(bytes);
         }
         if (bytes.length == 16) {
-            if (isIpv4Embedded(bytes)) {
+            if (isIpv4Embedded(bytes) || isNat64(bytes)) {
                 return isPublicIpv4(new byte[] {bytes[12], bytes[13], bytes[14], bytes[15]});
             }
             return isPublicIpv6(bytes);
@@ -152,6 +153,7 @@ public final class IpSafety {
         if (b0 == 0xfe && (b1 & 0xc0) == 0xc0) return false;         // fec0::/10 legacy site-local
         if (b0 == 0xff) return false;                                // ff00::/8 multicast
         if (b0 == 0x20 && b1 == 0x02) return false;                  // 2002::/16 6to4
+        if (b0 == 0x20 && b1 == 0x01 && b[2] == 0 && b[3] == 0) return false; // 2001::/32 Teredo
         if (b0 == 0x20 && b1 == 0x01 && (b[2] & 0xff) == 0x0d && (b[3] & 0xff) == 0xb8) return false; // 2001:db8::/32
         return true;
     }
@@ -164,6 +166,16 @@ public final class IpSafety {
         boolean mapped = (b[10] & 0xff) == 0xff && (b[11] & 0xff) == 0xff;
         boolean compatible = b[10] == 0 && b[11] == 0;
         return mapped || compatible;
+    }
+
+    /** True for the NAT64 well-known prefix {@code 64:ff9b::/96} with an IPv4 suffix. */
+    private static boolean isNat64(byte[] b) {
+        if ((b[0] & 0xff) != 0x00 || (b[1] & 0xff) != 0x64
+                || (b[2] & 0xff) != 0xff || (b[3] & 0xff) != 0x9b) return false;
+        for (int i = 4; i < 12; i++) {
+            if (b[i] != 0) return false;
+        }
+        return true;
     }
 
     private static boolean isAllZero(byte[] b) {

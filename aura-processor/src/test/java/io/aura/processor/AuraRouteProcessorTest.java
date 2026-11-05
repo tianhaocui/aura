@@ -88,7 +88,9 @@ class AuraRouteProcessorTest {
                 .contains("Short.parseShort(ctx.query(\"boxedShort\"))")
                 .contains("Byte.parseByte(ctx.query(\"boxedByte\"))")
                 .contains("ctx.query(\"boxedChar\")")
-                .contains("ctx.query(\"c\") == null || ctx.query(\"c\").isEmpty()")
+                .contains("io.aura.port.BaseContext.requireParameter(ctx.query(\"s\"), \"s\")")
+                .contains("io.aura.port.BaseContext.requireParameter(ctx.query(\"b\"), \"b\")")
+                .contains("io.aura.port.BaseContext.requireCharacter(ctx.query(\"c\"), \"c\")")
                 .doesNotContain("ctx.bodyOrThrow(java.lang.Short.class)")
                 .doesNotContain("ctx.bodyOrThrow(java.lang.Byte.class)")
                 .doesNotContain("ctx.bodyOrThrow(java.lang.Character.class)");

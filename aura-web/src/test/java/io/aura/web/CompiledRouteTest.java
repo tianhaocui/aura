@@ -72,4 +72,62 @@ class CompiledRouteTest {
                 List.of(), NOOP, List.of(), Map.of());
         assertThat(route.rawPath()).isEqualTo("/api/user/{id}");
     }
+
+    @Test
+    void aParameterIsHandedToTheHandlerDecoded() {
+        CompiledRoute route = compile("GET", "/user/{name}");
+
+        assertThat(route.match("/user/ada%20lint")).containsEntry("name", "ada lint");
+        assertThat(route.match("/user/%E5%8C%BF%E5%90%8D")).containsEntry("name", "匿名");
+    }
+
+    @Test
+    void anEncodedSlashIsNotASecondSegment() {
+        CompiledRoute route = compile("GET", "/user/{id}");
+
+        // The raw form holds no slash, so the wildcard would take it, and a handler that joins the
+        // value into a path would be handed two segments where the route promised one.
+        assertThat(route.match("/user/a%2Fb")).isNull();
+        assertThat(route.match("/user/a%2fb")).isNull();
+    }
+
+    @Test
+    void aSegmentThatWasNeverEncodedIsNotInvented() {
+        CompiledRoute route = compile("GET", "/user/{id}");
+
+        assertThat(route.match("/user/50%off")).containsEntry("id", "50%off");
+    }
+
+    @Test
+    void aStaticPathIsMatchedAfterTheRequestIsDecoded() {
+        CompiledRoute route = compile("GET", "/files/a b");
+
+        assertThat(route.match("/files/a%20b")).isNotNull();
+        assertThat(route.match("/files/a b")).isNotNull();
+    }
+
+    @Test
+    void aStaticPathCanContainDecodedUnicode() {
+        CompiledRoute route = compile("GET", "/文件");
+
+        assertThat(route.match("/%E6%96%87%E4%BB%B6")).isNotNull();
+    }
+
+    @Test
+    void aBackslashOrMalformedUtf8IsNotASegment() {
+        CompiledRoute route = compile("GET", "/user/{id}");
+
+        assertThat(route.match("/user/a%5Cb")).isNull();
+        assertThat(route.match("/user/%FF")).isNull();
+        assertThat(route.match("/user/%00")).isNull();
+    }
+
+    @Test
+    void aDoubleEncodedSlashIsDecodedOnlyOnce() {
+        CompiledRoute route = compile("GET", "/user/{id}");
+
+        // %252F names the literal text "%2F", not a slash; decoding it twice would turn a value
+        // the client sent into a path the route never described.
+        assertThat(route.match("/user/a%252Fb")).containsEntry("id", "a%2Fb");
+    }
 }

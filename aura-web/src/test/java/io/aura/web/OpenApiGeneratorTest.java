@@ -42,6 +42,33 @@ class OpenApiGeneratorTest {
                 .isTrue();
     }
 
+    @Test
+    void operationIdsStayUniqueWhenDistinctPathsNormalizeAlike() {
+        Route dashed = Route.of("GET", "/a-b", (BaseHandler) ctx -> { });
+        Route underscored = Route.of("GET", "/a_b", (BaseHandler) ctx -> { });
+
+        JSONObject document = SchemaWire.document(
+                OpenApiGenerator.generate("Orders", "1.0.0", List.of(dashed, underscored)));
+
+        assertThat(SchemaWire.operation(document, "/a-b", "GET").getString("operationId"))
+                .isEqualTo("get_a_b");
+        assertThat(SchemaWire.operation(document, "/a_b", "GET").getString("operationId"))
+                .isEqualTo("get_a_b_2");
+    }
+
+    @Test
+    void publishesFailureResponsesAlongsideSuccess() {
+        Route route = Route.of("GET", "/secure/{id}", (BaseHandler) ctx -> { })
+                .requireAuth("orders:read")
+                .withParams(List.of(new ApiParameter("id", "long", "path", true, null)));
+
+        JSONObject responses = SchemaWire.operation(SchemaWire.document(
+                OpenApiGenerator.generate("Orders", "1.0.0", List.of(route))), "/secure/{id}", "GET")
+                .getJSONObject("responses");
+
+        assertThat(responses.keySet()).contains("200", "400", "401", "403", "500");
+    }
+
     enum Channel { SMS, EMAIL }
 
     @Test

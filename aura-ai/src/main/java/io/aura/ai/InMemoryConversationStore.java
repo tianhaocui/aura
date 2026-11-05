@@ -9,19 +9,35 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /** Bounded reference conversation store for tests, local prototypes, and deterministic examples. */
 public final class InMemoryConversationStore implements ConversationStore {
+    public static final int DEFAULT_MAX_CONVERSATIONS = 10_000;
+    public static final int DEFAULT_MAX_ID_LENGTH = 256;
+
     private final int maxMessages;
     private final long maxCharacters;
+    private final int maxConversations;
+    private final int maxIdLength;
     private final Map<String, State> conversations = new ConcurrentHashMap<>();
 
     public InMemoryConversationStore(int maxMessages, long maxCharacters) {
+        this(maxMessages, maxCharacters, DEFAULT_MAX_CONVERSATIONS, DEFAULT_MAX_ID_LENGTH);
+    }
+
+    public InMemoryConversationStore(int maxMessages, long maxCharacters,
+                                     int maxConversations, int maxIdLength) {
         if (maxMessages < 1) throw new IllegalArgumentException("maxMessages must be positive");
         if (maxCharacters < 1) throw new IllegalArgumentException("maxCharacters must be positive");
+        if (maxConversations < 1) throw new IllegalArgumentException("maxConversations must be positive");
+        if (maxIdLength < 1) throw new IllegalArgumentException("maxIdLength must be positive");
         this.maxMessages = maxMessages;
         this.maxCharacters = maxCharacters;
+        this.maxConversations = maxConversations;
+        this.maxIdLength = maxIdLength;
     }
 
     public int maxMessages() { return maxMessages; }
     public long maxCharacters() { return maxCharacters; }
+    public int maxConversations() { return maxConversations; }
+    public int maxIdLength() { return maxIdLength; }
 
     @Override public ConversationSnapshot load(String conversationId) {
         String id = requireId(conversationId);
@@ -37,7 +53,7 @@ public final class InMemoryConversationStore implements ConversationStore {
         if (message.characterCount() > maxCharacters) {
             throw new IllegalArgumentException("message exceeds maxCharacters");
         }
-        State state = conversations.computeIfAbsent(id, ignored -> new State());
+        State state = stateFor(id);
         synchronized (state) {
             if (expectedVersion >= 0 && expectedVersion != state.version) {
                 throw new ConversationConflictException(id, expectedVersion, state.version);
@@ -52,8 +68,30 @@ public final class InMemoryConversationStore implements ConversationStore {
         }
     }
 
-    private static String requireId(String value) {
+    /**
+     * Creates the state for a new conversation while holding the map monitor so the
+     * conversation-count bound cannot be exceeded by concurrent first appends.
+     */
+    private State stateFor(String id) {
+        State existing = conversations.get(id);
+        if (existing != null) return existing;
+        synchronized (conversations) {
+            existing = conversations.get(id);
+            if (existing != null) return existing;
+            if (conversations.size() >= maxConversations) {
+                throw new IllegalStateException("conversation store is full: " + maxConversations);
+            }
+            State created = new State();
+            conversations.put(id, created);
+            return created;
+        }
+    }
+
+    private String requireId(String value) {
         if (value == null || value.isBlank()) throw new IllegalArgumentException("conversationId must not be blank");
+        if (value.length() > maxIdLength) {
+            throw new IllegalArgumentException("conversationId exceeds maxIdLength: " + maxIdLength);
+        }
         return value;
     }
 

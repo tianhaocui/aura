@@ -20,6 +20,7 @@ import java.util.function.BiConsumer;
  */
 final class CronScheduler implements AutoCloseable {
     private static final long CLOSE_AWAIT_MILLIS = 5_000L;
+    private static final long MIN_ARM_DELAY_NANOS = TimeUnit.SECONDS.toNanos(1);
 
     private final ScheduledExecutorService executor;
     private final Clock clock;
@@ -86,8 +87,12 @@ final class CronScheduler implements AutoCloseable {
 
         private void arm(ZonedDateTime now) {
             if (closed) return;
-            long delayNanos = Math.max(0L,
-                    Duration.between(now, contribution.schedule().next(now)).toNanos());
+            long delayNanos = Duration.between(now, contribution.schedule().next(now)).toNanos();
+            // A zero-delay arm runs fire() again the instant it finishes, so if a schedule ever
+            // resolved to a past instant the slot would spin its thread and re-run the task
+            // instead of waiting for the next occurrence. One second keeps a real fire time and
+            // bounds any regression at one retry per second.
+            if (delayNanos < MIN_ARM_DELAY_NANOS) delayNanos = MIN_ARM_DELAY_NANOS;
             try {
                 future = executor.schedule(this::fire, delayNanos, TimeUnit.NANOSECONDS);
             } catch (RejectedExecutionException stopping) {

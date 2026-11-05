@@ -153,7 +153,9 @@ class SnapshotRecorder {
                         rootType(cause), null, redactor.stackText(stackTrace(cause))),
                 response(status, scope),
                 env,
-                scope != null ? scope.externalCalls().stream().map(this::redactExternalCall).toList() : List.of(),
+                scope != null ? scope.externalCalls().stream()
+                        .limit(MAX_SNAPSHOT_COLLECTION_ENTRIES)
+                        .map(this::redactExternalCall).toList() : List.of(),
                 scope != null ? redactArtifacts(scope.artifacts()) : Map.of()
         );
         write(snapshot);
@@ -184,8 +186,11 @@ class SnapshotRecorder {
 
     private Map<String, Object> redactArtifacts(Map<String, Object> artifacts) {
         Map<String, Object> result = new LinkedHashMap<>();
-        artifacts.forEach((key, value) -> result.put(key,
-                redactor.isSensitiveField(key) ? "<redacted>" : redactor.artifact(value)));
+        for (var entry : artifacts.entrySet()) {
+            if (result.size() >= MAX_SNAPSHOT_COLLECTION_ENTRIES) break;
+            String key = entry.getKey();
+            result.put(key, redactor.isSensitiveField(key) ? "<redacted>" : redactor.artifact(entry.getValue()));
+        }
         return result;
     }
 

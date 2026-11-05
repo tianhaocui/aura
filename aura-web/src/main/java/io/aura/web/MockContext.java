@@ -27,6 +27,7 @@ public class MockContext extends Context {
     private final Map<String, Object> namedAttrs = new ConcurrentHashMap<>();
     private final Map<String, String> respHeaders = new HashMap<>();
     private final String peerIp;
+    private final String httpMethod;
     private final java.util.Map<String, String> responseCookies = new java.util.LinkedHashMap<>();
 
     public MockContext(Map<String, String> pathParams, Map<String, String> queryParams,
@@ -42,6 +43,17 @@ public class MockContext extends Context {
     public MockContext(Map<String, String> pathParams, Map<String, String> queryParams,
                        Map<String, String> headers, String body, AuraWebRuntime app,
                        String requestPath, String peerIp) {
+        this(pathParams, queryParams, headers, body, app, requestPath, peerIp, "");
+    }
+
+    /**
+     * The method is the one thing an in-memory request cannot infer from the route it matched, and
+     * a handler that branches on {@code ctx.method()} has to branch the same way here as it does
+     * behind a socket.
+     */
+    MockContext(Map<String, String> pathParams, Map<String, String> queryParams,
+                Map<String, String> headers, String body, AuraWebRuntime app,
+                String requestPath, String peerIp, String httpMethod) {
         super(null, pathParams, app, null);
         this.peerIp = peerIp;
         this.pathParams = pathParams;
@@ -50,6 +62,7 @@ public class MockContext extends Context {
         this.app = app;
         this.queryParams = queryParams;
         this.requestPath = requestPath;
+        this.httpMethod = httpMethod == null ? "" : httpMethod;
         if (app != null) namedAttrs.put("_app", app);
     }
 
@@ -77,12 +90,18 @@ public class MockContext extends Context {
     public <T> T body(java.lang.reflect.Type type) {
         return body == null || body.isBlank() ? null : (T) JSON.parseObject(body, type);
     }
-    @Override public String method() { return ""; }
+    @Override public String method() { return httpMethod; }
     @Override public String url() { return requestPath; }
     @Override public int statusCode() { return status == 0 ? 200 : status; }
 
-    @Override public Context status(int code) { this.status = code; return this; }
+    @Override public Context status(int code) {
+        if (responded) return this;
+        this.status = code;
+        return this;
+    }
     @Override public void json(Object obj) {
+        if (responded || isAborted()) return;
+        header("Content-Type", "application/json; charset=utf-8");
         io.aura.JsonConfig cfg = app != null ? app.jsonConfig() : null;
         String dateFormat = cfg != null ? cfg.dateFormat() : "yyyy-MM-dd'T'HH:mm:ss.SSS";
         com.alibaba.fastjson2.JSONWriter.Feature[] features = cfg != null && cfg.writeNulls()
@@ -92,12 +111,46 @@ public class MockContext extends Context {
         Snapshot.response(statusCode(), "application/json; charset=utf-8", obj);
         responded = true;
     }
-    @Override public void jsonRaw(String json) { responseBody = json; Snapshot.response(statusCode(), "application/json; charset=utf-8", json); responded = true; }
-    @Override public void text(String text) { responseBody = text; Snapshot.response(statusCode(), "text/plain; charset=utf-8", text); responded = true; }
-    @Override public void html(String html) { responseBody = html; Snapshot.response(statusCode(), "text/html; charset=utf-8", html); responded = true; }
-    @Override public void raw(String body) { responseBody = body; Snapshot.response(statusCode(), null, body); responded = true; }
-    @Override public void redirect(String url) { status = 302; Snapshot.response(statusCode(), null, null); responded = true; }
+    @Override public void jsonRaw(String json) {
+        if (responded || isAborted()) return;
+        header("Content-Type", "application/json; charset=utf-8");
+        responseBody = json; Snapshot.response(statusCode(), "application/json; charset=utf-8", json); responded = true;
+    }
+    @Override public void text(String text) {
+        if (responded || isAborted()) return;
+        header("Content-Type", "text/plain; charset=utf-8");
+        responseBody = text; Snapshot.response(statusCode(), "text/plain; charset=utf-8", text); responded = true;
+    }
+    @Override public void html(String html) {
+        if (responded || isAborted()) return;
+        header("Content-Type", "text/html; charset=utf-8");
+        responseBody = html; Snapshot.response(statusCode(), "text/html; charset=utf-8", html); responded = true;
+    }
+    @Override public void raw(String body) {
+        if (responded || isAborted()) return;
+        responseBody = body; Snapshot.response(statusCode(), null, body); responded = true;
+    }
+    @Override public void redirect(String url) {
+        if (responded || isAborted()) return;
+        // A redirect without its Location header is not a redirect: the client has nothing to
+        // follow, and a test that only checks 302 would pass against a broken handler.
+        if (url.indexOf('\r') >= 0 || url.indexOf('\n') >= 0) {
+            throw new IllegalArgumentException("Invalid redirect URL");
+        }
+        status = 302;
+        header("Location", url);
+        Snapshot.response(statusCode(), null, null);
+        responded = true;
+    }
     @Override public Context header(String name, String value) {
+        if (responded || isAborted()) return this;
+        if (name == null || name.isBlank()) throw new IllegalArgumentException("Header name must not be blank");
+        if (name.indexOf('\r') >= 0 || name.indexOf('\n') >= 0) {
+            throw new IllegalArgumentException("Invalid header name");
+        }
+        if (value != null && (value.indexOf('\r') >= 0 || value.indexOf('\n') >= 0)) {
+            throw new IllegalArgumentException("Invalid header value");
+        }
         respHeaders.entrySet().removeIf(entry -> entry.getKey().equalsIgnoreCase(name));
         respHeaders.put(name, value);
         return this;
@@ -123,9 +176,16 @@ public class MockContext extends Context {
     String fileContentType;
 
     @Override public void sendFile(String filename, byte[] data, String contentType) {
+        if (responded || isAborted()) return;
         this.fileName = filename;
         this.fileBytes = data;
         this.fileContentType = contentType;
+        // The download is announced by these two headers, so a test that never sees them cannot
+        // tell a served file from a blob, and the name is sanitised exactly as the socket does.
+        header("Content-Type", contentType);
+        header("Content-Disposition",
+                "attachment; filename=\"" + filename.replaceAll("[\\r\\n\"]", "") + "\"");
+        responded = true;
         Snapshot.response(statusCode(), contentType, java.util.Map.of("filename", filename, "bytes", data.length));
     }
 

@@ -18,20 +18,21 @@ public final class BeanValidator {
     public static void validate(Object obj) {
         if (obj == null) return;
         Class<?> clazz = obj.getClass();
-        if (!clazz.isRecord()) return;
 
         List<Validate.FieldError> errors = new ArrayList<>();
-        for (RecordComponent rc : clazz.getRecordComponents()) {
-            Object value;
-            try {
-                value = rc.getAccessor().invoke(obj);
-            } catch (Exception e) {
-                continue;
-            }
-            String name = rc.getName();
-            for (Annotation ann : rc.getAnnotations()) {
-                String error = check(ann, name, value);
-                if (error != null) errors.add(new Validate.FieldError(name, error));
+        if (clazz.isRecord()) {
+            for (RecordComponent rc : clazz.getRecordComponents()) {
+                Object value;
+                try {
+                    value = rc.getAccessor().invoke(obj);
+                } catch (Exception e) {
+                    continue;
+                }
+                String name = rc.getName();
+                for (Annotation ann : rc.getAnnotations()) {
+                    String error = check(ann, name, value);
+                    if (error != null) errors.add(new Validate.FieldError(name, error));
+                }
             }
         }
         if (!errors.isEmpty()) {

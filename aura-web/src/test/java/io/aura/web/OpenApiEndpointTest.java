@@ -20,7 +20,7 @@ class OpenApiEndpointTest {
         int port;
         try (ServerSocket socket = new ServerSocket(0)) { port = socket.getLocalPort(); }
         AuraApp app = TestApplications.app(
-                new AuraConfig().port(port).env("prod").openApi(true),
+                new AuraConfig().port(port).env("prod").publicOrigin("https://localhost").openApi(true),
                 "openapi-endpoint",
                 Route.of(
                         "GET",
