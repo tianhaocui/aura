@@ -38,6 +38,9 @@ jobs:
           java-version: ${{ matrix.java }}
           cache: maven
 
+      - name: Install ripgrep
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ripgrep
+
       - name: Test + Coverage Check
         run: mvn verify --batch-mode --fail-at-end
 
@@ -141,6 +144,8 @@ jobs:
           distribution: temurin
           java-version: '17'
           cache: maven
+      - name: Install ripgrep
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ripgrep
       - uses: helm/kind-action@a1b0e391336a6ee6713a0583f8c6240d70863de3 # v1.12.0
         with:
           version: 'v0.26.0'
@@ -161,6 +166,8 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
+      - name: Install ripgrep
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ripgrep
       - name: Install Maven 3.8.6
         run: |
           curl --fail --silent --show-error --location \
