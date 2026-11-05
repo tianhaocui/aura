@@ -272,6 +272,9 @@ record, the stage-by-stage log, and the migration table.
 
 ### Fixed
 
+- Undertow moves from 2.3.21.Final to 2.3.25.Final for three high-severity
+  request/response smuggling advisories (CVE-2026-28367, CVE-2026-28368,
+  CVE-2026-28369). The contract gate now refuses anything below 2.3.25.Final.
 - The generated deployment image now pins `maven-resources-plugin` 3.3.1 and
   `maven-jar-plugin` 3.4.1. The smoke build runs Maven 3.8.7 on the host and
   3.9.11 in the container, whose lifecycle defaults differ (2.6/2.4 against

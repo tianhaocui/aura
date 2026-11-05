@@ -58,7 +58,7 @@
         <maven.compiler.target>${java.version}</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <aura.version>1.0.0</aura.version>
-        <undertow.version>2.3.21.Final</undertow.version>
+        <undertow.version>2.3.25.Final</undertow.version>
         <fastjson2.version>2.0.47</fastjson2.version>
         <hikaricp.version>5.1.0</hikaricp.version>
         <flyway.version>13.7.0</flyway.version>
