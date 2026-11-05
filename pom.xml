@@ -225,7 +225,7 @@
             <dependency>
                 <groupId>org.assertj</groupId>
                 <artifactId>assertj-core</artifactId>
-                <version>3.25.3</version>
+                <version>3.27.7</version>
                 <scope>test</scope>
             </dependency>
             <!-- Policy-in-Core / Mechanism-in-Web gate (Stage 1). Transitive deps are
