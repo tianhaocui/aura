@@ -2,8 +2,6 @@
 FROM maven:3.9.11-eclipse-temurin-17 AS build
 WORKDIR /workspace
 COPY pom.xml ./
-RUN --mount=type=secret,id=maven_settings,target=/root/.m2/settings.xml,required=false \
-    mvn --batch-mode --no-transfer-progress dependency:go-offline
 COPY src ./src
 RUN --mount=type=secret,id=maven_settings,target=/root/.m2/settings.xml,required=false \
     mvn --batch-mode --no-transfer-progress verify

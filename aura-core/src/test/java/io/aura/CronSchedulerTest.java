@@ -128,7 +128,22 @@ class CronSchedulerTest {
 
         assertThat(pool.awaitTermination(5, TimeUnit.SECONDS)).isTrue();
         assertThat(runs).hasValue(0);
-        assertThat(liveCronThreads()).isEmpty();
+        assertThat(awaitNoCronThreads()).isEmpty();
+    }
+
+    /**
+     * A worker can still be listed by {@link Thread#getAllStackTraces()} for a moment after
+     * the pool reports termination, while it unwinds its run loop. Wait for that, rather
+     * than failing on the first snapshot.
+     */
+    private static List<String> awaitNoCronThreads() throws InterruptedException {
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+        List<String> live = liveCronThreads();
+        while (!live.isEmpty() && System.nanoTime() < deadline) {
+            Thread.sleep(10);
+            live = liveCronThreads();
+        }
+        return live;
     }
 
     private static List<String> liveCronThreads() {

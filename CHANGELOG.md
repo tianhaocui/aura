@@ -272,6 +272,16 @@ record, the stage-by-stage log, and the migration table.
 
 ### Fixed
 
+- The generated deployment image now pins `maven-resources-plugin` 3.3.1 and
+  `maven-jar-plugin` 3.4.1. The smoke build runs Maven 3.8.7 on the host and
+  3.9.11 in the container, whose lifecycle defaults differ (2.6/2.4 against
+  3.3.1/3.4.1), so the mirror-only repository could not serve the plugin the
+  container asked for. The `dependency:go-offline` layer is gone with it: it
+  resolves every lifecycle plugin, including ones the build never runs, which a
+  repository holding only the host's downloads cannot satisfy.
+- `CronSchedulerTest.closingTheRealPoolEndsItsThreadsWithoutRunningAnything` no
+  longer fails when the worker is still listed by `Thread.getAllStackTraces()`
+  for a moment after the pool reports termination.
 - `aura.schema.enabled=true` in a non-dev environment used to be a flag that did
   nothing: without a token the endpoint answered 404 forever. The switch and the
   token are now independent doors, either of which opens the schema.
