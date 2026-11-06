@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.0.0] - 2026-11-06
 
 The 0.6 return: one route contract, one entry point per decision, and a layering
 gate that runs in the normal build. `docs/REFACTOR_LOG.md` carries the decision

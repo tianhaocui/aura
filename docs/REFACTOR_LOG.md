@@ -784,9 +784,18 @@ is no number to lose; the allowlist handler itself was never at fault.
 and the classification half agree, and CI runs the same script on every push.
 
 GitHub Actions, not this machine, is the evidence for the CI-side gates. Run
-`42145583090` -- a `pull_request` run of CI on `52e45df` -- reported success for
-`test (17)`, `test (23)`, `minimum-maven`, `database-migrations`,
-`osv-full-scan`, `mcp-npm`, `deployment-smoke` and `dependency-review`.
+`42159837307` -- the `push` run `master` at `b4051ad` triggered -- reported
+success for `test (17)`, `test (23)`, `minimum-maven`, `database-migrations`,
+`osv-full-scan`, `mcp-npm` and `deployment-smoke`; `dependency-review` is
+`pull_request`-only, so its evidence is the PR run `42145583090` on the merged
+commit `52e45df`.
+
+Signing is the gate no hosted run covers, and it is proven here rather than in
+CI: `mvn -Prelease -DskipTests clean install` ran the reactor through
+`maven-gpg-plugin` with the production key imported on this machine, and
+`gpg --verify` of an installed `.asc` resolves to
+`E008AFD6011B7FE10E25073F78D8531C2CA83C3F` (`io.github.tianhaocui`). The private
+key material never left `~/.gnupg` and appears in no log.
 
 ## Still open
 
@@ -809,14 +818,14 @@ GitHub Actions, not this machine, is the evidence for the CI-side gates. Run
   is deleted entirely falls to the `no compilable fence marked in` message, but a
   guide that keeps one thin fence can still describe the rest of its module in words
   the compiler never sees.
-- `scripts/verify-public-api.sh` needs `jq`, which this machine does not have, so
-  step 5 of `verify-local-readiness.sh` stops there. The baseline this branch was
-  checked against came from a `jq`-free copy of the generator, not from that
-  script. The GitHub-hosted boxes in `docs/1.0-readiness.md` -- Docker/kind,
-  service-container migrations, Java 17/23, OSV, docs, API, SBOM, minimum-Maven
-  and `dependency-review` -- were filled by Actions run `42145583090` on commit
-  `52e45df`. Only signing and Central Portal boxes remain, and those need
-  credentials and release authority, not a run.
+- `scripts/verify-public-api.sh` used to stop at a missing `jq` on this machine,
+  so step 5 of `verify-local-readiness.sh` never reached its classification
+  half. `jq` is installed now and the script runs end to end. What is left in
+  `docs/1.0-readiness.md` is no longer a build problem: the GitHub-hosted boxes
+  were filled by Actions run `42159837307` on `master` at `b4051ad` (plus the
+  PR-only `dependency-review` run `42145583090`), production signing is proven
+  against the imported key, and the two Central Portal boxes need a publish
+  decision.
 
 ## Suggested review split
 
