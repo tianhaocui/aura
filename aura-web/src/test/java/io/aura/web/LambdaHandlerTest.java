@@ -1,6 +1,7 @@
 package io.aura.web;
 
-import io.aura.Aura;
+import io.aura.port.BaseContext;
+import io.aura.AuraWebRuntime;
 import org.junit.jupiter.api.Test;
 
 import java.util.HashMap;
@@ -10,7 +11,7 @@ import static org.assertj.core.api.Assertions.*;
 
 class LambdaHandlerTest {
 
-    private static final Aura APP = Aura.create();
+    private static final AuraWebRuntime APP = TestApplications.runtime();
 
     @Test
     void noParams_returnsString() throws Exception {
@@ -37,11 +38,12 @@ class LambdaHandlerTest {
     }
 
     @Test
-    void missingParam_intDefaultsToZero() throws Exception {
+    void missingParam_intNamesTheRequiredParameter() {
         var handler = new LambdaHandler(new IntParamHandler());
         var ctx = mockCtx(Map.of(), Map.of(), null);
-        handler.handle(ctx);
-        assertThat(ctx.responseBody).isEqualTo("user-0");
+        assertThatThrownBy(() -> handler.handle(ctx))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Required parameter 'id' is missing");
     }
 
     @Test
@@ -53,11 +55,12 @@ class LambdaHandlerTest {
     }
 
     @Test
-    void missingParam_longDefaultsToZero() throws Exception {
+    void missingParam_longNamesTheRequiredParameter() {
         var handler = new LambdaHandler(new LongParamHandler());
         var ctx = mockCtx(Map.of(), Map.of(), null);
-        handler.handle(ctx);
-        assertThat(ctx.responseBody).isEqualTo("item-0");
+        assertThatThrownBy(() -> handler.handle(ctx))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Required parameter 'id' is missing");
     }
 
     @Test
@@ -117,11 +120,12 @@ class LambdaHandlerTest {
     }
 
     @Test
-    void booleanParam_missingDefaultsFalse() throws Exception {
+    void booleanParam_missingNamesTheRequiredParameter() {
         var handler = new LambdaHandler(new BoolHandler());
         var ctx = mockCtx(Map.of(), Map.of(), null);
-        handler.handle(ctx);
-        assertThat(ctx.responseBody).isEqualTo("active=false");
+        assertThatThrownBy(() -> handler.handle(ctx))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Required parameter 'active' is missing");
     }
 
     @Test

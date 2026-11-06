@@ -1,5 +1,6 @@
 package io.aura.mcp;
 
+import io.aura.contract.ApiParameter;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -60,7 +61,7 @@ class McpUtilTest {
 
     @Test
     void jsonType_null_returnsString() {
-        assertThat(McpUtil.jsonType((String) null)).isEqualTo("string");
+        assertThat(McpUtil.jsonType(null)).isEqualTo("string");
     }
 
     @Test
@@ -68,45 +69,76 @@ class McpUtilTest {
         assertThat(McpUtil.jsonType("SomeCustomClass")).isEqualTo("string");
     }
 
-    // --- buildInputSchema ---
+    // --- inputSchema ---
 
     @Test
-    void buildInputSchema_emptyList_emptyProperties() {
-        Map<String, Object> schema = McpUtil.buildInputSchema(List.of());
-        assertThat(schema).containsEntry("type", "object");
-        @SuppressWarnings("unchecked")
-        Map<String, Object> props = (Map<String, Object>) schema.get("properties");
-        assertThat(props).isEmpty();
-        assertThat(schema).doesNotContainKey("required");
+    void inputSchema_emptyList_emptyProperties() {
+        McpWire.Schema schema = McpWire.of(McpUtil.inputSchema(List.of())).asSchema();
+        assertThat(schema.type()).isEqualTo("object");
+        assertThat(schema.propertyNames()).isEmpty();
+        assertThat(schema.keys()).doesNotContain("required");
     }
 
     @Test
-    void buildInputSchema_withParams_correctStructure() {
-        List<McpUtil.ParamInfo> params = List.of(
-                new McpUtil.ParamInfo("id", "int", "the item id"),
-                new McpUtil.ParamInfo("name", "String", null)
+    void inputSchema_withParams_correctStructure() {
+        List<McpParam> params = List.of(
+                new McpParam(new ApiParameter("id", "int", "query", true, "the item id")),
+                new McpParam(new ApiParameter("name", "String", "query", true, null))
         );
-        Map<String, Object> schema = McpUtil.buildInputSchema(params);
+        McpWire.Schema schema = McpWire.of(McpUtil.inputSchema(params)).asSchema();
 
-        assertThat(schema).containsEntry("type", "object");
+        assertThat(schema.type()).isEqualTo("object");
+        assertThat(schema.propertyNames()).contains("id", "name");
+        assertThat(schema.property("id").type()).isEqualTo("integer");
+        assertThat(schema.property("id").description()).isEqualTo("the item id");
+        assertThat(schema.property("name").type()).isEqualTo("string");
+        assertThat(schema.property("name").keys()).doesNotContain("description");
+        assertThat(schema.required()).containsExactly("id", "name");
+    }
 
-        @SuppressWarnings("unchecked")
-        Map<String, Object> props = (Map<String, Object>) schema.get("properties");
-        assertThat(props).containsKey("id");
-        assertThat(props).containsKey("name");
+    @Test
+    void inputSchema_preservesOptionalParameters() {
+        List<McpParam> params = List.of(
+                new McpParam(new ApiParameter("query", "String", "query", true, null)),
+                new McpParam(new ApiParameter("page", "int", "query", false, null)));
 
-        @SuppressWarnings("unchecked")
-        Map<String, Object> idProp = (Map<String, Object>) props.get("id");
-        assertThat(idProp).containsEntry("type", "integer");
-        assertThat(idProp).containsEntry("description", "the item id");
+        assertThat(McpWire.of(McpUtil.inputSchema(params)).asSchema().required())
+                .containsExactly("query");
+    }
 
-        @SuppressWarnings("unchecked")
-        Map<String, Object> nameProp = (Map<String, Object>) props.get("name");
-        assertThat(nameProp).containsEntry("type", "string");
-        assertThat(nameProp).doesNotContainKey("description");
+    @Test
+    void inputSchema_preservesStructuredBodySchema() {
+        Map<String, Object> body = new java.util.LinkedHashMap<>();
+        body.put("type", "object");
+        body.put("properties", Map.of("name", Map.of("type", "string")));
+        List<McpParam> params = List.of(new McpParam(
+                new ApiParameter("request", "CreateRequest", "body", true, null, body)));
 
-        @SuppressWarnings("unchecked")
-        List<String> required = (List<String>) schema.get("required");
-        assertThat(required).containsExactly("id", "name");
+        McpWire.Property request = McpWire.of(McpUtil.inputSchema(params)).asSchema()
+                .property("request");
+        assertThat(request.type()).isEqualTo("object");
+        assertThat(request.nested("properties").keys()).contains("name");
+    }
+
+    @Test
+    void inputSchema_projectsTheEnumChoicesItsContractDeclares() {
+        List<McpParam> params = List.of(new McpParam(
+                new ApiParameter("status", "OrderStatus", "query", true, "Order status",
+                        Map.of("type", "string", "enum", List.of("PAID", "NEW")))));
+
+        McpWire.Property status = McpWire.of(McpUtil.inputSchema(params)).asSchema()
+                .property("status");
+        assertThat(status.enumValues()).containsExactly("PAID", "NEW");
+        assertThat(status.description()).isEqualTo("Order status");
+    }
+
+    @Test
+    void inputSchema_refusesAParameterItWouldHaveToCallAString() {
+        // jsonType() has no entry for an unknown type name and defaults to "string", which is how
+        // a hand-declared record parameter used to reach the model as a string it could not send.
+        assertThatThrownBy(() -> new McpParam(
+                new ApiParameter("request", "CreateRequest", "body", true, null)))
+                .isInstanceOf(io.aura.contract.ContractException.class)
+                .hasMessageContaining("'request' is declared as CreateRequest");
     }
 }

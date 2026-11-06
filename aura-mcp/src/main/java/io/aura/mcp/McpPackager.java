@@ -2,31 +2,69 @@ package io.aura.mcp;
 
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONObject;
+import io.aura.security.IpSafety;
 
 import java.io.*;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
+import java.time.Duration;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 public class McpPackager {
 
+    /** System property used to explicitly permit packaging against private/local app URLs. */
+    public static final String ALLOW_PRIVATE_URL_PROPERTY = "aura.mcp.allow-private-url";
+    /** Environment variable equivalent of {@link #ALLOW_PRIVATE_URL_PROPERTY}. */
+    public static final String ALLOW_PRIVATE_URL_ENV = "AURA_MCP_ALLOW_PRIVATE_URL";
+
+    private static final int MAX_SCHEMA_BYTES = 1024 * 1024;
+    private static final int MAX_TEMPLATE_BYTES = 1024 * 1024;
+    private static final int MAX_PACKAGE_METADATA_BYTES = 1024 * 1024;
+    private static final int CONNECT_TIMEOUT_MS = 5_000;
+    private static final int READ_TIMEOUT_MS = 10_000;
+    private static final int MAX_PROCESS_OUTPUT_BYTES = 64 * 1024;
+    private static final long PROCESS_TIMEOUT_MS = 10_000L;
+    private static final long PUBLISH_TIMEOUT_MS = 5 * 60 * 1_000L;
+
     public static void generate(String appUrl, String npmName, String outputDir) throws Exception {
-        generate(appUrl, npmName, outputDir, null);
+        generate(appUrl, npmName, outputDir, null, allowPrivateUrls());
+    }
+
+    /** Generates a package with an explicit private/local app URL policy. */
+    public static void generate(String appUrl, String npmName, String outputDir,
+                                boolean allowPrivateUrl) throws Exception {
+        generate(appUrl, npmName, outputDir, null, allowPrivateUrl);
     }
 
     public static void generate(String appUrl, String npmName, String outputDir, McpRouter router) throws Exception {
-        Path out = Path.of(outputDir);
+        generate(appUrl, npmName, outputDir, router, allowPrivateUrls());
+    }
+
+    /** Generates a package with an optional in-memory schema and explicit URL policy. */
+    public static void generate(String appUrl, String npmName, String outputDir, McpRouter router,
+                                boolean allowPrivateUrl) throws Exception {
+        URI validatedAppUrl = validateAppUrl(appUrl, allowPrivateUrl);
+        Path out = validateOutputDir(outputDir);
         Files.createDirectories(out);
+        ensureRealOutputInsideRoot(out);
+        if (Files.exists(out.resolve("package.json")) || Files.exists(out.resolve("index.js"))) {
+            throw new FileAlreadyExistsException("Refusing to overwrite generated package files in " + out);
+        }
 
         String binName = npmName.contains("/") ? npmName.substring(npmName.lastIndexOf('/') + 1) : npmName;
-        String version = "0.1.0";
+        String version = McpProtocolConstants.SERVER_VERSION;
 
         String appName = binName;
         if (router == null) {
             try {
-                String schema;
-                try (var is = java.net.URI.create(appUrl + "/__schema__").toURL().openStream()) {
-                    schema = new String(is.readAllBytes());
-                }
+                String schema = fetchSchema(validatedAppUrl, allowPrivateUrl);
                 JSONObject obj = JSON.parseObject(schema);
                 if (obj.getString("name") != null) appName = obj.getString("name");
             } catch (Exception e) {
@@ -35,33 +73,30 @@ public class McpPackager {
         }
 
         // package.json
-        String packageJson = """
-                {
-                  "name": "%s",
-                  "version": "%s",
-                  "description": "MCP server for %s",
-                  "bin": {
-                    "%s": "./index.js"
-                  },
-                  "files": ["index.js"],
-                  "keywords": ["mcp", "aura", "ai"],
-                  "license": "MIT",
-                  "engines": { "node": ">=18" }
-                }
-                """.formatted(npmName, version, appName, binName);
-        Files.writeString(out.resolve("package.json"), packageJson);
+        validateNpmName(npmName);
+        Map<String, Object> packageMetadata = new LinkedHashMap<>();
+        packageMetadata.put("name", npmName);
+        packageMetadata.put("version", version);
+        packageMetadata.put("description", "MCP server for " + appName);
+        packageMetadata.put("bin", Map.of(binName, "./index.js"));
+        packageMetadata.put("files", List.of("index.js"));
+        packageMetadata.put("keywords", List.of("mcp", "aura", "ai"));
+        packageMetadata.put("license", "MIT");
+        packageMetadata.put("engines", Map.of("node", ">=18"));
+        atomicWriteNew(out.resolve("package.json"), JSON.toJSONString(packageMetadata));
 
         if (router != null) {
             String schemaJson = JSON.toJSONString(router.buildSchema());
             String template = loadTemplate();
             String indexJs = template
-                    .replace("__API_URL_PLACEHOLDER__", appUrl)
+                    .replace("\"__API_URL_PLACEHOLDER__\"", JSON.toJSONString(validatedAppUrl.toString()))
                     .replace("__SCHEMA_PLACEHOLDER__", schemaJson);
-            Files.writeString(out.resolve("index.js"), indexJs);
+            atomicWriteNew(out.resolve("index.js"), indexJs);
         } else {
             String template = loadTemplate();
-            String indexJs = template.replace("__API_URL_PLACEHOLDER__", appUrl);
-            Files.writeString(out.resolve("index.js"), indexJs);
+            String indexJs = template.replace("\"__API_URL_PLACEHOLDER__\"",
+                    JSON.toJSONString(validatedAppUrl.toString()));
+            atomicWriteNew(out.resolve("index.js"), indexJs);
         }
 
         System.out.println("MCP npm package generated at: " + out.toAbsolutePath());
@@ -73,10 +108,146 @@ public class McpPackager {
         System.out.println("  { \"command\": \"npx\", \"args\": [\"" + npmName + "\"] }");
     }
 
+    private static String fetchSchema(URI appUrl, boolean allowPrivate) throws IOException, InterruptedException {
+        URI schemaUri = URI.create(appUrl.toString() + (appUrl.toString().endsWith("/") ? "" : "/"))
+                .resolve("__schema__");
+        if (!allowPrivate) {
+            // DNS-rebinding defence: re-validate immediately before connecting, fail-closed on
+            // any private answer. Note: HttpClient.Builder.socketResolver(...) referenced in the
+            // original hardening brief never shipped in any JDK (11-21), so true IP pinning is
+            // not publicly supported; this at-connect re-resolve rides on the JDK's DNS cache
+            // (>=30s positive caching by default) and leaves only a sub-millisecond residual
+            // race when the cache expires exactly between this check and the socket lookup.
+            IpSafety.resolvePublic(schemaUri.getHost());
+        }
+        HttpClient client = HttpClient.newBuilder()
+                .followRedirects(HttpClient.Redirect.NEVER)
+                .connectTimeout(Duration.ofMillis(CONNECT_TIMEOUT_MS))
+                .build();
+        HttpRequest request = HttpRequest.newBuilder(schemaUri)
+                .timeout(Duration.ofMillis(READ_TIMEOUT_MS))
+                .GET()
+                .build();
+        HttpResponse<InputStream> response =
+                client.send(request, HttpResponse.BodyHandlers.ofInputStream());
+        int status = response.statusCode();
+        if (status < 200 || status >= 300) {
+            try (InputStream ignored = response.body()) { /* drain */ }
+            throw new IOException("Schema request failed with HTTP " + status);
+        }
+        try (InputStream input = response.body()) {
+            byte[] bytes = input.readNBytes(MAX_SCHEMA_BYTES + 1);
+            if (bytes.length > MAX_SCHEMA_BYTES) throw new IOException("Schema response exceeds maximum size");
+            return new String(bytes, StandardCharsets.UTF_8);
+        }
+    }
+
+    /**
+     * Validates an app URL using the secure default policy. HTTP(S) URLs that resolve to
+     * loopback, link-local, site-local, unique-local, multicast, or wildcard addresses are rejected.
+     *
+     * <p>Local development packaging can be explicitly enabled with
+     * {@code -Daura.mcp.allow-private-url=true} or
+     * {@code AURA_MCP_ALLOW_PRIVATE_URL=true}. The opt-in is intentionally process-wide
+     * because this method is also used by the command-line packager.</p>
+     */
+    public static URI validateAppUrl(String appUrl) throws Exception {
+        return validateAppUrl(appUrl, allowPrivateUrls());
+    }
+
+    /** Validates an app URL with an explicit private/local-address policy. */
+    public static URI validateAppUrl(String appUrl, boolean allowPrivate) throws Exception {
+        URI uri = URI.create(appUrl).normalize();
+        if (!("http".equalsIgnoreCase(uri.getScheme()) || "https".equalsIgnoreCase(uri.getScheme()))
+                || uri.getHost() == null || uri.getUserInfo() != null) {
+            throw new IllegalArgumentException("appUrl must be an absolute HTTP(S) URL without userinfo");
+        }
+        if (!allowPrivate) {
+            // Fail-fast advisory check only. The DNS-rebinding defence is enforced again in
+            // fetchSchema, which re-resolves and re-validates immediately before connecting.
+            try {
+                IpSafety.resolvePublic(uri.getHost());
+            } catch (SecurityException error) {
+                throw new IllegalArgumentException("appUrl resolves to a private or local address", error);
+            }
+        }
+        return uri;
+    }
+
+    static Path validateOutputDir(String outputDir) throws IOException {
+        Path root = configuredOutputRoot();
+        Path out = Path.of(outputDir).toAbsolutePath().normalize();
+        if (!out.startsWith(root)) throw new IOException("Output directory must be inside " + root);
+        Path realRoot = root.toRealPath();
+        ensureExistingOutputInsideRoot(realRoot, out);
+        return out;
+    }
+
+    private static void ensureRealOutputInsideRoot(Path out) throws IOException {
+        Path root = configuredOutputRoot().toRealPath();
+        Path resolved = out.toRealPath();
+        if (!resolved.startsWith(root)) throw new IOException("Output directory escapes configured root");
+    }
+
+    private static Path configuredOutputRoot() {
+        return Path.of(System.getProperty("aura.mcp.output-root", "."))
+                .toAbsolutePath().normalize();
+    }
+
+    /**
+     * Checks symlinks in the existing portion of an output path before any missing
+     * directories are created. A missing output tail is safe once its deepest existing
+     * ancestor resolves inside the configured root.
+     */
+    private static void ensureExistingOutputInsideRoot(Path realRoot, Path out) throws IOException {
+        Path existing = out;
+        while (!Files.exists(existing, LinkOption.NOFOLLOW_LINKS)) {
+            existing = existing.getParent();
+            if (existing == null) {
+                throw new IOException("Output directory has no existing ancestor");
+            }
+        }
+        Path resolved = existing.toRealPath();
+        if (!resolved.startsWith(realRoot)) {
+            throw new IOException("Output directory escapes configured root");
+        }
+    }
+
+    private static boolean allowPrivateUrls() {
+        return Boolean.parseBoolean(System.getProperty(ALLOW_PRIVATE_URL_PROPERTY,
+                System.getenv().getOrDefault(ALLOW_PRIVATE_URL_ENV, "false")));
+    }
+
+    private static void validateNpmName(String npmName) {
+        if (npmName == null || !npmName.matches("(?:@[a-z0-9][a-z0-9._-]*/)?[a-z0-9][a-z0-9._-]*")) {
+            throw new IllegalArgumentException("Invalid npm package name");
+        }
+    }
+
+    private static void atomicWriteNew(Path target, String content) throws IOException {
+        if (Files.exists(target)) throw new FileAlreadyExistsException(target.toString());
+        Path temp = Files.createTempFile(target.getParent(), ".aura-mcp-", ".tmp");
+        try {
+            Files.writeString(temp, content, StandardCharsets.UTF_8,
+                    StandardOpenOption.TRUNCATE_EXISTING);
+            try {
+                Files.move(temp, target, StandardCopyOption.ATOMIC_MOVE);
+            } catch (AtomicMoveNotSupportedException e) {
+                Files.move(temp, target);
+            }
+        } finally {
+            Files.deleteIfExists(temp);
+        }
+    }
+
     private static String loadTemplate() throws IOException {
         try (InputStream is = McpPackager.class.getResourceAsStream("/mcp-bridge-template.js")) {
             if (is == null) throw new IOException("mcp-bridge-template.js not found in classpath");
-            return new String(is.readAllBytes(), StandardCharsets.UTF_8);
+            byte[] bytes = is.readNBytes(MAX_TEMPLATE_BYTES + 1);
+            if (bytes.length > MAX_TEMPLATE_BYTES) {
+                throw new IOException("MCP bridge template exceeds maximum size");
+            }
+            return new String(bytes, StandardCharsets.UTF_8);
         }
     }
 
@@ -118,7 +289,7 @@ public class McpPackager {
             System.out.println("\n[dry-run] Would publish:");
             System.out.println("  " + dir.resolve("package.json"));
             System.out.println("  " + dir.resolve("index.js"));
-            String pkg = Files.readString(dir.resolve("package.json"));
+            String pkg = readBoundedFile(dir.resolve("package.json"), MAX_PACKAGE_METADATA_BYTES);
             System.out.println("\n" + pkg);
             System.out.println("[dry-run] No changes made. Remove --dry-run to publish.");
             return;
@@ -128,12 +299,29 @@ public class McpPackager {
         ProcessBuilder pb = new ProcessBuilder("npm", "publish", "--access", "public")
                 .directory(dir.toFile())
                 .inheritIO();
-        int code = pb.start().waitFor();
+        Process process = pb.start();
+        if (!process.waitFor(PUBLISH_TIMEOUT_MS, TimeUnit.MILLISECONDS)) {
+            process.destroyForcibly();
+            System.err.println("npm publish timed out after " + PUBLISH_TIMEOUT_MS + "ms");
+            System.exit(1);
+            return;
+        }
+        int code = process.exitValue();
         if (code == 0) {
             System.out.println("Published successfully!");
         } else {
             System.err.println("npm publish failed with exit code " + code);
             System.exit(code);
+        }
+    }
+
+    private static String readBoundedFile(Path path, int maxBytes) throws IOException {
+        try (InputStream input = Files.newInputStream(path)) {
+            byte[] bytes = input.readNBytes(maxBytes + 1);
+            if (bytes.length > maxBytes) {
+                throw new IOException("File exceeds maximum size of " + maxBytes + " bytes: " + path);
+            }
+            return new String(bytes, StandardCharsets.UTF_8);
         }
     }
 
@@ -147,13 +335,38 @@ public class McpPackager {
     }
 
     private static String exec(String... cmd) {
+        Process process = null;
+        java.util.concurrent.FutureTask<String> output = null;
         try {
-            Process p = new ProcessBuilder(cmd).start();
-            String out = new String(p.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
-            p.waitFor();
-            return out;
+            process = new ProcessBuilder(cmd).redirectErrorStream(true).start();
+            Process current = process;
+            output = new java.util.concurrent.FutureTask<>(() -> readCapped(current.getInputStream()));
+            Thread reader = new Thread(output, "aura-mcp-process-reader");
+            reader.setDaemon(true);
+            reader.start();
+            if (!process.waitFor(PROCESS_TIMEOUT_MS, TimeUnit.MILLISECONDS)) {
+                process.destroyForcibly();
+                return null;
+            }
+            return output.get(PROCESS_TIMEOUT_MS, TimeUnit.MILLISECONDS);
         } catch (Exception e) {
+            if (process != null) process.destroyForcibly();
             return null;
         }
+    }
+
+    private static String readCapped(InputStream input) throws IOException {
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        byte[] buffer = new byte[4096];
+        int read;
+        int retained = 0;
+        while ((read = input.read(buffer)) != -1) {
+            if (retained < MAX_PROCESS_OUTPUT_BYTES) {
+                int copy = Math.min(read, MAX_PROCESS_OUTPUT_BYTES - retained);
+                output.write(buffer, 0, copy);
+                retained += copy;
+            }
+        }
+        return output.toString(StandardCharsets.UTF_8);
     }
 }

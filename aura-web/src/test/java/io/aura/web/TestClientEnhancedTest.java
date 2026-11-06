@@ -1,6 +1,5 @@
 package io.aura.web;
 
-import io.aura.Aura;
 import org.junit.jupiter.api.Test;
 
 import java.util.Map;
@@ -13,9 +12,9 @@ class TestClientEnhancedTest {
 
     @Test
     void query_appendsToPath() {
-        var app = Aura.create();
-        app.routes(r -> r.get("/items", ctx -> ctx.json(Map.of("page", ctx.query("page"), "size", ctx.query("size")))));
-        var client = TestClient.of(app);
+        Router router = new Router();
+        router.get("/items", ctx -> ctx.json(Map.of("page", ctx.query("page"), "size", ctx.query("size"))));
+        var client = TestApplications.client(router);
 
         var resp = client.get("/items").query("page", "2").query("size", "10").execute();
         assertThat(resp.status()).isEqualTo(200);
@@ -23,13 +22,81 @@ class TestClientEnhancedTest {
         resp.expectJson("$.size", "10");
     }
 
+    @Test
+    void query_matchesUndertowDecodingAndFirstDuplicateValue() {
+        Router router = new Router();
+        router.get("/items", ctx -> ctx.json(Map.of(
+                "value", ctx.query("value"), "other", ctx.query("other"))));
+        var client = TestApplications.client(router);
+
+        var resp = client.get("/items")
+                .query("value", "中文 & space")
+                .query("value", "second")
+                .query("other", "a=b")
+                .execute();
+
+        resp.expect(200)
+                .expectJson("$.value", "中文 & space")
+                .expectJson("$.other", "a=b");
+    }
+
+    @Test
+    void headersAndCookies_matchCaseInsensitiveHttpSemantics() {
+        Router router = new Router();
+        router.get("/session", ctx -> ctx.json(Map.of(
+                "authorization", ctx.header("Authorization"),
+                "session", ctx.cookie("session"))));
+        var client = TestApplications.client(router);
+
+        client.get("/session")
+                .header("authorization", "Bearer test")
+                .cookie("session", "abc")
+                .execute()
+                .expectJson("$.authorization", "Bearer test")
+                .expectJson("$.session", "abc");
+    }
+
+    @Test
+    void responseCookies_areCapturedAsSetCookieHeader() {
+        Router router = new Router();
+        router.get("/login", ctx -> {
+            ctx.cookie("session", "abc", 120);
+            ctx.cookie("theme", "dark", 120);
+            ctx.cookie("session", "updated", 60);
+            ctx.text("ok");
+        });
+        var response = TestApplications.client(router).get("/login").execute();
+        assertThat(response.setCookies()).hasSize(2);
+        assertThat(response.setCookies().get(0)).contains("session=updated").contains("Max-Age=60");
+        assertThat(response.setCookies().get(1)).contains("theme=dark").contains("Max-Age=120");
+    }
+
+    @Test
+    void responseCookiesCannotChangeAfterResponseStartsOrAbort() {
+        Router router = new Router();
+        router.get("/late", ctx -> {
+            ctx.text("ok");
+            ctx.cookie("late", "ignored", 60);
+        });
+
+        var response = TestApplications.client(router).get("/late").execute();
+        assertThat(response.setCookies()).isEmpty();
+
+        router.get("/aborted", ctx -> {
+            ctx.abort();
+            ctx.cookie("late", "ignored", 60);
+        });
+        var aborted = TestApplications.client(router).get("/aborted").execute();
+        assertThat(aborted.setCookies()).isEmpty();
+    }
+
     // --- expectJson ---
 
     @Test
     void expectJson_matchesValue() {
-        var app = Aura.create();
-        app.routes(r -> r.get("/user", ctx -> ctx.json(Map.of("name", "Alice", "age", 30))));
-        var client = TestClient.of(app);
+        Router router = new Router();
+        router.get("/user", ctx -> ctx.json(Map.of("name", "Alice", "age", 30)));
+        var client = TestApplications.client(router);
 
         client.get("/user").execute()
                 .expect(200)
@@ -39,9 +106,9 @@ class TestClientEnhancedTest {
 
     @Test
     void expectJson_failsOnMismatch() {
-        var app = Aura.create();
-        app.routes(r -> r.get("/user", ctx -> ctx.json(Map.of("name", "Alice"))));
-        var client = TestClient.of(app);
+        Router router = new Router();
+        router.get("/user", ctx -> ctx.json(Map.of("name", "Alice")));
+        var client = TestApplications.client(router);
 
         var resp = client.get("/user").execute();
         assertThatThrownBy(() -> resp.expectJson("$.name", "Bob"))
@@ -55,47 +122,49 @@ class TestClientEnhancedTest {
 
     @Test
     void session_manualToken_attachesHeader() {
-        var app = Aura.create().jwt("test-secret");
-        app.routes(r -> {
-            r.before(Aura.requireAuth());
-            r.get("/me", ctx -> ctx.json(Map.of("userId", ctx.userId())));
+        Router router = new Router();
+        router.get("/me", ctx -> {
+            String authorization = ctx.header("Authorization");
+            if (authorization == null) {
+                ctx.status(401).json(Map.of("error", "Unauthorized"));
+                return;
+            }
+            ctx.json(Map.of("authorization", authorization));
         });
-        var client = TestClient.of(app);
+        var client = TestApplications.client(router);
 
-        String token = app.signJwt("user-42");
-        var session = client.session("Bearer " + token);
-        session.get("/me").expect(200).expectJson("$.userId", "user-42");
+        var session = client.session("Bearer test-token");
+        session.get("/me").expect(200).expectJson("$.authorization", "Bearer test-token");
     }
 
     @Test
     void session_login_extractsToken() {
-        var app = Aura.create().jwt("secret");
-        app.routes(r -> {
-            r.post("/login", ctx -> ctx.json(Map.of("token", app.signJwt("123"))));
-            r.get("/me", ctx -> {
-                String auth = ctx.header("Authorization");
-                if (auth == null) { ctx.status(401).json(Map.of("error", "Unauthorized")); return; }
-                String token = auth.replace("Bearer ", "");
-                String uid = app.verifyJwt(token);
-                ctx.json(Map.of("userId", uid));
-            });
+        Router router = new Router();
+        router.post("/login", ctx -> ctx.json(Map.of("token", "session-token")));
+        router.get("/me", ctx -> {
+            String auth = ctx.header("Authorization");
+            if (auth == null) { ctx.status(401).json(Map.of("error", "Unauthorized")); return; }
+            ctx.json(Map.of("token", auth.replace("Bearer ", "")));
         });
-        var client = TestClient.of(app);
+        var client = TestApplications.client(router);
 
         var loginResp = client.post("/login").body("{}").execute();
         var session = client.session();
         session.login(loginResp);
-        session.get("/me").expect(200).expectJson("$.userId", "123");
+        session.get("/me").expect(200).expectJson("$.token", "session-token");
     }
 
     @Test
     void session_withoutToken_gets401() {
-        var app = Aura.create().jwt("secret");
-        app.routes(r -> {
-            r.before(Aura.requireAuth());
-            r.get("/me", ctx -> ctx.text("ok"));
+        Router router = new Router();
+        router.get("/me", ctx -> {
+            if (ctx.header("Authorization") == null) {
+                ctx.status(401).json(Map.of("error", "Unauthorized"));
+                return;
+            }
+            ctx.text("ok");
         });
-        var client = TestClient.of(app);
+        var client = TestApplications.client(router);
 
         var session = client.session();
         session.get("/me").expect(401);
@@ -105,8 +174,8 @@ class TestClientEnhancedTest {
 
     @Test
     void mockContext_publiclyConstructible() {
-        var app = Aura.create();
-        var ctx = new MockContext(Map.of("id", "42"), Map.of(), Map.of(), null, app);
+        var ctx = new MockContext(Map.of("id", "42"), Map.of(), Map.of(), null,
+                TestApplications.runtime());
         assertThat(ctx.path("id")).isEqualTo("42");
         assertThat(ctx.statusCode()).isEqualTo(200);
     }

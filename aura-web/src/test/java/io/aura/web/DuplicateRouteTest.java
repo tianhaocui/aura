@@ -1,6 +1,9 @@
 package io.aura.web;
 
-import io.aura.Aura;
+import io.aura.port.BaseHandler;
+import io.aura.AuraApp;
+import io.aura.AuraConfig;
+import io.aura.contract.Route;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.*;
@@ -9,11 +12,9 @@ class DuplicateRouteTest {
 
     @Test
     void duplicateRoute_throwsOnStart() {
-        Aura app = Aura.create().port(0);
-        app.routes(r -> {
-            r.get("/api/users", ctx -> ctx.text("first"));
-            r.get("/api/users", ctx -> ctx.text("second"));
-        });
+        AuraApp app = app("duplicate-route",
+                route("GET", "/api/users", "first"),
+                route("GET", "/api/users", "second"));
         assertThatThrownBy(app::start)
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("Duplicate route: GET /api/users");
@@ -21,24 +22,26 @@ class DuplicateRouteTest {
 
     @Test
     void differentMethods_samePath_noDuplicate() throws Exception {
-        Aura app = Aura.create().port(0);
-        app.routes(r -> {
-            r.get("/api/users", ctx -> ctx.text("get"));
-            r.post("/api/users", ctx -> ctx.text("post"));
-        });
-        app.start();
-        app.stop();
+        AuraApp app = app("different-methods",
+                route("GET", "/api/users", "get"),
+                route("POST", "/api/users", "post"));
+        try {
+            app.start();
+        } finally {
+            app.stop();
+        }
     }
 
     @Test
     void differentPaths_sameMethod_noDuplicate() throws Exception {
-        Aura app = Aura.create().port(0);
-        app.routes(r -> {
-            r.get("/api/users", ctx -> ctx.text("users"));
-            r.get("/api/items", ctx -> ctx.text("items"));
-        });
-        app.start();
-        app.stop();
+        AuraApp app = app("different-paths",
+                route("GET", "/api/users", "users"),
+                route("GET", "/api/items", "items"));
+        try {
+            app.start();
+        } finally {
+            app.stop();
+        }
     }
 
     @Test
@@ -55,12 +58,21 @@ class DuplicateRouteTest {
     }
 
     @Test
+    void testClient_rejectsDuplicateRoutesLikeRealServer() {
+        AuraApp app = TestApplications.app("duplicate-test",
+                route("GET", "/same", "first"),
+                route("GET", "/same", "second"));
+
+        assertThatThrownBy(() -> TestClient.of(app))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("Duplicate route: GET /same");
+    }
+
+    @Test
     void duplicateParameterizedRoute_throwsOnStart() {
-        Aura app = Aura.create().port(0);
-        app.routes(r -> {
-            r.get("/api/users/{id}", ctx -> ctx.text("first"));
-            r.get("/api/users/{id}", ctx -> ctx.text("second"));
-        });
+        AuraApp app = app("duplicate-parameterized-route",
+                route("GET", "/api/users/{id}", "first"),
+                route("GET", "/api/users/{id}", "second"));
         assertThatThrownBy(app::start)
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("Duplicate route");
@@ -68,15 +80,33 @@ class DuplicateRouteTest {
 
     @Test
     void duplicateRouteInGroup_throwsOnStart() {
-        Aura app = Aura.create().port(0);
-        app.routes(r -> {
-            r.group("/api", api -> {
-                api.get("/users", ctx -> ctx.text("first"));
-                api.get("/users", ctx -> ctx.text("second"));
-            });
-        });
+        AuraApp app = app("duplicate-resolved-group-route",
+                route("GET", "/api/users", "first"),
+                route("GET", "/api/users", "second"));
         assertThatThrownBy(app::start)
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("Duplicate route: GET /api/users");
+    }
+
+    @Test
+    void twoNamesForOneParameterizedPathThrowOnStart() {
+        AuraApp app = app("renamed-parameter-route",
+                route("GET", "/api/users/{id}", "first"),
+                route("GET", "/api/users/{userId}", "second"));
+
+        // The placeholder name is the only difference, so the two can only ever answer the same
+        // request and which handler does is decided by the route sort, not by the author.
+        assertThatThrownBy(app::start)
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("/api/users/{id}")
+                .hasMessageContaining("/api/users/{userId}");
+    }
+
+    private static AuraApp app(String moduleId, Route... routes) {
+        return TestApplications.app(new AuraConfig().port(0), moduleId, routes);
+    }
+
+    private static Route route(String method, String path, String response) {
+        return Route.of(method, path, (BaseHandler) ctx -> ctx.text(response));
     }
 }

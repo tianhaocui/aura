@@ -1,0 +1,407 @@
+package io.aura.web;
+
+import io.aura.port.AdmissionDecision;
+import io.aura.port.AdmissionPolicy;
+import io.aura.port.AdmissionRequest;
+import com.alibaba.fastjson2.JSON;
+import io.aura.AuraEvent;
+import io.aura.AuraWebRuntime;
+import io.aura.CorsConfig;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.net.URI;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
+
+/**
+ * The pre-route policy chain: host allow-list, admission, security headers, CSRF, CORS, and the
+ * gates on Aura's own endpoints.
+ *
+ * <p>Both entry points build it from {@link #standard}, so {@code TestClient} rejects exactly what
+ * a real socket rejects instead of skipping straight to the handler.</p>
+ *
+ * <p>Draining is deliberately absent. Rejecting new traffic while in-flight requests finish is a
+ * transport lifecycle job, and a per-request rule here would silence the {@code /health} probes
+ * whose whole purpose is to answer {@code DOWN}.</p>
+ */
+public final class RequestGuards {
+
+    private static final Logger log = LoggerFactory.getLogger(RequestGuards.class);
+
+    private final List<RequestGuard> guards;
+
+    private RequestGuards(List<RequestGuard> guards) {
+        this.guards = guards;
+    }
+
+    /** Route template an admission policy should judge a request against. */
+    @FunctionalInterface
+    public interface RoutePattern {
+        String matching(String method, String path);
+    }
+
+    /** The chain Aura's own HTTP adapter runs, in the order its checks have always run. */
+    public static RequestGuards standard(AuraWebRuntime app, RoutePattern routePattern) {
+        List<RequestGuard> chain = new ArrayList<>();
+        chain.add(new HostGuard(app));
+        chain.add(new AdmissionGuard(app, routePattern));
+        chain.add(new SecurityHeadersGuard(app));
+        chain.add(new CsrfGuard(app));
+        chain.add(new CorsGuard(app));
+        chain.add(new BuiltinEndpointsGuard(app));
+        return new RequestGuards(List.copyOf(chain));
+    }
+
+    public GuardOutcome evaluate(GuardedRequest request) {
+        for (RequestGuard guard : guards) {
+            GuardOutcome outcome = guard.evaluate(request);
+            if (!outcome.proceed()) return outcome;
+        }
+        return GuardOutcome.next();
+    }
+
+    static boolean isUnsafeMethod(String method) {
+        return "POST".equals(method) || "PUT".equals(method) || "PATCH".equals(method)
+                || "DELETE".equals(method);
+    }
+
+    static String propertyOrDefault(AuraWebRuntime app, String key, String fallback) {
+        String value = app.prop(key);
+        return value == null || value.isBlank() ? fallback : value.trim();
+    }
+
+    private record HostGuard(AuraWebRuntime app) implements RequestGuard {
+        @Override
+        public GuardOutcome evaluate(GuardedRequest request) {
+            if (hostAllowed(request.hostName())) return GuardOutcome.next();
+            app.emit(AuraEvent.of("request.rejected.host", Map.of("method", request.method())));
+            return GuardOutcome.reject(421, "Misdirected Request");
+        }
+
+        private boolean hostAllowed(String host) {
+            if (host == null) return false;
+            if (!app.allowedHosts().isEmpty()) return app.allowedHosts().contains(host.toLowerCase());
+            if (app.publicOrigin() == null) return true;
+            try {
+                return host.equalsIgnoreCase(URI.create(app.publicOrigin()).getHost());
+            } catch (IllegalArgumentException e) {
+                return false;
+            }
+        }
+    }
+
+    /** Concurrency, rate limiting, and any module-supplied admission policy. */
+    private static final class AdmissionGuard implements RequestGuard {
+
+        private final AuraWebRuntime app;
+        private final RoutePattern routePattern;
+        private final AtomicInteger inFlight = new AtomicInteger();
+        private final FixedWindowRateLimiter rateLimiter;
+
+        AdmissionGuard(AuraWebRuntime app, RoutePattern routePattern) {
+            this.app = app;
+            this.routePattern = routePattern;
+            this.rateLimiter = new FixedWindowRateLimiter(app.rateLimitMaxKeys());
+        }
+
+        @Override
+        public GuardOutcome evaluate(GuardedRequest request) {
+            String method = request.method();
+            String path = request.path();
+            AdmissionPolicy custom = app.admissionPolicy();
+            if (custom != null) return evaluateCustom(request, custom, method, path);
+
+            int limit = app.concurrencyLimit();
+            if (limit > 0 && inFlight.incrementAndGet() > limit) {
+                app.emit(AuraEvent.of("request.rejected.concurrency", Map.of("limit", limit)));
+                inFlight.decrementAndGet();
+                return GuardOutcome.reject(503, "Service Unavailable");
+            }
+            int rate = app.rateLimitPerSecond();
+            if (rate > 0) {
+                String key = clientIp(request);
+                long now = System.currentTimeMillis() / 1000;
+                if (!rateLimiter.tryAcquire(key, rate, now)) {
+                    app.emit(AuraEvent.of("request.rejected.rate",
+                            Map.of("ratePerSecond", rate, "key", key)));
+                    if (limit > 0) inFlight.decrementAndGet();
+                    request.responseHeader("Retry-After", "1");
+                    return GuardOutcome.reject(429, "Too Many Requests");
+                }
+            }
+            if (limit > 0) request.onComplete(() -> inFlight.decrementAndGet());
+            return GuardOutcome.next();
+        }
+
+        private GuardOutcome evaluateCustom(GuardedRequest request, AdmissionPolicy custom,
+                                            String method, String path) {
+            AdmissionDecision decision;
+            try {
+                decision = custom.admit(new AdmissionRequest(method, path,
+                        routePattern.matching(method, path), clientIp(request),
+                        request.header("X-API-Key")));
+                if (decision == null) throw new IllegalStateException("Admission policy returned null");
+            } catch (RuntimeException failure) {
+                log.error("Admission policy failed closed for {} {}", method, path, failure);
+                return rejectAdmission(request, 503, "AURA_ADMISSION_POLICY_ERROR", 0);
+            }
+            if (!decision.allowed()) {
+                app.emit(AuraEvent.of("request.rejected.admission", Map.of(
+                        "method", method, "path", path, "status", decision.status(),
+                        "code", decision.code())));
+                GuardOutcome outcome = rejectAdmission(request, decision.status(),
+                        decision.code(), decision.retryAfterSeconds());
+                decision.close();
+                return outcome;
+            }
+            request.onComplete(decision::close);
+            return GuardOutcome.next();
+        }
+
+        private GuardOutcome rejectAdmission(GuardedRequest request, int status,
+                                             String code, int retryAfterSeconds) {
+            if (retryAfterSeconds > 0) {
+                request.responseHeader("Retry-After", Integer.toString(retryAfterSeconds));
+            }
+            return GuardOutcome.payload(status, JSON.toJSONString(Map.of(
+                    "error", "Request admission rejected", "code", code)));
+        }
+
+        private String clientIp(GuardedRequest request) {
+            String peer = request.peerIp();
+            String key = Context.resolveClientIp(String.join(",", app.trustedProxies()), peer,
+                    request.header("X-Forwarded-For"));
+            return key == null || key.isBlank() ? "unknown" : key;
+        }
+    }
+
+    private record SecurityHeadersGuard(AuraWebRuntime app) implements RequestGuard {
+        @Override
+        public GuardOutcome evaluate(GuardedRequest request) {
+            if (app.securityHeaders()) {
+                request.responseHeader("X-Content-Type-Options", "nosniff");
+                request.responseHeader("X-Frame-Options", "DENY");
+                request.responseHeader("Referrer-Policy", "no-referrer");
+                if (request.secure()) {
+                    request.responseHeader("Strict-Transport-Security",
+                            "max-age=31536000; includeSubDomains");
+                }
+            }
+            return GuardOutcome.next();
+        }
+    }
+
+    private record CsrfGuard(AuraWebRuntime app) implements RequestGuard {
+        @Override
+        public GuardOutcome evaluate(GuardedRequest request) {
+            String enabled = app.prop("aura.csrf.enabled");
+            // Production protection is the default, not a switch an operator has to remember.
+            // Anything other than an explicit "false" stays on, so a typo fails closed.
+            boolean enforce = enabled != null ? !"false".equalsIgnoreCase(enabled)
+                    : !"dev".equalsIgnoreCase(app.env());
+            if (!enforce || !isUnsafeMethod(request.method())) return GuardOutcome.next();
+
+            String headerName = propertyOrDefault(app, "aura.csrf.header", "X-CSRF-Token");
+            String cookieName = propertyOrDefault(app, "aura.csrf.cookie", "csrf_token");
+            String header = request.header(headerName);
+            String cookie = request.cookie(cookieName);
+            if (header != null && !header.isBlank() && cookie != null && !cookie.isBlank()
+                    && MessageDigest.isEqual(header.getBytes(StandardCharsets.UTF_8),
+                    cookie.getBytes(StandardCharsets.UTF_8))) {
+                return GuardOutcome.next();
+            }
+
+            String origin = request.header("Origin");
+            if (origin == null) {
+                String referer = request.header("Referer");
+                if (referer != null) {
+                    try {
+                        URI parsed = URI.create(referer);
+                        origin = parsed.getScheme() + "://" + parsed.getAuthority();
+                    } catch (IllegalArgumentException ignored) {
+                        return rejected();
+                    }
+                }
+            }
+            if (origin == null) return rejected();
+            String expected = expectedOrigin();
+            return expected != null && expected.equalsIgnoreCase(origin)
+                    ? GuardOutcome.next()
+                    : rejected();
+        }
+
+        private static GuardOutcome rejected() {
+            return GuardOutcome.payload(403, "{\"error\":\"CSRF validation failed\"}");
+        }
+
+        /**
+         * The request's own Host and forwarding headers cannot establish which origin the
+         * operator intended: the caller controls them. A missing or malformed configured origin
+         * is rejected by validation when enforcement is on, so returning null here fails closed.
+         */
+        private String expectedOrigin() {
+            String configured = app.publicOrigin();
+            if (configured == null) configured = app.prop("aura.public-origin");
+            if (configured == null || configured.isBlank()) return null;
+            try {
+                URI uri = URI.create(configured.trim());
+                if (uri.getScheme() == null || uri.getRawAuthority() == null) return null;
+                return uri.getScheme() + "://" + uri.getRawAuthority();
+            } catch (IllegalArgumentException invalid) {
+                return null;
+            }
+        }
+    }
+
+    /**
+     * The decisions about Aura's own endpoints: who may read the schema, whether OpenAPI exists
+     * at all, and whether a browser origin may upgrade to WebSocket. They used to sit inside the
+     * Undertow dispatch, which left the in-memory client verifying a security layer that stopped
+     * at the edge of the application's own routes.
+     *
+     * <p>Each rejection is bodyless on purpose. A 404 and a 401 are the whole signal for the
+     * schema endpoint, and an error document that names the reason discloses more than the
+     * status code does.</p>
+     */
+    private record BuiltinEndpointsGuard(AuraWebRuntime app) implements RequestGuard {
+
+        @Override
+        public GuardOutcome evaluate(GuardedRequest request) {
+            if (!"GET".equals(request.method())) return GuardOutcome.next();
+            String path = request.path();
+            if ("/__schema__".equals(path)) return schemaDecision(request);
+            if ("/openapi.json".equals(path)) {
+                return app.openApiEnabled() || app.devMode()
+                        ? GuardOutcome.next() : GuardOutcome.stop(404);
+            }
+            if ("websocket".equalsIgnoreCase(request.header("Upgrade"))) return wsOriginDecision(request);
+            return GuardOutcome.next();
+        }
+
+        private GuardOutcome schemaDecision(GuardedRequest request) {
+            if (schemaAllowed(request)) return GuardOutcome.next();
+            return GuardOutcome.stop(schemaToken() == null ? 404 : 401);
+        }
+
+        private boolean schemaAllowed(GuardedRequest request) {
+            boolean enabled = Boolean.parseBoolean(app.prop("aura.schema.enabled"));
+            boolean dev = "dev".equalsIgnoreCase(app.env());
+            if (!dev && !enabled) return false;
+            String token = schemaToken();
+            if (token == null || token.isBlank()) {
+                // The switch and the token are independent doors: either one alone opens the
+                // endpoint. Before this chain, a production app that set aura.schema.enabled
+                // without a token was told the schema did not exist -- a flag that silently
+                // did nothing is worse than a flag that refuses to be set.
+                return dev || enabled;
+            }
+            String supplied = request.header("X-Aura-Schema-Token");
+            if (supplied == null) {
+                String authorization = request.header("Authorization");
+                if (authorization != null && authorization.regionMatches(true, 0, "Bearer ", 0, 7)) {
+                    supplied = authorization.substring(7).trim();
+                }
+            }
+            return MessageDigest.isEqual(token.getBytes(StandardCharsets.UTF_8),
+                    (supplied == null ? "" : supplied).getBytes(StandardCharsets.UTF_8));
+        }
+
+        private String schemaToken() {
+            String token = app.prop("aura.schema.auth-token");
+            return token != null ? token : app.prop("aura.schema-token");
+        }
+
+        private GuardOutcome wsOriginDecision(GuardedRequest request) {
+            return originAllowed(request.header("Origin"))
+                    ? GuardOutcome.next() : GuardOutcome.stop(403);
+        }
+
+        private boolean originAllowed(String origin) {
+            if (origin == null || origin.isBlank()) {
+                // Non-browser clients commonly omit Origin. Keep that compatibility only
+                // for development or an explicit opt-in; production browser handshakes
+                // must carry an allowlisted Origin.
+                return "dev".equalsIgnoreCase(app.env())
+                        || Boolean.parseBoolean(app.prop("aura.websocket.allow-missing-origin"));
+            }
+            String explicit = app.prop("aura.websocket.origins");
+            if (explicit != null && !explicit.isBlank()) {
+                return Arrays.stream(explicit.split(","))
+                        .map(String::trim).anyMatch(origin::equals);
+            }
+            CorsConfig corsConfig = app.corsConfig();
+            if (corsConfig != null) {
+                if (corsConfig.hasWildcardOrigin()) return false;
+                return corsConfig.resolveOrigin(origin) != null;
+            }
+            String corsOrigin = app.corsOrigin();
+            if (corsOrigin == null) return "dev".equalsIgnoreCase(app.env());
+            if ("*".equals(corsOrigin)) return false;
+            return corsOrigin.equals(origin);
+        }
+    }
+
+    private record CorsGuard(AuraWebRuntime app) implements RequestGuard {
+        @Override
+        public GuardOutcome evaluate(GuardedRequest request) {
+            String corsOrigin = app.corsOrigin();
+            if (corsOrigin == null) return GuardOutcome.next();
+
+            CorsConfig corsConfig = app.corsConfig();
+            String allowOrigin;
+            String allowHeaders;
+            boolean credentials = false;
+            if (corsConfig != null) {
+                String requestOrigin = request.header("Origin");
+                allowOrigin = corsConfig.resolveOrigin(requestOrigin);
+                allowHeaders = corsConfig.headers();
+                credentials = corsConfig.credentials();
+                if (corsConfig.hasWildcardOrigin() && credentials) {
+                    // A wildcard cannot be combined with credentialed CORS. Refuse to reflect
+                    // an arbitrary browser Origin rather than echoing the request back.
+                    allowOrigin = null;
+                    credentials = false;
+                }
+                if (requestOrigin != null && !"*".equals(allowOrigin)) {
+                    request.addResponseHeader("Vary", "Origin");
+                }
+            } else {
+                allowOrigin = corsOrigin;
+                allowHeaders = "Content-Type, Authorization";
+            }
+            if (allowOrigin != null) {
+                request.responseHeader("Access-Control-Allow-Origin", allowOrigin);
+                request.responseHeader("Access-Control-Allow-Methods",
+                        "GET, POST, PUT, DELETE, PATCH, HEAD, OPTIONS");
+                request.responseHeader("Access-Control-Allow-Headers", allowHeaders);
+                request.responseHeader("Access-Control-Max-Age", "86400");
+                if (credentials) request.responseHeader("Access-Control-Allow-Credentials", "true");
+                String requestedHeaders = request.header("Access-Control-Request-Headers");
+                if (requestedHeaders != null && !requestedHeaders.isBlank()) {
+                    // Only a policy that allows every header may echo the request's list; an
+                    // explicit allow-list stays authoritative.
+                    boolean anyHeader = allowHeaders == null || allowHeaders.isBlank()
+                            || "*".equals(allowHeaders.trim());
+                    if (anyHeader) {
+                        request.responseHeader("Access-Control-Allow-Headers", requestedHeaders);
+                    }
+                    request.addResponseHeader("Vary", "Access-Control-Request-Headers");
+                }
+            }
+            // An OPTIONS request is a preflight only when it carries both headers. Answering
+            // every OPTIONS with 204 here swallowed ordinary OPTIONS routes and bypassed the
+            // router's Allow handling for non-CORS callers.
+            boolean preflight = "OPTIONS".equals(request.method())
+                    && request.header("Origin") != null
+                    && request.header("Access-Control-Request-Method") != null;
+            if (preflight && allowOrigin != null) return GuardOutcome.stop(204);
+            return GuardOutcome.next();
+        }
+    }
+}

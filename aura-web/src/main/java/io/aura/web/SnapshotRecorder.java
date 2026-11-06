@@ -1,0 +1,503 @@
+package io.aura.web;
+
+import com.alibaba.fastjson2.JSON;
+import com.alibaba.fastjson2.JSONWriter;
+import io.aura.AuraWebRuntime;
+import io.aura.snapshot.ExceptionSnapshot;
+import io.aura.snapshot.SnapshotOptions;
+import io.aura.snapshot.SnapshotScope;
+import io.undertow.server.HttpServerExchange;
+
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.time.Instant;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+class SnapshotRecorder {
+
+    private static final Logger log = LoggerFactory.getLogger(SnapshotRecorder.class);
+
+    private static final String TRUNCATION_MARKER = "...<truncated>";
+    private static final String SAFE_PATH_PARAMETER = "redacted";
+    private static final int MAX_SNAPSHOT_COLLECTION_ENTRIES = 256;
+    private static final Map<AuraWebRuntime, SnapshotRecorder> RECORDERS = new ConcurrentHashMap<>();
+    private static final Map<Path, Object> STORAGE_LOCKS = new ConcurrentHashMap<>();
+
+    private final SnapshotOptions options;
+    private final SnapshotRedactor redactor;
+    private final ExceptionSnapshot.EnvSnapshot env;
+    private final ArrayBlockingQueue<ExceptionSnapshot> queue;
+    private final Thread writer;
+    private final AtomicLong dropped = new AtomicLong();
+    private volatile boolean closed;
+
+    private SnapshotRecorder(AuraWebRuntime app) {
+        this.options = app.snapshotOptions();
+        this.redactor = new SnapshotRedactor(options);
+        this.env = captureEnv(app, options);
+        this.queue = options.async() ? new ArrayBlockingQueue<>(options.queueSize()) : null;
+        this.writer = options.async() ? startWriter() : null;
+    }
+
+    static SnapshotRecorder of(AuraWebRuntime app) {
+        return RECORDERS.computeIfAbsent(app, SnapshotRecorder::new);
+    }
+
+    static void close(AuraWebRuntime app) {
+        SnapshotRecorder recorder = RECORDERS.remove(app);
+        if (recorder != null) recorder.close();
+    }
+
+    static boolean shouldCapture(AuraWebRuntime app) {
+        SnapshotOptions options = app.snapshotOptions();
+        if (!options.enabled()) return false;
+        return options.sampleRate() >= 1.0 || Math.random() <= options.sampleRate();
+    }
+
+    static long dropped(AuraWebRuntime app) {
+        SnapshotRecorder recorder = RECORDERS.get(app);
+        return recorder == null ? 0L : recorder.dropped.get();
+    }
+
+    static SnapshotMetrics metrics(AuraWebRuntime app) {
+        SnapshotRecorder recorder = RECORDERS.get(app);
+        SnapshotOptions options = app.snapshotOptions();
+        if (recorder == null) {
+            return new SnapshotMetrics(0, 0, options.async() ? options.queueSize() : 0,
+                    options.async(), false);
+        }
+        return new SnapshotMetrics(recorder.dropped.get(),
+                recorder.queue == null ? 0 : recorder.queue.size(),
+                recorder.queue == null ? 0 : recorder.queue.size() + recorder.queue.remainingCapacity(),
+                recorder.queue != null, recorder.writer != null && recorder.writer.isAlive());
+    }
+
+    void record(Exception e, CompiledRoute route, Context ctx, HttpServerExchange exchange, SnapshotScope scope) {
+        Map<String, String> headers = new LinkedHashMap<>();
+        exchange.getRequestHeaders().forEach(h -> headers.put(h.getHeaderName().toString(), h.getFirst()));
+        Map<String, String> query = new LinkedHashMap<>();
+        exchange.getQueryParameters().forEach((k, v) -> query.put(k, v == null || v.isEmpty() ? "" : v.peek()));
+        String body = options.bodyMode() == SnapshotOptions.BodyMode.CACHED_ONLY ? ctx.cachedBody() : null;
+        Map<String, String> pathParams = route.match(stripQuery(ctx.url()));
+        record(e, route.method(), route.rawPath(), pathParams, handlerName(route), ctx.method(),
+                safeRequestPath(route, ctx.url(), pathParams),
+                query, headers, body, ctx.ip(), ctx.requestId(), ctx.statusCode(), scope);
+    }
+
+    void record(Exception e, CompiledRoute route, MockContext ctx, String method, String path,
+                Map<String, String> query, Map<String, String> headers, String body, SnapshotScope scope) {
+        Map<String, String> pathParams = route.match(stripQuery(path));
+        record(e, route.method(), route.rawPath(), pathParams, handlerName(route), method,
+                safeRequestPath(route, path, pathParams),
+                query, headers, body, ctx.ip(), ctx.requestId(), ctx.statusCode(), scope);
+    }
+
+    private String safeRequestPath(CompiledRoute route, String actualPath, Map<String, String> pathParams) {
+        if (pathParams == null && actualPath != null) {
+            int queryStart = actualPath.indexOf('?');
+            if (queryStart >= 0) pathParams = route.match(actualPath.substring(0, queryStart));
+        }
+        if (pathParams == null || pathParams.isEmpty()) return redactor.path(actualPath);
+        String safePath = route.rawPath();
+        for (String name : pathParams.keySet()) {
+            safePath = safePath.replace("{" + name + "}", SAFE_PATH_PARAMETER);
+        }
+        return redactor.path(safePath);
+    }
+
+    private static String stripQuery(String path) {
+        if (path == null) return null;
+        int queryStart = path.indexOf('?');
+        return queryStart >= 0 ? path.substring(0, queryStart) : path;
+    }
+
+    private static Map<String, String> safePathParams(Map<String, String> pathParams) {
+        if (pathParams == null || pathParams.isEmpty()) return Map.of();
+        Map<String, String> safe = new LinkedHashMap<>();
+        pathParams.keySet().forEach(key -> safe.put(key, "<redacted>"));
+        return safe;
+    }
+
+    private void record(Exception e, String routeMethod, String routePath, Map<String, String> pathParams,
+                        String handler, String method, String path, Map<String, String> query,
+                        Map<String, String> headers, String body, String ip, String requestId,
+                        int status, SnapshotScope scope) {
+        if (tooManyEntries(query) || tooManyEntries(headers)
+                || scope != null && (tooManyEntries(scope.artifacts())
+                || scope.externalCalls().size() > MAX_SNAPSHOT_COLLECTION_ENTRIES)) {
+            drop("collection-limit");
+            return;
+        }
+        Throwable cause = ExceptionResolver.unwrap(e);
+        ExceptionSnapshot snapshot = new ExceptionSnapshot(
+                1,
+                Instant.now().toString().replace(':', '-') + "-" + UUID.randomUUID(),
+                Instant.now().toString(),
+                new ExceptionSnapshot.RequestSnapshot(method, redactor.path(path), redactor.query(query), redactor.headers(headers),
+                        redactor.body(body, options.maxBodySize()), ip, requestId),
+                new ExceptionSnapshot.RouteSnapshot(routeMethod, redactor.path(routePath),
+                        safePathParams(pathParams), handler),
+                new ExceptionSnapshot.ExceptionInfo(cause.getClass().getName(), null,
+                        redactor.exceptionText(ExceptionResolver.code(cause)),
+                        redactor.exceptionText(ExceptionResolver.field(cause)), ExceptionResolver.status(cause),
+                        rootType(cause), null, redactor.stackText(stackTrace(cause))),
+                response(status, scope),
+                env,
+                scope != null ? scope.externalCalls().stream()
+                        .limit(MAX_SNAPSHOT_COLLECTION_ENTRIES)
+                        .map(this::redactExternalCall).toList() : List.of(),
+                scope != null ? redactArtifacts(scope.artifacts()) : Map.of()
+        );
+        write(snapshot);
+    }
+
+    private static boolean tooManyEntries(Map<?, ?> values) {
+        return values != null && values.size() > MAX_SNAPSHOT_COLLECTION_ENTRIES;
+    }
+
+    private ExceptionSnapshot.ResponseSnapshot response(int status, SnapshotScope scope) {
+        if (scope != null && scope.response() != null) {
+            ExceptionSnapshot.ResponseSnapshot resp = scope.response();
+            return new ExceptionSnapshot.ResponseSnapshot(resp.status(), redactor.headers(resp.headers()), resp.contentType(),
+                    redactor.body(resp.body(), options.maxBodySize()));
+        }
+        return new ExceptionSnapshot.ResponseSnapshot(status, Map.of(), null, null);
+    }
+
+    private ExceptionSnapshot.ExternalCallSnapshot redactExternalCall(ExceptionSnapshot.ExternalCallSnapshot call) {
+        return new ExceptionSnapshot.ExternalCallSnapshot(call.id(), call.name(), call.protocol(), call.method(), redactor.url(call.url()),
+                redactor.headers(call.requestHeaders()),
+                redactor.body(call.requestBody(), options.maxExternalBodySize()),
+                call.responseStatus(),
+                redactor.headers(call.responseHeaders()),
+                redactor.body(call.responseBody(), options.maxExternalBodySize()),
+                call.durationMs(), call.startedAt());
+    }
+
+    private Map<String, Object> redactArtifacts(Map<String, Object> artifacts) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        for (var entry : artifacts.entrySet()) {
+            if (result.size() >= MAX_SNAPSHOT_COLLECTION_ENTRIES) break;
+            String key = entry.getKey();
+            result.put(key, redactor.isSensitiveField(key) ? "<redacted>" : redactor.artifact(entry.getValue()));
+        }
+        return result;
+    }
+
+    private void write(ExceptionSnapshot snapshot) {
+        if (closed) return;
+        if (options.async()) {
+            if (!queue.offer(snapshot)) drop("queue-full");
+        } else {
+            writeNow(snapshot);
+        }
+    }
+
+    private void drop(String reason) {
+        dropped.incrementAndGet();
+        try { options.dropCallback().accept(reason); }
+        catch (RuntimeException callbackError) { log.warn("Snapshot drop callback failed", callbackError); }
+    }
+
+    private Thread startWriter() {
+        Thread t = new Thread(() -> {
+            while (!closed || !queue.isEmpty()) {
+                try {
+                    ExceptionSnapshot snapshot = queue.poll(100, TimeUnit.MILLISECONDS);
+                    if (snapshot != null) writeNow(snapshot);
+                } catch (InterruptedException e) {
+                    if (!closed) {
+                        Thread.currentThread().interrupt();
+                        return;
+                    }
+                }
+            }
+        }, "aura-snapshot-writer");
+        t.setDaemon(true);
+        t.start();
+        return t;
+    }
+
+    private void close() {
+        closed = true;
+        if (writer == null) return;
+        writer.interrupt();
+        boolean interrupted = false;
+        while (writer.isAlive()) {
+            try {
+                writer.join(2_000L);
+                if (writer.isAlive()) break;
+            } catch (InterruptedException e) {
+                interrupted = true;
+            }
+        }
+        if (interrupted) Thread.currentThread().interrupt();
+    }
+
+    private void writeNow(ExceptionSnapshot snapshot) {
+        try {
+            String json = JSON.toJSONString(redactStoredStack(snapshot), JSONWriter.Feature.PrettyFormat);
+            byte[] bytes = json.getBytes(StandardCharsets.UTF_8);
+            if (options.maxSnapshotFileSize() <= 0 || bytes.length > options.maxSnapshotFileSize()) {
+                drop("file-too-large");
+                return;
+            }
+            Path dir = options.dir().toAbsolutePath().normalize();
+            Object storageLock = STORAGE_LOCKS.computeIfAbsent(dir, ignored -> new Object());
+            synchronized (storageLock) {
+                Files.createDirectories(dir);
+                evictExpired(dir);
+                evictForCount(dir);
+                evictForCapacity(dir, bytes.length);
+                if (options.maxStorageSize() <= 0 || options.maxSnapshots() <= 0
+                        || storageSize(dir) + bytes.length > options.maxStorageSize()
+                        || snapshotCount(dir) >= options.maxSnapshots()) {
+                    drop("retention-limit");
+                    return;
+                }
+                Path path = dir.resolve(snapshot.snapshotId() + ".json");
+                Files.write(path, bytes);
+            }
+        } catch (Exception error) {
+            dropped.incrementAndGet();
+            log.warn("Failed to write Aura snapshot", error);
+            try { options.writeFailureCallback().accept(error); }
+            catch (RuntimeException callbackError) { log.warn("Snapshot write failure callback failed", callbackError); }
+        }
+    }
+
+    /** Second-pass scan: guarantees any stack trace reaching disk has been through the redactor. */
+    private ExceptionSnapshot redactStoredStack(ExceptionSnapshot snapshot) {
+        ExceptionSnapshot.ExceptionInfo safeException = null;
+        ExceptionSnapshot.ExceptionInfo exception = snapshot.exception();
+        if (exception != null && exception.stackTrace() != null) {
+            String redacted = redactor.stackText(exception.stackTrace());
+            if (!redacted.equals(exception.stackTrace())) {
+                safeException = new ExceptionSnapshot.ExceptionInfo(
+                        exception.type(), exception.message(), exception.code(), exception.field(), exception.status(),
+                        exception.rootCauseType(), exception.rootCauseMessage(), redacted);
+            }
+        }
+        ExceptionSnapshot.ResponseSnapshot safeResponse = null;
+        ExceptionSnapshot.ResponseSnapshot response = snapshot.response();
+        if (response != null) {
+            Object scrubbedBody = scrubStackFields(response.body());
+            if (scrubbedBody != response.body()) {
+                safeResponse = new ExceptionSnapshot.ResponseSnapshot(
+                        response.status(), response.headers(), response.contentType(), scrubbedBody);
+            }
+        }
+        if (safeException == null && safeResponse == null) return snapshot;
+        return new ExceptionSnapshot(snapshot.schemaVersion(), snapshot.snapshotId(), snapshot.createdAt(),
+                snapshot.request(), snapshot.route(),
+                safeException != null ? safeException : exception,
+                safeResponse != null ? safeResponse : response,
+                snapshot.environment(), snapshot.externalCalls(), snapshot.artifacts());
+    }
+
+    /**
+     * Recursively walks response/artifact bodies and applies stack-text redaction to any
+     * string value under a trace-shaped key (`trace`, `stackTrace`, `stack`, `cause`).
+     * Dev-mode responses embed the raw trace in the JSON body; the recorder already redacts
+     * exception.stackTrace but not this second copy.
+     */
+    private Object scrubStackFields(Object value) {
+        if (value instanceof Map<?, ?> map) {
+            Map<Object, Object> out = new LinkedHashMap<>(map.size());
+            boolean changed = false;
+            for (var e : map.entrySet()) {
+                Object k = e.getKey();
+                Object v = e.getValue();
+                Object scrubbed = (k instanceof String key && isTraceKey(key) && v instanceof String s)
+                        ? redactor.stackText(s)
+                        : scrubStackFields(v);
+                if (scrubbed != v) changed = true;
+                out.put(k, scrubbed);
+            }
+            return changed ? out : value;
+        }
+        if (value instanceof List<?> list) {
+            List<Object> out = new java.util.ArrayList<>(list.size());
+            boolean changed = false;
+            for (Object item : list) {
+                Object scrubbed = scrubStackFields(item);
+                if (scrubbed != item) changed = true;
+                out.add(scrubbed);
+            }
+            return changed ? out : value;
+        }
+        return value;
+    }
+
+    private static boolean isTraceKey(String key) {
+        String normalized = key.toLowerCase(java.util.Locale.ROOT).replace("_", "").replace("-", "");
+        return normalized.equals("trace") || normalized.equals("stacktrace")
+                || normalized.equals("stack") || normalized.equals("cause");
+    }
+
+    private void evictExpired(Path dir) {
+        if (options.retentionTtl().isZero()) return;
+        long cutoff = System.currentTimeMillis() - options.retentionTtl().toMillis();
+        for (Path file : snapshotFiles(dir)) {
+            try {
+                if (Files.getLastModifiedTime(file).toMillis() < cutoff) Files.deleteIfExists(file);
+            } catch (Exception error) { log.debug("Failed to evict expired snapshot {}", file, error); }
+        }
+    }
+
+    private void evictForCount(Path dir) {
+        if (options.maxSnapshots() <= 0) return;
+        List<Path> files = snapshotFiles(dir);
+        int excess = files.size() - Math.max(0, options.maxSnapshots() - 1);
+        for (int i = 0; i < excess; i++) deleteQuietly(files.get(i));
+    }
+
+    private void evictForCapacity(Path dir, long incomingBytes) {
+        if (options.maxStorageSize() <= 0) return;
+        List<Path> files = snapshotFiles(dir);
+        long size = storageSize(dir);
+        int index = 0;
+        while (size + incomingBytes > options.maxStorageSize() && index < files.size()) {
+            Path file = files.get(index++);
+            try {
+                long fileSize = Files.size(file);
+                if (Files.deleteIfExists(file)) size -= fileSize;
+            } catch (Exception error) { log.debug("Failed to evict snapshot {}", file, error); }
+        }
+    }
+
+    private static List<Path> snapshotFiles(Path dir) {
+        try (var files = Files.list(dir)) {
+            return files.filter(Files::isRegularFile)
+                    .filter(file -> file.getFileName().toString().endsWith(".json"))
+                    .sorted(java.util.Comparator.comparingLong(SnapshotRecorder::modifiedTime))
+                    .toList();
+        } catch (Exception ignored) { return List.of(); }
+    }
+
+    private static long modifiedTime(Path file) {
+        try { return Files.getLastModifiedTime(file).toMillis(); }
+        catch (Exception ignored) { return Long.MIN_VALUE; }
+    }
+
+    private static int snapshotCount(Path dir) { return snapshotFiles(dir).size(); }
+
+    private static void deleteQuietly(Path file) {
+        try { Files.deleteIfExists(file); }
+        catch (Exception ignored) { }
+    }
+
+    private static long storageSize(Path dir) {
+        try (var files = Files.list(dir)) {
+            return files.filter(Files::isRegularFile)
+                    .mapToLong(file -> {
+                        try { return Files.size(file); } catch (Exception ignored) { return 0L; }
+                    }).sum();
+        } catch (Exception ignored) {
+            return 0L;
+        }
+    }
+
+    private static ExceptionSnapshot.EnvSnapshot captureEnv(AuraWebRuntime app, SnapshotOptions options) {
+        Map<String, String> env = new LinkedHashMap<>();
+        for (String key : options.envAllowlist()) {
+            String value = System.getenv(key);
+            if (value != null) env.put(key, value);
+        }
+        Map<String, String> props = new LinkedHashMap<>();
+        props.put("aura.env", app.env());
+        props.put("aura.port", String.valueOf(app.port()));
+        props.put("aura.workers", String.valueOf(app.workers()));
+        props.put("aura.request-timeout", String.valueOf(app.requestTimeout()));
+        props.put("aura.gzip", String.valueOf(app.gzip()));
+        return new ExceptionSnapshot.EnvSnapshot(
+                AuraWebRuntime.class.getPackage().getImplementationVersion(),
+                app.env(),
+                System.getProperty("java.version"),
+                System.getProperty("os.name"),
+                java.util.TimeZone.getDefault().getID(),
+                java.util.Locale.getDefault().toLanguageTag(),
+                props,
+                env
+        );
+    }
+
+    private String stackTrace(Throwable t) {
+        int maxSize = options.maxStackTraceSize();
+        if (maxSize <= 0) return null;
+        StringBuilder result = new StringBuilder();
+        Throwable current = t;
+        boolean truncated = false;
+        while (current != null) {
+            if (!appendWithinLimit(result, current.getClass().getName() + '\n', maxSize)) {
+                truncated = true;
+                break;
+            }
+            for (StackTraceElement frame : current.getStackTrace()) {
+                if (!appendWithinLimit(result, "\\tat " + frame + '\n', maxSize)) {
+                    truncated = true;
+                    break;
+                }
+            }
+            if (truncated) break;
+            current = current.getCause();
+            if (current != null && !appendWithinLimit(result, "Caused by: ", maxSize)) {
+                truncated = true;
+                break;
+            }
+        }
+        return truncated ? addTruncationMarker(result, maxSize) : result.toString();
+    }
+
+    private static boolean appendWithinLimit(StringBuilder result, String value, int maxSize) {
+        int remaining = maxSize - result.length();
+        if (value.length() <= remaining) {
+            result.append(value);
+            return true;
+        }
+        result.append(value, 0, remaining);
+        return false;
+    }
+
+    private static String addTruncationMarker(StringBuilder result, int maxSize) {
+        if (maxSize <= TRUNCATION_MARKER.length()) {
+            return TRUNCATION_MARKER.substring(0, maxSize);
+        }
+        int contentSize = maxSize - TRUNCATION_MARKER.length();
+        return result.substring(0, Math.min(result.length(), contentSize)) + TRUNCATION_MARKER;
+    }
+
+    private static String rootType(Throwable t) {
+        Throwable root = root(t);
+        return root != null ? root.getClass().getName() : null;
+    }
+
+    private static String rootMessage(Throwable t) {
+        Throwable root = root(t);
+        return root != null ? root.getMessage() : null;
+    }
+
+    private static Throwable root(Throwable t) {
+        Throwable cur = t;
+        while (cur != null && cur.getCause() != null) cur = cur.getCause();
+        return cur;
+    }
+
+    private static String handlerName(CompiledRoute route) {
+        if (route.handler() instanceof LambdaHandler lh) {
+            var method = lh.samMethod();
+            return method.getDeclaringClass().getName() + "." + method.getName();
+        }
+        return route.handler().getClass().getName();
+    }
+}

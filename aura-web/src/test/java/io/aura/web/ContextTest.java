@@ -1,6 +1,8 @@
 package io.aura.web;
 
-import io.aura.Aura;
+import io.aura.port.SseEmitter;
+import io.aura.AuraConfig;
+import io.aura.AuraWebRuntime;
 import org.junit.jupiter.api.Test;
 
 import java.util.Map;
@@ -21,14 +23,14 @@ import static org.assertj.core.api.Assertions.*;
  *  - query(name, default) when value is present
  *  - statusCode() default (0 → 200 via MockContext)
  *  - method() / url() on MockContext return empty strings
- *  - cookie(String) on MockContext returns null
+ *  - cookie(String) on MockContext parses the request Cookie header
  *  - SSE sanitize strips CRLF from event names and ids
  *  - SSE multiline data splits into multiple data: lines
  *  - Context.redirect() CRLF guard — \r alone, \n alone, \r\n combined
  */
 class ContextTest {
 
-    private static Aura app() { return Aura.create(); }
+    private static AuraWebRuntime app() { return TestApplications.runtime(); }
 
     private static MockContext mockCtx() {
         return new MockContext(Map.of(), Map.of(), Map.of(), null, app());
@@ -160,8 +162,12 @@ class ContextTest {
     // -------------------------------------------------------------------------
 
     @Test
-    void cookie_returnsNull_onMockContext() {
-        assertThat(mockCtx().cookie("session")).isNull();
+    void cookie_parsesRequestCookieHeader() {
+        MockContext ctx = new MockContext(Map.of(), Map.of(),
+                Map.of("cookie", "session=abc; theme=dark"), null, app());
+        assertThat(ctx.cookie("session")).isEqualTo("abc");
+        assertThat(ctx.cookie("theme")).isEqualTo("dark");
+        assertThat(ctx.cookie("missing")).isNull();
     }
 
     // -------------------------------------------------------------------------
@@ -186,7 +192,8 @@ class ContextTest {
 
     @Test
     void json_writesNulls_whenJsonConfigEnabled() {
-        Aura a = Aura.create().jsonConfig(cfg -> cfg.writeNulls(true));
+        AuraWebRuntime a = TestApplications.runtime(
+                new AuraConfig().jsonConfig(cfg -> cfg.writeNulls(true)));
         MockContext ctx = new MockContext(Map.of(), Map.of(), Map.of(), null, a);
         ctx.json(new NullableObj("hello", null));
         assertThat(ctx.responseBody).contains("\"name\"");
@@ -196,7 +203,7 @@ class ContextTest {
 
     @Test
     void json_omitsNulls_whenWriteNullsDisabled() {
-        Aura a = Aura.create(); // writeNulls defaults to false
+        AuraWebRuntime a = app(); // writeNulls defaults to false
         MockContext ctx = new MockContext(Map.of(), Map.of(), Map.of(), null, a);
         ctx.json(new NullableObj("hello", null));
         assertThat(ctx.responseBody).contains("\"name\"");
@@ -205,10 +212,10 @@ class ContextTest {
 
     @Test
     void json_respectsCustomDateFormat_viaTestClient() {
-        Aura a = Aura.create().jsonConfig(cfg -> cfg.dateFormat("yyyy-MM-dd"));
+        AuraConfig config = new AuraConfig().jsonConfig(cfg -> cfg.dateFormat("yyyy-MM-dd"));
         Router router = new Router();
         router.get("/date", ctx -> ctx.json(Map.of("d", java.time.LocalDate.of(2025, 1, 15))));
-        TestClient client = new TestClient(a, router);
+        TestClient client = TestApplications.client(config, router);
         String body = client.get("/date").execute().body();
         assertThat(body).contains("2025-01-15");
     }
@@ -390,24 +397,22 @@ class ContextTest {
 
     @Test
     void set_and_get_byType_worksInRouteHandler() {
-        Aura a = app();
         Router router = new Router();
         router.before(ctx -> ctx.set(new User("carol", 20)));
         router.get("/me", ctx -> {
             User u = ctx.get(User.class);
             ctx.text(u != null ? u.name() : "null");
         });
-        TestClient client = new TestClient(a, router);
+        TestClient client = TestApplications.client(router);
         assertThat(client.get("/me").execute().body()).isEqualTo("carol");
     }
 
     @Test
     void set_and_get_byName_worksInRouteHandler() {
-        Aura a = app();
         Router router = new Router();
         router.before(ctx -> ctx.set("requestId", "req-123"));
         router.get("/id", ctx -> ctx.text(ctx.get("requestId", String.class)));
-        TestClient client = new TestClient(a, router);
+        TestClient client = TestApplications.client(router);
         assertThat(client.get("/id").execute().body()).isEqualTo("req-123");
     }
 
@@ -416,19 +421,6 @@ class ContextTest {
     // -------------------------------------------------------------------------
 
     record User(String name, int age) {}
-        // -------------------------------------------------------------------------
-    // queryMap() — returns all query params as Map<String, String>
-
-    @Test void queryMap_returnsAllParams() {
-        MockContext ctx = mockCtxWithQuery(Map.of("a", "1", "b", "2"));
-        assertThat(ctx.queryMap()).containsEntry("a", "1").containsEntry("b", "2").hasSize(2);
-    }
-
-    @Test void queryMap_emptyWhenNoParams() {
-        MockContext ctx = mockCtx();
-        assertThat(ctx.queryMap()).isEmpty();
-    }
-
     record NullableObj(String name, String value) {}
 
     static abstract class AbstractService {}

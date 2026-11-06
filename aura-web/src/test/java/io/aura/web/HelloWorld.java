@@ -1,14 +1,15 @@
 package io.aura.web;
 
-import io.aura.Aura;
+import io.aura.port.BaseHandler;
+import io.aura.AuraConfig;
+import io.aura.contract.Route;
 
 public class HelloWorld {
     public static void main(String[] args) {
-        Aura.create()
-            .port(8080)
-            .routes((BaseRouter r) -> {
-                r.get("/hello", ctx -> ctx.text("hi"));
-            })
-            .start();
+        TestApplications.app(
+                new AuraConfig().port(8080),
+                "hello-world",
+                Route.of("GET", "/hello", (BaseHandler) ctx -> ctx.text("hi")))
+                .start();
     }
 }

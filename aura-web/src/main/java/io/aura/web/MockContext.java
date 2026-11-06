@@ -1,13 +1,21 @@
 package io.aura.web;
 
+import io.aura.port.SseEmitter;
 import com.alibaba.fastjson2.JSON;
-import io.aura.Aura;
+import io.aura.AuraWebRuntime;
+import io.aura.snapshot.Snapshot;
 
+import java.io.ByteArrayOutputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class MockContext extends Context {
+
+    /** The address an in-memory request is deemed to have arrived from. */
+    private static final String LOCALHOST = "127.0.0.1";
 
     int status;
     String responseBody;
@@ -16,76 +24,216 @@ public class MockContext extends Context {
     private final Map<String, String> headers;
     private final Map<String, String> queryParams;
     private final String body;
-    private final Aura app;
+    private final AuraWebRuntime app;
     private final String requestPath;
     private final Map<Class<?>, Object> attrs = new ConcurrentHashMap<>();
     private final Map<String, Object> namedAttrs = new ConcurrentHashMap<>();
     private final Map<String, String> respHeaders = new HashMap<>();
+    private final String peerIp;
+    private final String httpMethod;
+    private final java.util.Map<String, String> responseCookies = new java.util.LinkedHashMap<>();
 
     public MockContext(Map<String, String> pathParams, Map<String, String> queryParams,
-                       Map<String, String> headers, String body, Aura app) {
+                       Map<String, String> headers, String body, AuraWebRuntime app) {
         this(pathParams, queryParams, headers, body, app, "");
     }
 
     public MockContext(Map<String, String> pathParams, Map<String, String> queryParams,
-                       Map<String, String> headers, String body, Aura app, String requestPath) {
+                       Map<String, String> headers, String body, AuraWebRuntime app, String requestPath) {
+        this(pathParams, queryParams, headers, body, app, requestPath, LOCALHOST);
+    }
+
+    public MockContext(Map<String, String> pathParams, Map<String, String> queryParams,
+                       Map<String, String> headers, String body, AuraWebRuntime app,
+                       String requestPath, String peerIp) {
+        this(pathParams, queryParams, headers, body, app, requestPath, peerIp, "");
+    }
+
+    /**
+     * The method is the one thing an in-memory request cannot infer from the route it matched, and
+     * a handler that branches on {@code ctx.method()} has to branch the same way here as it does
+     * behind a socket.
+     */
+    MockContext(Map<String, String> pathParams, Map<String, String> queryParams,
+                Map<String, String> headers, String body, AuraWebRuntime app,
+                String requestPath, String peerIp, String httpMethod) {
         super(null, pathParams, app, null);
+        this.peerIp = peerIp;
         this.pathParams = pathParams;
         this.headers = headers;
         this.body = body;
         this.app = app;
         this.queryParams = queryParams;
         this.requestPath = requestPath;
+        this.httpMethod = httpMethod == null ? "" : httpMethod;
         if (app != null) namedAttrs.put("_app", app);
     }
 
     @Override public String path(String name) { return pathParams.get(name); }
     @Override public String query(String name) { return queryParams.get(name); }
     @Override public String query(String name, String def) { String v = query(name); return v != null ? v : def; }
-    @Override public Map<String, String> queryMap() { return queryParams; }
-    @Override public String header(String name) { return headers.get(name); }
-    @Override public String cookie(String name) { return null; }
-    @Override public <T> T body(Class<T> type) { return body == null || body.isBlank() ? null : JSON.parseObject(body, type); }
-    @Override public String method() { return ""; }
+    @Override public String header(String name) {
+        for (var entry : headers.entrySet()) {
+            if (entry.getKey().equalsIgnoreCase(name)) return entry.getValue();
+        }
+        return null;
+    }
+    @Override public String cookie(String name) {
+        String header = header("Cookie");
+        if (header == null) return null;
+        for (String item : header.split(";")) {
+            String[] pair = item.trim().split("=", 2);
+            if (pair.length == 2 && pair[0].trim().equals(name)) return pair[1].trim();
+        }
+        return null;
+    }
+    @Override public String bodyText() { return body; }
+    @Override public <T> T body(Class<T> type) { return body((java.lang.reflect.Type) type); }
+    @Override @SuppressWarnings("unchecked")
+    public <T> T body(java.lang.reflect.Type type) {
+        return body == null || body.isBlank() ? null : (T) JSON.parseObject(body, type);
+    }
+    @Override public String method() { return httpMethod; }
     @Override public String url() { return requestPath; }
     @Override public int statusCode() { return status == 0 ? 200 : status; }
 
-    @Override public Context status(int code) { this.status = code; return this; }
+    @Override public Context status(int code) {
+        if (responded) return this;
+        this.status = code;
+        return this;
+    }
     @Override public void json(Object obj) {
+        if (responded || isAborted()) return;
+        header("Content-Type", "application/json; charset=utf-8");
         io.aura.JsonConfig cfg = app != null ? app.jsonConfig() : null;
         String dateFormat = cfg != null ? cfg.dateFormat() : "yyyy-MM-dd'T'HH:mm:ss.SSS";
         com.alibaba.fastjson2.JSONWriter.Feature[] features = cfg != null && cfg.writeNulls()
                 ? new com.alibaba.fastjson2.JSONWriter.Feature[]{com.alibaba.fastjson2.JSONWriter.Feature.WriteNulls}
                 : new com.alibaba.fastjson2.JSONWriter.Feature[0];
         responseBody = JSON.toJSONString(obj, dateFormat, features);
+        Snapshot.response(statusCode(), "application/json; charset=utf-8", obj);
         responded = true;
     }
-    @Override public void jsonRaw(String json) { responseBody = json; responded = true; }
-    @Override public void text(String text) { responseBody = text; responded = true; }
-    @Override public void html(String html) { responseBody = html; responded = true; }
-    @Override public void raw(String body) { responseBody = body; responded = true; }
-    @Override public void redirect(String url) { status = 302; responded = true; }
-    @Override public Context header(String name, String value) {
-        if (name.indexOf('\r') >= 0 || name.indexOf('\n') >= 0
-                || value.indexOf('\r') >= 0 || value.indexOf('\n') >= 0) {
-            throw new IllegalArgumentException("Header name/value must not contain CR or LF");
+    @Override public void jsonRaw(String json) {
+        if (responded || isAborted()) return;
+        header("Content-Type", "application/json; charset=utf-8");
+        responseBody = json; Snapshot.response(statusCode(), "application/json; charset=utf-8", json); responded = true;
+    }
+    @Override public void text(String text) {
+        if (responded || isAborted()) return;
+        header("Content-Type", "text/plain; charset=utf-8");
+        responseBody = text; Snapshot.response(statusCode(), "text/plain; charset=utf-8", text); responded = true;
+    }
+    @Override public void html(String html) {
+        if (responded || isAborted()) return;
+        header("Content-Type", "text/html; charset=utf-8");
+        responseBody = html; Snapshot.response(statusCode(), "text/html; charset=utf-8", html); responded = true;
+    }
+    @Override public void raw(String body) {
+        if (responded || isAborted()) return;
+        responseBody = body; Snapshot.response(statusCode(), null, body); responded = true;
+    }
+    @Override public void redirect(String url) {
+        if (responded || isAborted()) return;
+        // A redirect without its Location header is not a redirect: the client has nothing to
+        // follow, and a test that only checks 302 would pass against a broken handler.
+        if (url.indexOf('\r') >= 0 || url.indexOf('\n') >= 0) {
+            throw new IllegalArgumentException("Invalid redirect URL");
         }
+        status = 302;
+        header("Location", url);
+        Snapshot.response(statusCode(), null, null);
+        responded = true;
+    }
+    @Override public Context header(String name, String value) {
+        if (responded || isAborted()) return this;
+        if (name == null || name.isBlank()) throw new IllegalArgumentException("Header name must not be blank");
+        if (name.indexOf('\r') >= 0 || name.indexOf('\n') >= 0) {
+            throw new IllegalArgumentException("Invalid header name");
+        }
+        if (value != null && (value.indexOf('\r') >= 0 || value.indexOf('\n') >= 0)) {
+            throw new IllegalArgumentException("Invalid header value");
+        }
+        respHeaders.entrySet().removeIf(entry -> entry.getKey().equalsIgnoreCase(name));
         respHeaders.put(name, value);
         return this;
     }
-    @Override public Context cookie(String name, String value, int maxAge) { return this; }
+    @Override public Context cookie(String name, String value, int maxAge) {
+        if (isAborted() || responded) return this;
+        StringBuilder setCookie = new StringBuilder(name).append('=').append(value == null ? "" : value)
+                .append("; Path=/; HttpOnly; Secure; SameSite=Lax");
+        if (maxAge >= 0) setCookie.append("; Max-Age=").append(maxAge);
+        responseCookies.put(name, setCookie.toString());
+        header("Set-Cookie", setCookie.toString());
+        return this;
+    }
 
-    @Override boolean isResponseStarted() { return responded; }
+    @Override public boolean isResponseStarted() { return responded; }
     Map<String, String> responseHeaders() { return respHeaders; }
+    java.util.List<String> responseCookies() {
+        return java.util.List.copyOf(responseCookies.values());
+    }
 
     byte[] fileBytes;
     String fileName;
     String fileContentType;
+    long fileLength;
 
     @Override public void sendFile(String filename, byte[] data, String contentType) {
+        if (responded || isAborted()) return;
+        announceDownload(filename, contentType, data.length);
         this.fileName = filename;
         this.fileBytes = data;
         this.fileContentType = contentType;
+        this.fileLength = data.length;
+        responded = true;
+        Snapshot.response(statusCode(), contentType, java.util.Map.of("filename", filename, "bytes", data.length));
+    }
+
+    @Override public void sendFile(String filename, Path path, String contentType) throws Exception {
+        if (responded || isAborted()) return;
+        if (path == null) throw new IllegalArgumentException("path must not be null");
+        if (!Files.isRegularFile(path)) {
+            throw new IllegalArgumentException("Download source is not a regular file: " + path);
+        }
+        byte[] data = Files.readAllBytes(path);
+        announceDownload(filename, contentType, data.length);
+        this.fileName = filename;
+        this.fileBytes = data;
+        this.fileContentType = contentType;
+        this.fileLength = data.length;
+        responded = true;
+        Snapshot.response(statusCode(), contentType, java.util.Map.of("filename", filename, "bytes", data.length));
+    }
+
+    @Override public void sendStream(String filename, long contentLength, String contentType,
+                                     StreamWriter writer) throws Exception {
+        if (responded || isAborted()) return;
+        if (writer == null) throw new IllegalArgumentException("writer must not be null");
+        if (contentLength < -1) {
+            throw new IllegalArgumentException("contentLength must be -1 or non-negative");
+        }
+        announceDownload(filename, contentType, contentLength);
+        this.fileName = filename;
+        this.fileContentType = contentType;
+        this.fileLength = contentLength;
+        responded = true;
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        try {
+            writer.write(output);
+        } finally {
+            this.fileBytes = output.toByteArray();
+        }
+        Snapshot.response(statusCode(), contentType,
+                java.util.Map.of("filename", filename, "bytes", contentLength));
+    }
+
+    private void announceDownload(String filename, String contentType, long contentLength) {
+        // The download is announced by these two headers, so a test that never sees them cannot
+        // tell a served file from a blob, and the name is sanitised exactly as the socket does.
+        header("Content-Type", contentType);
+        header("Content-Disposition",
+                "attachment; filename=\"" + filename.replaceAll("[\\r\\n\"]", "") + "\"");
     }
 
     @Override public <T> void set(T instance) { attrs.put(instance.getClass(), instance); }
@@ -99,17 +247,15 @@ public class MockContext extends Context {
     @Override public void set(String key, Object value) { namedAttrs.put(key, value); }
     @Override @SuppressWarnings("unchecked")
     public <T> T get(String key, Class<T> type) { return (T) namedAttrs.get(key); }
-    @Override public Aura app() { return app; }
+    @Override public AuraWebRuntime app() { return app; }
 
     @Override
     public String ip() {
-        if (app != null && app.trustProxy()) {
-            String xff = headers.get("X-Forwarded-For");
-            if (xff != null && !xff.isBlank()) {
-                return xff.split(",")[0].trim();
-            }
-        }
-        return "127.0.0.1";
+        String trusted = app == null ? null : String.join(",", app.trustedProxies());
+        // The peer is the address the guard chain judged and the lookup is the
+        // case-insensitive one HTTP uses. Two client identities inside one mock
+        // request means a test that exercises the code nobody ships.
+        return Context.resolveClientIp(trusted, peerIp, header("X-Forwarded-For"));
     }
 
     @Override
@@ -143,25 +289,5 @@ public class MockContext extends Context {
                 responseBody = responseBody == null ? chunk : responseBody + chunk;
             }
         };
-    }
-
-    @Override
-    io.aura.ExceptionSnapshot buildSnapshot(Throwable cause, long durationMs) {
-        String uid = null;
-        try { uid = userId(); } catch (Exception ignored) {}
-        return new io.aura.ExceptionSnapshot(
-                requestId(),
-                method(),
-                url(),
-                headers != null ? Map.copyOf(headers) : Map.of(),
-                queryParams != null ? Map.copyOf(queryParams) : Map.of(),
-                pathParams != null ? Map.copyOf(pathParams) : Map.of(),
-                body,
-                uid,
-                durationMs,
-                cause.getClass().getName(),
-                cause.getMessage(),
-                io.aura.ExceptionSnapshot.captureStackTrace(cause)
-        );
     }
 }

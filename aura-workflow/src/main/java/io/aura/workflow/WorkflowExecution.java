@@ -1,0 +1,76 @@
+package io.aura.workflow;
+
+import java.time.Instant;
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.UUID;
+
+public final class WorkflowExecution {
+    public enum Status { PENDING, RUNNING, SUCCEEDED, FAILED, CANCELLED }
+
+    private final String executionId;
+    private final String workflowId;
+    private final String variant;
+    private final String idempotencyKey;
+    private final Map<String, StepExecution> steps;
+    private Status status;
+    private Throwable error;
+    private final Instant startedAt;
+    private Instant finishedAt;
+    private final WorkflowClock clock;
+
+    WorkflowExecution(String workflowId, String variant) {
+        this(workflowId, variant, null);
+    }
+
+    WorkflowExecution(String workflowId, String variant, String idempotencyKey) {
+        this(workflowId, variant, idempotencyKey, WorkflowClock.SYSTEM);
+    }
+
+    WorkflowExecution(String workflowId, String variant, String idempotencyKey, WorkflowClock clock) {
+        this(UUID.randomUUID().toString(), workflowId, variant, idempotencyKey,
+                new LinkedHashMap<>(), Status.PENDING, null, clock.now(), null, clock);
+    }
+
+    private WorkflowExecution(String executionId, String workflowId, String variant,
+                              String idempotencyKey, Map<String, StepExecution> steps,
+                              Status status, Throwable error, Instant startedAt,
+                              Instant finishedAt, WorkflowClock clock) {
+        this.executionId = executionId;
+        this.workflowId = workflowId;
+        this.variant = variant;
+        this.idempotencyKey = idempotencyKey;
+        this.steps = steps;
+        this.status = status;
+        this.error = error;
+        this.startedAt = startedAt;
+        this.finishedAt = finishedAt;
+        this.clock = clock;
+    }
+
+    WorkflowExecution copy() {
+        Map<String, StepExecution> copiedSteps = new LinkedHashMap<>();
+        steps.forEach((id, step) -> copiedSteps.put(id, step.copy()));
+        return new WorkflowExecution(executionId, workflowId, variant, idempotencyKey,
+                copiedSteps, status, error, startedAt, finishedAt, clock);
+    }
+    void start() { status = Status.RUNNING; }
+    void success() { status = Status.SUCCEEDED; finishedAt = clock.now(); }
+    void fail(Throwable cause) { status = Status.FAILED; error = cause; finishedAt = clock.now(); }
+    void cancel(Throwable cause) { status = Status.CANCELLED; error = cause; finishedAt = clock.now(); }
+    void add(StepExecution step) { steps.put(step.stepId(), step); }
+    public String executionId() { return executionId; }
+    public String workflowId() { return workflowId; }
+    public String variant() { return variant; }
+    public String idempotencyKey() { return idempotencyKey; }
+    public Status status() { return status; }
+    public Throwable error() { return error; }
+    public Instant startedAt() { return startedAt; }
+    public Instant finishedAt() { return finishedAt; }
+    public Map<String, StepExecution> steps() { return Collections.unmodifiableMap(steps); }
+    public java.util.List<StepExecution> stepExecutions() { return java.util.List.copyOf(steps.values()); }
+    public StepExecution step(String id) { return steps.get(id); }
+    /** Returns an immutable, redacted view suitable for persistence or tooling. */
+    public WorkflowExecutionSnapshot snapshot() { return WorkflowExecutionSnapshot.from(this); }
+}

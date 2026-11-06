@@ -2,7 +2,7 @@
 
 const http = require('http');
 const https = require('https');
-const readline = require('readline');
+const packageMetadata = require('./package.json');
 
 const fs = require('fs');
 const path = require('path');
@@ -26,23 +26,45 @@ function resolveUrl() {
 }
 
 const baseUrl = resolveUrl().replace(/\/+$/, '');
-if (!/^https?:\/\//i.test(baseUrl)) {
-  process.stderr.write('Invalid AURA_API_URL: must start with http:// or https://\n');
+let parsedBaseUrl;
+try {
+  parsedBaseUrl = new URL(baseUrl);
+} catch (_) {
+  process.stderr.write('Invalid AURA_API_URL\n');
   process.exit(1);
 }
+if (!['http:', 'https:'].includes(parsedBaseUrl.protocol) || parsedBaseUrl.username || parsedBaseUrl.password) {
+  process.stderr.write('Invalid AURA_API_URL: use HTTP(S) without userinfo\n');
+  process.exit(1);
+}
+const MAX_HTTP_BYTES = 1024 * 1024;
+const MAX_LINE_BYTES = 1024 * 1024;
+const schemaToken = process.env.API_SCHEMA_TOKEN || process.env.AURA_SCHEMA_TOKEN || null;
 let routes = null;
 
 function httpRequest(method, reqPath, body) {
   return new Promise((resolve, reject) => {
     const u = new URL(reqPath, baseUrl);
+    if (u.origin !== parsedBaseUrl.origin) return reject(new Error('Cross-origin request target rejected'));
     const transport = u.protocol === 'https:' ? https : http;
     const opts = { method, hostname: u.hostname, port: u.port, path: u.pathname + u.search };
+    if (schemaToken && reqPath.endsWith('/__schema__')) opts.headers = { 'X-Aura-Schema-Token': schemaToken };
     const req = transport.request(opts, res => {
       let data = '';
-      res.on('data', chunk => data += chunk);
+      let size = 0;
+      res.on('data', chunk => {
+        size += chunk.length;
+        if (size > MAX_HTTP_BYTES) {
+          res.destroy(new Error('HTTP response exceeds maximum size'));
+          return;
+        }
+        data += chunk;
+      });
       res.on('end', () => resolve(data));
+      res.on('error', reject);
     });
     req.on('error', reject);
+    req.setTimeout(10000, () => req.destroy(new Error('HTTP request timed out')));
     if (body) {
       req.setHeader('Content-Type', 'application/json');
       req.write(JSON.stringify(body));
@@ -69,17 +91,23 @@ function buildInputSchema(params) {
   (params || []).forEach(p => {
     const type = { int: 'integer', long: 'integer', Integer: 'integer', Long: 'integer',
       double: 'number', float: 'number', boolean: 'boolean', Boolean: 'boolean' }[p.type] || 'string';
-    properties[p.name] = { type };
+    properties[p.name] = p.schema && Object.keys(p.schema).length ? { ...p.schema } : { type };
     if (p.description) properties[p.name].description = p.description;
-    required.push(p.name);
+    if (p.required !== false) required.push(p.name);
   });
   return { type: 'object', properties, ...(required.length ? { required } : {}) };
 }
 
 function handleInitialize() {
-  return { protocolVersion: '2024-11-05', capabilities: { tools: {} },
-    serverInfo: { name: 'aura-mcp', version: '0.1.0' } };
+  return { protocolVersion: '2025-03-26', capabilities: { tools: {}, resources: {}, prompts: {} },
+    serverInfo: { name: 'aura-mcp', version: packageMetadata.version } };
 }
+
+function handlePing() { return {}; }
+function handleResourcesList() { return { resources: [] }; }
+function handleResourcesRead() { return { contents: [] }; }
+function handlePromptsList() { return { prompts: [] }; }
+function handlePromptsGet() { return { messages: [] }; }
 
 function handleToolsList() {
   const tools = routes.map(r => ({
@@ -103,8 +131,8 @@ async function handleToolsCall(params) {
   (route.params || []).forEach(p => {
     const val = args[p.name];
     if (val === undefined) return;
-    if (p.source === 'path') routePath = routePath.replace(`{${p.name}}`, val);
-    else if (p.source === 'query') query.push(`${p.name}=${encodeURIComponent(val)}`);
+    if (p.source === 'path') routePath = routePath.replace(`{${p.name}}`, encodeURIComponent(String(val)));
+    else if (p.source === 'query') query.push(`${encodeURIComponent(p.name)}=${encodeURIComponent(String(val))}`);
   });
 
   const fullPath = baseUrl + routePath + (query.length ? '?' + query.join('&') : '');
@@ -112,7 +140,14 @@ async function handleToolsCall(params) {
 
   try {
     const result = await httpRequest(route.method, fullPath, body);
-    return { content: [{ type: 'text', text: result }] };
+    const response = { content: [{ type: 'text', text: result }] };
+    try {
+      const structured = JSON.parse(result);
+      if (structured && typeof structured === 'object' && !Array.isArray(structured)) {
+        response.structuredContent = structured;
+      }
+    } catch (_) {}
+    return response;
   } catch (e) {
     return { isError: true, content: [{ type: 'text', text: 'Error: ' + e.message }] };
   }
@@ -124,9 +159,14 @@ async function handleMessage(msg) {
 
   switch (method) {
     case 'initialize': result = handleInitialize(); break;
+    case 'ping': result = handlePing(); break;
     case 'notifications/initialized': return null;
     case 'tools/list': result = handleToolsList(); break;
     case 'tools/call': result = await handleToolsCall(params); break;
+    case 'resources/list': result = handleResourcesList(); break;
+    case 'resources/read': result = handleResourcesRead(params); break;
+    case 'prompts/list': result = handlePromptsList(); break;
+    case 'prompts/get': result = handlePromptsGet(params); break;
     default: return null;
   }
 
@@ -137,13 +177,27 @@ async function handleMessage(msg) {
 async function main() {
   await loadSchema();
 
-  const rl = readline.createInterface({ input: process.stdin });
-  for await (const line of rl) {
-    if (!line.trim()) continue;
-    const msg = JSON.parse(line);
-    const response = await handleMessage(msg);
-    if (response) {
-      process.stdout.write(JSON.stringify(response) + '\n');
+  let buffered = Buffer.alloc(0);
+  for await (const chunk of process.stdin) {
+    buffered = Buffer.concat([buffered, chunk]);
+    let newline;
+    while ((newline = buffered.indexOf(0x0a)) !== -1) {
+      if (newline > MAX_LINE_BYTES) throw new Error('MCP request exceeds maximum size');
+      const line = buffered.subarray(0, newline).toString('utf8').replace(/\r$/, '');
+      buffered = buffered.subarray(newline + 1);
+      if (!line.trim()) continue;
+      const msg = JSON.parse(line);
+      const response = await handleMessage(msg);
+      if (response) process.stdout.write(JSON.stringify(response) + '\n');
+    }
+    if (buffered.length > MAX_LINE_BYTES) throw new Error('MCP request exceeds maximum size');
+  }
+  if (buffered.length) {
+    const line = buffered.toString('utf8').replace(/\r$/, '');
+    if (line.trim()) {
+      const msg = JSON.parse(line);
+      const response = await handleMessage(msg);
+      if (response) process.stdout.write(JSON.stringify(response) + '\n');
     }
   }
 }

@@ -1,76 +1,140 @@
 package io.aura.web;
 
+import io.aura.port.BaseContext;
+import io.aura.port.SseEmitter;
+import io.aura.port.UploadedFile;
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONWriter;
-import io.aura.Aura;
+import io.aura.AuraWebRuntime;
+import io.aura.contract.CancellationToken;
 import io.aura.JsonConfig;
+import io.aura.snapshot.Snapshot;
 import io.undertow.server.HttpServerExchange;
 import io.undertow.server.handlers.form.FormData;
 import io.undertow.server.handlers.form.FormDataParser;
 import io.undertow.server.handlers.form.FormParserFactory;
+import io.undertow.server.handlers.form.FormEncodedDataDefinition;
+import io.undertow.server.handlers.form.MultiPartParserDefinition;
 import io.undertow.util.Headers;
 import io.undertow.util.HttpString;
 
 import java.io.IOException;
+import java.io.OutputStream;
+import java.net.InetAddress;
+import java.net.UnknownHostException;
 import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
+import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import io.undertow.io.IoCallback;
+import io.undertow.io.Sender;
 
 public class Context implements BaseContext {
 
     private final HttpServerExchange exchange;
     private final Map<String, String> pathParams;
-    private final Aura app;
+    private final AuraWebRuntime app;
     private final String requestId;
     private final Map<Class<?>, Object> attrs = new ConcurrentHashMap<>();
     private final Map<String, Object> namedAttrs = new ConcurrentHashMap<>();
-    private final java.util.concurrent.atomic.AtomicBoolean responseSent = new java.util.concurrent.atomic.AtomicBoolean(false);
     private String cachedBody;
+    private FormDataParser cachedFormParser;
+    private FormData cachedFormData;
     private volatile boolean aborted;
+    private final CancellationToken cancellationToken;
 
-    Context(HttpServerExchange exchange, Map<String, String> pathParams, Aura app, String requestId) {
+    Context(HttpServerExchange exchange, Map<String, String> pathParams, AuraWebRuntime app, String requestId) {
+        this(exchange, pathParams, app, requestId, new CancellationToken());
+    }
+
+    Context(HttpServerExchange exchange, Map<String, String> pathParams, AuraWebRuntime app, String requestId, CancellationToken cancellationToken) {
         this.exchange = exchange;
         this.pathParams = pathParams;
         this.app = app;
         this.requestId = requestId;
+        this.cancellationToken = cancellationToken;
         if (app != null) namedAttrs.put("_app", app);
     }
 
-    public Aura app() { return app; }
-    boolean isResponseStarted() { return exchange != null && exchange.isResponseStarted(); }
+    public AuraWebRuntime app() { return app; }
+    @Override public boolean isResponseStarted() { return exchange != null && exchange.isResponseStarted(); }
+    String cachedBody() { return cachedBody; }
     @Override public String requestId() { return requestId; }
+    @Override public CancellationToken cancellationToken() { return cancellationToken; }
 
     @Override
     public UploadedFile file(String field) throws Exception {
-        exchange.startBlocking();
-        FormDataParser parser = FormParserFactory.builder().build().createParser(exchange);
-        if (parser == null) return null;
-        try (parser) {
-            FormData formData = parser.parseBlocking();
-            FormData.FormValue value = formData.getFirst(field);
-            if (value == null || !value.isFileItem()) return null;
-            FormData.FileItem item = value.getFileItem();
-            byte[] data = item.getInputStream().readAllBytes();
-            String contentType = value.getHeaders() != null
-                    ? value.getHeaders().getFirst(Headers.CONTENT_TYPE)
-                    : null;
-            return new UploadedFile(value.getFileName(), data, contentType);
+        FormData formData = formData();
+        if (formData == null) return null;
+        FormData.FormValue value = formData.getFirst(field);
+        if (value == null || !value.isFileItem()) return null;
+        FormData.FileItem item = value.getFileItem();
+        long max = uploadLimit();
+        int limit = (int) Math.min(max, Integer.MAX_VALUE - 1L);
+        byte[] data;
+        try (var input = item.getInputStream()) {
+            data = input.readNBytes(limit + 1);
         }
+        if (data.length > limit) throw new IOException("Multipart file exceeds maximum upload size");
+        String contentType = value.getHeaders() != null
+                ? value.getHeaders().getFirst(Headers.CONTENT_TYPE)
+                : null;
+        return new UploadedFile(value.getFileName(), data, contentType);
     }
 
     @Override
     public String formField(String name) throws Exception {
+        FormData formData = formData();
+        if (formData == null) return null;
+        FormData.FormValue value = formData.getFirst(name);
+        if (value == null || value.isFileItem()) return null;
+        return value.getValue();
+    }
+
+    private FormData formData() throws IOException {
+        if (cachedFormData != null) return cachedFormData;
+        // An in-memory request has no socket to block on; it handed its body over when it was
+        // built, so a form it did not carry is absent here rather than unreadable.
+        if (exchange == null) return null;
         exchange.startBlocking();
-        FormDataParser parser = FormParserFactory.builder().build().createParser(exchange);
-        if (parser == null) return null;
-        try (parser) {
-            FormData formData = parser.parseBlocking();
-            FormData.FormValue value = formData.getFirst(name);
-            if (value == null || value.isFileItem()) return null;
-            return value.getValue();
+        cachedFormParser = createFormParser();
+        if (cachedFormParser == null) return null;
+        try {
+            cachedFormData = cachedFormParser.parseBlocking();
+            exchange.addExchangeCompleteListener((completed, next) -> {
+                try { cachedFormParser.close(); } catch (IOException ignored) {}
+                finally { next.proceed(); }
+            });
+            return cachedFormData;
+        } catch (IOException e) {
+            try { cachedFormParser.close(); } catch (IOException ignored) {}
+            cachedFormParser = null;
+            throw e;
         }
+    }
+
+    private FormDataParser createFormParser() {
+        long max = uploadLimit();
+        MultiPartParserDefinition multipart = new MultiPartParserDefinition();
+        multipart.setMaxIndividualFileSize(max);
+        multipart.setFieldSizeThreshold(Math.min(max, 1024 * 1024));
+        return FormParserFactory.builder(false)
+                .addParser(new FormEncodedDataDefinition())
+                .addParser(multipart)
+                .build().createParser(exchange);
+    }
+
+    private long uploadLimit() {
+        long uploadMax = app != null ? app.maxUploadSize() : 1024 * 1024L;
+        long bodyMax = app != null ? app.maxBodySize() : 10 * 1024 * 1024L;
+        if (bodyMax > 0) uploadMax = Math.min(uploadMax, bodyMax);
+        return Math.max(0L, uploadMax);
     }
 
     @Override public String path(String name) { return pathParams.get(name); }
@@ -85,12 +149,6 @@ public class Context implements BaseContext {
         return val == null ? defaultValue : val;
     }
 
-    @Override public java.util.Map<String, String> queryMap() {
-        java.util.Map<String, String> map = new java.util.LinkedHashMap<>();
-        exchange.getQueryParameters().forEach((k, v) -> map.put(k, v.peek()));
-        return map;
-    }
-
     @Override public String header(String name) {
         return exchange.getRequestHeaders().getFirst(name);
     }
@@ -101,56 +159,94 @@ public class Context implements BaseContext {
     }
 
     @Override public <T> T body(Class<T> type) throws IOException {
+        return body((java.lang.reflect.Type) type);
+    }
+
+    @Override public String bodyText() throws IOException {
         if (cachedBody == null) {
             exchange.startBlocking();
-            long maxSize = app != null ? app.maxBodySize() : 10 * 1024 * 1024;
-            cachedBody = new String(exchange.getInputStream().readNBytes((int) Math.min(maxSize, Integer.MAX_VALUE)), StandardCharsets.UTF_8);
+            long maxSize = app != null ? app.maxBodySize() : 10 * 1024 * 1024L;
+            cachedBody = readBody(exchange.getInputStream(), maxSize);
+        }
+        return cachedBody;
+    }
+
+    @Override @SuppressWarnings("unchecked")
+    public <T> T body(java.lang.reflect.Type type) throws IOException {
+        if (cachedBody == null) {
+            exchange.startBlocking();
+            long maxSize = app != null ? app.maxBodySize() : 10 * 1024 * 1024L;
+            cachedBody = readBody(exchange.getInputStream(), maxSize);
         }
         if (cachedBody.isBlank()) return null;
-        return JSON.parseObject(cachedBody, type);
+        return (T) JSON.parseObject(cachedBody, type);
+    }
+
+    private static String readBody(java.io.InputStream input, long maxSize) throws IOException {
+        java.io.ByteArrayOutputStream output = new java.io.ByteArrayOutputStream();
+        byte[] buffer = new byte[8192];
+        long total = 0;
+        int read;
+        while ((read = input.read(buffer)) != -1) {
+            total += read;
+            if (maxSize > 0 && total > maxSize) throw new RequestBodyTooLargeException("Request body exceeds maximum size");
+            if (total > Integer.MAX_VALUE) throw new RequestBodyTooLargeException("Request body exceeds maximum supported size");
+            output.write(buffer, 0, read);
+        }
+        return output.toString(StandardCharsets.UTF_8);
     }
 
     @Override public String method() { return exchange.getRequestMethod().toString(); }
     @Override public String url() { return exchange.getRequestURI(); }
     @Override public int statusCode() { return exchange.getStatusCode(); }
 
-    @Override public Context status(int code) { exchange.setStatusCode(code); return this; }
+    @Override public Context status(int code) {
+        if (!isResponseStarted()) exchange.setStatusCode(code);
+        return this;
+    }
 
     @Override public void json(Object obj) {
-        if (!responseSent.compareAndSet(false, true)) return;
+        if (aborted || isResponseStarted()) return;
         exchange.getResponseHeaders().put(Headers.CONTENT_TYPE, "application/json; charset=utf-8");
         JsonConfig cfg = app != null ? app.jsonConfig() : null;
         String dateFormat = cfg != null ? cfg.dateFormat() : "yyyy-MM-dd'T'HH:mm:ss.SSS";
         JSONWriter.Feature[] features = cfg != null && cfg.writeNulls()
                 ? new JSONWriter.Feature[]{JSONWriter.Feature.WriteNulls}
                 : new JSONWriter.Feature[0];
-        exchange.getResponseSender().send(JSON.toJSONString(obj, dateFormat, features));
+        String json = JSON.toJSONString(obj, dateFormat, features);
+        Snapshot.response(exchange.getStatusCode(), "application/json; charset=utf-8", obj);
+        exchange.getResponseSender().send(json);
     }
 
     @Override public void jsonRaw(String json) {
-        if (!responseSent.compareAndSet(false, true)) return;
+        if (aborted || isResponseStarted()) return;
         exchange.getResponseHeaders().put(Headers.CONTENT_TYPE, "application/json; charset=utf-8");
+        Snapshot.response(exchange.getStatusCode(), "application/json; charset=utf-8", json);
         exchange.getResponseSender().send(json);
     }
 
     @Override public void text(String text) {
-        if (!responseSent.compareAndSet(false, true)) return;
+        if (aborted || isResponseStarted()) return;
         exchange.getResponseHeaders().put(Headers.CONTENT_TYPE, "text/plain; charset=utf-8");
+        Snapshot.response(exchange.getStatusCode(), "text/plain; charset=utf-8", text);
         exchange.getResponseSender().send(text);
     }
 
     @Override public void html(String html) {
-        if (!responseSent.compareAndSet(false, true)) return;
+        if (aborted || isResponseStarted()) return;
         exchange.getResponseHeaders().put(Headers.CONTENT_TYPE, "text/html; charset=utf-8");
+        Snapshot.response(exchange.getStatusCode(), "text/html; charset=utf-8", html);
         exchange.getResponseSender().send(html);
     }
 
     @Override public void raw(String body) {
-        if (!responseSent.compareAndSet(false, true)) return;
+        if (aborted || isResponseStarted()) return;
+        Snapshot.response(exchange.getStatusCode(), null, body);
         exchange.getResponseSender().send(body);
     }
 
     @Override public void redirect(String url) {
+        if (aborted || isResponseStarted()) return;
         if (url.indexOf('\r') >= 0 || url.indexOf('\n') >= 0) {
             throw new IllegalArgumentException("Invalid redirect URL");
         }
@@ -160,15 +256,20 @@ public class Context implements BaseContext {
     }
 
     @Override public Context header(String name, String value) {
-        if (name.indexOf('\r') >= 0 || name.indexOf('\n') >= 0
-                || value.indexOf('\r') >= 0 || value.indexOf('\n') >= 0) {
-            throw new IllegalArgumentException("Header name/value must not contain CR or LF");
+        if (aborted || isResponseStarted()) return this;
+        if (name == null || name.isBlank()) throw new IllegalArgumentException("Header name must not be blank");
+        if (name.indexOf('\r') >= 0 || name.indexOf('\n') >= 0) {
+            throw new IllegalArgumentException("Invalid header name");
+        }
+        if (value != null && (value.indexOf('\r') >= 0 || value.indexOf('\n') >= 0)) {
+            throw new IllegalArgumentException("Invalid header value");
         }
         exchange.getResponseHeaders().put(new HttpString(name), value);
         return this;
     }
 
     @Override public Context cookie(String name, String value, int maxAge) {
+        if (aborted || isResponseStarted()) return this;
         var cookie = new io.undertow.server.handlers.CookieImpl(name, value);
         cookie.setMaxAge(maxAge);
         cookie.setPath("/");
@@ -200,57 +301,220 @@ public class Context implements BaseContext {
         exchange.getResponseHeaders().put(new HttpString("Cache-Control"), "no-cache");
         exchange.getResponseHeaders().put(new HttpString("X-Accel-Buffering"), "no");
         exchange.setPersistent(false);
-        exchange.startBlocking();
-        var out = exchange.getOutputStream();
-        return new SseEmitter() {
-            @Override
-            public void send(String data) throws Exception {
-                write(formatData(data));
-            }
+        return new AsyncSseEmitter(exchange.getResponseSender());
+    }
 
-            @Override
-            public void send(String event, String data) throws Exception {
-                write("event: " + sanitize(event) + "\n" + formatData(data));
-            }
+    /**
+     * Queues events for the response sender and keeps exactly one send in flight. The request
+     * worker only enqueues, so a consumer that stops reading cannot hold it; the callback that
+     * completes one send starts the next. The queue is bounded so the same consumer cannot turn
+     * the server into an unbounded buffer: once the backlog passes the cap the stream ends.
+     */
+    private static final class AsyncSseEmitter implements SseEmitter {
 
-            @Override
-            public void send(String event, String data, String id) throws Exception {
-                write("id: " + sanitize(id) + "\nevent: " + sanitize(event) + "\n" + formatData(data));
-            }
+        private static final int MAX_QUEUED_BYTES = 1024 * 1024;
 
-            @Override
-            public void close() {
-                try { out.close(); } catch (IOException ignored) {}
-            }
+        private final io.undertow.io.Sender sender;
+        private final Object lock = new Object();
+        private final Deque<String> queue = new ArrayDeque<>();
+        private long queuedBytes;
+        private boolean inFlight;
+        private boolean closing;
+        private boolean ended;
 
-            private String formatData(String data) {
-                StringBuilder sb = new StringBuilder();
-                for (String line : data.split("\n", -1)) {
-                    sb.append("data: ").append(line).append("\n");
+        AsyncSseEmitter(io.undertow.io.Sender sender) {
+            this.sender = sender;
+        }
+
+        @Override
+        public void send(String data) {
+            enqueue(formatData(data));
+        }
+
+        @Override
+        public void send(String event, String data) {
+            enqueue("event: " + sanitize(event) + "\n" + formatData(data));
+        }
+
+        @Override
+        public void send(String event, String data, String id) {
+            enqueue("id: " + sanitize(id) + "\nevent: " + sanitize(event) + "\n" + formatData(data));
+        }
+
+        @Override
+        public void close() {
+            synchronized (lock) {
+                closing = true;
+            }
+            pump();
+        }
+
+        private void enqueue(String text) {
+            int bytes = text.length();
+            synchronized (lock) {
+                if (ended || closing) return;
+                if (queuedBytes + bytes > MAX_QUEUED_BYTES) {
+                    // The reader is behind by more than we are willing to hold. Ending the
+                    // stream is kinder than blocking the handler or growing without bound.
+                    closing = true;
+                    queue.clear();
+                    queuedBytes = 0;
+                } else {
+                    queue.addLast(text);
+                    queuedBytes += bytes;
                 }
-                sb.append("\n");
-                return sb.toString();
             }
+            pump();
+        }
 
-            private String sanitize(String value) {
-                return value.replaceAll("[\\r\\n]", "");
+        private void pump() {
+            String next;
+            synchronized (lock) {
+                if (inFlight || ended) return;
+                next = queue.pollFirst();
+                if (next == null) {
+                    if (!closing) return;
+                    ended = true;
+                } else {
+                    inFlight = true;
+                    queuedBytes -= next.length();
+                }
             }
+            if (next == null) {
+                endExchange();
+                return;
+            }
+            try {
+                sender.send(ByteBuffer.wrap(next.getBytes(StandardCharsets.UTF_8)),
+                        new io.undertow.io.IoCallback() {
+                            @Override
+                            public void onComplete(HttpServerExchange exchange,
+                                                   io.undertow.io.Sender ignored) {
+                                sent();
+                            }
 
-            private void write(String text) throws IOException {
-                out.write(text.getBytes(StandardCharsets.UTF_8));
-                out.flush();
+                            @Override
+                            public void onException(HttpServerExchange exchange,
+                                                    io.undertow.io.Sender ignored,
+                                                    IOException failure) {
+                                failed();
+                            }
+                        });
+            } catch (RuntimeException failure) {
+                failed();
             }
-        };
+        }
+
+        private void sent() {
+            synchronized (lock) {
+                inFlight = false;
+            }
+            pump();
+        }
+
+        private void failed() {
+            synchronized (lock) {
+                inFlight = false;
+                ended = true;
+                closing = true;
+                queue.clear();
+                queuedBytes = 0;
+            }
+        }
+
+        private void endExchange() {
+            try {
+                sender.close();
+            } catch (RuntimeException ignored) {
+            }
+        }
+
+        private static String formatData(String data) {
+            StringBuilder sb = new StringBuilder();
+            for (String line : data.split("\n", -1)) {
+                sb.append("data: ").append(line).append("\n");
+            }
+            sb.append("\n");
+            return sb.toString();
+        }
+
+        private static String sanitize(String value) {
+            return value.replaceAll("[\\r\\n]", "");
+        }
     }
 
     @Override
     public void sendFile(String filename, byte[] data, String contentType) {
+        if (aborted || isResponseStarted()) return;
+        announceDownload(filename, contentType, data.length);
+        Snapshot.response(exchange.getStatusCode(), contentType, Map.of("filename", filename, "bytes", data.length));
+        exchange.getResponseSender().send(ByteBuffer.wrap(data));
+    }
+
+    @Override
+    public void sendFile(String filename, Path path, String contentType) throws Exception {
+        if (aborted || isResponseStarted()) return;
+        if (path == null) throw new IllegalArgumentException("path must not be null");
+        if (!Files.isRegularFile(path)) {
+            throw new IllegalArgumentException("Download source is not a regular file: " + path);
+        }
+        long length = Files.size(path);
+        FileChannel content = FileChannel.open(path, StandardOpenOption.READ);
+        try {
+            announceDownload(filename, contentType, length);
+            Snapshot.response(exchange.getStatusCode(), contentType,
+                    Map.of("filename", filename, "bytes", length));
+            // Undertow transfers the channel without copying it through the heap. The callback
+            // owns the descriptor because the transfer outlives this handler invocation.
+            exchange.getResponseSender().transferFrom(content, new IoCallback() {
+                @Override public void onComplete(HttpServerExchange exchange, Sender sender) {
+                    closeContent(content);
+                    exchange.endExchange();
+                }
+
+                @Override public void onException(HttpServerExchange exchange, Sender sender,
+                                                  IOException exception) {
+                    closeContent(content);
+                    exchange.endExchange();
+                }
+            });
+        } catch (RuntimeException | Error failure) {
+            closeContent(content);
+            throw failure;
+        }
+    }
+
+    @Override
+    public void sendStream(String filename, long contentLength, String contentType,
+                           StreamWriter writer) throws Exception {
+        if (aborted || isResponseStarted()) return;
+        if (writer == null) throw new IllegalArgumentException("writer must not be null");
+        if (contentLength < -1) {
+            throw new IllegalArgumentException("contentLength must be -1 or non-negative");
+        }
+        announceDownload(filename, contentType, contentLength);
+        Snapshot.response(exchange.getStatusCode(), contentType,
+                Map.of("filename", filename, "bytes", contentLength));
+        exchange.startBlocking();
+        try (OutputStream output = exchange.getOutputStream()) {
+            writer.write(output);
+            output.flush();
+        }
+    }
+
+    private void announceDownload(String filename, String contentType, long contentLength) {
         exchange.getResponseHeaders().put(Headers.CONTENT_TYPE, contentType);
         String safeName = filename.replaceAll("[\\r\\n\"]", "");
         exchange.getResponseHeaders().put(new HttpString("Content-Disposition"),
                 "attachment; filename=\"" + safeName + "\"");
-        exchange.setResponseContentLength(data.length);
-        exchange.getResponseSender().send(ByteBuffer.wrap(data));
+        if (contentLength >= 0) exchange.setResponseContentLength(contentLength);
+    }
+
+    private static void closeContent(FileChannel content) {
+        try {
+            content.close();
+        } catch (IOException ignored) {
+        }
     }
 
     @Override
@@ -261,38 +525,92 @@ public class Context implements BaseContext {
 
     @Override
     public String ip() {
-        if (app != null && app.trustProxy()) {
-            String xff = exchange.getRequestHeaders().getFirst("X-Forwarded-For");
-            if (xff != null && !xff.isBlank()) {
-                return xff.split(",")[0].trim();
+        String xff = exchange.getRequestHeaders().getFirst("X-Forwarded-For");
+        var addr = exchange.getSourceAddress();
+        String peer = addr != null ? addr.getAddress().getHostAddress() : null;
+        String configured = app == null ? null : String.join(",", app.trustedProxies());
+        return resolveClientIp(configured, peer, xff);
+    }
+
+    static String resolveClientIp(String configured, String peer, String forwardedFor) {
+        String normalizedPeer = normalizeForwardedIp(peer);
+        if (normalizedPeer == null) return peer;
+        if (forwardedFor == null || forwardedFor.isBlank()
+                || !isTrustedProxy(configured, normalizedPeer)) {
+            return normalizedPeer;
+        }
+
+        String[] hops = forwardedFor.split(",", -1);
+        for (int i = hops.length - 1; i >= 0; i--) {
+            String hop = normalizeForwardedIp(hops[i]);
+            if (hop == null) return normalizedPeer;
+            if (!isTrustedProxy(configured, hop)) return hop;
+        }
+        return normalizedPeer;
+    }
+
+    static boolean isTrustedProxy(String configured, String peer) {
+        String normalizedPeer = normalizeForwardedIp(peer);
+        if (configured == null || configured.isBlank() || normalizedPeer == null) return false;
+        for (String entry : configured.split(",")) {
+            String rule = entry.trim();
+            if (rule.isEmpty()) continue;
+            String normalizedRule = normalizeForwardedIp(rule);
+            if ((normalizedRule != null && normalizedRule.equals(normalizedPeer))
+                    || cidrContains(rule, normalizedPeer)) {
+                return true;
             }
         }
-        var addr = exchange.getSourceAddress();
-        return addr != null ? addr.getAddress().getHostAddress() : null;
+        return false;
     }
 
-    io.aura.ExceptionSnapshot buildSnapshot(Throwable cause, long durationMs) {
-        Map<String, String> hdrs = new java.util.LinkedHashMap<>();
-        if (exchange != null) {
-            exchange.getRequestHeaders().forEach(h ->
-                    hdrs.put(h.getHeaderName().toString(), h.getFirst()));
+    static String normalizeForwardedIp(String value) {
+        if (value == null) return null;
+        String candidate = value.trim();
+        if (candidate.isEmpty() || !candidate.matches("[0-9A-Fa-f:.]+")) return null;
+        if (candidate.indexOf(':') < 0 && !isValidIpv4(candidate)) return null;
+        try {
+            return InetAddress.getByName(candidate).getHostAddress();
+        } catch (UnknownHostException ignored) {
+            return null;
         }
-        String uid = null;
-        try { uid = userId(); } catch (Exception ignored) {}
-        return new io.aura.ExceptionSnapshot(
-                requestId,
-                method(),
-                url(),
-                hdrs,
-                queryMap(),
-                pathParams != null ? Map.copyOf(pathParams) : Map.of(),
-                cachedBody,
-                uid,
-                durationMs,
-                cause.getClass().getName(),
-                cause.getMessage(),
-                io.aura.ExceptionSnapshot.captureStackTrace(cause)
-        );
+    }
+
+    private static boolean isValidIpv4(String candidate) {
+        String[] octets = candidate.split("\\.", -1);
+        if (octets.length != 4) return false;
+        for (String octet : octets) {
+            if (octet.isEmpty() || octet.length() > 3) return false;
+            int value = 0;
+            for (int i = 0; i < octet.length(); i++) {
+                char digit = octet.charAt(i);
+                if (digit < '0' || digit > '9') return false;
+                value = value * 10 + digit - '0';
+            }
+            if (value > 255) return false;
+        }
+        return true;
+    }
+
+    private static boolean cidrContains(String cidr, String address) {
+        try {
+            String[] parts = cidr.split("/", 2);
+            if (parts.length != 2) return false;
+            String normalizedNetwork = normalizeForwardedIp(parts[0]);
+            if (normalizedNetwork == null) return false;
+            byte[] network = InetAddress.getByName(normalizedNetwork).getAddress();
+            byte[] candidate = InetAddress.getByName(address).getAddress();
+            if (network.length != candidate.length) return false;
+            int bits = Integer.parseInt(parts[1]);
+            if (bits < 0 || bits > network.length * 8) return false;
+            for (int i = 0; i < network.length; i++) {
+                int remaining = bits - i * 8;
+                int mask = remaining >= 8 ? 0xff : remaining <= 0 ? 0 : (0xff << (8 - remaining)) & 0xff;
+                if ((network[i] & mask) != (candidate[i] & mask)) return false;
+            }
+            return true;
+        } catch (UnknownHostException | NumberFormatException ignored) {
+            return false;
+        }
     }
 }
-

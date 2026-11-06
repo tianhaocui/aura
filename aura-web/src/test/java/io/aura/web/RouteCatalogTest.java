@@ -1,0 +1,96 @@
+package io.aura.web;
+
+import io.aura.port.BaseHandler;
+import io.aura.port.BaseRouter;
+import io.aura.contract.ApiParameter;
+import org.junit.jupiter.api.Test;
+
+import java.util.List;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+class RouteCatalogTest {
+    record User(long id, String name) { }
+
+    @FunctionalInterface
+    interface UserGet { User get(long id); }
+
+    static class UserService implements UserGet {
+        public User get(long id) { return new User(id, "name"); }
+    }
+    @Test
+    void preservesExplicitLambdaParameterContractForSchemaAdapters() {
+        BaseRouter router = new BaseRouter();
+        router.post("/orders", ctx -> ctx.text("ok"))
+                .param("customerId", "string", "query", true, "Customer identifier")
+                .param("order", "Order", "body", true, "Order payload");
+
+        CompiledRoute route = UndertowStarter.compileRoutes(router).get(0);
+        io.aura.contract.Route description = RouteCatalog.describe(route);
+
+        assertThat(description.params())
+                .extracting(ApiParameter::name)
+                .containsExactly("customerId", "order");
+        assertThat(description.params().get(0).source()).isEqualTo("query");
+        assertThat(description.params().get(1).required()).isTrue();
+    }
+
+    @Test
+    void routeContractDefensivelyCopiesExplicitParameters() {
+        var parameter = new ApiParameter("id", "long", "path", true, "Order id");
+        var source = new java.util.ArrayList<>(List.of(parameter));
+
+        io.aura.contract.Route route = io.aura.contract.Route
+                .of("POST", "/orders", (BaseHandler) ctx -> { })
+                .withParams(source);
+        source.clear();
+
+        assertThat(route.params()).containsExactly(parameter);
+    }
+
+    enum Direction { UP, DOWN }
+
+    @FunctionalInterface
+    interface Search { String search(List<String> tags, Direction direction); }
+
+    static class SearchService implements Search {
+        public String search(List<String> tags, Direction direction) { return tags + "/" + direction; }
+    }
+
+    @Test
+    void describesCollectionAndEnumParametersWhereTheBinderReadsThem() {
+        Router router = new Router();
+        router.post("/search", new LambdaHandler(new SearchService()));
+
+        CompiledRoute route = UndertowStarter.compileRoutes(router).get(0);
+        io.aura.contract.Route description = RouteCatalog.describe(route);
+
+        // A List is never a query string: the binder reads it from the body, so the
+        // contract has to say body too.
+        assertThat(description.params().get(0).source()).isEqualTo("body");
+        // A body may arrive as null and the handler decides what that means, so required is
+        // not claimed here -- the contract does not promise a rejection the binder never makes.
+        assertThat(description.params().get(0).required()).isFalse();
+        assertThat(description.params().get(0).schema().get("type")).isEqualTo("array");
+
+        // An enum arrives as its name(), with the accepted spellings spelled out.
+        assertThat(description.params().get(1).source()).isEqualTo("query");
+        assertThat(description.params().get(1).schema().get("type")).isEqualTo("string");
+        assertThat(description.params().get(1).schema().get("enum")).isEqualTo(List.of("UP", "DOWN"));
+    }
+
+    @Test
+    void reflectsResponseRecordSchemaForServiceRoutes() {
+        Router router = new Router();
+        router.get("/users/{id}", new LambdaHandler(new UserService()));
+
+        CompiledRoute route = UndertowStarter.compileRoutes(router).get(0);
+        io.aura.contract.Route description = RouteCatalog.describe(route);
+
+        assertThat(description.responseSchema().get("type")).isEqualTo("object");
+        @SuppressWarnings("unchecked")
+        java.util.Map<String, Object> properties =
+                (java.util.Map<String, Object>) description.responseSchema().get("properties");
+        assertThat(properties.keySet()).contains("id", "name");
+    }
+}

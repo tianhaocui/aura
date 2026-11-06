@@ -1,5 +1,8 @@
 package io.aura.web;
 
+import io.aura.port.BaseHandler;
+import io.aura.port.WsHandler;
+import io.aura.contract.Route;
 import io.undertow.server.HttpServerExchange;
 import io.undertow.websockets.WebSocketConnectionCallback;
 import io.undertow.websockets.WebSocketProtocolHandshakeHandler;
@@ -10,10 +13,15 @@ import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-record CompiledWsRoute(String rawPath, Pattern pattern, List<String> paramNames,
-                       List<BaseHandler> beforeHandlers, WsHandler wsHandler) {
+record CompiledWsRoute(Route contract, Pattern pattern, List<String> paramNames,
+                       List<BaseHandler> beforeHandlers, WsHandler wsHandler,
+                       long maxMessageBytes, WebSocketConnectionRegistry connections) {
 
-    Map<String, String> match(String path) {
+    String rawPath() { return contract.path(); }
+
+    Map<String, String> match(String rawPath) {
+        String path = CompiledRoute.decodePath(rawPath);
+        if (path == null) return null;
         Matcher m = pattern.matcher(path);
         if (!m.matches()) return null;
         Map<String, String> params = new HashMap<>();
@@ -27,23 +35,36 @@ record CompiledWsRoute(String rawPath, Pattern pattern, List<String> paramNames,
         Map<String, String> queryParams = parseQuery(exchange);
 
         WebSocketConnectionCallback callback = (WebSocketHttpExchange wsExchange, WebSocketChannel channel) -> {
-            UndertowWsConnection conn = new UndertowWsConnection(channel, pathParams, queryParams);
-            conn.setErrorHandler(wsHandler.onError);
+            if (!connections.register(channel)) {
+                connections.reject(channel);
+                return;
+            }
+            UndertowWsConnection conn = new UndertowWsConnection(
+                    channel, pathParams, queryParams, () -> connections.touch(channel));
+            conn.setErrorHandler(wsHandler.errorHandler());
 
-            if (wsHandler.onOpen != null) {
+            if (wsHandler.openHandler() != null) {
                 try {
-                    wsHandler.onOpen.accept(conn);
+                    wsHandler.openHandler().accept(conn);
                 } catch (Exception e) {
                     routeToError(conn, e);
                 }
             }
 
             channel.getReceiveSetter().set(new AbstractReceiveListener() {
+                @Override protected long getMaxTextBufferSize() { return maxMessageBytes; }
+                @Override protected long getMaxBinaryBufferSize() { return maxMessageBytes; }
+
+                @Override public void handleEvent(WebSocketChannel ch) {
+                    connections.touch(ch);
+                    super.handleEvent(ch);
+                }
+
                 @Override
                 protected void onFullTextMessage(WebSocketChannel ch, BufferedTextMessage msg) {
-                    if (wsHandler.onMessage != null) {
+                    if (wsHandler.messageHandler() != null) {
                         try {
-                            wsHandler.onMessage.accept(conn, msg.getData());
+                            wsHandler.messageHandler().accept(conn, msg.getData());
                         } catch (Exception e) {
                             routeToError(conn, e);
                         }
@@ -52,9 +73,9 @@ record CompiledWsRoute(String rawPath, Pattern pattern, List<String> paramNames,
 
                 @Override
                 protected void onCloseMessage(CloseMessage cm, WebSocketChannel ch) {
-                    if (wsHandler.onClose != null) {
+                    if (wsHandler.closeHandler() != null) {
                         try {
-                            wsHandler.onClose.handle(conn, cm.getCode(), cm.getReason());
+                            wsHandler.closeHandler().handle(conn, cm.getCode(), cm.getReason());
                         } catch (Exception e) {
                             routeToError(conn, e);
                         }
@@ -73,9 +94,9 @@ record CompiledWsRoute(String rawPath, Pattern pattern, List<String> paramNames,
     }
 
     private void routeToError(UndertowWsConnection conn, Throwable error) {
-        if (wsHandler.onError != null) {
+        if (wsHandler.errorHandler() != null) {
             try {
-                wsHandler.onError.handle(conn, error);
+                wsHandler.errorHandler().handle(conn, error);
             } catch (Exception suppressed) {
                 error.addSuppressed(suppressed);
             }
@@ -91,18 +112,26 @@ record CompiledWsRoute(String rawPath, Pattern pattern, List<String> paramNames,
         return params;
     }
 
-    static CompiledWsRoute compile(String path, List<BaseHandler> beforeHandlers, WsHandler handler) {
+    static CompiledWsRoute compile(Route contract, List<BaseHandler> beforeHandlers,
+                                   long maxMessageBytes, WebSocketConnectionRegistry connections) {
+        String path = contract.path();
         List<String> paramNames = new ArrayList<>();
-        String regex = path
-                .replace(".", "\\.")
-                .replace("+", "\\+")
-                .replaceAll("\\{([a-zA-Z_][a-zA-Z0-9_]*)}", "([^/]+)");
+        // Only the braces-hashed placeholders are regex: escaping . and + by hand left every other
+        // metacharacter live, so a path like /ws/a(b either matched paths the author never wrote
+        // or failed to compile at all.
         Pattern paramPattern = Pattern.compile("\\{([a-zA-Z_][a-zA-Z0-9_]*)}");
         Matcher m = paramPattern.matcher(path);
+        StringBuilder regex = new StringBuilder();
+        int last = 0;
         while (m.find()) {
+            regex.append(Pattern.quote(path.substring(last, m.start())));
+            regex.append("([^/]+)");
             paramNames.add(m.group(1));
+            last = m.end();
         }
-        return new CompiledWsRoute(path, Pattern.compile("^" + regex + "$"),
-                paramNames, beforeHandlers, handler);
+        regex.append(Pattern.quote(path.substring(last)));
+        return new CompiledWsRoute(contract, Pattern.compile("^" + regex + "$"),
+                paramNames, beforeHandlers, (WsHandler) contract.handler(),
+                maxMessageBytes, connections);
     }
 }

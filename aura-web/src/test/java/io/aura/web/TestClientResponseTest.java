@@ -1,6 +1,5 @@
 package io.aura.web;
 
-import io.aura.Aura;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -13,12 +12,12 @@ class TestClientResponseTest {
 
     @Test
     void header_returnsResponseHeader() {
-        var app = Aura.create();
-        app.routes(r -> r.get("/ping", ctx -> {
+        Router router = new Router();
+        router.get("/ping", ctx -> {
             ctx.header("X-Custom", "hello");
             ctx.text("pong");
-        }));
-        var client = TestClient.of(app);
+        });
+        var client = TestApplications.client(router);
 
         var resp = client.get("/ping").execute();
         assertThat(resp.status()).isEqualTo(200);
@@ -27,9 +26,9 @@ class TestClientResponseTest {
 
     @Test
     void header_returnsNullWhenNotSet() {
-        var app = Aura.create();
-        app.routes(r -> r.get("/ping", ctx -> ctx.text("pong")));
-        var client = TestClient.of(app);
+        Router router = new Router();
+        router.get("/ping", ctx -> ctx.text("pong"));
+        var client = TestApplications.client(router);
 
         var resp = client.get("/ping").execute();
         assertThat(resp.header("X-Missing")).isNull();
@@ -37,12 +36,12 @@ class TestClientResponseTest {
 
     @Test
     void expectHeader_passesOnMatch() {
-        var app = Aura.create();
-        app.routes(r -> r.get("/ping", ctx -> {
+        Router router = new Router();
+        router.get("/ping", ctx -> {
             ctx.header("X-Req-Id", "abc123");
             ctx.text("ok");
-        }));
-        var client = TestClient.of(app);
+        });
+        var client = TestApplications.client(router);
 
         client.get("/ping").execute()
                 .expect(200)
@@ -51,12 +50,12 @@ class TestClientResponseTest {
 
     @Test
     void expectHeader_throwsOnMismatch() {
-        var app = Aura.create();
-        app.routes(r -> r.get("/ping", ctx -> {
+        Router router = new Router();
+        router.get("/ping", ctx -> {
             ctx.header("X-Req-Id", "abc");
             ctx.text("ok");
-        }));
-        var client = TestClient.of(app);
+        });
+        var client = TestApplications.client(router);
 
         assertThatThrownBy(() -> client.get("/ping").execute().expectHeader("X-Req-Id", "xyz"))
                 .isInstanceOf(AssertionError.class)
@@ -65,12 +64,12 @@ class TestClientResponseTest {
 
     @Test
     void jsonList_deserializesArray() {
-        var app = Aura.create();
-        app.routes(r -> r.get("/users", ctx -> ctx.json(List.of(
+        Router router = new Router();
+        router.get("/users", ctx -> ctx.json(List.of(
                 Map.of("name", "Alice", "age", 25),
                 Map.of("name", "Bob", "age", 30)
-        ))));
-        var client = TestClient.of(app);
+        )));
+        var client = TestApplications.client(router);
 
         record User(String name, int age) {}
         var users = client.get("/users").execute().jsonList(User.class);

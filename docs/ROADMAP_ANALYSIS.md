@@ -8,6 +8,12 @@ aura-site 项目验证了 Aura 的核心价值：2000 行 Java 实现了 Spring 
 
 **核心原则：Aura 的竞争力是轻和快，任何拓展不能违背这一点。**
 
+> **时代背景（重要）：** 本文写于 stage1 重构之前，示例中的反射式入口
+> —— `ServiceRegistrar`、`MethodRefHandler`、`Router.crud(...)` 与
+> `app.service(...)` —— 已随「单一门」重构移除。如今路由只有一条门：显式贡献的
+> `Route`（手写或 `aura-processor` 生成）。下文这些示例只作演进思路保留，落地前需
+> 改写为显式 `Route` 贡献，不可当作现行 API。
+
 ---
 
 ## 一、短期补充（提升日常开发体验）
@@ -88,13 +94,14 @@ r.crud("/api/docs", docsService, CrudOptions.of().pageSize(50));
 **API 设计：**
 
 ```java
-// 方式一：Builder API（推荐）
-Aura.create()
-    .cron("0 9 * * *", () -> reminderService.checkOverdue())
-    .cron("*/5 * * * *", () -> stockService.checkLowStock())
-    .start();
+// 方式一：模块 install() 显式注册（推荐）
+@Override public void install(ModuleContext context) {
+    context.cron("0 9 * * *", () -> reminderService.checkOverdue());
+    context.cron("*/5 * * * *", () -> stockService.checkLowStock());
+}
 
-// 方式二：注解（可选，后续加）
+// 方式二：注解（可选，后续加）—— 由 aura-processor 在编译期生成显式贡献，
+// 运行期不再有包扫描这条门
 @Schedule("0 9 * * *")
 public void checkOverdue() { ... }
 ```
@@ -102,8 +109,10 @@ public void checkOverdue() { ... }
 **实现复杂度：** 中等（约 200 行）
 - 内置轻量 cron 解析器（只支持标准 5 字段）
 - 基于 `ScheduledExecutorService`，不引入 Quartz
-- `app.cron()` 注册任务，`stop()` 时自动关闭线程池
-- 支持 `@Schedule` 注解（PackageScanner 扫描时注册）
+- `ModuleContext.cron()` 注册任务（与 `context.route(Route)` 同为 install() 里的显式贡献），
+  `stop()` 时自动关闭线程池
+- `@Schedule` 注解走 aura-processor 编译期生成，不恢复包扫描：`PackageScanner` 与
+  `RouteEntry` 已在 ④-ab 删除，一条贡献门是本分支不可回退的约束
 
 **边界判断：** 不做分布式调度、不做任务持久化、不做失败重试。单机 cron 够用。
 

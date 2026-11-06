@@ -1,0 +1,501 @@
+# Aura Framework - AI Development Guide
+
+You are developing with Aura, a lightweight Java 17+ backend framework.
+
+## Query Style Decision Rule
+
+```
+db.table().where().find()          — simple CRUD (default choice)
+db.findDynamic(template, map)      — multi-condition search with optional filters
+db.find(sql, params)               — only for joins/subqueries
+```
+
+## Project Setup (pom.xml)
+
+```xml
+<dependency>
+    <groupId>io.github.tianhaocui</groupId>
+    <artifactId>aura-web</artifactId>
+    <version>0.6.1</version>
+</dependency>
+<!-- Optional: database -->
+<dependency>
+    <groupId>io.github.tianhaocui</groupId>
+    <artifactId>aura-db</artifactId>
+    <version>0.6.1</version>
+</dependency>
+<!-- Required: add your own SLF4J provider -->
+<dependency>
+    <groupId>ch.qos.logback</groupId>
+    <artifactId>logback-classic</artifactId>
+    <version>1.5.6</version>
+</dependency>
+```
+
+The `-parameters` compiler flag is **required** — add `<parameters>true</parameters>` to maven-compiler-plugin.
+Without it, all route parameters silently receive null/0 (app starts but every handler gets zeroed arguments).
+
+## Minimal App
+
+```java
+Aura.create().port(8080)
+    .get("/hello", () -> "hello world")
+    .start();
+```
+
+## Route Patterns
+
+```java
+app.get("/path", () -> result);                    // no params
+app.get("/user/{id}", (int id) -> findUser(id));   // path param
+app.post("/user", (CreateReq req) -> save(req));   // body param
+app.patch("/user/{id}", (int id, PatchReq req) -> update(id, req));  // partial update
+app.head("/file/{id}", (int id) -> checkExists(id));   // existence check
+app.options("/api/items", () -> "GET,POST,PATCH");     // API discovery
+
+app.routes(r -> {
+    r.get("/user/{id}", userService, "get");
+    r.post("/user", userService, "create");
+    r.crud("/user", userService);  // registers get/list/create/update/delete
+});
+
+// Service class — plain Java, no annotations needed
+class UserService {
+    User get(int id) { ... }
+    List<User> list() { ... }
+    User create(CreateReq req) { ... }
+    void delete(int id) { ... }
+}
+```
+
+**Route priority**: exact paths beat parameterized paths. `/api/items/search` matches before `/api/items/{id}`.
+
+**`@Path` annotation**: works with `.services()` registration (auto-DI + routes) or `.service()`. Inside `routes()` lambda, register paths explicitly.
+
+## Parameter Binding Rules
+
+- `int/long/String` → path param first, then query param (by name)
+- `record/POJO` → request body (JSON), auto-validated if annotations present
+- `Context` → framework context object
+- Return non-void → auto JSON response; String → text response; void → no body
+- Boxed types (`Integer`/`Long`) → `null` when absent; primitives → `0`/`false`
+
+## Middleware and Error Handling
+
+```java
+// 全局异常处理（推荐 — 在 app 上注册，不在 router 里）
+app.exception(IllegalArgumentException.class, (e, ctx) ->
+    ctx.status(400).json(Result.fail(400, e.getMessage())));
+app.exception(Exception.class, (e, ctx) ->
+    ctx.status(500).json(Result.fail(500, "Internal error")));
+
+// 全局 before with exclude（无需在 handler 里 if 跳过）
+app.before(authHandler).exclude("/health", "/api/adapter/health*");
+
+app.routes(r -> {
+    r.before(ctx -> { /* auth, logging */ });
+    r.after(ctx -> { /* timing, cleanup */ });
+    r.group("/api", api -> {
+        api.before(authMiddleware);  // only /api/** requires auth
+        api.get("/items", itemService, "list");
+    });
+});
+```
+
+### app.exception() 注册规则
+
+- 使用 `isAssignableFrom` 匹配 — 注册 `RuntimeException.class` 会捕获所有子类
+- `LinkedHashMap` 按注册顺序遍历，**第一个匹配的 handler 生效**
+- 先注册具体异常，再注册通用异常（从小到大注册）
+- `InvocationTargetException` 自动 unwrap，匹配的是 `getCause()`
+
+```java
+// 正确顺序：具体在前，通用在后
+app.exception(ValidationException.class, (e, ctx) -> ctx.status(400).json(...));
+app.exception(AuthException.class, (e, ctx) -> ctx.status(401).json(...));
+app.exception(Exception.class, (e, ctx) -> ctx.status(500).json(...));
+```
+
+### 全局过滤器 + 路径白名单
+
+```java
+// 方式一：app.before().exclude() — 推荐
+app.before(ctx -> {
+    String token = ctx.header("Authorization");
+    if (token == null) { ctx.status(401).json(Map.of("error", "Unauthorized")); ctx.abort(); }
+    else ctx.set("_userId", verifyToken(token));
+}).exclude("/health", "/login", "/public/*");
+
+// 方式二：router group — 按路径前缀分组
+app.routes(r -> {
+    r.get("/health", ctx -> ctx.text("ok"));       // 不需要认证
+    r.group("/api", api -> {
+        api.before(authMiddleware);                  // /api/** 需要认证
+        api.get("/users", userService, "list");
+    });
+});
+```
+
+`exclude()` 支持精确匹配和通配符（`*` 结尾表示前缀匹配）。
+
+Unhandled exceptions return JSON `{"error": "message"}`. In dev mode (`AURA_ENV=dev`), `"trace"` is added.
+`IllegalArgumentException` and `ValidationException` automatically return 400.
+**AI 写代码只管 throw，不需要 try-catch。**
+
+## Validation Annotations
+
+```java
+public record CreateUser(
+    @NotBlank String name,
+    @Min(0) @Max(150) int age,
+    @Size(min = 11, max = 11) String phone,
+    @Pattern("[a-z]+@[a-z]+\\.[a-z]+") String email
+) {}
+```
+
+Annotations: `@NotNull`, `@NotBlank`, `@Min`, `@Max`, `@Size`, `@Pattern`
+Only trigger for record/POJO body parameters — NOT for path/query params.
+
+For cross-field validation, implement `Validatable`:
+
+```java
+record DateRange(@NotNull LocalDate start, @NotNull LocalDate end) implements Validatable {
+    public void validate() {
+        Validate.isTrue(!end.isBefore(start), "end must be after start");
+    }
+}
+```
+
+## Auth
+
+```java
+// Built-in JWT (zero dependency)
+app.jwt("secret");  // or env: AURA_JWT_SECRET
+
+// Protect routes
+r.group("/api", api -> {
+    api.before(Aura.requireAuth());  // 401 if not authenticated
+    api.get("/profile", ctx -> db.findById("user", ctx.userId()));
+});
+
+// Sign token — accepts String subject (userId, email, UUID, etc.)
+r.post("/login", ctx -> ctx.json(Map.of("token", app.signJwt("user-123"))));
+r.post("/login", ctx -> ctx.json(Map.of("token", app.signJwt(42L))));  // long overload
+
+// Custom auth (OAuth, IAM, Redis session — anything)
+app.auth(ctx -> myIamClient.verify(ctx.header("X-Token")));  // returns String userId or null
+```
+
+`ctx.userId()` returns String. Throws if not authenticated.
+
+## Plugins
+
+```java
+Aura.create()
+    .plugin(app -> app.register(new RedisClient("localhost")))
+    .plugin(new NacosPlugin())  // aura-nacos: auto service registration + config
+    .start();
+
+public interface AuraPlugin { void install(Aura app); }
+```
+
+## Services — Auto-Wiring (v0.6.0+)
+
+**This is the recommended way to register business components.** AI should use this pattern by default.
+
+```java
+Aura.create()
+    .register(Db.create(app.prop("db.url"), app.prop("db.user"), app.prop("db.pass")))
+    .register(app.props("engine.", EngineConfig.class))
+    .services(
+        ScoreService.class,       // DI-only — no routes
+        MatchService.class,       // DI-only — no routes
+        UserController.class,     // @Path("/api/users") → DI + auto route registration
+        OrderController.class     // @Path("/api/orders") → DI + auto route registration
+    )
+    .before(Aura.requireAuth()).exclude("/health", "/api/auth/*")
+    .start();
+```
+
+### Rules
+
+- `register(instance)` = infrastructure you create manually (Db, Config Records, external clients)
+- `services(Class...)` = all components — DI via constructor injection. **@Path classes also get routes registered automatically**
+- **Aura itself is auto-registered** — any service can inject `Aura` to access config/beans
+- **Order doesn't matter** — `register()` and `services()` can appear in any order. All resolve happens at `start()`.
+- Constructor params are matched **by type** from registered beans + other services
+- Unique public constructor required (multiple → startup error)
+- Missing dependency → startup error with clear message:
+  ```
+  [Aura] Cannot create Engine: constructor requires ScoreService but no bean of that type registered.
+  Registered: [Db, MatchService, EngineConfig]
+  Hint: add ScoreService.class to services() or register an instance.
+  ```
+- Circular dependency → startup error with full chain
+- **Route table logged at startup** — all routes printed after compilation for visibility
+
+### @Path in services() (v0.6.1+)
+
+Classes with `@Path` in services() get both DI and automatic route registration. No separate step needed.
+
+```java
+@Path("/api/users")
+public class UserController {
+    private final Db db;
+    public UserController(Db db) { this.db = db; }
+
+    @Get("/{id}")
+    public User get(int id) { return db.findById("users", id).as(User.class); }
+
+    @Post("")
+    public User create(CreateReq req) { return db.insert("users", req); }
+}
+
+// Registration: one line in services()
+Aura.create()
+    .register(Db.create(...))
+    .services(UserController.class)  // ← DI + routes in one shot
+    .start();
+```
+
+**Two API methods, two semantics:**
+```
+register(instance)   — infrastructure: pre-created instances (Db, Config Records)
+services(Class...)   — all components: constructor injection. @Path → auto-routes
+```
+
+AI adds a component → add one line to services(). Done.
+
+### Adding a new Component (AI workflow)
+
+```java
+// DI-only service (no routes):
+public class NotificationService {
+    private final Db db;
+    private final Engine engine;
+    public NotificationService(Db db, Engine engine) { ... }
+}
+
+// Route service (with @Path):
+@Path("/api/notifications")
+public class NotificationController {
+    private final NotificationService notifications;
+    public NotificationController(NotificationService notifications) { ... }
+
+    @Get("")
+    public List<Notification> list() { return notifications.listAll(); }
+}
+
+// Register: add lines to services()
+.services(
+    ...,
+    NotificationService.class,     // ← DI only
+    NotificationController.class   // ← DI + routes
+)
+```
+
+No need to know variable names, creation order, or where to pass references.
+
+### Reloadable — Config hot-reload
+
+```java
+// Implement Reloadable to receive config change notifications
+public class ApiKeyFilter implements Reloadable {
+    private volatile String apiKey;
+
+    public ApiKeyFilter(Aura app) {
+        this.apiKey = app.prop("api.key");
+    }
+
+    @Override
+    public void reload(Aura app) {
+        this.apiKey = app.prop("api.key");  // re-read updated config
+    }
+}
+
+// Framework calls reload() on all Reloadable services when:
+app.reloadConfig();  // manually, or triggered by NacosPlugin on config change
+```
+
+Services implementing `Closeable` are auto-closed on stop (reverse order).
+
+### resultWrapper — Global response wrapping
+
+```java
+app.resultWrapper(Result::ok);  // one line — all handler return values auto-wrapped
+```
+
+Service methods just return business objects; framework wraps with Result:
+```java
+@Path("/api/users")
+public class UserController {
+    @Get("/{id}")
+    User get(int id) { return db.findById("user", id); }
+    // Response: {"code":0,"message":"ok","data":{"name":"alice"}}
+}
+```
+
+Behavior:
+- Handler returns value → `wrapper.apply(value)` → JSON response
+- Handler throws → exceptionHandler → wrapper NOT applied
+- Handler manually calls ctx.json()/ctx.text() → wrapper NOT applied (response already sent)
+- Wrapper must accept null (handler returning null → `Result.ok(null)`)
+
+## Configuration
+
+```java
+Aura.create()
+    .port(8080)                    // or env: AURA_PORT
+    .env("dev")                    // or env: AURA_ENV
+    .jwt("secret")                 // or env: AURA_JWT_SECRET
+    .cors(true)                    // CORS allow all
+    .cors(c -> c.origins("https://app.com").credentials(true))  // fine-grained
+    .maxBodySize(10 * 1024 * 1024L)
+    .requestTimeout(30)            // 503 after 30s
+    .gzip(true)                    // response compression
+    .accessLog("json")             // JSON structured log (or true for human-readable)
+    .staticFiles("/public")
+    .spa(true)                     // unknown paths → /index.html
+    .mcp(true)                     // MCP Server for AI agents
+    .health()                      // /health endpoint, 503 on shutdown
+    .dev(true)                     // hot-reload (requires aura-dev dependency + JDK)
+    .resultWrapper(Result::ok)     // auto-wrap handler returns with Result
+    .set("db.url", "jdbc:mysql://...")
+    .onStart(a -> log.info("ready on port {}", a.port()))
+    .onStop(a -> a.getBean(Db.class).close())
+    .start(args);
+```
+
+### Lifecycle Hooks
+
+- `onStart(hook)` — runs **after** server port is listening (safe to register service discovery)
+- `onStop(hook)` — runs on SIGTERM/SIGINT during graceful shutdown (close connections, deregister)
+
+```java
+app.onStart(a -> nacosClient.register("my-service", a.port()));  // port is ready
+app.onStop(a -> nacosClient.deregister("my-service"));
+```
+
+Properties read order: startup args > env var > System Property (-D) > `aura.properties` > code default.
+
+Priority (highest to lowest):
+1. `--key=value` startup args
+2. Environment variable (`KEY_NAME` — dots and hyphens become underscores, uppercased)
+3. System Property (`-Dkey=value`)
+4. `app.set(key, value)`
+5. `aura-{env}.properties`
+6. `aura.properties`
+
+Env var key conversion: `prop("nacos.server-addr")` → looks up `NACOS_SERVER_ADDR` (`.` → `_`, `-` → `_`, uppercase).
+
+`props(prefix)` uses pure `startsWith()` matching — `props("login.")` matches `login.item-cms.url`.
+
+### Config Binding to Record
+
+```java
+// aura.properties: bnp.api.key=abc123, bnp.api.url=https://..., bnp.api.timeout=30
+record BnpConfig(String key, String url, int timeout) {}
+BnpConfig config = app.props("bnp.api.", BnpConfig.class);  // auto-strips prefix, binds by field name
+```
+
+Supported types: String, int, long, double, boolean. Record-only (no POJO). Missing keys → default values (null/0/false).
+
+## Context API
+
+```java
+// 请求
+ctx.path("id")   ctx.pathInt("id")   ctx.pathLong("id")
+ctx.query("page")   ctx.queryRequired("name")   ctx.queryInt("page", 1)
+ctx.header("Authorization")   ctx.cookie("name")   ctx.method()   ctx.url()
+ctx.body(T.class)   ctx.bodyOrThrow(T.class)   ctx.ip()
+ctx.pageNum()   ctx.pageSize()   ctx.file("field")   ctx.formField("name")
+
+// 响应
+ctx.status(201)   ctx.json(obj)   ctx.text("ok")   ctx.html("<h1>Hi</h1>")
+ctx.jsonRaw(str)  // output raw JSON string without re-serialization
+ctx.raw(body)     // write body without setting Content-Type (for CSV, XML, etc.)
+ctx.redirect("/")   ctx.sendFile("name.pdf", bytes)   ctx.sse()
+
+// 认证 (userId 返回 String — 支持 long/UUID/email)
+ctx.userId()
+
+// 上下文存储
+ctx.set(user)   ctx.get(User.class)   ctx.app().getBean(Db.class)
+```
+
+`ctx.json(row)` works directly — Row extends LinkedHashMap, serializes as JSON object.
+
+### HTTP 代理/透传响应
+
+```java
+// 透传第三方 API 响应（保留原始 Content-Type）
+r.get("/proxy/report", ctx -> {
+    var resp = httpClient.send(req, HttpResponse.BodyHandlers.ofString());
+    ctx.status(resp.statusCode());
+    resp.headers().firstValue("Content-Type").ifPresent(ct -> ctx.header("Content-Type", ct));
+    ctx.raw(resp.body());  // 不覆盖 Content-Type
+});
+```
+
+`ctx.raw()` vs `ctx.text()`: raw 不设 Content-Type，适合透传外部响应或自定义格式（CSV/XML/protobuf）。
+
+## Testing
+
+```java
+TestClient client = TestClient.of(app);
+client.get("/user/1").execute().expect(200).bodyContains("alice");
+client.post("/user").body(Map.of("name", "bob")).execute().expect(201);
+client.patch("/user/1").body(Map.of("name", "new")).expect(200);
+client.get("/items").query("page", "2").query("size", "10").expect(200);
+
+// JSONPath assertions
+client.get("/user/1").execute().expect(200)
+    .expectJson("$.name", "alice")
+    .expectJson("$.age", 30);
+
+// Session — auto token management
+TestSession session = client.session("Bearer " + token);
+session.get("/api/me").expect(200);
+
+// Or login + auto-extract token
+session.login(client.post("/login").body(creds).execute());
+session.get("/protected").expect(200);
+
+// Direct MockContext (public) — unit test handlers without routing
+var ctx = new MockContext(Map.of("id", "1"), Map.of(), Map.of(), null, app);
+```
+
+In-memory, no HTTP server needed. AI writes code → runs TestClient → confirms it works.
+
+## Key Principles
+
+- No XML, no YAML, no annotations required
+- Service methods are plain Java
+- One `Aura.create()...start()` is a complete app
+- Row type roundtrip: insert LocalDateTime → findById returns LocalDateTime → update writes back
+
+## Important Notes
+
+- **`-parameters` compiler flag required** — without it, all route params are null/0 with no error
+- **Path param syntax is `{id}`** — NOT `:id`
+- **Validation only on record body params** — path/query params are NOT auto-validated
+- **DI via `services(Class...)`** — framework auto-creates with constructor injection. `@Path` classes also get routes registered. Use `register(instance)` only for infrastructure (Db, configs).
+- **`scan()` is deprecated** — use `services(Class...)` instead. services() handles both DI and @Path routing.
+- **Multi-datasource** — `Db.create(name, dataSource)`, register with `app.register(name, db)`. See AI_GUIDE_DB.md.
+- **Config is .properties only** — no YAML support
+- **query params need manual access** — `ctx.query("name")`, no auto-binding
+- **Record classes auto-serialize** — field name = JSON key, no annotations needed
+- **`bodyOrThrow()` = body() + null check + BeanValidator** — the recommended way
+- **Exception handling via `app.exception()`** — handler 里不需要 try-catch
+- **`db.execute()` returns `int`** — affected row count
+- **`@Path` works with `.services()` or `.service()`** — not in `routes()` lambda
+- **Route conflicts throw at startup** — same method + path = `IllegalStateException`
+- **`abort()` defaults to 403** — without explicit status code
+- **`orderBy()` validates field names** — invalid chars throw `IllegalArgumentException`
+- **staticFiles path is classpath-relative** — e.g. `/public` = `src/main/resources/public`
+
+## Extended Guides
+
+- [AI_GUIDE_DB.md](AI_GUIDE_DB.md) — Database, Query builder, Dynamic SQL, transactions
+- [AI_GUIDE_MCP.md](AI_GUIDE_MCP.md) — MCP Server, tool generation, McpRouter
+- [AI_GUIDE_OPS.md](AI_GUIDE_OPS.md) — SSE, file upload/download, packaging, integrations

@@ -7,14 +7,26 @@
     <parent>
         <groupId>io.github.tianhaocui</groupId>
         <artifactId>aura-parent</artifactId>
-        <version>0.6.2</version>
+        <version>1.0.0</version>
     </parent>
 
     <artifactId>aura-mcp</artifactId>
     <name>aura-mcp</name>
     <description>MCP (Model Context Protocol) support for Aura framework</description>
+    <properties>
+        <jacoco.line.minimum>0.70</jacoco.line.minimum>
+        <jacoco.branch.minimum>0.55</jacoco.branch.minimum>
+    </properties>
 
     <dependencies>
+        <dependency>
+            <groupId>io.github.tianhaocui</groupId>
+            <artifactId>aura-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.alibaba.fastjson2</groupId>
+            <artifactId>fastjson2</artifactId>
+        </dependency>
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter</artifactId>
@@ -25,9 +37,18 @@
             <artifactId>assertj-core</artifactId>
             <scope>test</scope>
         </dependency>
+        <!-- The bridge speaks to a running application over HTTP; it is a sibling mechanism of
+             the Web adapter, not a consumer of its internals. Only the tests mount an app, and
+             McpLayeringTest keeps main out of io.aura.web and Undertow. -->
         <dependency>
             <groupId>io.github.tianhaocui</groupId>
             <artifactId>aura-web</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.tngtech.archunit</groupId>
+            <artifactId>archunit-junit5</artifactId>
+            <scope>test</scope>
         </dependency>
     </dependencies>
 

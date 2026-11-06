@@ -2,25 +2,68 @@ package io.aura.db;
 
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
+import io.aura.contract.CancellationToken;
 
 import java.sql.*;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.CancellationException;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
+import java.time.Duration;
+import java.util.function.Function;
 import java.util.function.Supplier;
 
 public class Db implements AutoCloseable {
 
     private final HikariDataSource ds;
     private final String name;
-    private final ThreadLocal<Connection> TX_CONN = new ThreadLocal<>();
-    private static final java.util.concurrent.ExecutorService INDEPENDENT_TX_POOL =
-            java.util.concurrent.Executors.newCachedThreadPool(r -> {
-                Thread t = new Thread(r, "aura-tx-independent");
-                t.setDaemon(true);
-                return t;
-            });
+    private static final int INDEPENDENT_TX_THREADS = Math.max(2,
+            Math.min(8, Runtime.getRuntime().availableProcessors()));
+    private static final int INDEPENDENT_TX_QUEUE_CAPACITY = 256;
+    private static final AtomicInteger INDEPENDENT_TX_THREAD_ID = new AtomicInteger();
+    private static final AtomicLong INDEPENDENT_TX_REJECTED = new AtomicLong();
+    private static final AtomicLong INDEPENDENT_TX_TIMED_OUT = new AtomicLong();
+    private final ThreadLocal<TransactionContext> txContext = new ThreadLocal<>();
+    private static volatile ThreadPoolExecutor independentTxPool = newIndependentTxPool();
+
+    private static ThreadPoolExecutor newIndependentTxPool() {
+        return new ThreadPoolExecutor(
+                INDEPENDENT_TX_THREADS,
+                INDEPENDENT_TX_THREADS,
+                0L,
+                TimeUnit.MILLISECONDS,
+                new ArrayBlockingQueue<>(INDEPENDENT_TX_QUEUE_CAPACITY),
+                r -> {
+                    Thread t = new Thread(r, "aura-tx-independent-" + INDEPENDENT_TX_THREAD_ID.incrementAndGet());
+                    t.setDaemon(true);
+                    return t;
+                },
+                new ThreadPoolExecutor.AbortPolicy());
+    }
+
+    /**
+     * shutdownPool() is process-wide, so a Db that opens later would inherit an executor that
+     * refuses every task. Re-arming an empty one keeps the shutdown a shutdown of the threads
+     * that existed when it was asked for.
+     */
+    private static synchronized ThreadPoolExecutor independentTxPool() {
+        ThreadPoolExecutor pool = independentTxPool;
+        if (pool.isShutdown()) {
+            pool = newIndependentTxPool();
+            independentTxPool = pool;
+        }
+        return pool;
+    }
 
     private Db(String name, HikariDataSource ds) {
         this.name = name;
@@ -55,6 +98,11 @@ public class Db implements AutoCloseable {
         return name;
     }
 
+    /** Migration adapter view. The DataSource is owned and closed by this Db. */
+    MigrationContext migrationContext() {
+        return new MigrationContext(this, ds, name);
+    }
+
     /**
      * Generates IN-clause placeholders for raw SQL.
      * Usage: db.find("SELECT * FROM user WHERE id IN (" + Db.in(ids) + ")", ids.toArray())
@@ -73,17 +121,37 @@ public class Db implements AutoCloseable {
     // --- typed query ---
 
     public <T> List<T> query(String sql, Object[] params, RowMapper<T> mapper) {
-        boolean inTx = TX_CONN.get() != null;
+        return query(sql, params, mapper, new CancellationToken());
+    }
+
+    /** Executes a query that can cancel its JDBC statement through the token. */
+    public <T> List<T> query(String sql, Object[] params, RowMapper<T> mapper,
+                             CancellationToken cancellationToken) {
+        Objects.requireNonNull(cancellationToken, "cancellationToken");
+        cancellationToken.throwIfCancelled();
+        boolean inTx = transactionConnection() != null;
         Connection conn = null;
         try {
             conn = getConnection();
-            try (PreparedStatement ps = prepare(conn, sql, params);
-                 ResultSet rs = ps.executeQuery()) {
-                List<T> result = new ArrayList<>();
-                while (rs.next()) result.add(mapper.map(rs));
-                return result;
+            try (PreparedStatement ps = prepare(conn, sql, params)) {
+                CancellationToken.Registration registration = cancellationToken.onCancel(() -> cancel(ps));
+                try (ResultSet rs = ps.executeQuery()) {
+                    List<T> result = new ArrayList<>();
+                    while (rs.next()) {
+                        cancellationToken.throwIfCancelled();
+                        result.add(mapper.map(rs));
+                    }
+                    return result;
+                } finally {
+                    registration.close();
+                }
             }
+        } catch (java.util.concurrent.CancellationException e) {
+            throw e;
         } catch (SQLException e) {
+            if (cancellationToken.isCancelled()) {
+                throw new java.util.concurrent.CancellationException("Database query cancelled");
+            }
             throw new DbException(e);
         } finally {
             if (!inTx && conn != null) {
@@ -93,7 +161,12 @@ public class Db implements AutoCloseable {
     }
 
     public <T> T queryOne(String sql, Object[] params, RowMapper<T> mapper) {
-        List<T> list = query(sql, params, mapper);
+        return queryOne(sql, params, mapper, new CancellationToken());
+    }
+
+    public <T> T queryOne(String sql, Object[] params, RowMapper<T> mapper,
+                          CancellationToken cancellationToken) {
+        List<T> list = query(sql, params, mapper, cancellationToken);
         return list.isEmpty() ? null : list.get(0);
     }
 
@@ -103,8 +176,17 @@ public class Db implements AutoCloseable {
         return query(sql, params, Db::rsToRow);
     }
 
+    public List<Row> findCancellable(String sql, CancellationToken cancellationToken, Object... params) {
+        return query(sql, params, Db::rsToRow, cancellationToken);
+    }
+
     public Row findOne(String sql, Object... params) {
         List<Row> list = find(sql, params);
+        return list.isEmpty() ? null : list.get(0);
+    }
+
+    public Row findOneCancellable(String sql, CancellationToken cancellationToken, Object... params) {
+        List<Row> list = findCancellable(sql, cancellationToken, params);
         return list.isEmpty() ? null : list.get(0);
     }
 
@@ -119,21 +201,10 @@ public class Db implements AutoCloseable {
         return queryOne("SELECT * FROM " + table + " WHERE " + primaryKey + " = ?", new Object[]{id}, rs -> rsToRow(rs, table, primaryKey));
     }
 
-    public Row findByIdOrThrow(String table, Object id) {
-        Row row = findById(table, id);
-        if (row == null) throw new io.aura.NotFoundException(table + " not found: id=" + id);
-        return row;
-    }
-
-    public Row findByIdOrThrow(String table, String primaryKey, Object id) {
-        Row row = findById(table, primaryKey, id);
-        if (row == null) throw new io.aura.NotFoundException(table + " not found: " + primaryKey + "=" + id);
-        return row;
-    }
-
     public List<Row> findWhere(String table, String where, Object... params) {
         SqlSafe.identifier(table);
-        return query("SELECT * FROM " + table + " WHERE " + where, params, rs -> rsToRow(rs, table));
+        String safeWhere = SqlSafe.whereClause(where);
+        return query("SELECT * FROM " + table + " WHERE " + safeWhere, params, rs -> rsToRow(rs, table));
     }
 
     public int deleteById(String table, Object id) {
@@ -148,9 +219,11 @@ public class Db implements AutoCloseable {
         return find(p.sql(), p.params());
     }
 
-    public Page<Row> paginateDynamic(String template, Map<?, ?> data, int pageNum, int pageSize) {
+    public Page<Row> paginateDynamic(String template, Map<?, ?> data,
+                                     PaginationOrder order, int pageNum, int pageSize,
+                                     TotalStrategy totalStrategy) {
         SqlKit.Parsed p = SqlKit.parse(template, data);
-        return paginate(p.sql(), p.params(), pageNum, pageSize);
+        return paginate(p.sql(), p.params(), order, pageNum, pageSize, totalStrategy);
     }
 
     // null in data map means "skip this field", not "set to NULL". Use Row.update() for explicit nulls.
@@ -174,38 +247,103 @@ public class Db implements AutoCloseable {
 
     // --- pagination ---
 
-    public <T> Page<T> paginate(String sql, Object[] params, int pageNum, int pageSize,
-                                 RowMapper<T> mapper) {
-        String countSql = "SELECT COUNT(*) FROM (" + sql + ") _t";
-        long total = queryOne(countSql, params, rs -> rs.getLong(1));
-        if (total == 0) return Page.empty(pageNum, pageSize);
+    /**
+     * Paginates an arbitrary query. The query is wrapped and the supplied order
+     * becomes the outer, final order; order fields must be projected by the query.
+     */
+    public <T> Page<T> paginate(String sql, Object[] params, PaginationOrder order,
+                                int pageNum, int pageSize, TotalStrategy totalStrategy,
+                                RowMapper<T> mapper) {
+        return paginateInternal(sql, params, order, pageNum, pageSize,
+                totalStrategy, mapper, true);
+    }
+
+    <T> Page<T> paginateBase(String sql, Object[] params, PaginationOrder order,
+                             int pageNum, int pageSize, TotalStrategy totalStrategy,
+                             RowMapper<T> mapper) {
+        return paginateInternal(sql, params, order, pageNum, pageSize,
+                totalStrategy, mapper, false);
+    }
+
+    private <T> Page<T> paginateInternal(
+            String sql, Object[] params, PaginationOrder order,
+            int pageNum, int pageSize, TotalStrategy totalStrategy,
+            RowMapper<T> mapper, boolean wrapBaseQuery) {
+        requirePagination(pageNum, pageSize);
+        if (sql == null || sql.isBlank()) throw new IllegalArgumentException("sql must not be blank");
+        params = params == null ? new Object[0] : params;
+        Objects.requireNonNull(order, "order");
+        Objects.requireNonNull(totalStrategy, "totalStrategy");
+        Objects.requireNonNull(mapper, "mapper");
+        if (wrapBaseQuery) order.requireProjectedColumns();
+
+        long total = -1;
+        if (totalStrategy == TotalStrategy.EXACT) {
+            String countSql = "SELECT COUNT(*) FROM (" + sql + ") _t";
+            total = queryOne(countSql, params, rs -> rs.getLong(1));
+            if (total == 0) return Page.empty(pageNum, pageSize);
+        }
 
         long offset = (long) (pageNum - 1) * pageSize;
-        String pageSql = sql + " LIMIT ? OFFSET ?";
+        int querySize = totalStrategy == TotalStrategy.NONE ? pageSize + 1 : pageSize;
+        String orderedSql = wrapBaseQuery ? "SELECT * FROM (" + sql + ") _page" : sql;
+        String pageSql = orderedSql + " ORDER BY " + order.clause() + " LIMIT ? OFFSET ?";
         Object[] pageParams = new Object[params.length + 2];
         System.arraycopy(params, 0, pageParams, 0, params.length);
-        pageParams[params.length] = pageSize;
+        pageParams[params.length] = querySize;
         pageParams[params.length + 1] = offset;
 
         List<T> list = query(pageSql, pageParams, mapper);
-        return new Page<>(list, pageNum, pageSize, total);
+        if (totalStrategy == TotalStrategy.NONE) {
+            boolean hasNext = list.size() > pageSize;
+            List<T> items = hasNext ? List.copyOf(list.subList(0, pageSize)) : list;
+            return Page.withoutTotal(items, pageNum, pageSize, hasNext);
+        }
+        return Page.exact(list, pageNum, pageSize, total);
     }
 
-    public Page<Row> paginate(String sql, Object[] params, int pageNum, int pageSize) {
-        return paginate(sql, params, pageNum, pageSize, Db::rsToRow);
+    public Page<Row> paginate(String sql, Object[] params, PaginationOrder order,
+                              int pageNum, int pageSize, TotalStrategy totalStrategy) {
+        return paginate(sql, params, order, pageNum, pageSize, totalStrategy, Db::rsToRow);
+    }
+
+    public Page<Row> paginate(String sql, Object[] params, PaginationOrder order,
+                              int pageNum, int pageSize) {
+        return paginate(sql, params, order, pageNum, pageSize, TotalStrategy.EXACT);
     }
 
     // --- execute ---
 
     public int execute(String sql, Object... params) {
-        boolean inTx = TX_CONN.get() != null;
+        return executeInternal(sql, new CancellationToken(), params);
+    }
+
+    /** Executes an update that can cancel its JDBC statement through the token. */
+    public int executeCancellable(String sql, CancellationToken cancellationToken, Object... params) {
+        return executeInternal(sql, cancellationToken, params);
+    }
+
+    private int executeInternal(String sql, CancellationToken cancellationToken, Object... params) {
+        Objects.requireNonNull(cancellationToken, "cancellationToken");
+        cancellationToken.throwIfCancelled();
+        boolean inTx = transactionConnection() != null;
         Connection conn = null;
         try {
             conn = getConnection();
             try (PreparedStatement ps = prepare(conn, sql, params)) {
-                return ps.executeUpdate();
+                CancellationToken.Registration registration = cancellationToken.onCancel(() -> cancel(ps));
+                try {
+                    return ps.executeUpdate();
+                } finally {
+                    registration.close();
+                }
             }
+        } catch (java.util.concurrent.CancellationException e) {
+            throw e;
         } catch (SQLException e) {
+            if (cancellationToken.isCancelled()) {
+                throw new java.util.concurrent.CancellationException("Database update cancelled");
+            }
             throw new DbException(e);
         } finally {
             if (!inTx && conn != null) {
@@ -215,14 +353,12 @@ public class Db implements AutoCloseable {
     }
 
     public Object insertAndReturnId(String sql, Object... params) {
-        boolean inTx = TX_CONN.get() != null;
+        boolean inTx = transactionConnection() != null;
         Connection conn = null;
         try {
             conn = getConnection();
             try (PreparedStatement ps = conn.prepareStatement(sql, java.sql.Statement.RETURN_GENERATED_KEYS)) {
-                if (params != null) {
-                    for (int i = 0; i < params.length; i++) ps.setObject(i + 1, params[i]);
-                }
+                bind(ps, params);
                 ps.executeUpdate();
                 try (java.sql.ResultSet keys = ps.getGeneratedKeys()) {
                     return keys.next() ? keys.getObject(1) : null;
@@ -268,28 +404,23 @@ public class Db implements AutoCloseable {
     }
 
     public int[] batch(String sql, List<Object[]> paramsList) {
-        boolean inTx = TX_CONN.get() != null;
-        if (inTx) {
-            Connection conn = TX_CONN.get();
+        boolean inTx = transactionConnection() != null;
+        Connection conn = null;
+        try {
+            conn = getConnection();
             try (PreparedStatement ps = conn.prepareStatement(sql)) {
                 for (Object[] params : paramsList) {
-                    for (int i = 0; i < params.length; i++) ps.setObject(i + 1, params[i]);
+                    bind(ps, params);
                     ps.addBatch();
                 }
                 return ps.executeBatch();
-            } catch (SQLException e) {
-                throw new DbException(e);
             }
-        }
-        try (Connection conn = ds.getConnection();
-             PreparedStatement ps = conn.prepareStatement(sql)) {
-            for (Object[] params : paramsList) {
-                for (int i = 0; i < params.length; i++) ps.setObject(i + 1, params[i]);
-                ps.addBatch();
-            }
-            return ps.executeBatch();
         } catch (SQLException e) {
             throw new DbException(e);
+        } finally {
+            if (!inTx && conn != null) {
+                try { conn.close(); } catch (SQLException ignored) {}
+            }
         }
     }
 
@@ -300,10 +431,36 @@ public class Db implements AutoCloseable {
     }
 
     public <T> T transaction(Supplier<T> block) {
-        if (TX_CONN.get() != null) {
+        Objects.requireNonNull(block, "block");
+        if (isCurrentTransaction()) {
             return block.get();  // already in transaction, reuse
         }
         return doTransaction(block);
+    }
+
+    /**
+     * Transaction variant that passes an explicit context to the callback.
+     * This overload lets callers use {@code db.transaction(ctx -> ...)} while
+     * retaining the original no-argument Supplier/Runnable APIs.
+     */
+    public <T> T transaction(Function<TransactionContext, T> block) {
+        return transactionContext(block);
+    }
+
+    /**
+     * Runs a transaction with an explicit context for code that must access the
+     * transaction-scoped JDBC connection. Nested calls reuse the same context.
+     */
+    public <T> T transactionContext(Function<TransactionContext, T> block) {
+        Objects.requireNonNull(block, "block");
+        TransactionContext current = currentTransactionContext();
+        if (current != null) return block.apply(current);
+        return doTransaction(() -> block.apply(requireCurrentTransactionContext()));
+    }
+
+    /** Returns this database's active transaction context, or {@code null}. */
+    public TransactionContext currentTransactionContext() {
+        return txContext.get();
     }
 
     public void transactionThrows(ThrowingRunnable block) throws Exception {
@@ -311,10 +468,18 @@ public class Db implements AutoCloseable {
     }
 
     public <T> T transactionThrows(ThrowingSupplier<T> block) throws Exception {
-        if (TX_CONN.get() != null) {
+        Objects.requireNonNull(block, "block");
+        if (isCurrentTransaction()) {
             return block.get();
         }
         return doTransactionThrows(block);
+    }
+
+    public <T> T transactionContextThrows(ThrowingTransactionFunction<T> block) throws Exception {
+        Objects.requireNonNull(block, "block");
+        TransactionContext current = currentTransactionContext();
+        if (current != null) return block.apply(current);
+        return doTransactionThrows(() -> block.apply(requireCurrentTransactionContext()));
     }
 
     /**
@@ -334,43 +499,163 @@ public class Db implements AutoCloseable {
     }
 
     public <T> T transactionIndependent(Supplier<T> block) {
-        var future = new java.util.concurrent.CompletableFuture<T>();
-        INDEPENDENT_TX_POOL.submit(() -> {
-            try {
-                future.complete(doTransaction(block));
-            } catch (Exception e) {
-                future.completeExceptionally(e);
-            }
-        });
+        return transactionIndependent(Duration.ZERO, new CancellationToken(), ignored -> block.get());
+    }
+
+    /** Runs an independent transaction with cooperative cancellation and an optional absolute timeout. */
+    public <T> T transactionIndependent(Duration timeout, CancellationToken cancellationToken,
+                                        Function<CancellationToken, T> block) {
+        Objects.requireNonNull(block, "block");
+        Objects.requireNonNull(timeout, "timeout");
+        Objects.requireNonNull(cancellationToken, "cancellationToken");
+        if (timeout.isNegative()) throw new IllegalArgumentException("timeout cannot be negative");
+        cancellationToken.throwIfCancelled();
+        Outcome outcome = new Outcome();
+        java.util.concurrent.Future<T> future;
         try {
-            return future.join();
-        } catch (java.util.concurrent.CompletionException e) {
-            Throwable cause = e.getCause();
-            throw cause instanceof RuntimeException re ? re : new DbException(cause);
+            future = independentTxPool().submit(() -> {
+                try {
+                    cancellationToken.throwIfCancelled();
+                    T result = doTransaction(() -> block.apply(cancellationToken));
+                    outcome.markCommitted();
+                    return result;
+                } finally {
+                    outcome.markSettled();
+                }
+            });
+        } catch (RejectedExecutionException e) {
+            INDEPENDENT_TX_REJECTED.incrementAndGet();
+            throw new DbException("Independent transaction executor is saturated or shut down", e);
+        }
+        long deadline = timeout.isZero() ? Long.MAX_VALUE : System.nanoTime() + timeout.toNanos();
+        CancellationToken.Registration registration = cancellationToken.onCancel(() -> future.cancel(true));
+        try {
+            while (true) {
+                cancellationToken.throwIfCancelled();
+                long remaining = deadline == Long.MAX_VALUE ? Long.MAX_VALUE : deadline - System.nanoTime();
+                if (remaining <= 0) {
+                    INDEPENDENT_TX_TIMED_OUT.incrementAndGet();
+                    cancellationToken.cancel();
+                    future.cancel(true);
+                    throw new DbException(timedOut(outcome));
+                }
+                try {
+                    long waitNanos = remaining == Long.MAX_VALUE
+                            ? TimeUnit.MILLISECONDS.toNanos(100)
+                            : Math.min(remaining, TimeUnit.MILLISECONDS.toNanos(100));
+                    return future.get(waitNanos, TimeUnit.NANOSECONDS);
+                } catch (TimeoutException polling) {
+                    // Recheck the cancellation token and absolute deadline.
+                }
+            }
+        } catch (InterruptedException interrupted) {
+            future.cancel(true);
+            Thread.currentThread().interrupt();
+            throw new DbException("Independent transaction interrupted", interrupted);
+        } catch (CancellationException cancelled) {
+            throw cancelled;
+        } catch (ExecutionException execution) {
+            Throwable cause = execution.getCause();
+            throw cause instanceof RuntimeException runtime ? runtime : new DbException(cause);
+        } finally {
+            registration.close();
+        }
+    }
+
+    public static io.aura.contract.ExecutorMetrics independentTransactionMetrics() {
+        ThreadPoolExecutor pool = independentTxPool;
+        return new io.aura.contract.ExecutorMetrics("db-independent-transaction", true,
+                pool.getMaximumPoolSize(), pool.getActiveCount(),
+                pool.getQueue().size(), INDEPENDENT_TX_QUEUE_CAPACITY,
+                pool.getCompletedTaskCount(), INDEPENDENT_TX_REJECTED.get(),
+                INDEPENDENT_TX_TIMED_OUT.get());
+    }
+
+    /** How long a timed-out caller waits for the worker to report its own ending. */
+    private static final Duration OUTCOME_GRACE = Duration.ofMillis(250);
+
+    /**
+     * Interrupting a running task does not take back the statement its thread already handed to
+     * the driver, so "timed out" alone cannot tell a caller whether the rows landed. The block
+     * records how it ended; a short fixed grace turns a guess into an answer when the block
+     * reacts to the interrupt, and stays honest about the ones that do not finish in time.
+     */
+    private static String timedOut(Outcome outcome) {
+        if (!outcome.awaitSettled(OUTCOME_GRACE)) {
+            return "Independent transaction timed out; the block had not finished, its outcome is unknown";
+        }
+        return outcome.committed()
+                ? "Independent transaction timed out; the block committed after the deadline"
+                : "Independent transaction timed out; the block rolled back";
+    }
+
+    private static final class Outcome {
+        private final java.util.concurrent.CountDownLatch settled = new java.util.concurrent.CountDownLatch(1);
+        private volatile boolean committed;
+
+        void markCommitted() { committed = true; }
+        void markSettled() { settled.countDown(); }
+        boolean committed() { return committed; }
+
+        boolean awaitSettled(Duration grace) {
+            try {
+                return settled.await(grace.toNanos(), TimeUnit.NANOSECONDS);
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+                return false;
+            }
         }
     }
 
     /** Manual transaction control. Caller is responsible for commit/rollback/close. */
     public Transaction beginTransaction() {
-        if (TX_CONN.get() != null) {
+        if (isCurrentTransaction()) {
             throw new IllegalStateException("Already in a transaction; use transaction() to reuse or transactionIndependent() for independent transaction");
         }
+        Connection conn;
         try {
-            Connection conn = ds.getConnection();
-            conn.setAutoCommit(false);
-            TX_CONN.set(conn);
-            return new Transaction(conn);
+            conn = ds.getConnection();
         } catch (SQLException e) {
             throw new DbException(e);
         }
+        try {
+            conn.setAutoCommit(false);
+        } catch (SQLException e) {
+            // Nothing has taken ownership of this connection, so the caller cannot return it and
+            // the pool loses the slot for good.
+            try { conn.close(); } catch (SQLException ignored) {}
+            throw new DbException(e);
+        }
+        Transaction tx = new Transaction(conn);
+        txContext.set(new TransactionContext(this, conn));
+        return tx;
     }
 
-    public class Transaction implements AutoCloseable {
+    /** Explicitly typed alias for callers that do not depend on the nested Transaction class. */
+    public TransactionHandle beginTransactionHandle() {
+        return beginTransaction();
+    }
+
+    public class Transaction implements TransactionHandle {
         private final Connection conn;
         private boolean done = false;
 
         private Transaction(Connection conn) {
             this.conn = conn;
+        }
+
+        @Override
+        public TransactionContext context() {
+            TransactionContext context = currentTransactionContext();
+            if (context == null || context.connection() != conn) {
+                throw new IllegalStateException("Transaction is not active on the current thread");
+            }
+            return context;
+        }
+
+        @Override
+        public boolean isActive() {
+            return !done;
         }
 
         public void commit() {
@@ -381,7 +666,7 @@ public class Db implements AutoCloseable {
                 throw new DbException(e);
             } finally {
                 done = true;
-                TX_CONN.remove();
+                clearTransactionContext(conn);
                 try { conn.close(); } catch (SQLException ignored) {}
             }
         }
@@ -394,7 +679,7 @@ public class Db implements AutoCloseable {
                 throw new DbException(e);
             } finally {
                 done = true;
-                TX_CONN.remove();
+                clearTransactionContext(conn);
                 try { conn.close(); } catch (SQLException ignored) {}
             }
         }
@@ -408,7 +693,7 @@ public class Db implements AutoCloseable {
     private <T> T doTransaction(Supplier<T> block) {
         try (Connection conn = ds.getConnection()) {
             conn.setAutoCommit(false);
-            TX_CONN.set(conn);
+            txContext.set(new TransactionContext(this, conn));
             try {
                 T result = block.get();
                 conn.commit();
@@ -417,7 +702,7 @@ public class Db implements AutoCloseable {
                 try { conn.rollback(); } catch (SQLException rollbackEx) { e.addSuppressed(rollbackEx); }
                 throw e instanceof RuntimeException re ? re : new DbException(e);
             } finally {
-                TX_CONN.remove();
+                clearTransactionContext(conn);
             }
         } catch (SQLException e) {
             throw new DbException(e);
@@ -427,7 +712,7 @@ public class Db implements AutoCloseable {
     private <T> T doTransactionThrows(ThrowingSupplier<T> block) throws Exception {
         try (Connection conn = ds.getConnection()) {
             conn.setAutoCommit(false);
-            TX_CONN.set(conn);
+            txContext.set(new TransactionContext(this, conn));
             try {
                 T result = block.get();
                 conn.commit();
@@ -436,7 +721,7 @@ public class Db implements AutoCloseable {
                 try { conn.rollback(); } catch (SQLException rollbackEx) { e.addSuppressed(rollbackEx); }
                 throw e;
             } finally {
-                TX_CONN.remove();
+                clearTransactionContext(conn);
             }
         } catch (SQLException e) {
             throw new DbException(e);
@@ -449,22 +734,62 @@ public class Db implements AutoCloseable {
     }
 
     public static void shutdownPool() {
-        INDEPENDENT_TX_POOL.shutdownNow();
+        independentTxPool().shutdownNow();
     }
 
     // --- internal ---
 
     private Connection getConnection() throws SQLException {
-        Connection tx = TX_CONN.get();
+        Connection tx = transactionConnection();
         return tx != null ? tx : ds.getConnection();
+    }
+
+    private boolean isCurrentTransaction() {
+        return currentTransactionContext() != null;
+    }
+
+    private TransactionContext requireCurrentTransactionContext() {
+        TransactionContext context = currentTransactionContext();
+        if (context == null) throw new IllegalStateException("No active transaction");
+        return context;
+    }
+
+    private Connection transactionConnection() {
+        TransactionContext context = currentTransactionContext();
+        return context == null ? null : context.connection();
+    }
+
+    private void clearTransactionContext(Connection connection) {
+        TransactionContext context = txContext.get();
+        if (context != null && context.connection() == connection) {
+            txContext.remove();
+        }
+    }
+
+    private static void requirePagination(int pageNum, int pageSize) {
+        if (pageNum < 1) throw new IllegalArgumentException("pageNum must be at least 1: " + pageNum);
+        if (pageSize < 1 || pageSize > Page.MAX_PAGE_SIZE) {
+            throw new IllegalArgumentException("pageSize must be between 1 and " + Page.MAX_PAGE_SIZE + ": " + pageSize);
+        }
     }
 
     private PreparedStatement prepare(Connection conn, String sql, Object[] params) throws SQLException {
         PreparedStatement ps = conn.prepareStatement(sql);
-        if (params != null) {
-            for (int i = 0; i < params.length; i++) ps.setObject(i + 1, params[i]);
-        }
+        bind(ps, params);
         return ps;
+    }
+
+    private static void bind(PreparedStatement ps, Object[] params) throws SQLException {
+        if (params == null) return;
+        for (int i = 0; i < params.length; i++) {
+            Object param = params[i];
+            if (param instanceof SqlBindable bindable) bindable.bind(ps, i + 1);
+            else ps.setObject(i + 1, param);
+        }
+    }
+
+    private static void cancel(java.sql.Statement statement) {
+        try { statement.cancel(); } catch (SQLException ignored) { }
     }
 
     static Row rsToRow(ResultSet rs) throws SQLException {
@@ -500,5 +825,7 @@ public class Db implements AutoCloseable {
 
     public static class DbException extends RuntimeException {
         public DbException(Throwable cause) { super(cause); }
+        public DbException(String message) { super(message); }
+        public DbException(String message, Throwable cause) { super(message, cause); }
     }
 }

@@ -1,0 +1,415 @@
+package io.aura;
+
+import io.aura.snapshot.SnapshotOptions;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.LinkedHashSet;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.Properties;
+import java.util.Set;
+import java.util.function.Consumer;
+
+/** Central, validated runtime configuration for an Aura application. */
+public final class AuraConfig {
+    private static final Logger log = LoggerFactory.getLogger(AuraConfig.class);
+    public static final long DEFAULT_MAX_BODY_SIZE = 10L * 1024 * 1024;
+    public static final long DEFAULT_MAX_UPLOAD_SIZE = 1024L * 1024;
+    public static final long DEFAULT_MAX_WEBSOCKET_MESSAGE_SIZE = 1024L * 1024;
+    public static final int DEFAULT_MAX_WEBSOCKET_CONNECTIONS = 10_000;
+    public static final int DEFAULT_WEBSOCKET_IDLE_TIMEOUT = 60;
+    public static final int DEFAULT_RATE_LIMIT_MAX_KEYS = 65_536;
+    private static final long MAX_BODY_SIZE_LIMIT = 1024L * 1024 * 1024;
+    private static final String TLS_PASSWORD_PROPERTY = "aura.tls.keystore-password";
+    /**
+     * Settings the framework itself reads. Anything else under {@code aura.*} is either a module
+     * property or a typo; warning here is the difference between a deployment that fails to
+     * configure CSRF and one that silently runs with a misspelled key.
+     */
+    private static final Set<String> KNOWN_PROPERTIES = Set.of(
+            "aura.port", "aura.env", "aura.workers",
+            "aura.max-body-size", "aura.max-upload-size",
+            "aura.max-websocket-message-size", "aura.max-websocket-connections",
+            "aura.websocket-idle-timeout", "aura.shutdown-timeout", "aura.request-timeout",
+            "aura.health-check-timeout", "aura.page-size-max",
+            "aura.concurrency-limit", "aura.rate-limit-per-second", "aura.rate-limit-max-keys",
+            "aura.public-origin", "aura.allowed-hosts", "aura.trusted-proxies",
+            "aura.security-headers", "aura.openapi", "aura.dev-mode", "aura.cors",
+            "aura.static-files", "aura.spa", "aura.access-log", "aura.gzip", "aura.gzip-min-size",
+            "aura.tls.keystore-path", TLS_PASSWORD_PROPERTY,
+            "aura.csrf.enabled", "aura.csrf.header", "aura.csrf.cookie",
+            "aura.schema.enabled", "aura.schema.auth-token", "aura.schema-token",
+            "aura.websocket.origins", "aura.websocket.allow-missing-origin",
+            "aura.mcp.http.origins");
+
+    /** Loads framework settings from a properties file before application creation. */
+    public static AuraConfig fromProperties(Path path) throws IOException {
+        if (path == null) throw new IllegalArgumentException("config path must not be null");
+        try (InputStream input = Files.newInputStream(path)) {
+            Properties properties = new Properties();
+            properties.load(input);
+            return fromProperties(properties);
+        }
+    }
+
+    /**
+     * Creates validated framework configuration from properties. Environment and
+     * JVM properties intentionally win over file values so deployments can use
+     * one image with environment-specific settings.
+     */
+    public static AuraConfig fromProperties(Properties properties) {
+        AuraConfig config = new AuraConfig();
+        if (properties == null) return config;
+        for (String key : properties.stringPropertyNames()) {
+            if (key.startsWith("aura.") && !KNOWN_PROPERTIES.contains(key) && !isModuleProperty(key)) {
+                log.warn("Unrecognized Aura setting '{}' (ignored unless a module consumes it)", key);
+            }
+        }
+        properties.forEach((key, value) -> {
+            if (key != null && key.toString().startsWith("aura.")
+                    && !TLS_PASSWORD_PROPERTY.equals(key.toString()) && value != null) {
+                config.property(key.toString(), value.toString());
+            }
+        });
+        config.port(parseInt(value(properties, "aura.port", "AURA_PORT"), config.port, "aura.port"));
+        String env = value(properties, "aura.env", "AURA_ENV");
+        if (env != null) config.env(env);
+        config.workers(parseInt(value(properties, "aura.workers", "AURA_WORKERS"), config.workers, "aura.workers"));
+        config.maxBodySize(parseLong(value(properties, "aura.max-body-size", "AURA_MAX_BODY_SIZE"), config.maxBodySize, "aura.max-body-size"));
+        config.maxUploadSize(parseLong(value(properties, "aura.max-upload-size", "AURA_MAX_UPLOAD_SIZE"), config.maxUploadSize, "aura.max-upload-size"));
+        config.maxWebSocketMessageSize(parseLong(value(properties, "aura.max-websocket-message-size", "AURA_MAX_WEBSOCKET_MESSAGE_SIZE"), config.maxWebSocketMessageSize, "aura.max-websocket-message-size"));
+        config.maxWebSocketConnections(parseInt(value(properties, "aura.max-websocket-connections", "AURA_MAX_WEBSOCKET_CONNECTIONS"), config.maxWebSocketConnections, "aura.max-websocket-connections"));
+        config.webSocketIdleTimeout(parseInt(value(properties, "aura.websocket-idle-timeout", "AURA_WEBSOCKET_IDLE_TIMEOUT"), config.webSocketIdleTimeout, "aura.websocket-idle-timeout"));
+        config.shutdownTimeout(parseInt(value(properties, "aura.shutdown-timeout", "AURA_SHUTDOWN_TIMEOUT"), config.shutdownTimeout, "aura.shutdown-timeout"));
+        config.requestTimeout(parseInt(value(properties, "aura.request-timeout", "AURA_REQUEST_TIMEOUT"), config.requestTimeout, "aura.request-timeout"));
+        config.healthCheckTimeout(parseInt(value(properties, "aura.health-check-timeout", "AURA_HEALTH_CHECK_TIMEOUT"), config.healthCheckTimeout, "aura.health-check-timeout"));
+        config.pageSizeMax(parseInt(value(properties, "aura.page-size-max", "AURA_PAGE_SIZE_MAX"), config.pageSizeMax, "aura.page-size-max"));
+        config.concurrencyLimit(parseInt(value(properties, "aura.concurrency-limit", "AURA_CONCURRENCY_LIMIT"), config.concurrencyLimit, "aura.concurrency-limit"));
+        config.rateLimitPerSecond(parseInt(value(properties, "aura.rate-limit-per-second", "AURA_RATE_LIMIT_PER_SECOND"), config.rateLimitPerSecond, "aura.rate-limit-per-second"));
+        config.rateLimitMaxKeys(parseInt(value(properties, "aura.rate-limit-max-keys", "AURA_RATE_LIMIT_MAX_KEYS"), config.rateLimitMaxKeys, "aura.rate-limit-max-keys"));
+
+        String publicOrigin = value(properties, "aura.public-origin", "AURA_PUBLIC_ORIGIN");
+        if (publicOrigin != null) config.publicOrigin(publicOrigin);
+        String allowedHosts = value(properties, "aura.allowed-hosts", "AURA_ALLOWED_HOSTS");
+        if (allowedHosts != null) config.allowedHosts(allowedHosts.split(","));
+        String trustedProxies = value(properties, "aura.trusted-proxies", "AURA_TRUSTED_PROXIES");
+        if (trustedProxies != null) config.trustedProxies(trustedProxies.split(","));
+        String securityHeaders = value(properties, "aura.security-headers", "AURA_SECURITY_HEADERS");
+        if (securityHeaders != null) config.securityHeaders(parseBoolean(securityHeaders, "aura.security-headers"));
+        String openApi = value(properties, "aura.openapi", "AURA_OPENAPI");
+        if (openApi != null) config.openApi(parseBoolean(openApi, "aura.openapi"));
+        String devMode = value(properties, "aura.dev-mode", "AURA_DEV_MODE");
+        if (devMode != null) config.devMode(parseBoolean(devMode, "aura.dev-mode"));
+        String cors = value(properties, "aura.cors", "AURA_CORS");
+        if (cors != null) {
+            if ("true".equalsIgnoreCase(cors)) config.cors(true);
+            else if ("false".equalsIgnoreCase(cors)) config.cors(false);
+            else config.cors(cors);
+        }
+        String staticFiles = value(properties, "aura.static-files", "AURA_STATIC_FILES");
+        if (staticFiles != null) config.staticFiles(staticFiles);
+        String spa = value(properties, "aura.spa", "AURA_SPA");
+        if (spa != null) config.spa(parseBoolean(spa, "aura.spa"));
+        String accessLog = value(properties, "aura.access-log", "AURA_ACCESS_LOG");
+        if (accessLog != null) config.accessLog("true".equalsIgnoreCase(accessLog) ? "text" :
+                "false".equalsIgnoreCase(accessLog) ? null : accessLog);
+        String gzip = value(properties, "aura.gzip", "AURA_GZIP");
+        if (gzip != null) config.gzip(parseBoolean(gzip, "aura.gzip"));
+        config.gzipMinSize(parseInt(value(properties, "aura.gzip-min-size", "AURA_GZIP_MIN_SIZE"), config.gzipMinSize, "aura.gzip-min-size"));
+        String keyStorePath = value(properties, "aura.tls.keystore-path", "AURA_TLS_KEYSTORE_PATH");
+        String keyStorePassword = value(properties, "aura.tls.keystore-password", "AURA_TLS_KEYSTORE_PASSWORD");
+        if (keyStorePath != null) config.tls(keyStorePath, keyStorePassword);
+        else if (keyStorePassword != null) throw new IllegalArgumentException("aura.tls.keystore-path is required when a TLS password is configured");
+        return config.validate();
+    }
+
+    /**
+     * {@code aura.<module>.<setting>} belongs to a module that is not installed yet, so it cannot
+     * be called a typo here. A two-segment {@code aura.*} key has no module namespace to hide in.
+     */
+    private static boolean isModuleProperty(String key) {
+        int moduleSeparator = key.indexOf('.', "aura.".length());
+        return moduleSeparator > "aura.".length() && moduleSeparator < key.length() - 1;
+    }
+
+    private static String value(Properties properties, String key, String envKey) {
+        String value = System.getenv(envKey);
+        if (value != null && !value.isBlank()) return value.trim();
+        value = System.getProperty(key);
+        if (value != null && !value.isBlank()) return value.trim();
+        value = properties.getProperty(key);
+        return value == null || value.isBlank() ? null : value.trim();
+    }
+
+    private static int parseInt(String value, int fallback, String key) {
+        if (value == null) return fallback;
+        try { return Integer.parseInt(value); }
+        catch (NumberFormatException error) { throw new IllegalArgumentException(key + " must be an integer", error); }
+    }
+
+    private static long parseLong(String value, long fallback, String key) {
+        if (value == null) return fallback;
+        try { return Long.parseLong(value); }
+        catch (NumberFormatException error) { throw new IllegalArgumentException(key + " must be a long integer", error); }
+    }
+
+    private static boolean parseBoolean(String value, String key) {
+        if ("true".equalsIgnoreCase(value)) return true;
+        if ("false".equalsIgnoreCase(value)) return false;
+        throw new IllegalArgumentException(key + " must be true or false");
+    }
+
+    private int port = 8080;
+    private String env = "dev";
+    private int workers = 200;
+    private long maxBodySize = DEFAULT_MAX_BODY_SIZE;
+    private long maxUploadSize = DEFAULT_MAX_UPLOAD_SIZE;
+    private long maxWebSocketMessageSize = DEFAULT_MAX_WEBSOCKET_MESSAGE_SIZE;
+    private int maxWebSocketConnections = DEFAULT_MAX_WEBSOCKET_CONNECTIONS;
+    private int webSocketIdleTimeout = DEFAULT_WEBSOCKET_IDLE_TIMEOUT;
+    private int shutdownTimeout = 30;
+    private int requestTimeout;
+    private int healthCheckTimeout = 1;
+    private int pageSizeMax = 500;
+    private int concurrencyLimit;
+    private int rateLimitPerSecond;
+    private int rateLimitMaxKeys = DEFAULT_RATE_LIMIT_MAX_KEYS;
+    private String publicOrigin;
+    private final Set<String> allowedHosts = new LinkedHashSet<>();
+    private final Set<String> trustedProxies = new LinkedHashSet<>();
+    private boolean securityHeaders = true;
+    private boolean openApiEnabled;
+    private boolean devMode;
+    private String keyStorePath;
+    private String keyStorePassword;
+    private String staticFilesPath;
+    private boolean spa;
+    private String corsOrigin;
+    private CorsConfig corsConfig;
+    private boolean accessLog;
+    private String accessLogFormat;
+    private boolean gzip;
+    private int gzipMinSize = 1024;
+    private final Map<String, String> properties = new LinkedHashMap<>();
+    private final JsonConfig jsonConfig = new JsonConfig();
+    private final SnapshotOptions snapshotOptions = new SnapshotOptions();
+
+    public AuraConfig port(int value) { port = value; return this; }
+    public AuraConfig env(String value) { env = requireText(value, "env"); return this; }
+    public AuraConfig workers(int value) { workers = value; return this; }
+    public AuraConfig maxBodySize(long value) { maxBodySize = value; return this; }
+    public AuraConfig maxUploadSize(long value) { maxUploadSize = value; return this; }
+    public AuraConfig maxWebSocketMessageSize(long value) { maxWebSocketMessageSize = value; return this; }
+    public AuraConfig maxWebSocketConnections(int value) { maxWebSocketConnections = value; return this; }
+    public AuraConfig webSocketIdleTimeout(int seconds) { webSocketIdleTimeout = seconds; return this; }
+    public AuraConfig shutdownTimeout(int value) { shutdownTimeout = value; return this; }
+    public AuraConfig requestTimeout(int value) { requestTimeout = value; return this; }
+    public AuraConfig healthCheckTimeout(int value) { healthCheckTimeout = value; return this; }
+    public AuraConfig pageSizeMax(int value) { pageSizeMax = value; return this; }
+    public AuraConfig concurrencyLimit(int value) { concurrencyLimit = value; return this; }
+    public AuraConfig rateLimitPerSecond(int value) { rateLimitPerSecond = value; return this; }
+    public AuraConfig rateLimitMaxKeys(int value) { rateLimitMaxKeys = value; return this; }
+    public AuraConfig publicOrigin(String value) { publicOrigin = blankToNull(value); return this; }
+    public AuraConfig allowedHosts(String... hosts) {
+        allowedHosts.clear();
+        if (hosts != null) for (String host : hosts) if (host != null && !host.isBlank()) allowedHosts.add(host.trim().toLowerCase());
+        return this;
+    }
+    public AuraConfig trustedProxies(String... proxies) {
+        trustedProxies.clear();
+        if (proxies != null) {
+            for (String proxy : proxies) {
+                if (proxy == null || proxy.isBlank()) continue;
+                String rule = proxy.trim();
+                validateProxyRule(rule);
+                trustedProxies.add(rule);
+            }
+        }
+        return this;
+    }
+    public AuraConfig securityHeaders(boolean value) { securityHeaders = value; return this; }
+    public AuraConfig openApi(boolean value) { openApiEnabled = value; return this; }
+    public AuraConfig devMode(boolean value) { devMode = value; return this; }
+    public AuraConfig tls(String keyStore, String password) {
+        keyStorePath = requireText(keyStore, "TLS keystore path");
+        keyStorePassword = password;
+        return this;
+    }
+
+    public AuraConfig staticFiles(String path) { staticFilesPath = blankToNull(path); return this; }
+    public AuraConfig spa(boolean value) { spa = value; return this; }
+    public AuraConfig cors(boolean enabled) { corsOrigin = enabled ? "*" : null; corsConfig = null; return this; }
+    public AuraConfig cors(String origin) { corsOrigin = blankToNull(origin); corsConfig = null; return this; }
+    public AuraConfig cors(Consumer<CorsConfig> consumer) {
+        if (consumer == null) throw new IllegalArgumentException("cors config consumer must not be null");
+        CorsConfig value = new CorsConfig();
+        consumer.accept(value);
+        if (value.credentials() && value.hasWildcardOrigin()) {
+            throw new IllegalArgumentException("Credentialed CORS requires explicit origins; wildcard '*' is not allowed");
+        }
+        corsConfig = value;
+        corsOrigin = "__cors_config__";
+        return this;
+    }
+    public AuraConfig accessLog(boolean enabled) { accessLog = enabled; accessLogFormat = enabled ? "text" : null; return this; }
+    public AuraConfig accessLog(String format) { accessLogFormat = blankToNull(format); accessLog = accessLogFormat != null; return this; }
+    public AuraConfig gzip(boolean enabled) { gzip = enabled; return this; }
+    public AuraConfig gzipMinSize(int bytes) { gzipMinSize = Math.max(0, bytes); return this; }
+    public AuraConfig jsonConfig(Consumer<JsonConfig> consumer) {
+        if (consumer == null) throw new IllegalArgumentException("json config consumer must not be null");
+        consumer.accept(jsonConfig);
+        return this;
+    }
+    public AuraConfig snapshot(Consumer<SnapshotOptions> consumer) {
+        if (consumer == null) throw new IllegalArgumentException("snapshot config consumer must not be null");
+        consumer.accept(snapshotOptions);
+        return this;
+    }
+
+    /** Stores a module-scoped property for resolution by an explicitly installed module. */
+    public AuraConfig property(String key, String value) {
+        if (key == null || !key.startsWith("aura.")) {
+            throw new IllegalArgumentException("AuraConfig properties must use the aura.<module>.* namespace");
+        }
+        if (TLS_PASSWORD_PROPERTY.equals(key)) {
+            throw new IllegalArgumentException("TLS password must be configured with tls(...) or deployment settings");
+        }
+        if (value == null) properties.remove(key); else properties.put(key, value);
+        return this;
+    }
+
+    Map<String, String> properties() { return Map.copyOf(properties); }
+
+    public int port() { return port; }
+    public String env() { return env; }
+    public int workers() { return workers; }
+    public long maxBodySize() { return maxBodySize; }
+    public long maxUploadSize() { return maxUploadSize; }
+    public long maxWebSocketMessageSize() { return maxWebSocketMessageSize; }
+    public int maxWebSocketConnections() { return maxWebSocketConnections; }
+    public int webSocketIdleTimeout() { return webSocketIdleTimeout; }
+    public int shutdownTimeout() { return shutdownTimeout; }
+    public int requestTimeout() { return requestTimeout; }
+    public int healthCheckTimeout() { return healthCheckTimeout; }
+    public int pageSizeMax() { return pageSizeMax; }
+    public int concurrencyLimit() { return concurrencyLimit; }
+    public int rateLimitPerSecond() { return rateLimitPerSecond; }
+    public int rateLimitMaxKeys() { return rateLimitMaxKeys; }
+    public String publicOrigin() { return publicOrigin; }
+    public Set<String> allowedHosts() { return Set.copyOf(allowedHosts); }
+    public Set<String> trustedProxies() { return Set.copyOf(trustedProxies); }
+    public boolean securityHeaders() { return securityHeaders; }
+    public boolean openApiEnabled() { return openApiEnabled; }
+    public boolean devMode() { return devMode; }
+    public boolean tlsEnabled() { return keyStorePath != null; }
+    public String keyStorePath() { return keyStorePath; }
+    String keyStorePassword() { return keyStorePassword; }
+    public String staticFilesPath() { return staticFilesPath; }
+    public boolean spa() { return spa; }
+    public String corsOrigin() { return corsOrigin; }
+    public CorsConfig corsConfig() { return corsConfig; }
+    public boolean accessLog() { return accessLog; }
+    public String accessLogFormat() { return accessLogFormat; }
+    public boolean gzip() { return gzip; }
+    public int gzipMinSize() { return gzipMinSize; }
+    public JsonConfig jsonConfig() { return jsonConfig; }
+    public SnapshotOptions snapshotOptions() { return snapshotOptions; }
+
+    /** Captures a validated, immutable view for a runtime or adapter. */
+    public AuraConfigSnapshot snapshotView() { return AuraConfigSnapshot.from(this); }
+
+    /** Validate before binding a listener; zero means disabled only for optional admission controls. */
+    public AuraConfig validate() {
+        if (port < 0 || port > 65535) throw new IllegalArgumentException("port must be between 0 and 65535");
+        if (workers < 1) throw new IllegalArgumentException("workers must be positive");
+        if (maxBodySize <= 0 || maxBodySize > MAX_BODY_SIZE_LIMIT) {
+            throw new IllegalArgumentException("maxBodySize must be between 1 byte and 1 GiB");
+        }
+        if (maxUploadSize <= 0) throw new IllegalArgumentException("maxUploadSize must be positive and bounded");
+        if (maxUploadSize > maxBodySize) throw new IllegalArgumentException("maxUploadSize cannot exceed maxBodySize");
+        if (maxWebSocketMessageSize < 1 || maxWebSocketMessageSize > 64L * 1024 * 1024) {
+            throw new IllegalArgumentException("maxWebSocketMessageSize must be between 1 byte and 64 MiB");
+        }
+        if (maxWebSocketConnections < 1 || maxWebSocketConnections > 1_000_000) {
+            throw new IllegalArgumentException("maxWebSocketConnections must be between 1 and 1000000");
+        }
+        if (webSocketIdleTimeout < 1 || webSocketIdleTimeout > 86_400) {
+            throw new IllegalArgumentException("webSocketIdleTimeout must be between 1 and 86400 seconds");
+        }
+        if (shutdownTimeout < 0) throw new IllegalArgumentException("shutdownTimeout cannot be negative");
+        if (requestTimeout < 0) throw new IllegalArgumentException("requestTimeout cannot be negative");
+        if (healthCheckTimeout < 1 || healthCheckTimeout > 300) {
+            throw new IllegalArgumentException("healthCheckTimeout must be between 1 and 300 seconds");
+        }
+        if (pageSizeMax < 1 || pageSizeMax > 100_000) throw new IllegalArgumentException("pageSizeMax is out of range");
+        if (concurrencyLimit < 0 || rateLimitPerSecond < 0) throw new IllegalArgumentException("admission limits cannot be negative");
+        if (rateLimitMaxKeys < 1 || rateLimitMaxKeys > 1_000_000) {
+            throw new IllegalArgumentException("rateLimitMaxKeys must be between 1 and 1000000");
+        }
+        if (tlsEnabled() && (keyStorePassword == null || keyStorePassword.isEmpty())) throw new IllegalArgumentException("TLS keystore password is required");
+        if (publicOrigin != null) validatePublicOrigin(publicOrigin);
+        String csrf = properties.get("aura.csrf.enabled");
+        boolean csrfEnforced = csrf != null ? parseBoolean(csrf, "aura.csrf.enabled")
+                : !"dev".equalsIgnoreCase(env);
+        if (csrfEnforced && publicOrigin == null) {
+            throw new IllegalArgumentException("aura.public-origin is required when CSRF protection is enabled;"
+                    + " set it, or opt out with aura.csrf.enabled=false");
+        }
+        return this;
+    }
+
+    /**
+     * The Host header belongs to the caller. Comparing it with itself made the CSRF origin check
+     * a formality for any client that could spell its own hostname, so the expected origin has to
+     * come from configuration and be a real origin rather than a prefix or a bare hostname.
+     */
+    private static void validatePublicOrigin(String value) {
+        java.net.URI origin;
+        try {
+            origin = java.net.URI.create(value);
+        } catch (IllegalArgumentException invalid) {
+            throw new IllegalArgumentException("aura.public-origin must be an absolute origin like https://app.example", invalid);
+        }
+        if (origin.getScheme() == null || origin.getRawAuthority() == null
+                || origin.getRawUserInfo() != null || origin.getRawQuery() != null
+                || origin.getRawFragment() != null
+                || (origin.getRawPath() != null && !origin.getRawPath().isEmpty() && !"/".equals(origin.getRawPath()))) {
+            throw new IllegalArgumentException("aura.public-origin must be an absolute origin like https://app.example");
+        }
+    }
+
+    private static String requireText(String value, String name) {
+        if (value == null || value.isBlank()) throw new IllegalArgumentException(name + " must not be blank");
+        return value.trim();
+    }
+    private static void validateProxyRule(String rule) {
+        String[] parts = rule.split("/", -1);
+        if (parts.length > 2 || parts[0].isBlank() || !parts[0].matches("[0-9A-Fa-f:.]+")) {
+            throw new IllegalArgumentException("trusted proxy must be a numeric IP address or CIDR: " + rule);
+        }
+        try {
+            java.net.InetAddress address = java.net.InetAddress.getByName(parts[0]);
+            if (parts[0].indexOf(':') < 0) {
+                String[] octets = parts[0].split("\\.", -1);
+                if (octets.length != 4) throw new IllegalArgumentException("invalid IPv4 address");
+                for (String octet : octets) {
+                    int value = Integer.parseInt(octet);
+                    if (value < 0 || value > 255) throw new IllegalArgumentException("invalid IPv4 octet");
+                }
+            }
+            if (parts.length == 2) {
+                int prefix = Integer.parseInt(parts[1]);
+                int max = address.getAddress().length * 8;
+                if (prefix < 0 || prefix > max) throw new IllegalArgumentException("CIDR prefix out of range");
+            }
+        } catch (Exception error) {
+            throw new IllegalArgumentException("invalid trusted proxy rule: " + rule, error);
+        }
+    }
+    private static String blankToNull(String value) { return value == null || value.isBlank() ? null : value.trim(); }
+}

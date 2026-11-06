@@ -173,6 +173,14 @@ class QueryBuildTest {
     }
 
     @Test
+    void paginationOrderRejectsInjectionAndNormalizesFields() {
+        assertThat(PaginationOrder.by("created_at DESC", "id ASC").clause())
+                .isEqualTo("created_at DESC, id ASC");
+        assertThatThrownBy(() -> PaginationOrder.by("id; DROP TABLE users"))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
     void orderBy_spaceOnlyField_throws() throws Exception {
         Query q = newQuery("users");
         assertThatThrownBy(() -> q.orderBy("   "))
@@ -205,6 +213,26 @@ class QueryBuildTest {
         q.limit(10).offset(20);
 
         assertThat(buildSql(q)).isEqualTo("SELECT * FROM users LIMIT 10 OFFSET 20");
+    }
+
+    @Test
+    void limit_rejectsNegativeAndExcessiveValues() throws Exception {
+        Query q = newQuery("users");
+        assertThatIllegalArgumentException().isThrownBy(() -> q.limit(-1));
+        assertThatIllegalArgumentException().isThrownBy(() -> q.limit(Query.MAX_LIMIT + 1));
+    }
+
+    @Test
+    void offset_rejectsNegativeAndExcessiveValues() throws Exception {
+        Query q = newQuery("users");
+        assertThatIllegalArgumentException().isThrownBy(() -> q.offset(-1));
+        assertThatIllegalArgumentException().isThrownBy(() -> q.offset(Query.MAX_OFFSET + 1));
+    }
+
+    @Test
+    void limitAndOffset_acceptBoundaryValues() throws Exception {
+        Query q = newQuery("users").limit(0).offset(Query.MAX_OFFSET);
+        assertThat(buildSql(q)).isEqualTo("SELECT * FROM users LIMIT 0 OFFSET " + Query.MAX_OFFSET);
     }
 
     // --- combined ---

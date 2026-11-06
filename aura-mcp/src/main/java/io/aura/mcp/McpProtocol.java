@@ -3,8 +3,9 @@ package io.aura.mcp;
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONObject;
 
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
 import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
@@ -13,6 +14,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 public final class McpProtocol {
+
+    private static final int DEFAULT_MAX_LINE_BYTES = 1024 * 1024;
 
     private static final Logger log = LoggerFactory.getLogger(McpProtocol.class);
 
@@ -24,17 +27,26 @@ public final class McpProtocol {
     private final PrintStream out;
     private final String serverName;
     private final RequestHandler handler;
+    private final int maxLineBytes;
 
     public McpProtocol(PrintStream out, String serverName, RequestHandler handler) {
+        this(out, serverName, handler, DEFAULT_MAX_LINE_BYTES);
+    }
+
+    McpProtocol(PrintStream out, String serverName, RequestHandler handler, int maxLineBytes) {
         this.out = out;
         this.serverName = serverName;
         this.handler = handler;
+        this.maxLineBytes = Math.max(1024, maxLineBytes);
     }
 
     public void runStdio() throws Exception {
-        BufferedReader in = new BufferedReader(new InputStreamReader(System.in, StandardCharsets.UTF_8));
+        run(System.in);
+    }
+
+    void run(InputStream input) throws Exception {
         String line;
-        while ((line = in.readLine()) != null) {
+        while ((line = readLine(input, maxLineBytes)) != null) {
             if (line.isBlank()) continue;
             try {
                 JSONObject request = JSON.parseObject(line);
@@ -44,36 +56,77 @@ public final class McpProtocol {
                     out.flush();
                 }
             } catch (Exception e) {
-                sendError(null, -32700, "Parse error: " + e.getMessage());
+                log.warn("MCP stdio JSON parsing failed", e);
+                sendError(null, -32700, "Parse error");
             }
         }
         log.info("MCP stdio stream closed");
     }
 
-    public JSONObject dispatch(JSONObject request) {
-        String method = request.getString("method");
-        Object id = request.get("id");
+    private String readLine(InputStream input, int limit) throws IOException {
+        ByteArrayOutputStream bytes = new ByteArrayOutputStream(Math.min(limit, 8192));
+        int value;
+        while ((value = input.read()) != -1) {
+            if (value == '\n') break;
+            if (bytes.size() >= limit) {
+                while (value != '\n' && value != -1) value = input.read();
+                sendError(null, -32600, "Request exceeds maximum size");
+                return "";
+            }
+            if (value != '\r') bytes.write(value);
+        }
+        if (value == -1 && bytes.size() == 0) return null;
+        return bytes.toString(StandardCharsets.UTF_8);
+    }
 
-        if (method == null) return null;
+    private JSONObject dispatch(JSONObject request) {
+        Object id = request == null ? null : request.get("id");
+        if (request == null || !"2.0".equals(request.getString("jsonrpc"))) {
+            if (id != null) sendError(id, -32600, "Invalid Request");
+            return null;
+        }
+        String method = request.getString("method");
+
+        if (method == null) {
+            if (id != null) sendError(id, -32600, "Invalid Request: method is required");
+            return null;
+        }
+
+        Object rawParams = request.get("params");
+        if (rawParams != null && !(rawParams instanceof JSONObject)) {
+            if (id != null) sendError(id, -32602, "Invalid params");
+            return null;
+        }
 
         Object result;
         if ("initialize".equals(method)) {
             result = Map.of(
-                "protocolVersion", "2025-03-26",
-                "capabilities", Map.of("tools", Map.of("listChanged", false)),
-                "serverInfo", Map.of("name", serverName, "version", "0.1.0")
+                "protocolVersion", McpProtocolConstants.VERSION,
+                "capabilities", Map.of("tools", Map.of(), "resources", Map.of(), "prompts", Map.of()),
+                "serverInfo", Map.of("name", serverName, "version", McpProtocolConstants.SERVER_VERSION)
             );
+        } else if ("ping".equals(method)) {
+            result = Map.of();
         } else if ("notifications/initialized".equals(method)) {
             result = null;
         } else {
             try {
                 result = handler.handle(method, request.getJSONObject("params"));
-            } catch (Exception e) {
-                return buildError(id, -32603, "Internal error: " + e.getMessage());
+            } catch (RequestException invalidRequest) {
+                if (id != null) sendError(id, invalidRequest.code(), invalidRequest.getMessage());
+                return null;
+            } catch (RuntimeException handlerFailure) {
+                log.warn("MCP stdio handler failed for method {}", method, handlerFailure);
+                if (id != null) sendError(id, -32603, "Internal error");
+                return null;
             }
         }
 
-        if (id == null || result == null) return null;
+        if (id == null) return null;
+        if (result == null) {
+            sendError(id, -32601, "Method not found: " + method);
+            return null;
+        }
 
         JSONObject resp = new JSONObject();
         resp.put("jsonrpc", "2.0");
@@ -82,16 +135,23 @@ public final class McpProtocol {
         return resp;
     }
 
-    public JSONObject buildError(Object id, int code, String message) {
+    private void sendError(Object id, int code, String message) {
         JSONObject err = new JSONObject();
         err.put("jsonrpc", "2.0");
         err.put("id", id);
         err.put("error", Map.of("code", code, "message", message));
-        return err;
+        out.println(err.toJSONString());
+        out.flush();
     }
 
-    private void sendError(Object id, int code, String message) {
-        out.println(buildError(id, code, message).toJSONString());
-        out.flush();
+    static final class RequestException extends RuntimeException {
+        private final int code;
+
+        RequestException(int code, String message) {
+            super(message);
+            this.code = code;
+        }
+
+        int code() { return code; }
     }
 }

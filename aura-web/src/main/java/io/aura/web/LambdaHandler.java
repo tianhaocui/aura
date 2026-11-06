@@ -1,6 +1,8 @@
 package io.aura.web;
 
 
+import io.aura.port.BaseContext;
+import io.aura.port.BaseHandler;
 import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
 
@@ -31,9 +33,9 @@ public final class LambdaHandler implements BaseHandler {
 
         Object result = samMethod.invoke(lambda, args);
         if (!hasReturn) return;
-        if (ctx instanceof Context c && c.isResponseStarted()) return;
-        if (ctx instanceof Context c && c.app() != null && c.app().resultWrapper() != null) {
-            ctx.json(c.app().resultWrapper().apply(result));
+        if (ctx.isResponseStarted()) return;
+        if (ctx.app() != null && ctx.app().resultWrapper() != null) {
+            ctx.json(ctx.app().resultWrapper().apply(result));
         } else if (result != null) {
             if (result instanceof String s) {
                 ctx.text(s);

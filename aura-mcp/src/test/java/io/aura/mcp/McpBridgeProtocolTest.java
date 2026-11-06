@@ -2,6 +2,7 @@ package io.aura.mcp;
 
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONObject;
+import io.aura.contract.Route;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -19,10 +20,16 @@ class McpBridgeProtocolTest {
     @BeforeEach
     void setup() {
         router = new McpRouter();
-        router.tool("get_user", new UserService(), "get", "获取用户");
-        router.tool("greet", "打招呼")
-              .param("name", String.class, "名字")
-              .handler(ctx -> "hello " + ctx.getString("name"));
+        router.tool(Route.of("GET", "/user",
+                      (McpHandler) ctx -> new UserService().get(ctx.getInt("id")))
+                .describedAs("获取用户")
+                .withParams(java.util.List.of(new io.aura.contract.ApiParameter(
+                        "id", "int", "query", true, "用户号"))));
+        router.tool(Route.of("POST", "/greet",
+                      (McpHandler) ctx -> "hello " + ctx.getString("name"))
+                .describedAs("打招呼")
+                .withParams(java.util.List.of(new io.aura.contract.ApiParameter(
+                        "name", "String", "query", true, "名字"))));
     }
 
     static class UserService {
@@ -36,6 +43,7 @@ class McpBridgeProtocolTest {
         assertThat(result.getString("protocolVersion")).isEqualTo("2025-03-26");
         assertThat(result.getJSONObject("capabilities")).containsKey("tools");
         assertThat(result.getJSONObject("serverInfo").getString("name")).isEqualTo("aura-mcp");
+        assertThat(result.getJSONObject("serverInfo").getString("version")).isEqualTo("1.0.0");
     }
 
     @Test
@@ -45,7 +53,7 @@ class McpBridgeProtocolTest {
         var tools = result.getJSONArray("tools");
         assertThat(tools).hasSize(2);
         assertThat(tools.getJSONObject(0).getString("name")).isEqualTo("get_user");
-        assertThat(tools.getJSONObject(1).getString("name")).isEqualTo("greet");
+        assertThat(tools.getJSONObject(1).getString("name")).isEqualTo("post_greet");
     }
 
     @Test
@@ -69,20 +77,52 @@ class McpBridgeProtocolTest {
         String response = sendRequest("tools/call", 4, params);
         JSONObject result = parseResult(response);
         assertThat(result.getBoolean("isError")).isTrue();
+        assertThat(result.getString("code")).isEqualTo("MCP_TOOL_ERROR");
         assertThat(result.getJSONArray("content").getJSONObject(0).getString("text"))
-                .contains("nonexistent");
+                .doesNotContain("nonexistent");
     }
 
     @Test
-    void nullMethod_returnsNothing() throws Exception {
-        String response = sendRaw("{\"jsonrpc\":\"2.0\",\"id\":5}");
-        assertThat(response).isEmpty();
+    void nullMethodReturnsInvalidRequestError() throws Exception {
+        JSONObject response = JSON.parseObject(sendRaw("{\"jsonrpc\":\"2.0\",\"id\":5}"));
+        assertThat(response.getJSONObject("error").getInteger("code")).isEqualTo(-32600);
     }
 
     @Test
     void notification_noId_returnsNothing() throws Exception {
         String response = sendRequest("notifications/initialized", null, null);
         assertThat(response).isEmpty();
+    }
+
+    @Test
+    void protocolExtensions_areDeterministic() throws Exception {
+        assertThat(parseResult(sendRequest("ping", 5, null))).isEmpty();
+        assertThat(parseResult(sendRequest("resources/list", 6, null)).getJSONArray("resources")).isEmpty();
+        assertThat(parseResult(sendRequest("resources/read", 7, new JSONObject())).getJSONArray("contents")).isEmpty();
+        assertThat(parseResult(sendRequest("prompts/list", 8, null)).getJSONArray("prompts")).isEmpty();
+        assertThat(parseResult(sendRequest("prompts/get", 9, new JSONObject())).getJSONArray("messages")).isEmpty();
+    }
+
+    @Test
+    void unknownMethodReturnsJsonRpcMethodNotFoundError() throws Exception {
+        JSONObject response = JSON.parseObject(sendRequest("unknown/method", 11, null));
+        assertThat(response.getJSONObject("error").getInteger("code")).isEqualTo(-32601);
+        assertThat(response.getJSONObject("error").getString("message")).contains("unknown/method");
+    }
+
+    @Test
+    void invalidParamsReturnsJsonRpcInvalidParamsErrorAndNotificationsStaySilent() throws Exception {
+        JSONObject request = new JSONObject();
+        request.put("jsonrpc", "2.0");
+        request.put("id", 12);
+        request.put("method", "tools/list");
+        request.put("params", "not-an-object");
+
+        JSONObject response = JSON.parseObject(sendRaw(request.toJSONString()));
+        assertThat(response.getJSONObject("error").getInteger("code")).isEqualTo(-32602);
+
+        request.remove("id");
+        assertThat(sendRaw(request.toJSONString())).isBlank();
     }
 
     private String sendRequest(String method, Object id, JSONObject params) throws Exception {
@@ -102,6 +142,11 @@ class McpBridgeProtocolTest {
             PrintStream out = new PrintStream(baos, true, StandardCharsets.UTF_8);
 
             McpProtocol protocol = new McpProtocol(out, "aura-mcp", (method, params) -> switch (method) {
+                case "ping" -> Map.of();
+                case "resources/list" -> Map.of("resources", List.of());
+                case "resources/read" -> Map.of("contents", List.of());
+                case "prompts/list" -> Map.of("prompts", List.of());
+                case "prompts/get" -> Map.of("messages", List.of());
                 case "tools/list" -> router.buildSchema();
                 case "tools/call" -> {
                     String toolName = params.getString("name");
@@ -112,8 +157,7 @@ class McpBridgeProtocolTest {
                         String text = result instanceof String s ? s : JSON.toJSONString(result);
                         yield Map.of("content", List.of(Map.of("type", "text", "text", text)));
                     } catch (Exception e) {
-                        yield Map.of("isError", true,
-                            "content", List.of(Map.of("type", "text", "text", "Error: " + e.getMessage())));
+                        yield McpContent.error("MCP_TOOL_ERROR");
                     }
                 }
                 default -> null;

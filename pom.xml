@@ -6,7 +6,7 @@
 
     <groupId>io.github.tianhaocui</groupId>
     <artifactId>aura-parent</artifactId>
-    <version>0.6.2</version>
+    <version>1.0.0</version>
     <packaging>pom</packaging>
 
     <name>Aura</name>
@@ -35,11 +35,21 @@
     </scm>
 
     <modules>
+        <module>aura-contract</module>
         <module>aura-core</module>
+        <module>aura-processor</module>
         <module>aura-web</module>
         <module>aura-db</module>
+        <module>aura-db-migration-flyway</module>
+        <module>aura-db-migration-liquibase</module>
         <module>aura-mcp</module>
-        <module>aura-dev</module>
+        <module>aura-ai</module>
+        <module>aura-workflow</module>
+        <module>aura-bom</module>
+        <module>aura-starter</module>
+        <module>aura-archetype</module>
+        <module>examples/aura-composed</module>
+        <module>examples/aura-generated</module>
     </modules>
 
     <properties>
@@ -47,15 +57,33 @@
         <maven.compiler.source>${java.version}</maven.compiler.source>
         <maven.compiler.target>${java.version}</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <aura.version>0.6.2</aura.version>
-        <undertow.version>2.3.12.Final</undertow.version>
+        <aura.version>1.0.0</aura.version>
+        <undertow.version>2.3.25.Final</undertow.version>
         <fastjson2.version>2.0.47</fastjson2.version>
         <hikaricp.version>5.1.0</hikaricp.version>
+        <flyway.version>13.7.0</flyway.version>
+        <liquibase.version>4.33.0</liquibase.version>
+        <commons-lang3.version>3.20.0</commons-lang3.version>
+        <commons-collections4.version>4.6.0</commons-collections4.version>
+        <commons-text.version>1.15.0</commons-text.version>
+        <maven.archetype.version>3.4.1</maven.archetype.version>
+        <postgresql.version>42.7.12</postgresql.version>
+        <mysql.version>9.4.0</mysql.version>
+        <jacoco.line.minimum>0.55</jacoco.line.minimum>
+        <jacoco.branch.minimum>0.45</jacoco.branch.minimum>
         <slf4j.version>2.0.12</slf4j.version>
+        <jboss-logging.version>3.6.1.Final</jboss-logging.version>
+        <archunit.version>1.3.0</archunit.version>
+        <testcontainers.version>2.0.5</testcontainers.version>
     </properties>
 
     <dependencyManagement>
         <dependencies>
+            <dependency>
+                <groupId>io.github.tianhaocui</groupId>
+                <artifactId>aura-contract</artifactId>
+                <version>${aura.version}</version>
+            </dependency>
             <dependency>
                 <groupId>io.github.tianhaocui</groupId>
                 <artifactId>aura-core</artifactId>
@@ -63,7 +91,47 @@
             </dependency>
             <dependency>
                 <groupId>io.github.tianhaocui</groupId>
+                <artifactId>aura-processor</artifactId>
+                <version>${aura.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.github.tianhaocui</groupId>
                 <artifactId>aura-web</artifactId>
+                <version>${aura.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.github.tianhaocui</groupId>
+                <artifactId>aura-db</artifactId>
+                <version>${aura.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.github.tianhaocui</groupId>
+                <artifactId>aura-db-migration-flyway</artifactId>
+                <version>${aura.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.github.tianhaocui</groupId>
+                <artifactId>aura-db-migration-liquibase</artifactId>
+                <version>${aura.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.github.tianhaocui</groupId>
+                <artifactId>aura-mcp</artifactId>
+                <version>${aura.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.github.tianhaocui</groupId>
+                <artifactId>aura-ai</artifactId>
+                <version>${aura.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.github.tianhaocui</groupId>
+                <artifactId>aura-workflow</artifactId>
+                <version>${aura.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.github.tianhaocui</groupId>
+                <artifactId>aura-starter</artifactId>
                 <version>${aura.version}</version>
             </dependency>
             <dependency>
@@ -82,9 +150,59 @@
                 <version>${hikaricp.version}</version>
             </dependency>
             <dependency>
+                <groupId>org.flywaydb</groupId>
+                <artifactId>flyway-core</artifactId>
+                <version>${flyway.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.flywaydb</groupId>
+                <artifactId>flyway-database-postgresql</artifactId>
+                <version>${flyway.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.flywaydb</groupId>
+                <artifactId>flyway-mysql</artifactId>
+                <version>${flyway.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.liquibase</groupId>
+                <artifactId>liquibase-core</artifactId>
+                <version>${liquibase.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.postgresql</groupId>
+                <artifactId>postgresql</artifactId>
+                <version>${postgresql.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.mysql</groupId>
+                <artifactId>mysql-connector-j</artifactId>
+                <version>${mysql.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.commons</groupId>
+                <artifactId>commons-lang3</artifactId>
+                <version>${commons-lang3.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.commons</groupId>
+                <artifactId>commons-collections4</artifactId>
+                <version>${commons-collections4.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.commons</groupId>
+                <artifactId>commons-text</artifactId>
+                <version>${commons-text.version}</version>
+            </dependency>
+            <dependency>
                 <groupId>org.slf4j</groupId>
                 <artifactId>slf4j-api</artifactId>
                 <version>${slf4j.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.jboss.logging</groupId>
+                <artifactId>jboss-logging</artifactId>
+                <version>${jboss-logging.version}</version>
             </dependency>
             <dependency>
                 <groupId>org.junit.jupiter</groupId>
@@ -93,9 +211,30 @@
                 <scope>test</scope>
             </dependency>
             <dependency>
+                <groupId>org.testcontainers</groupId>
+                <artifactId>testcontainers-junit-jupiter</artifactId>
+                <version>${testcontainers.version}</version>
+                <scope>test</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.testcontainers</groupId>
+                <artifactId>testcontainers-postgresql</artifactId>
+                <version>${testcontainers.version}</version>
+                <scope>test</scope>
+            </dependency>
+            <dependency>
                 <groupId>org.assertj</groupId>
                 <artifactId>assertj-core</artifactId>
-                <version>3.25.3</version>
+                <version>3.27.7</version>
+                <scope>test</scope>
+            </dependency>
+            <!-- Policy-in-Core / Mechanism-in-Web gate (Stage 1). Transitive deps are
+                 archunit-* only plus org.slf4j:slf4j-api:2.0.12 (exact match for
+                 ${slf4j.version}), so maven-enforcer dependencyConvergence stays clean. -->
+            <dependency>
+                <groupId>com.tngtech.archunit</groupId>
+                <artifactId>archunit-junit5</artifactId>
+                <version>${archunit.version}</version>
                 <scope>test</scope>
             </dependency>
         </dependencies>
@@ -119,9 +258,27 @@
                 <version>3.2.5</version>
             </plugin>
             <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-enforcer-plugin</artifactId>
+                <version>3.5.0</version>
+                <executions>
+                    <execution>
+                        <id>enforce-build-contract</id>
+                        <goals><goal>enforce</goal></goals>
+                        <configuration>
+                            <rules>
+                                <requireJavaVersion><version>[17,)</version></requireJavaVersion>
+                                <requireMavenVersion><version>[3.8.6,)</version></requireMavenVersion>
+                                <dependencyConvergence/>
+                            </rules>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
                 <groupId>org.jacoco</groupId>
                 <artifactId>jacoco-maven-plugin</artifactId>
-                <version>0.8.11</version>
+                <version>0.8.13</version>
                 <executions>
                     <execution>
                         <goals><goal>prepare-agent</goal></goals>
@@ -143,7 +300,12 @@
                                         <limit>
                                             <counter>LINE</counter>
                                             <value>COVEREDRATIO</value>
-                                            <minimum>0.10</minimum>
+                                            <minimum>${jacoco.line.minimum}</minimum>
+                                        </limit>
+                                        <limit>
+                                            <counter>BRANCH</counter>
+                                            <value>COVEREDRATIO</value>
+                                            <minimum>${jacoco.branch.minimum}</minimum>
                                         </limit>
                                     </limits>
                                 </rule>
@@ -156,6 +318,37 @@
     </build>
 
     <profiles>
+        <profile>
+            <id>sbom</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.cyclonedx</groupId>
+                        <artifactId>cyclonedx-maven-plugin</artifactId>
+                        <version>2.9.3</version>
+                        <executions>
+                            <execution>
+                                <id>aggregate-sbom</id>
+                                <phase>verify</phase>
+                                <goals><goal>makeAggregateBom</goal></goals>
+                            </execution>
+                        </executions>
+                        <configuration>
+                            <schemaVersion>1.6</schemaVersion>
+                            <includeBomSerialNumber>true</includeBomSerialNumber>
+                            <includeCompileScope>true</includeCompileScope>
+                            <includeProvidedScope>true</includeProvidedScope>
+                            <includeRuntimeScope>true</includeRuntimeScope>
+                            <includeSystemScope>false</includeSystemScope>
+                            <includeTestScope>false</includeTestScope>
+                            <outputFormat>json</outputFormat>
+                            <outputName>aura-sbom</outputName>
+                            <outputDirectory>${project.build.directory}</outputDirectory>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
         <profile>
             <id>fat-jar</id>
             <build>
@@ -200,7 +393,7 @@
                     <plugin>
                         <groupId>org.apache.maven.plugins</groupId>
                         <artifactId>maven-source-plugin</artifactId>
-                        <version>3.3.0</version>
+                        <version>3.4.0</version>
                         <executions>
                             <execution>
                                 <id>attach-sources</id>
@@ -211,7 +404,7 @@
                     <plugin>
                         <groupId>org.apache.maven.plugins</groupId>
                         <artifactId>maven-javadoc-plugin</artifactId>
-                        <version>3.6.3</version>
+                        <version>3.12.0</version>
                         <configuration>
                             <doclint>none</doclint>
                         </configuration>
@@ -225,7 +418,7 @@
                     <plugin>
                         <groupId>org.apache.maven.plugins</groupId>
                         <artifactId>maven-gpg-plugin</artifactId>
-                        <version>3.1.0</version>
+                        <version>3.2.8</version>
                         <executions>
                             <execution>
                                 <id>sign-artifacts</id>
@@ -237,7 +430,7 @@
                     <plugin>
                         <groupId>org.sonatype.central</groupId>
                         <artifactId>central-publishing-maven-plugin</artifactId>
-                        <version>0.7.0</version>
+                        <version>0.9.0</version>
                         <extensions>true</extensions>
                         <configuration>
                             <publishingServerId>central</publishingServerId>

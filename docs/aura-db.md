@@ -27,9 +27,14 @@ Db analytics = Db.create("analytics", existingDataSource);
 ### Cleanup
 
 ```java
-// Shutdown the independent transaction thread pool (call on app stop)
+// Shutdown the process-wide independent transaction thread pool (call on app stop)
 Db.shutdownPool();
 ```
+
+`db.close()` closes that Db's Hikari connections but deliberately leaves the shared
+`transactionIndependent` executor alone, because several Db instances may use it. The pool is
+re-armed on demand: a Db created after `shutdownPool()` gets a fresh executor rather than one
+that rejects every task.
 
 ### Query Builder
 
@@ -40,7 +45,7 @@ db.table("user")
 // Chain conditions (null values auto-skipped)
   .where("age", ">", 18)
   .where("status", "active")     // shorthand for .where("status", "=", "active")
-  .orderBy("name", "created DESC")
+  .orderBy("name", "id ASC")
   .limit(10)
   .offset(20)
 
@@ -92,14 +97,63 @@ db.findBy("user", "age > ? AND status = ?", 18, "active"); // List<Row>
 ```java
 // Directives: #where, #and, #or, #orderBy
 // Null/blank params auto-skipped
-String sql = "SELECT * FROM user #where(name, '=', name) #and(age, '>', age) #orderBy(created)";
+String sql = "SELECT * FROM user #where(name, '=', name) #and(age, '>', age)";
 
 Map<String, Object> filter = Map.of("name", "tom", "age", 18);
 db.find(sql, filter);                        // List<Row>
-db.paginate(sql, filter, 1, 20);            // Page<Row>
+db.paginateDynamic(sql, filter, PaginationOrder.by("created DESC", "id ASC"),
+        1, 20, TotalStrategy.EXACT);        // Page<Row>
 
 // If filter = Map.of("name", "tom") → WHERE name = ? (age skipped)
 // If filter = Map.of() → no WHERE clause at all
+```
+
+The builder and the dynamic path are the same call written out, with the total kept
+optional so a caller cannot tell a missing count and a zero count apart:
+
+<!-- aura:compile name=db-query-builder-and-bounded-page -->
+```java
+package docs.example;
+
+import io.aura.db.Db;
+import io.aura.db.Page;
+import io.aura.db.PaginationOrder;
+import io.aura.db.Row;
+import io.aura.db.TotalStrategy;
+
+import java.util.List;
+import java.util.Map;
+
+public final class UserQueries {
+    private UserQueries() { }
+
+    /** Conditions, order, bounds, then one terminal operation. Nulls and false flags skip. */
+    public static List<Row> activeAdults(Db db, List<Integer> ids, String name) {
+        return db.table("user")
+                .where("age", ">", 18)
+                .where("status", "active")
+                .whereIf(name != null, "name", name)
+                .whereIf(!ids.isEmpty(), "id", "IN", ids)
+                .orderBy("name", "id ASC")
+                .limit(10)
+                .offset(20)
+                .find();
+    }
+
+    public static Page<Row> firstPage(Db db, Map<String, Object> filter) {
+        return db.paginateDynamic(
+                "SELECT * FROM user #where(name, '=', name) #and(age, '>', age)",
+                filter, PaginationOrder.by("created DESC", "id ASC"),
+                1, 20, TotalStrategy.EXACT);
+    }
+
+    /** TotalStrategy without a count leaves the total empty, so "no total" is not "no rows". */
+    public static String describe(Page<Row> page) {
+        return "page " + page.pageNum() + ", " + page.list().size() + " rows, "
+                + page.total().orElse(-1L) + " total, "
+                + (page.hasNext() ? "more to come" : "last page");
+    }
+}
 ```
 
 ### Execute
@@ -188,10 +242,24 @@ Object generatedId = db.insertAndReturnId(
 ### Pagination
 
 ```java
-Page<Row> page = db.table("user").where("status", "active").paginate(1, 20);
+Page<Row> page = db.table("user")
+        .where("status", "active")
+        .orderBy("created_at DESC", "id ASC")
+        .paginate(1, 20, TotalStrategy.EXACT);
 // Or with raw SQL:
-Page<Row> page = db.paginate("SELECT * FROM user", new Object[]{}, 1, 20);
+Page<Row> page = db.paginate("SELECT * FROM user", new Object[]{},
+        PaginationOrder.by("created_at DESC", "id ASC"),
+        1, 20, TotalStrategy.NONE);
 ```
+
+Pagination always requires an explicit order with a unique tie-breaker. `EXACT`
+runs a count query. `NONE` skips the count, leaves `total()` and `totalPages()`
+empty, and fetches one extra row to compute `hasNext()`.
+
+Raw and dynamic queries are wrapped before the final order is applied. Their
+`PaginationOrder` fields must therefore be unqualified projected column labels.
+For joins, project an explicit alias and order by it, for example
+`SELECT u.id AS user_id, ...` with `PaginationOrder.by("user_id ASC")`.
 
 ### Typed Queries
 
@@ -202,6 +270,14 @@ List<User> users = db.query(
     rs -> new User(rs.getInt("id"), rs.getString("name"))
 );
 ```
+
+### Cancellation
+
+Pass a shared `CancellationToken` to `findCancellable`, `query`,
+`executeCancellable`, or query builder operations such as
+`db.table("user").find(token)`. The JDBC statement
+is cancelled when the token fires and result iteration checks the token between
+rows, so request and workflow shutdown can stop database work cooperatively.
 
 ### Close
 
@@ -288,9 +364,42 @@ Row.of("user").id(1).delete(db);
 | `TIMESTAMP` | `java.time.LocalDateTime` |
 | `DATE` | `java.time.LocalDate` |
 | `TIME` | `java.time.LocalTime` |
+| `JSONB` | driver text form (`PGobject`); read with `getJson` |
+| `vector` | driver text form (`PGobject`); read with `getVector` |
 
 `row.getStr("created_at")` calls `.toString()` and works fine.
 `ctx.json(row)` serializes date/time to ISO 8601 automatically.
+
+### PostgreSQL `jsonb` and `pgvector`
+
+A plain String does not bind to a `jsonb` column, and a `float[]` does not bind to a
+`vector` column. The wrappers below send an untyped parameter that PostgreSQL coerces to
+the target column's or operator's type:
+
+```java
+db.execute("INSERT INTO document (payload) VALUES (?)",
+        Jsonb.of(Map.of("kind", "note")));          // serialised with fastjson2
+db.execute("INSERT INTO document (payload) VALUES (?)",
+        Jsonb.raw("{\"kind\":\"note\"}"));          // already-serialised text
+
+db.execute("CREATE TABLE item (embedding vector(3))");
+db.execute("INSERT INTO item (embedding) VALUES (?)", PgVector.of(0.1f, 0.2f, 0.3f));
+
+Row row = db.findOne("SELECT payload, embedding FROM document, item LIMIT 1");
+Map<String, Object> payload = row.getJson("payload", Map.class);
+String raw = row.getJson("payload");
+float[] embedding = row.getVector("embedding");
+
+// Distance ordering binds the probe vector the same way.
+db.find("SELECT * FROM item ORDER BY embedding <-> ? LIMIT 5",
+        PgVector.of(0.1f, 0.2f, 0.3f));
+```
+
+`Row.setJson(key, value)` and `Row.setVector(key, ...)` store the wrappers so `Row.insert`
+binds them correctly. `Jsonb.of(Object)` serialises values, and a Java `String` therefore
+becomes a JSON string scalar; use `Jsonb.raw(String)` for text that is already JSON.
+`PgVector.of(...)` accepts float or double values, and `PgVector.parse(...)` accepts
+pgvector's text form, a list of numbers, or an array.
 
 ---
 
@@ -322,7 +431,8 @@ Fluent query builder returned by `db.table(name)`.
 ## Page
 
 ```java
-public record Page<T>(List<T> list, int pageNum, int pageSize, long total)
+public record Page<T>(List<T> list, int pageNum, int pageSize,
+                      OptionalLong total, boolean hasNext)
 ```
 
 | Method | Returns | Description |
@@ -330,8 +440,8 @@ public record Page<T>(List<T> list, int pageNum, int pageSize, long total)
 | `list()` | `List<T>` | Current page data |
 | `pageNum()` | int | Current page number |
 | `pageSize()` | int | Page size |
-| `total()` | long | Total record count |
-| `totalPages()` | int | Total pages |
+| `total()` | `OptionalLong` | Exact total, empty with `TotalStrategy.NONE` |
+| `totalPages()` | `OptionalInt` | Exact pages, empty with `TotalStrategy.NONE` |
 | `hasNext()` | boolean | Has next page |
 | `hasPrev()` | boolean | Has previous page |
 
@@ -366,3 +476,64 @@ All directives auto-skip when the parameter value is null or blank.
 - All operators whitelisted
 - Parameters always use `?` placeholders (never concatenated)
 - Transaction connections not leaked by try-with-resources
+
+---
+
+## Schema migration SPI
+
+`SchemaMigrator` is the single execution boundary. `DatabaseModule` invokes it
+once during module startup and aborts startup with outer code
+`AURA_MODULE_START_FAILED` plus `causeCode=DB_MIGRATION_FAILED` when it fails or
+returns no result:
+
+```java
+AuraApp.create()
+        .use(DatabaseModule.create(db)
+                .migrateWith(SqlSchemaMigrator.classpath("db/migration")))
+        .start();
+```
+
+For Flyway, add `aura-db-migration-flyway` and use the same lifecycle boundary:
+
+```java
+DatabaseModule.create(db)
+        .migrateWith(FlywaySchemaMigrator.classpath("db/migration"));
+```
+
+For Liquibase, add `aura-db-migration-liquibase`:
+
+```java
+DatabaseModule.create(db)
+        .migrateWith(LiquibaseSchemaMigrator.classpath("db/changelog.xml"));
+```
+
+Both adapters borrow connections from `MigrationContext.dataSource()` and
+return them after each run without closing the Aura-owned `DataSource` or `Db`.
+They fail startup when the configured classpath resource is missing and report
+the number of migrations or changesets applied by that run. Migration runs
+outside an Aura transaction so the selected engine owns locking, validation,
+transactions, baseline, and dialect semantics.
+
+The Flyway and Liquibase adapters are covered for concurrent first-starts from
+independent connection pools. Flyway uses its schema-history lock; Liquibase
+uses its changelog lock and retries only a bounded set of recognized duplicate
+`DATABASECHANGELOG` bootstrap races before acquiring that lock. The built-in
+classifier covers H2, PostgreSQL, MySQL/MariaDB, SQL Server, and Oracle duplicate
+object codes, and requires an exact Liquibase history-table identifier; ordinary
+changelog SQL failures and user tables with similar names are never retried.
+Custom `SchemaMigrator` implementations must provide equivalent cross-process
+locking for production deployment.
+
+`aura-db-migration-flyway` includes Flyway's PostgreSQL and MySQL/MariaDB
+database-type plugins. The application must still install its chosen JDBC
+driver. For Oracle, SQL Server, or another database, add the matching Flyway
+database plugin at the same version as `flyway-core`.
+
+Custom adapters implement `SchemaMigrator` and follow the same ownership rule;
+`DatabaseModule` closes the database during application shutdown.
+
+`SqlSchemaMigrator` is a lightweight implementation for tests and simple
+single-process deployments. It maintains `_migrations`, validates checksums and
+uses Aura transactions, but its semicolon splitter is not a Flyway/Liquibase
+replacement: it does not implement vendor delimiters, stored-procedure parsing,
+distributed migration locks, repair, or baseline workflows.

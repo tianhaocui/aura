@@ -1,15 +1,22 @@
 package io.aura.web;
 
-import io.aura.Aura;
+import io.aura.port.WsConnection;
+import io.aura.AuraApp;
+import io.aura.AuraConfig;
+import io.aura.AuraModule;
+import io.aura.ModuleContext;
+import io.aura.contract.ModuleMetadata;
 import org.junit.jupiter.api.Test;
 
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.WebSocket;
-import java.util.List;
 import java.util.concurrent.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Consumer;
 
 import static org.assertj.core.api.Assertions.*;
 
@@ -19,11 +26,209 @@ class WebSocketTest {
 
     private int nextPort() { return PORT_SEQ.getAndIncrement(); }
 
+    private AuraApp app(int port, Consumer<ModuleContext> configure) {
+        return app(new AuraConfig().port(port), configure);
+    }
+
+    private AuraApp app(AuraConfig config, Consumer<ModuleContext> configure) {
+        return AuraApp.create(config).use(new AuraModule() {
+            @Override public ModuleMetadata descriptor() {
+                return ModuleMetadata.of("websocket-test", "1.0.0");
+            }
+
+            @Override public void install(ModuleContext context) {
+                configure.accept(context);
+            }
+        });
+    }
+
+    @Test
+    void connectionLimitRejectsExcessAndReleasesPermitOnClose() throws Exception {
+        int port = nextPort();
+        var accepted = new AtomicInteger();
+        var live = new AtomicInteger();
+        var app = app(new AuraConfig().port(port)
+                        .maxWebSocketConnections(1)
+                        .webSocketIdleTimeout(30),
+                context -> context.webSocket("/ws/limited", ws -> ws
+                        .onOpen(conn -> { accepted.incrementAndGet(); live.incrementAndGet(); })
+                        .onClose((conn, code, reason) -> live.decrementAndGet())));
+        app.start();
+        try {
+            var first = HttpClient.newHttpClient().newWebSocketBuilder()
+                    .buildAsync(URI.create("ws://localhost:" + port + "/ws/limited"), requestingListener())
+                    .join();
+            awaitCount(accepted, 1);
+
+            var rejectedCode = new CompletableFuture<Integer>();
+            var rejected = HttpClient.newHttpClient().newWebSocketBuilder()
+                    .buildAsync(URI.create("ws://localhost:" + port + "/ws/limited"),
+                            closeListener(rejectedCode)).join();
+            assertThat(rejectedCode.get(3, TimeUnit.SECONDS))
+                    .isEqualTo(WebSocketConnectionRegistry.LIMIT_CLOSE_CODE);
+            // A rejected channel never reaches an open handler: registration failed, so the
+            // upgrade returned before the handlers were installed.
+            assertThat(accepted).hasValue(1);
+
+            first.sendClose(WebSocket.NORMAL_CLOSURE, "done").join();
+            awaitValue(live, 0);
+
+            // Acceptance is the permit's release and a close code means the limit still holds it, so
+            // every attempt resolves before the next starts. An unresolved candidate fails instead of
+            // being aborted: aborting one whose open handler is still queued is what used to land a
+            // third open after the count it was checked against.
+            WebSocket replacement = null;
+            for (int attempt = 0; attempt < 20 && replacement == null; attempt++) {
+                var closeCode = new CompletableFuture<Integer>();
+                // Take the baseline before the handshake: an admitted connection increments it during
+                // the upgrade, so reading after join() could never observe the attempt's own acceptance.
+                int acceptedBefore = accepted.get();
+                var candidate = HttpClient.newHttpClient().newWebSocketBuilder()
+                        .buildAsync(URI.create("ws://localhost:" + port + "/ws/limited"), closeListener(closeCode))
+                        .join();
+                for (int tick = 0;
+                        tick < 120 && accepted.get() == acceptedBefore && !closeCode.isDone(); tick++) {
+                    Thread.sleep(25);
+                }
+                if (accepted.get() > acceptedBefore) {
+                    replacement = candidate;
+                } else if (closeCode.isDone()) {
+                    candidate.abort();
+                    Thread.sleep(25);
+                } else {
+                    candidate.abort();
+                    fail("handshake on /ws/limited was neither admitted nor rejected within 3s");
+                }
+            }
+
+            assertThat(replacement).isNotNull();
+            awaitCount(accepted, 2);
+            awaitValue(live, 1);
+            replacement.sendClose(WebSocket.NORMAL_CLOSURE, "done");
+            rejected.abort();
+        } finally {
+            app.stop();
+        }
+    }
+
+    @Test
+    void idleConnectionClosesWithGoingAway() throws Exception {
+        int port = nextPort();
+        var app = app(new AuraConfig().port(port)
+                        .maxWebSocketConnections(4)
+                        .webSocketIdleTimeout(1),
+                context -> context.webSocket("/ws/idle", ws -> { }));
+        app.start();
+        try {
+            var closeCode = new CompletableFuture<Integer>();
+            HttpClient.newHttpClient().newWebSocketBuilder()
+                    .buildAsync(URI.create("ws://localhost:" + port + "/ws/idle"),
+                            closeListener(closeCode)).join();
+
+            assertThat(closeCode.get(3, TimeUnit.SECONDS))
+                    .isEqualTo(WebSocketConnectionRegistry.GOING_AWAY_CLOSE_CODE);
+        } finally {
+            app.stop();
+        }
+    }
+
+    @Test
+    void shutdownClosesActiveConnectionWithGoingAway() throws Exception {
+        int port = nextPort();
+        var activeConnectionReady = new CountDownLatch(1);
+        var app = app(new AuraConfig().port(port)
+                        .maxWebSocketConnections(4)
+                        .webSocketIdleTimeout(30),
+                context -> context.webSocket("/ws/shutdown", ws ->
+                        ws.onOpen(conn -> activeConnectionReady.countDown())));
+        app.start();
+        var closeCode = new CompletableFuture<Integer>();
+        try {
+            HttpClient.newHttpClient().newWebSocketBuilder()
+                    .buildAsync(URI.create("ws://localhost:" + port + "/ws/shutdown"),
+                            closeListener(closeCode)).join();
+
+            assertThat(activeConnectionReady.await(3, TimeUnit.SECONDS)).isTrue();
+
+            app.stop();
+
+            assertThat(closeCode.get(3, TimeUnit.SECONDS))
+                    .isEqualTo(WebSocketConnectionRegistry.GOING_AWAY_CLOSE_CODE);
+        } finally {
+            app.stop();
+        }
+    }
+
+    /** The handler's open runs on an Undertow thread; the client's join() only proves the handshake. */
+    private static void awaitCount(AtomicInteger counter, int expected) throws InterruptedException {
+        for (int attempt = 0; attempt < 120 && counter.get() < expected; attempt++) {
+            Thread.sleep(25);
+        }
+        assertThat(counter).hasValue(expected);
+    }
+
+    private static void awaitValue(AtomicInteger counter, int expected) throws InterruptedException {
+        for (int attempt = 0; attempt < 120 && counter.get() != expected; attempt++) {
+            Thread.sleep(25);
+        }
+        assertThat(counter).hasValue(expected);
+    }
+
+    private static WebSocket.Listener requestingListener() {
+        return new WebSocket.Listener() {
+            @Override public void onOpen(WebSocket webSocket) { webSocket.request(1); }
+        };
+    }
+
+    private static WebSocket.Listener closeListener(CompletableFuture<Integer> closeCode) {
+        return new WebSocket.Listener() {
+            @Override public void onOpen(WebSocket webSocket) { webSocket.request(1); }
+
+            @Override public CompletionStage<?> onClose(
+                    WebSocket webSocket, int statusCode, String reason) {
+                closeCode.complete(statusCode);
+                return null;
+            }
+        };
+    }
+
+    @Test
+    void oversizedMessageClosesConnectionWith1009BeforeHandlerRuns() throws Exception {
+        int port = nextPort();
+        var handled = new AtomicBoolean();
+        var app = app(new AuraConfig().port(port).maxWebSocketMessageSize(16), context ->
+                context.webSocket("/ws/bounded", ws ->
+                        ws.onMessage((connection, text) -> handled.set(true))));
+        app.start();
+        try {
+            var closeCode = new CompletableFuture<Integer>();
+            var ws = HttpClient.newHttpClient().newWebSocketBuilder()
+                    .buildAsync(URI.create("ws://localhost:" + port + "/ws/bounded"),
+                            new WebSocket.Listener() {
+                                @Override public void onOpen(WebSocket webSocket) {
+                                    webSocket.request(1);
+                                }
+
+                                @Override public CompletionStage<?> onClose(
+                                        WebSocket webSocket, int statusCode, String reason) {
+                                    closeCode.complete(statusCode);
+                                    return null;
+                                }
+                            }).join();
+            ws.sendText("x".repeat(128), true).join();
+
+            assertThat(closeCode.get(3, TimeUnit.SECONDS)).isEqualTo(1009);
+            assertThat(handled).isFalse();
+        } finally {
+            app.stop();
+        }
+    }
+
     @Test
     void echo() throws Exception {
         int port = nextPort();
-        var app = Aura.create().port(port)
-            .routes(r -> r.ws("/ws/echo", ws ->
+        var app = app(port, context ->
+            context.webSocket("/ws/echo", ws ->
                 ws.onMessage((conn, msg) -> conn.send("echo:" + msg))
             ));
         app.start();
@@ -50,8 +255,8 @@ class WebSocketTest {
     void pathParams() throws Exception {
         int port = nextPort();
         var received = new CompletableFuture<String>();
-        var app = Aura.create().port(port)
-            .routes(r -> r.ws("/ws/room/{roomId}", ws ->
+        var app = app(port, context ->
+            context.webSocket("/ws/room/{roomId}", ws ->
                 ws.onOpen(conn -> conn.send("joined:" + conn.path("roomId")))
             ));
         app.start();
@@ -75,29 +280,24 @@ class WebSocketTest {
     @Test
     void beforeMiddleware_rejectsUnauthorized() throws Exception {
         int port = nextPort();
-        var app = Aura.create().port(port)
-            .routes(r -> {
-                r.before(ctx -> {
-                    if (ctx.header("Authorization") == null) {
-                        ctx.status(401).abort();
-                    }
-                });
-                r.ws("/ws/secure", ws ->
-                    ws.onMessage((conn, msg) -> conn.send(msg))
-                );
+        var app = app(port, context -> {
+            context.before(ctx -> {
+                if (ctx.header("Authorization") == null) {
+                    ctx.status(401).abort();
+                }
             });
+            context.webSocket("/ws/secure", ws ->
+                ws.onMessage((conn, msg) -> conn.send(msg))
+            );
+        });
         app.start();
         try {
             var failed = new CompletableFuture<Throwable>();
             HttpClient.newHttpClient().newWebSocketBuilder()
                 .buildAsync(URI.create("ws://localhost:" + port + "/ws/secure"),
                     new WebSocket.Listener() {})
-                .whenComplete((ws, err) -> {
-                    if (err != null) failed.complete(err);
-                    else failed.complete(null);
-                });
-            var err = failed.get(3, TimeUnit.SECONDS);
-            assertThat(err).isNotNull();
+                .whenComplete((ws, err) -> failed.complete(err));
+            assertThat(failed.get(3, TimeUnit.SECONDS)).isNotNull();
         } finally {
             app.stop();
         }
@@ -107,8 +307,8 @@ class WebSocketTest {
     void onClose_fires() throws Exception {
         int port = nextPort();
         var closed = new CompletableFuture<Integer>();
-        var app = Aura.create().port(port)
-            .routes(r -> r.ws("/ws/close", ws ->
+        var app = app(port, context ->
+            context.webSocket("/ws/close", ws ->
                 ws.onClose((conn, code, reason) -> closed.complete(code))
             ));
         app.start();
@@ -126,8 +326,8 @@ class WebSocketTest {
     @Test
     void multipleMessages() throws Exception {
         int port = nextPort();
-        var app = Aura.create().port(port)
-            .routes(r -> r.ws("/ws/multi", ws ->
+        var app = app(port, context ->
+            context.webSocket("/ws/multi", ws ->
                 ws.onMessage((conn, msg) -> conn.send(msg.toUpperCase()))
             ));
         app.start();
@@ -161,8 +361,8 @@ class WebSocketTest {
     void broadcast() throws Exception {
         int port = nextPort();
         var connections = ConcurrentHashMap.<WsConnection>newKeySet();
-        var app = Aura.create().port(port)
-            .routes(r -> r.ws("/ws/broadcast", ws -> {
+        var app = app(port, context ->
+            context.webSocket("/ws/broadcast", ws -> {
                 ws.onOpen(connections::add);
                 ws.onMessage((conn, msg) -> {
                     for (WsConnection c : connections) c.send(msg);
@@ -211,8 +411,8 @@ class WebSocketTest {
     void connectionAttributes() throws Exception {
         int port = nextPort();
         var received = new CompletableFuture<String>();
-        var app = Aura.create().port(port)
-            .routes(r -> r.ws("/ws/attrs", ws -> {
+        var app = app(port, context ->
+            context.webSocket("/ws/attrs", ws -> {
                 ws.onOpen(conn -> conn.set("name", "alice"));
                 ws.onMessage((conn, msg) -> conn.send(conn.get("name", String.class) + ":" + msg));
             }));
@@ -239,8 +439,8 @@ class WebSocketTest {
     void onError_routesHandlerException() throws Exception {
         int port = nextPort();
         var error = new CompletableFuture<Throwable>();
-        var app = Aura.create().port(port)
-            .routes(r -> r.ws("/ws/err", ws -> {
+        var app = app(port, context ->
+            context.webSocket("/ws/err", ws -> {
                 ws.onMessage((conn, msg) -> { throw new RuntimeException("boom"); });
                 ws.onError((conn, err) -> error.complete(err));
             }));

@@ -1,74 +1,69 @@
 package io.aura.web;
 
 import com.alibaba.fastjson2.JSON;
-import io.aura.Aura;
+import io.aura.AuraApp;
+import io.aura.AuraRuntime;
+import io.aura.AuraWebRuntime;
+import io.aura.snapshot.Snapshot;
+import io.aura.snapshot.SnapshotScope;
 
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 import java.net.URLDecoder;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
 
 public class TestClient {
 
-    private final Aura app;
+    private final AuraWebRuntime app;
     private final Router router;
     private final List<CompiledRoute> compiled;
-    private final RateLimiter rateLimiter;
+    // Compiled without a connection registry: this client describes the endpoints and admits
+    // requests through them, it never upgrades a socket.
+    private final List<CompiledWsRoute> webSockets;
+    private final RequestGuards guards;
 
-    TestClient(Aura app, Router router) {
+    TestClient(AuraWebRuntime app, Router router) {
         this.app = app;
         this.router = router;
         this.compiled = UndertowStarter.compileRoutes(router, app);
-        if (app.rateLimitMax() > 0 && !"dev".equals(app.env())) {
-            this.rateLimiter = new RateLimiter();
-        } else {
-            // Check if any method has @RateLimit even without global config
-            boolean hasMethodLimit = compiled.stream().anyMatch(cr ->
-                    cr.handler() instanceof MethodRefHandler mh && mh.resolvedMethod() != null
-                            && mh.resolvedMethod().isAnnotationPresent(io.aura.annotation.RateLimit.class));
-            this.rateLimiter = hasMethodLimit ? new RateLimiter() : null;
-        }
+        UndertowStarter.detectDuplicateRoutes(compiled);
+        this.webSockets = UndertowStarter.compileWsRoutes(app, router, null);
+        UndertowStarter.detectDuplicateWsRoutes(webSockets);
+        this.guards = RequestGuards.standard(app, this::routePattern);
     }
 
-    public static TestClient of(Aura app) {
-        // Wire MCP HTTP transport if mcpPath is configured
-        if (app.mcpPath() != null && app.mcpRouter() != null) {
-            java.util.ServiceLoader<io.aura.McpStarter> mcpLoader = java.util.ServiceLoader.load(io.aura.McpStarter.class);
-            mcpLoader.findFirst().ifPresent(starter -> starter.httpHandler(app));
+    /** Admission policies judge a request by its route template, the same as the real adapter. */
+    private String routePattern(String method, String path) {
+        for (CompiledRoute route : compiled) {
+            if ((route.method().equals(method) || "HEAD".equals(method) && "GET".equals(route.method()))
+                    && route.match(path) != null) return route.rawPath();
         }
-        Router router = new Router();
-        // replay direct routes
-        for (var entry : app.directRoutes()) {
-            BaseHandler handler;
-            if (entry.handler() instanceof BaseHandler h) {
-                handler = h;
-            } else {
-                handler = new LambdaHandler(entry.handler());
-            }
-            switch (entry.method()) {
-                case "GET" -> router.get(entry.path(), handler);
-                case "POST" -> router.post(entry.path(), handler);
-                case "PUT" -> router.put(entry.path(), handler);
-                case "DELETE" -> router.delete(entry.path(), handler);
-                case "PATCH" -> router.patch(entry.path(), handler);
-                case "HEAD" -> router.head(entry.path(), handler);
-                case "OPTIONS" -> router.options(entry.path(), handler);
+        if ("GET".equals(method)) {
+            for (CompiledWsRoute route : webSockets) {
+                if (route.match(path) != null) return route.rawPath();
             }
         }
-        // replay routes config
-        @SuppressWarnings("unchecked")
-        var config = (java.util.function.Consumer<BaseRouter>) app.routeConfig();
-        if (config != null) config.accept(router);
-        // replay services
-        for (Object service : app.services()) {
-            ServiceRegistrar.register(service, router);
-        }
-        if (!app.scanPackages().isEmpty()) {
-            PackageScanner.scan(app.scanPackages(), router, app);
-        }
+        return path;
+    }
+
+    private static TestClient of(AuraWebRuntime app) {
+        Router router = RouteAssembler.assemble(app);
         return new TestClient(app, router);
+    }
+
+    /** Creates the in-memory client from the stable runtime seam. */
+    public static TestClient of(AuraRuntime runtime) {
+        if (runtime == null) throw new IllegalArgumentException("runtime must not be null");
+        if (runtime instanceof AuraWebRuntime app) return of(app);
+        throw new IllegalArgumentException("TestClient requires a runtime with an Aura Web adapter");
+    }
+
+    /** Standard 1.0 verification entry point for explicitly composed applications. */
+    public static TestClient of(AuraApp app) {
+        if (app == null) throw new IllegalArgumentException("app must not be null");
+        return of(app.runtimeView());
     }
 
     public Request get(String path) { return new Request("GET", path); }
@@ -79,11 +74,39 @@ public class TestClient {
     public Request head(String path) { return new Request("HEAD", path); }
     public Request options(String path) { return new Request("OPTIONS", path); }
 
+    /** Returns the same route schema served by the real Web adapter, WebSocket endpoints included. */
+    public Map<String, Object> schema() {
+        return RouteContract.schema(app, compiled, webSocketContracts());
+    }
+
+    /** Returns the same OpenAPI document served by the real Web adapter. */
+    public Map<String, Object> openApi() {
+        return RouteContract.openApi(app, compiled, webSocketContracts());
+    }
+
+    private List<io.aura.contract.Route> webSocketContracts() {
+        return webSockets.stream().map(CompiledWsRoute::contract).toList();
+    }
+
+    /**
+     * The body Aura's HTTP adapter serves for its own endpoints, or null for anything the
+     * application's routes must answer. Admission -- token, OpenAPI switch -- is the guard
+     * chain's decision; reaching this point means the request was allowed.
+     */
+    private String builtinDocument(String method, String path) {
+        if (!"GET".equals(method)) return null;
+        if ("/__schema__".equals(path)) return JSON.toJSONString(schema());
+        if ("/openapi.json".equals(path)) return JSON.toJSONString(openApi());
+        return null;
+    }
+
     public class Request {
         private final String method;
         private String path;
-        private final Map<String, String> headers = new HashMap<>();
+        private final Map<String, String> headers = new LinkedHashMap<>();
         private String body;
+        private boolean secure;
+        private String remoteAddr = "127.0.0.1";
 
         Request(String method, String path) {
             this.method = method;
@@ -91,16 +114,43 @@ public class TestClient {
         }
 
         public Request header(String name, String value) {
+            headers.entrySet().removeIf(entry -> entry.getKey().equalsIgnoreCase(name));
             headers.put(name, value);
             return this;
         }
 
+        /** Marks the request as arriving over TLS, which is what enables the HSTS header. */
+        public Request secure(boolean value) {
+            this.secure = value;
+            return this;
+        }
+
+        /**
+         * Sets the direct TCP peer address, loopback by default. One value feeds both the
+         * guard chain and {@code ctx.ip()}, so a test that expects {@code X-Forwarded-For}
+         * to be honoured has to name its proxy here -- and a test that names an untrusted
+         * peer sees that peer everywhere, not only in the policy.
+         */
+        public Request remoteAddr(String ip) {
+            this.remoteAddr = ip;
+            return this;
+        }
+
         public Request query(String name, String value) {
+            if (name == null || value == null) throw new IllegalArgumentException("query name/value must not be null");
             String separator = path.contains("?") ? "&" : "?";
-            path = path + separator
-                    + URLEncoder.encode(name, StandardCharsets.UTF_8)
-                    + "="
-                    + URLEncoder.encode(value, StandardCharsets.UTF_8);
+            path = path + separator + encodeQuery(name) + "=" + encodeQuery(value);
+            return this;
+        }
+
+        /** Adds one request cookie using the same Cookie header format as a browser. */
+        public Request cookie(String name, String value) {
+            if (name == null || name.isBlank() || value == null) {
+                throw new IllegalArgumentException("cookie name must not be blank and value must not be null");
+            }
+            String current = headerValue("Cookie");
+            String entry = name + "=" + value;
+            header("Cookie", current == null || current.isBlank() ? entry : current + "; " + entry);
             return this;
         }
 
@@ -113,145 +163,144 @@ public class TestClient {
         public Response execute() {
             String routePath = path.contains("?") ? path.substring(0, path.indexOf('?')) : path;
             Map<String, String> queryParams = parseQueryString(path);
+            MockGuardedRequest guarded =
+                    new MockGuardedRequest(method, routePath, headers, secure, remoteAddr);
+            try {
+                GuardOutcome outcome = guards.evaluate(guarded);
+                if (!outcome.proceed()) return guardResponse(guarded, outcome);
+                return handle(guarded, routePath, queryParams);
+            } finally {
+                guarded.complete();
+            }
+        }
 
-            // OpenAPI endpoint (dev-only)
-            if ("GET".equals(method) && "/openapi.json".equals(routePath) && app.openapi() && "dev".equals(app.env())) {
-                return new Response(200, OpenApiGenerator.generate(compiled, app),
-                        Map.of("Content-Type", "application/json"));
+        private Response handle(MockGuardedRequest guarded, String routePath,
+                                Map<String, String> queryParams) {
+            long maxBody = app.maxBodySize();
+            if (maxBody > 0 && body != null
+                    && body.getBytes(StandardCharsets.UTF_8).length > maxBody) {
+                MockContext errorCtx = new MockContext(Map.of(), queryParams, headers, body, app,
+                        routePath, guarded.peerIp(), method);
+                ExceptionResolver.apply(app, new RequestBodyTooLargeException(
+                        "Request body exceeds maximum size"), errorCtx);
+                return response(guarded, errorCtx, errorCtx.responseBody);
             }
 
-            // Schema endpoint (dev or explicitly enabled)
-            if ("GET".equals(method) && "/__schema__".equals(routePath) && ("dev".equals(app.env()) || app.schemaEnabled())) {
-                return new Response(200, buildSchema(),
-                        Map.of("Content-Type", "application/json"));
+            String builtin = builtinDocument(method, routePath);
+            if (builtin != null) {
+                Map<String, String> headers = new LinkedHashMap<>(guarded.responseHeaders());
+                headers.put("Content-Type", "application/json; charset=utf-8");
+                headers.put("Cache-Control", "no-store");
+                return new Response(200, builtin, headers);
             }
 
-            // Global rate limit check
-            if (rateLimiter != null && app.rateLimitMax() > 0) {
-                String clientIp = extractClientIp(headers);
-                if (!rateLimiter.allow(clientIp, app.rateLimitMax(), (int) app.rateLimitWindow().toSeconds())) {
-                    long retryAfter = app.rateLimitWindow().toSeconds();
-                    return new Response(429,
-                            "{\"error\":\"Rate limit exceeded\",\"retryAfter\":" + retryAfter + "}",
-                            Map.of("Retry-After", String.valueOf(retryAfter)));
+            SnapshotScope snapshotScope = Snapshot.currentOrNull();
+            boolean snapshotBound = false;
+            if (snapshotScope == null && SnapshotRecorder.shouldCapture(app)) {
+                snapshotScope = SnapshotScope.capture();
+                Snapshot.bind(snapshotScope);
+                snapshotBound = true;
+            }
+            final SnapshotScope activeSnapshotScope = snapshotScope;
+
+            try {
+                for (var route : compiled) {
+                    if (!route.method().equals(method)) continue;
+                    Map<String, String> params = route.match(routePath);
+                    if (params == null) continue;
+
+                    var mockCtx = new MockContext(params, queryParams, headers, body, app, routePath,
+                            guarded.peerIp(), method);
+                    final Exception[] failure = new Exception[1];
+                    RouteExecutor.execute(route, mockCtx, (e, c) -> {
+                        failure[0] = e;
+                        handleException(e, (MockContext) c);
+                    });
+                    if (failure[0] != null && activeSnapshotScope != null && activeSnapshotScope.mode() == SnapshotScope.Mode.CAPTURE) {
+                        SnapshotRecorder.of(app).record(failure[0], route, mockCtx, method, routePath,
+                                queryParams, headers, body, activeSnapshotScope);
+                    }
+                    return response(guarded, mockCtx, mockCtx.responseBody);
                 }
-            }
 
-            for (var route : compiled) {
-                if (!route.method().equals(method)) continue;
-                Map<String, String> params = route.match(routePath);
-                if (params == null) continue;
-
-                // Per-method @RateLimit check
-                if (rateLimiter != null && route.handler() instanceof MethodRefHandler mh && mh.resolvedMethod() != null) {
-                    io.aura.annotation.RateLimit rl = mh.resolvedMethod().getAnnotation(io.aura.annotation.RateLimit.class);
-                    if (rl != null) {
-                        String clientIp = extractClientIp(headers);
-                        String key = clientIp + ":" + mh.resolvedMethod().getDeclaringClass().getSimpleName() + "." + mh.resolvedMethod().getName();
-                        if (!rateLimiter.allow(key, rl.value(), rl.window())) {
-                            return new Response(429,
-                                    "{\"error\":\"Rate limit exceeded\",\"retryAfter\":" + rl.window() + "}",
-                                    Map.of("Retry-After", String.valueOf(rl.window())));
+                // HEAD auto-fallback: use GET handler, suppress body
+                if ("HEAD".equals(method)) {
+                    for (var route : compiled) {
+                        if (!"GET".equals(route.method())) continue;
+                        Map<String, String> params = route.match(routePath);
+                        if (params == null) continue;
+                        var mockCtx = new MockContext(params, queryParams, headers, body, app, routePath,
+                            guarded.peerIp(), method);
+                        final Exception[] failure = new Exception[1];
+                        RouteExecutor.execute(route, mockCtx, (e, c) -> {
+                            failure[0] = e;
+                            handleException(e, (MockContext) c);
+                        });
+                        if (failure[0] != null && activeSnapshotScope != null && activeSnapshotScope.mode() == SnapshotScope.Mode.CAPTURE) {
+                            SnapshotRecorder.of(app).record(failure[0], route, mockCtx, method, routePath,
+                                    queryParams, headers, body, activeSnapshotScope);
                         }
+                        return response(guarded, mockCtx, null);
                     }
                 }
 
-                var mockCtx = new MockContext(params, queryParams, headers, body, app, routePath);
-                RouteExecutor.execute(route, mockCtx, (e, c) -> handleException(e, (MockContext) c));
-                return new Response(mockCtx.status == 0 ? 200 : mockCtx.status, mockCtx.responseBody, mockCtx.responseHeaders());
-            }
-
-            // HEAD auto-fallback: use GET handler, suppress body
-            if ("HEAD".equals(method)) {
-                for (var route : compiled) {
-                    if (!"GET".equals(route.method())) continue;
-                    Map<String, String> params = route.match(routePath);
-                    if (params == null) continue;
-                    var mockCtx = new MockContext(params, queryParams, headers, body, app, routePath);
-                    RouteExecutor.execute(route, mockCtx, (e, c) -> handleException(e, (MockContext) c));
-                    return new Response(mockCtx.status == 0 ? 200 : mockCtx.status, null, mockCtx.responseHeaders());
+                Map<String, String> responseHeaders = new LinkedHashMap<>(guarded.responseHeaders());
+                if (app.devMode()) {
+                    responseHeaders.put("Content-Type", "application/json");
+                    return new Response(404, buildRouteDiagnostic(method, routePath), responseHeaders);
                 }
+                return new Response(404, "Not Found", responseHeaders);
+            } finally {
+                if (snapshotBound) Snapshot.clear();
             }
+        }
 
-            if (Aura.isDevMode()) {
-                String diagnostic = buildRouteDiagnostic(method, routePath);
-                return new Response(404, diagnostic, Map.of("Content-Type", "application/json"));
+        /** Guard-set headers such as security and CORS headers come first; a handler may override. */
+        private Response response(MockGuardedRequest guarded, MockContext ctx, String body) {
+            Map<String, String> merged = new LinkedHashMap<>(guarded.responseHeaders());
+            merged.putAll(ctx.responseHeaders());
+            return new Response(ctx.status == 0 ? 200 : ctx.status, body, merged, ctx.responseCookies());
+        }
+
+        private Response guardResponse(MockGuardedRequest guarded, GuardOutcome outcome) {
+            Map<String, String> merged = new LinkedHashMap<>(guarded.responseHeaders());
+            if (outcome.body() != null) {
+                merged.putIfAbsent("Content-Type", "application/json; charset=utf-8");
             }
-            return new Response(404, "Not Found", Map.of());
+            return new Response(outcome.status(), outcome.body(), merged);
         }
 
         @SuppressWarnings({"unchecked", "rawtypes"})
         private void handleException(Exception e, MockContext ctx) {
-            Throwable cause = e instanceof java.lang.reflect.InvocationTargetException ? e.getCause() : e;
-            if (cause == null) cause = e;
-            if (cause instanceof Error err) throw err;
-            for (var entry : app.exceptionHandlers().entrySet()) {
-                if (entry.getKey().isAssignableFrom(cause.getClass())) {
-                    try {
-                        ((BaseExceptionHandler) entry.getValue()).handle((Exception) cause, ctx);
-                    } catch (Exception inner) {
-                        if (ctx.status == 0) ctx.status = 500;
-                    }
-                    notifySnapshotHandler(cause, ctx);
-                    return;
-                }
-            }
-            if (cause instanceof io.aura.NotFoundException) {
-                ctx.status = 404;
-                ctx.responseBody = JSON.toJSONString(Map.of("error", cause.getMessage(), "code", "NOT_FOUND"));
-                notifySnapshotHandler(cause, ctx);
-                return;
-            }
-            if (cause instanceof io.aura.Validate.ValidationException ve && !ve.errors().isEmpty()) {
-                ctx.status = 400;
-                ctx.responseBody = JSON.toJSONString(Map.of(
-                        "error", "Validation failed",
-                        "errors", ve.errors().stream()
-                                .map(fe -> Map.of("field", fe.field(), "message", fe.message()))
-                                .toList()));
-                notifySnapshotHandler(cause, ctx);
-                return;
-            }
-            if (cause instanceof IllegalArgumentException || cause instanceof io.aura.Validate.ValidationException) {
-                ctx.status = 400;
-                ctx.responseBody = JSON.toJSONString(Map.of("error",
-                        cause.getMessage() != null ? cause.getMessage() : "Bad Request"));
-                notifySnapshotHandler(cause, ctx);
-                return;
-            }
-            if (ctx.status == 0) ctx.status = 500;
-            if ("dev".equals(app.env())) {
-                ctx.responseBody = JSON.toJSONString(Map.of("error",
-                        cause.getMessage() != null ? cause.getMessage() : cause.getClass().getSimpleName()));
-            } else {
-                ctx.responseBody = JSON.toJSONString(Map.of("error", "Internal Server Error"));
-            }
-            notifySnapshotHandler(cause, ctx);
-        }
-
-        private void notifySnapshotHandler(Throwable cause, MockContext ctx) {
-            var handler = app.exceptionSnapshotHandler();
-            if (handler == null) return;
-            try {
-                io.aura.ExceptionSnapshot snapshot = ctx.buildSnapshot(cause, 0);
-                handler.accept((Exception) cause, snapshot);
-            } catch (Exception ignored) {}
+            ExceptionResolver.apply(app, e, ctx);
         }
 
         private static Map<String, String> parseQueryString(String path) {
-            Map<String, String> params = new HashMap<>();
+            Map<String, String> params = new LinkedHashMap<>();
             int idx = path.indexOf('?');
             if (idx < 0) return params;
             String qs = path.substring(idx + 1);
             for (String pair : qs.split("&")) {
                 String[] kv = pair.split("=", 2);
-                if (kv.length == 2) params.put(
-                        URLDecoder.decode(kv[0], StandardCharsets.UTF_8),
-                        URLDecoder.decode(kv[1], StandardCharsets.UTF_8));
-                else if (kv.length == 1) params.put(
-                        URLDecoder.decode(kv[0], StandardCharsets.UTF_8), "");
+                if (kv.length == 2) params.putIfAbsent(decodeQuery(kv[0]), decodeQuery(kv[1]));
+                else if (kv.length == 1 && !kv[0].isEmpty()) params.putIfAbsent(decodeQuery(kv[0]), "");
             }
             return params;
+        }
+
+        private static String encodeQuery(String value) {
+            return URLEncoder.encode(value, StandardCharsets.UTF_8);
+        }
+
+        private static String decodeQuery(String value) {
+            return URLDecoder.decode(value, StandardCharsets.UTF_8);
+        }
+
+        private String headerValue(String name) {
+            for (var entry : headers.entrySet()) {
+                if (entry.getKey().equalsIgnoreCase(name)) return entry.getValue();
+            }
+            return null;
         }
 
         public Response expect(int statusCode) {
@@ -261,20 +310,6 @@ public class TestClient {
                         + " body: " + resp.body());
             }
             return resp;
-        }
-
-        private String buildSchema() {
-            java.util.List<Map<String, Object>> routes = new java.util.ArrayList<>();
-            for (var cr : compiled) {
-                Map<String, Object> entry = new java.util.LinkedHashMap<>();
-                entry.put("method", cr.method());
-                entry.put("path", cr.rawPath());
-                routes.add(entry);
-            }
-            Map<String, Object> schema = new java.util.LinkedHashMap<>();
-            schema.put("name", app.prop("app.name") != null ? app.prop("app.name") : "Aura App");
-            schema.put("routes", routes);
-            return JSON.toJSONString(schema);
         }
 
         private String buildRouteDiagnostic(String method, String path) {
@@ -297,16 +332,6 @@ public class TestClient {
             if (hint != null) body.put("hint", "Did you mean: " + hint + "?");
             body.put("registered", registered);
             return JSON.toJSONString(body);
-        }
-
-        private String extractClientIp(Map<String, String> headers) {
-            if (app.trustProxy()) {
-                String xff = headers.get("X-Forwarded-For");
-                if (xff != null && !xff.isBlank()) {
-                    return xff.split(",")[0].trim();
-                }
-            }
-            return "127.0.0.1";
         }
 
         private static int levenshtein(String a, String b) {
@@ -337,13 +362,14 @@ public class TestClient {
 
     public static class TestSession {
         private final TestClient client;
-        private final Map<String, String> defaultHeaders = new HashMap<>();
+        private final Map<String, String> defaultHeaders = new LinkedHashMap<>();
 
         TestSession(TestClient client) {
             this.client = client;
         }
 
         public TestSession header(String name, String value) {
+            defaultHeaders.entrySet().removeIf(entry -> entry.getKey().equalsIgnoreCase(name));
             defaultHeaders.put(name, value);
             return this;
         }
@@ -380,17 +406,30 @@ public class TestClient {
         private final int status;
         private final String body;
         private final Map<String, String> headers;
+        private final List<String> setCookies;
 
         Response(int status, String body, Map<String, String> headers) {
+            this(status, body, headers, List.of());
+        }
+
+        Response(int status, String body, Map<String, String> headers, List<String> setCookies) {
             this.status = status;
             this.body = body;
             this.headers = headers != null ? headers : Map.of();
+            this.setCookies = setCookies == null ? List.of() : List.copyOf(setCookies);
         }
 
         public int status() { return status; }
         public String body() { return body; }
+        /** All Set-Cookie values emitted by the handler, in response order. */
+        public List<String> setCookies() { return setCookies; }
 
-        public String header(String name) { return headers.get(name); }
+        public String header(String name) {
+            for (var entry : headers.entrySet()) {
+                if (entry.getKey().equalsIgnoreCase(name)) return entry.getValue();
+            }
+            return null;
+        }
 
         public <T> T json(Class<T> type) {
             return JSON.parseObject(body, type);
@@ -408,7 +447,7 @@ public class TestClient {
         }
 
         public Response expectHeader(String name, String value) {
-            String actual = headers.get(name);
+            String actual = header(name);
             if (!java.util.Objects.equals(value, actual)) {
                 throw new AssertionError("Expected header '" + name + "' to be '" + value + "' but got '" + actual + "'");
             }

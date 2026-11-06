@@ -1,6 +1,6 @@
 package io.aura.web;
 
-import io.aura.Aura;
+import io.aura.AuraConfig;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.*;
@@ -9,25 +9,25 @@ class GzipConfigTest {
 
     @Test
     void gzip_defaultDisabled() {
-        Aura app = Aura.create();
-        assertThat(app.gzip()).isFalse();
+        AuraConfig config = new AuraConfig();
+        assertThat(config.gzip()).isFalse();
     }
 
     @Test
     void gzip_enabled() {
-        Aura app = Aura.create().gzip(true);
-        assertThat(app.gzip()).isTrue();
+        AuraConfig config = new AuraConfig().gzip(true);
+        assertThat(config.gzip()).isTrue();
     }
 
     @Test
     void gzipMinSize_default1024() {
-        Aura app = Aura.create();
-        assertThat(app.gzipMinSize()).isEqualTo(1024);
+        AuraConfig config = new AuraConfig();
+        assertThat(config.gzipMinSize()).isEqualTo(1024);
     }
 
     @Test
     void gzipMinSize_custom() {
-        Aura app = Aura.create().gzipMinSize(512);
-        assertThat(app.gzipMinSize()).isEqualTo(512);
+        AuraConfig config = new AuraConfig().gzipMinSize(512);
+        assertThat(config.gzipMinSize()).isEqualTo(512);
     }
 }

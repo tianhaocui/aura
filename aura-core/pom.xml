@@ -7,13 +7,21 @@
     <parent>
         <groupId>io.github.tianhaocui</groupId>
         <artifactId>aura-parent</artifactId>
-        <version>0.6.2</version>
+        <version>1.0.0</version>
     </parent>
 
     <artifactId>aura-core</artifactId>
     <name>aura-core</name>
+    <properties>
+        <jacoco.line.minimum>0.65</jacoco.line.minimum>
+        <jacoco.branch.minimum>0.50</jacoco.branch.minimum>
+    </properties>
 
     <dependencies>
+        <dependency>
+            <groupId>io.github.tianhaocui</groupId>
+            <artifactId>aura-contract</artifactId>
+        </dependency>
         <dependency>
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-api</artifactId>
@@ -32,6 +40,11 @@
         <dependency>
             <groupId>org.assertj</groupId>
             <artifactId>assertj-core</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.tngtech.archunit</groupId>
+            <artifactId>archunit-junit5</artifactId>
             <scope>test</scope>
         </dependency>
     </dependencies>

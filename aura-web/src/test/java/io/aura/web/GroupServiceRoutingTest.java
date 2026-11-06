@@ -1,5 +1,6 @@
 package io.aura.web;
 
+import io.aura.port.BaseRouter;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -8,19 +9,13 @@ import static org.assertj.core.api.Assertions.*;
 
 class GroupServiceRoutingTest {
 
-    static class UserService {
-        public String get(int id) { return "user-" + id; }
-        public List<String> list() { return List.of("a", "b"); }
-    }
-
     @Test
-    void group_supportsServiceMethodRouting() {
+    void group_supportsExplicitRoutes() {
         Router router = new Router();
-        UserService svc = new UserService();
 
         router.group("/api", api -> {
-            api.get("/user/{id}", svc, "get");
-            api.get("/user", svc, "list");
+            api.get("/user/{id}", ctx -> ctx.text("user"));
+            api.get("/user", ctx -> ctx.json(List.of("a", "b")));
         });
 
         assertThat(router.groups).hasSize(1);
@@ -32,11 +27,10 @@ class GroupServiceRoutingTest {
     @Test
     void group_inheritsBeforeHandlers() {
         Router router = new Router();
-        UserService svc = new UserService();
 
         router.group("/api", api -> {
             api.before(ctx -> {});
-            api.get("/user/{id}", svc, "get");
+            api.get("/user/{id}", ctx -> ctx.text("user"));
         });
 
         BaseRouter sub = router.groups.get(0).router();
@@ -45,17 +39,16 @@ class GroupServiceRoutingTest {
     }
 
     @Test
-    void group_compilesWithServiceMethodRoutes() {
+    void group_compilesWithExplicitRoutes() {
         Router router = new Router();
-        UserService svc = new UserService();
 
         router.group("/api", api -> {
-            api.get("/user/{id}", svc, "get");
+            api.get("/user/{id}", ctx -> ctx.text("user"));
         });
 
         List<CompiledRoute> routes = UndertowStarter.compileRoutes(router);
         assertThat(routes).hasSize(1);
         assertThat(routes.get(0).rawPath()).isEqualTo("/api/user/{id}");
-        assertThat(routes.get(0).handler()).isInstanceOf(MethodRefHandler.class);
+        assertThat(routes.get(0).handler()).isNotNull();
     }
 }

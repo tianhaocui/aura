@@ -1,30 +1,256 @@
 name: CI
 
 on:
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: 'Why this release-readiness run is being requested'
+        required: false
+        default: 'manual readiness verification'
   pull_request:
     branches: [master]
   push:
     branches: [master]
+  schedule:
+    - cron: '17 3 * * 1'
+
+run-name: >-
+  Aura 1.0 readiness${{ github.event_name == 'workflow_dispatch' && format(' — {0}', inputs.reason) || '' }}
+
+concurrency:
+  group: aura-1.0-readiness-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        java: [17, 23]
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: 17
+          java-version: ${{ matrix.java }}
           cache: maven
+
+      - name: Install ripgrep
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ripgrep
 
       - name: Test + Coverage Check
         run: mvn verify --batch-mode --fail-at-end
 
+      - name: Module and Documentation Contract
+        run: bash scripts/verify-aura-contracts.sh
+
+      - name: AI Golden Evaluation
+        if: matrix.java == 17
+        run: bash scripts/verify-ai-evals.sh
+
+      - name: BOM, Starter, and Archetype Smoke
+        if: matrix.java == 17
+        run: bash scripts/verify-maven-archetype.sh
+
+      - name: Release Artifact Shape
+        if: matrix.java == 17
+        run: bash scripts/verify-release-artifacts.sh
+
+      - name: Release GPG Signatures
+        if: matrix.java == 17
+        run: bash scripts/verify-release-signatures.sh
+
+      - name: Archive Release Checksums
+        if: matrix.java == 17
+        uses: actions/upload-artifact@v4
+        with:
+          name: aura-1.0-release-checksums
+          path: target/aura-release-checksums.sha256
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Aggregate SBOM
+        if: matrix.java == 17
+        run: bash scripts/verify-sbom.sh
+
+      - name: Archive Release SBOM
+        if: matrix.java == 17
+        uses: actions/upload-artifact@v4
+        with:
+          name: aura-1.0-sbom
+          path: target/aura-sbom.json
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Public API Baseline
+        if: matrix.java == 17
+        run: bash scripts/verify-public-api.sh
+
+      - name: Archive Public API Change Report
+        if: always() && matrix.java == 17
+        uses: actions/upload-artifact@v4
+        with:
+          name: aura-1.0-public-api-report
+          path: target/aura-public-api-report.json
+          if-no-files-found: ignore
+          retention-days: 90
+
+      - name: Canonical Documentation Code
+        if: matrix.java == 17
+        run: bash scripts/verify-docs-code.sh
+
       - name: Upload Coverage Report
-        if: always()
+        if: always() && matrix.java == 17
         uses: actions/upload-artifact@v4
         with:
           name: coverage-report
           path: '**/target/site/jacoco/'
           retention-days: 7
+
+  dependency-review:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Reject newly introduced vulnerable dependencies
+        uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: high
+
+  mcp-npm:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Verify MCP npm package and stdio contract
+        run: node scripts/verify-mcp-npm.mjs
+
+  deployment-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+      - name: Install ripgrep
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ripgrep
+      - uses: helm/kind-action@a1b0e391336a6ee6713a0583f8c6240d70863de3 # v1.12.0
+        with:
+          version: 'v0.26.0'
+          kubectl_version: 'v1.31.4'
+          cluster_name: aura-smoke
+          wait: 120s
+      - name: Build and run generated Docker and Kubernetes deployment
+        env:
+          AURA_KIND_CLUSTER: aura-smoke
+        run: bash scripts/verify-deployment.sh
+
+  minimum-maven:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Install ripgrep
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ripgrep
+      - name: Install Maven 3.8.6
+        run: |
+          curl --fail --silent --show-error --location \
+            https://archive.apache.org/dist/maven/maven-3/3.8.6/binaries/apache-maven-3.8.6-bin.tar.gz \
+            --output "$RUNNER_TEMP/apache-maven.tar.gz"
+          echo 'f790857f3b1f90ae8d16281f902c689e4f136ebe584aba45e4b1fa66c80cba826d3e0e52fdd04ed44b4c66f6d3fe3584a057c26dfcac544a60b301e6d0f91c26  '"$RUNNER_TEMP/apache-maven.tar.gz" | sha512sum --check
+          tar -xzf "$RUNNER_TEMP/apache-maven.tar.gz" -C "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/apache-maven-3.8.6/bin" >> "$GITHUB_PATH"
+      - name: Verify minimum Maven toolchain
+        run: |
+          mvn --version | tee "$RUNNER_TEMP/maven-version.txt"
+          rg -q 'Apache Maven 3\.8\.6' "$RUNNER_TEMP/maven-version.txt"
+          mvn --batch-mode --fail-at-end verify
+          bash scripts/verify-aura-contracts.sh
+          bash scripts/verify-docs-code.sh
+
+  database-migrations:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: aura
+          POSTGRES_PASSWORD: aura
+          POSTGRES_DB: aura
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U aura -d aura"
+          --health-interval=5s --health-timeout=5s --health-retries=20
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: aura
+          MYSQL_USER: aura
+          MYSQL_PASSWORD: aura
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -u aura -paura"
+          --health-interval=5s --health-timeout=5s --health-retries=30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+      - name: Flyway and Liquibase against PostgreSQL
+        env:
+          AURA_MIGRATION_JDBC_URL: jdbc:postgresql://127.0.0.1:5432/aura
+          AURA_MIGRATION_JDBC_USER: aura
+          AURA_MIGRATION_JDBC_PASSWORD: aura
+        run: >-
+          mvn --batch-mode --fail-at-end -q
+          -pl aura-db-migration-flyway,aura-db-migration-liquibase -am
+          -Dtest=FlywayExternalDatabaseTest,LiquibaseExternalDatabaseTest
+          -Dsurefire.failIfNoSpecifiedTests=false test
+      - name: Flyway and Liquibase against MySQL
+        env:
+          AURA_MIGRATION_JDBC_URL: jdbc:mysql://127.0.0.1:3306/aura?useSSL=false&allowPublicKeyRetrieval=true
+          AURA_MIGRATION_JDBC_USER: aura
+          AURA_MIGRATION_JDBC_PASSWORD: aura
+        run: >-
+          mvn --batch-mode --fail-at-end -q
+          -pl aura-db-migration-flyway,aura-db-migration-liquibase -am
+          -Dtest=FlywayExternalDatabaseTest,LiquibaseExternalDatabaseTest
+          -Dsurefire.failIfNoSpecifiedTests=false test
+
+  osv-full-scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Full OSV dependency scan
+        uses: google/osv-scanner-action/osv-scanner-action@v2.0.2
+        with:
+          scan-args: |-
+            --recursive
+            ./

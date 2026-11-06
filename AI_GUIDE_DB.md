@@ -39,14 +39,8 @@ int total = db.table("user").where("active", true).count();
 db.table("user").where("status", "inactive").delete();
 db.table("user").where("id", 1).update(Row.of("user").set("name", "new"));
 
-// findOneOrThrow — throws NotFoundException (→ 404) if null
-db.table("user").where("id", id).findOneOrThrow();                  // "Not found: user"
-db.table("user").where("id", id).findOneOrThrow("User not found");  // custom message
-
 // Shortcuts
 db.findById("user", id);
-db.findByIdOrThrow("user", id);                    // throws NotFoundException if null
-db.findByIdOrThrow("user", "uuid", id);            // custom primary key column
 db.findWhere("user", "active = ?", true);
 db.deleteById("user", id);
 ```
@@ -55,9 +49,10 @@ db.deleteById("user", id);
 
 ```java
 // Null/blank params auto-skipped — no if/else needed
-String sql = "SELECT * FROM user #where(name, '=', name) #and(age, '>', age) #orderBy(created)";
+String sql = "SELECT * FROM user #where(name, '=', name) #and(age, '>', age)";
 db.findDynamic(sql, filterMap);                        // List<Row>
-db.paginateDynamic(sql, filterMap, pageNum, pageSize); // Page<Row>
+db.paginateDynamic(sql, filterMap, PaginationOrder.by("created DESC", "id ASC"),
+        pageNum, pageSize, TotalStrategy.EXACT);       // Page<Row>
 
 // Directives: #where(field, op, paramKey) #and(...) #or(...) #orderBy(field1, field2)
 // filterMap = Map.of("name", "tom", "age", 18) → WHERE name = ? AND age > ?
@@ -112,9 +107,21 @@ db.updateDynamic("rides", Map.of("title", "New Title", "status", "published"), "
 int page     = ctx.pageNum();   // ?page= (default 1, min 1)
 int pageSize = ctx.pageSize();  // ?pageSize= (default 20, max 500)
 
-Page<Row> page = db.table("user").where("active", true).paginate(ctx.pageNum(), ctx.pageSize());
-// Use ctx.json(page) — serializes as {list, pageNum, pageSize, total, totalPages, hasNext}
+Page<Row> page = db.table("user")
+    .where("active", true)
+    .orderBy("created_at DESC", "id ASC") // unique tie-breaker is required
+    .paginate(ctx.pageNum(), ctx.pageSize(), TotalStrategy.EXACT);
+
+// Skip COUNT(*) on hot paths. Aura fetches one extra row to determine hasNext.
+Page<Row> fast = db.table("user")
+    .orderBy("id ASC")
+    .paginate(ctx.pageNum(), ctx.pageSize(), TotalStrategy.NONE);
+fast.total().isEmpty();       // total was intentionally not queried
+fast.totalPages().isEmpty();
 ```
+
+For raw joins, order by an unqualified projected alias. Example:
+`SELECT u.id AS user_id, ...` with `PaginationOrder.by("user_id ASC")`.
 
 ## Transactions
 
@@ -131,6 +138,12 @@ db.transaction(() -> {
 // Independent (REQUIRES_NEW) — new thread, commits independently
 // WARNING: ThreadLocal state NOT inherited
 db.transactionIndependent(() -> db.execute(auditSql, args));
+
+// Cancellable and time-bounded independent work. Pass the token to DB calls.
+db.transactionIndependent(Duration.ofSeconds(2), ctx.cancellationToken(), token ->
+        db.executeCancellable(auditSql, token, args));
+
+ExecutorMetrics txMetrics = Db.independentTransactionMetrics();
 
 // Manual control
 try (var tx = db.beginTransaction()) {
@@ -185,8 +198,22 @@ db.find("SELECT * FROM user WHERE id IN (" + Db.in(ids) + ")", ids.toArray());
 ```java
 Db main = Db.create("main", "jdbc:mysql://host/main", user, pass);
 Db log  = Db.create("log", "jdbc:mysql://host/log", user, pass);
-app.register("main", main).register("log", log);
-Db logDb = app.getBean("log", Db.class);
+
+public final class DatabasesModule implements AuraModule {
+    public ModuleMetadata descriptor() {
+        return ModuleMetadata.of("databases", "1.0.0").provides("db.main", "db.log");
+    }
+    public void install(ModuleContext context) {
+        context.register("main", main);
+        context.register("log", log);
+    }
+    public void stop(ModuleContext context) {
+        main.close();
+        log.close();
+    }
+}
+
+Db logDb = context.require("log", Db.class); // from a dependent business module
 
 // Custom DataSource (full HikariCP control — pool size, timeout, driver-specific props)
 HikariConfig config = new HikariConfig();
@@ -207,16 +234,16 @@ ctx.json(db.table("user").select("id, name, status").where("id", id).findOne());
 // Use Query.paginate() instead of manual LIMIT/OFFSET
 Page<Row> page = db.table("rides")
     .where("user_id", userId)
-    .orderBy("created_at DESC")
+    .orderBy("created_at DESC", "id ASC")
     .paginate(ctx.pageNum(), ctx.pageSize());
 
 // Use Query.delete() instead of raw SQL DELETE
 db.table("tournaments").where("id", id).delete();
 
-// Use group + before for scoped auth
-r.group("/api", api -> {
-    api.before(ctx -> jwt.requireAuth(ctx));
-    api.get("/rides", rideService, "list");
-});
-r.post("/auth/login", authService, "login"); // outside = no auth
+// Route-scoped auth is declared on the Route, not in hand-written middleware.
+context.route(Route.of("GET", "/api/rides",
+        (BaseHandler) ctx -> ctx.json(rideService.list()))
+        .requireAuth("rides.read"));
+context.route(Route.of("POST", "/auth/login",
+        (BaseHandler) ctx -> ctx.json(authService.login(ctx))));
 ```
