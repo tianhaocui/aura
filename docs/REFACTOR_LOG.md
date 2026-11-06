@@ -779,10 +779,14 @@ wildcard bind succeeded. The class now configures `port(0)` and reads the
 OS-assigned port back from the started adapter (`AuraApp.boundPort()`), so there
 is no number to lose; the allowlist handler itself was never at fault.
 
-`scripts/verify-public-api.sh` needs `jq`, which is not installed here. The
-regenerated baseline came from the script's own generation half (its first 141
-lines, `jq` dropped from the tool check); the classification half still needs
-`jq` locally or in CI.
+`scripts/verify-public-api.sh` used to stop at its `jq` check on this machine.
+`jq` is installed now, so the script runs end to end: the regenerated baseline
+and the classification half agree, and CI runs the same script on every push.
+
+GitHub Actions, not this machine, is the evidence for the CI-side gates. Run
+`42145583090` -- a `pull_request` run of CI on `52e45df` -- reported success for
+`test (17)`, `test (23)`, `minimum-maven`, `database-migrations`,
+`osv-full-scan`, `mcp-npm`, `deployment-smoke` and `dependency-review`.
 
 ## Still open
 
@@ -808,9 +812,11 @@ lines, `jq` dropped from the tool check); the classification half still needs
 - `scripts/verify-public-api.sh` needs `jq`, which this machine does not have, so
   step 5 of `verify-local-readiness.sh` stops there. The baseline this branch was
   checked against came from a `jq`-free copy of the generator, not from that
-  script. The remaining unchecked boxes in `docs/1.0-readiness.md` are CI-side
-  runs (Docker/kind, service-container migrations, OSV, SBOM, signing, Central
-  Portal) that need a push to `origin`, not code.
+  script. The GitHub-hosted boxes in `docs/1.0-readiness.md` -- Docker/kind,
+  service-container migrations, Java 17/23, OSV, docs, API, SBOM, minimum-Maven
+  and `dependency-review` -- were filled by Actions run `42145583090` on commit
+  `52e45df`. Only signing and Central Portal boxes remain, and those need
+  credentials and release authority, not a run.
 
 ## Suggested review split
 
