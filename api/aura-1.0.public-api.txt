@@ -1,3 +1,39 @@
+### aura-contract:io.aura.contract.AccessPolicy$Authenticated
+public final class io.aura.contract.AccessPolicy$Authenticated extends java.lang.Record implements io.aura.contract.AccessPolicy {
+  public io.aura.contract.AccessPolicy$Authenticated();
+  public boolean authenticated();
+  public java.lang.String permissionId();
+  public final java.lang.String toString();
+  public final int hashCode();
+  public final boolean equals(java.lang.Object);
+}
+### aura-contract:io.aura.contract.AccessPolicy$Permission
+public final class io.aura.contract.AccessPolicy$Permission extends java.lang.Record implements io.aura.contract.AccessPolicy {
+  public io.aura.contract.AccessPolicy$Permission(java.lang.String);
+  public boolean authenticated();
+  public java.lang.String permissionId();
+  public final java.lang.String toString();
+  public final int hashCode();
+  public final boolean equals(java.lang.Object);
+  public java.lang.String id();
+}
+### aura-contract:io.aura.contract.AccessPolicy$Public
+public final class io.aura.contract.AccessPolicy$Public extends java.lang.Record implements io.aura.contract.AccessPolicy {
+  public io.aura.contract.AccessPolicy$Public();
+  public boolean authenticated();
+  public java.lang.String permissionId();
+  public final java.lang.String toString();
+  public final int hashCode();
+  public final boolean equals(java.lang.Object);
+}
+### aura-contract:io.aura.contract.AccessPolicy
+public interface io.aura.contract.AccessPolicy {
+  public static final io.aura.contract.AccessPolicy PUBLIC;
+  public static final io.aura.contract.AccessPolicy AUTHENTICATED;
+  public static io.aura.contract.AccessPolicy permission(java.lang.String);
+  public abstract boolean authenticated();
+  public abstract java.lang.String permissionId();
+}
 ### aura-contract:io.aura.contract.ApiParameter
 public final class io.aura.contract.ApiParameter extends java.lang.Record {
   public io.aura.contract.ApiParameter(java.lang.String, java.lang.String, java.lang.String, boolean, java.lang.String);
@@ -26,6 +62,27 @@ public final class io.aura.contract.CancellationToken {
   public void detach();
   public io.aura.contract.CancellationToken$Registration onCancel(java.lang.Runnable);
   public void throwIfCancelled();
+}
+### aura-contract:io.aura.contract.Capability
+public final class io.aura.contract.Capability {
+  public static io.aura.contract.CapabilityDefinition of(java.lang.String, java.lang.String, io.aura.contract.AccessPolicy, io.aura.contract.CapabilityHandler, io.aura.contract.ApiParameter...);
+  public static io.aura.contract.CapabilityDefinition of(java.lang.String, java.lang.String, io.aura.contract.AccessPolicy, io.aura.contract.CapabilityHandler, java.util.List<io.aura.contract.ApiParameter>);
+}
+### aura-contract:io.aura.contract.CapabilityDefinition
+public final class io.aura.contract.CapabilityDefinition extends java.lang.Record {
+  public io.aura.contract.CapabilityDefinition(java.lang.String, java.lang.String, java.util.List<io.aura.contract.ApiParameter>, io.aura.contract.AccessPolicy, io.aura.contract.CapabilityHandler);
+  public final java.lang.String toString();
+  public final int hashCode();
+  public final boolean equals(java.lang.Object);
+  public java.lang.String name();
+  public java.lang.String description();
+  public java.util.List<io.aura.contract.ApiParameter> params();
+  public io.aura.contract.AccessPolicy access();
+  public io.aura.contract.CapabilityHandler handler();
+}
+### aura-contract:io.aura.contract.CapabilityHandler
+public interface io.aura.contract.CapabilityHandler {
+  public abstract java.lang.Object handle(java.util.Map<java.lang.String, java.lang.Object>, java.lang.String) throws java.lang.Exception;
 }
 ### aura-contract:io.aura.contract.CapabilityLookup
 public interface io.aura.contract.CapabilityLookup {
@@ -625,6 +682,23 @@ public interface io.aura.annotation.Size extends java.lang.annotation.Annotation
   public abstract int min();
   public abstract int max();
   public abstract java.lang.String message();
+}
+### aura-core:io.aura.capability.CapabilityModule
+public final class io.aura.capability.CapabilityModule implements io.aura.AuraModule {
+  public static io.aura.capability.CapabilityModule create();
+  public static io.aura.capability.CapabilityModule create(io.aura.capability.CapabilityRegistry);
+  public io.aura.contract.ModuleMetadata descriptor();
+  public void install(io.aura.ModuleContext);
+  public io.aura.capability.CapabilityRegistry registry();
+}
+### aura-core:io.aura.capability.CapabilityRegistry
+public final class io.aura.capability.CapabilityRegistry {
+  public io.aura.capability.CapabilityRegistry();
+  public io.aura.capability.CapabilityRegistry register(io.aura.contract.CapabilityDefinition);
+  public boolean contains(java.lang.String);
+  public io.aura.contract.CapabilityDefinition get(java.lang.String);
+  public java.util.Map<java.lang.String, io.aura.contract.CapabilityDefinition> snapshot();
+  public java.util.Map<java.lang.String, java.lang.Object> schema();
 }
 ### aura-core:io.aura.port.AdmissionDecision
 public final class io.aura.port.AdmissionDecision implements java.lang.AutoCloseable {
@@ -1694,6 +1768,7 @@ public class io.aura.mcp.McpBridge {
 ### aura-mcp:io.aura.mcp.McpContext
 public class io.aura.mcp.McpContext {
   public java.lang.String userId();
+  public java.util.Map<java.lang.String, java.lang.Object> args();
   public java.lang.Object get(java.lang.String);
   public java.lang.String getString(java.lang.String);
   public int getInt(java.lang.String);
@@ -1808,6 +1883,8 @@ public final class io.aura.mcp.McpResourceLink extends java.lang.Record implemen
 public class io.aura.mcp.McpRouter implements io.aura.contract.McpRouterSpec {
   public io.aura.mcp.McpRouter();
   public io.aura.mcp.McpRouter tool(io.aura.contract.Route);
+  public io.aura.mcp.McpRouter tool(io.aura.contract.CapabilityDefinition);
+  public java.util.Map<java.lang.String, java.lang.String> capabilityBindings();
   public java.util.List<io.aura.mcp.McpTool> tools();
   public io.aura.mcp.McpRouter resource(java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String);
   public io.aura.mcp.McpRouter prompt(java.lang.String, java.lang.String, java.lang.String, java.lang.String...);
@@ -1925,6 +2002,7 @@ public final class io.aura.mcp.McpTool extends java.lang.Record {
 ### aura-mcp:io.aura.mcp.McpUtil
 public final class io.aura.mcp.McpUtil {
   public static java.lang.String buildToolName(java.lang.String, java.lang.String);
+  public static java.lang.String capabilityToolName(java.lang.String);
   public static java.lang.String jsonType(java.lang.String);
   public static boolean isWireName(java.lang.String);
   public static boolean rendersWithoutSchema(java.lang.String);
@@ -2342,6 +2420,13 @@ public final class io.aura.ai.StructuredOutputSpec {
 ### aura-workflow:io.aura.workflow.AuraWorkflow
 public interface io.aura.workflow.AuraWorkflow<C> extends io.aura.workflow.Workflow<C> {
 }
+### aura-workflow:io.aura.workflow.CancellationPolicy
+public final class io.aura.workflow.CancellationPolicy extends java.lang.Enum<io.aura.workflow.CancellationPolicy> {
+  public static final io.aura.workflow.CancellationPolicy PRESERVE_COMPLETED;
+  public static final io.aura.workflow.CancellationPolicy COMPENSATE_ON_CANCEL;
+  public static io.aura.workflow.CancellationPolicy[] values();
+  public static io.aura.workflow.CancellationPolicy valueOf(java.lang.String);
+}
 ### aura-workflow:io.aura.workflow.DurableWorkflowExecutionStore
 public interface io.aura.workflow.DurableWorkflowExecutionStore extends io.aura.workflow.WorkflowExecutionStore {
   public abstract void saveLeased(io.aura.workflow.WorkflowExecutionSnapshot, io.aura.workflow.WorkflowLease);
@@ -2448,6 +2533,7 @@ public interface io.aura.workflow.WorkflowCompensation<C> {
 }
 ### aura-workflow:io.aura.workflow.WorkflowDefinition$Builder
 public final class io.aura.workflow.WorkflowDefinition$Builder<C> {
+  public io.aura.workflow.WorkflowDefinition$Builder<C> cancellationPolicy(io.aura.workflow.CancellationPolicy);
   public io.aura.workflow.WorkflowDefinition$Builder<C> step(java.lang.String, io.aura.workflow.WorkflowStep<C>);
   public io.aura.workflow.WorkflowDefinition$Builder<C> step(java.lang.String, io.aura.workflow.WorkflowStep<C>, io.aura.workflow.StepMode);
   public io.aura.workflow.WorkflowDefinition$Builder<C> step(java.lang.String, io.aura.workflow.WorkflowStep<C>, io.aura.workflow.StepMode, io.aura.workflow.RetryPolicy);

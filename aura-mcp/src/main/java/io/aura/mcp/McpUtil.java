@@ -15,6 +15,16 @@ public final class McpUtil {
         return method.toLowerCase() + "_" + name;
     }
 
+    /**
+     * The one mapping from a stable capability name to an MCP tool name: dots become
+     * underscores ({@code order.query} → {@code order_query}). The rule lives here, next to
+     * {@link #buildToolName}, so any projection or reconciliation recomputes the same answer
+     * instead of inventing a second naming scheme. The capability name itself never changes.
+     */
+    public static String capabilityToolName(String capabilityName) {
+        return capabilityName.replace('.', '_');
+    }
+
     public static String jsonType(String javaType) {
         if (javaType == null) return "string";
         String scalar = ScalarType.jsonTypeName(javaType);

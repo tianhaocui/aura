@@ -22,6 +22,9 @@ public class McpContext {
     /** Returns the identity resolved by the transport, or null for anonymous calls. */
     public String userId() { return userId; }
 
+    /** The arguments as delivered by the transport; empty when the call carried none. */
+    public Map<String, Object> args() { return args == null ? Map.of() : args; }
+
     public Object get(String name) {
         return args.get(name);
     }

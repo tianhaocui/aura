@@ -1,7 +1,11 @@
 package io.aura.mcp;
 
+import io.aura.contract.AccessPolicy;
+import io.aura.contract.ApiParameter;
+import io.aura.contract.CapabilityDefinition;
 import io.aura.contract.ContractException;
 import io.aura.contract.McpRouterSpec;
+import io.aura.contract.Route;
 
 import java.util.*;
 import java.util.function.BiPredicate;
@@ -11,6 +15,7 @@ public class McpRouter implements McpRouterSpec {
     private final List<McpTool> tools = new java.util.concurrent.CopyOnWriteArrayList<>();
     private final Map<String, McpResource> resources = Collections.synchronizedMap(new LinkedHashMap<>());
     private final Map<String, McpPrompt> prompts = Collections.synchronizedMap(new LinkedHashMap<>());
+    private final Map<String, String> capabilityTools = Collections.synchronizedMap(new LinkedHashMap<>());
 
     /**
      * The only way to publish a tool: a shared {@link io.aura.contract.Route} contract whose
@@ -36,18 +41,66 @@ public class McpRouter implements McpRouterSpec {
                             + " whose handler is an McpHandler — use route.withHandler(mcpHandler)"
                             + " to project a route served in another transport.");
         }
-        List<McpParam> params;
-        try {
-            params = route.params().stream().map(McpParam::new).toList();
-        } catch (ContractException e) {
-            // McpParam owns the rule so the bridge cannot skip it; the door that knows which
-            // route broke it is the one that can say so.
-            throw new ContractException(e.error().code(), e.error().message()
-                    + " (tool " + route.method() + " " + route.path() + ")");
-        }
+        List<McpParam> params = params(route.params(), "tool " + route.method() + " " + route.path());
         register(new McpTool(McpUtil.buildToolName(route.method(), route.path()),
                 route.description(), params, handler, route.permission(), route.authenticated()));
         return this;
+    }
+
+    /**
+     * Projects an explicitly declared {@link CapabilityDefinition} into an MCP tool. The
+     * definition stays authoritative: parameters pass through the same {@link McpParam} gate
+     * and the same {@link McpUtil#inputSchema} funnel as a route tool, the access policy maps
+     * through {@link AccessPolicy} onto the same authenticated/permission facts, and invocation
+     * goes through the same fail-closed {@link #invoke} chain — a capability gets no second
+     * execution path and no second schema.
+     *
+     * <p>The tool name is the published mapping {@link McpUtil#capabilityToolName}, never the
+     * route-derived {@link McpUtil#buildToolName}: protocol naming must not become part of the
+     * business identity. The mapping is queryable via {@link #capabilityBindings()} and each
+     * projected tool advertises {@code x-aura-capability} in {@code tools/list}, so the
+     * projection can be reconciled against the definition instead of trusted.
+     */
+    public McpRouter tool(CapabilityDefinition capability) {
+        Objects.requireNonNull(capability, "capability");
+        String toolName = McpUtil.capabilityToolName(capability.name());
+        if (tools.stream().anyMatch(tool -> tool.name().equals(toolName))) {
+            throw new ContractException("AURA_MCP_TOOL_DUPLICATE",
+                    "MCP tool name '" + toolName + "' (capability " + capability.name()
+                            + ") is already registered");
+        }
+        McpHandler handler = ctx -> capability.handler().handle(ctx.args(), ctx.userId());
+        // A capability with no HTTP endpoint is still a Route — a Route nobody serves. The
+        // contract carries the declared facts; this door only adds the protocol projection.
+        Route route = Route.of("POST", "/capabilities/" + capability.name(), handler)
+                .withParams(capability.params())
+                .describedAs(capability.description());
+        AccessPolicy access = capability.access();
+        if (access instanceof AccessPolicy.Permission permission) {
+            route = route.requireAuth(permission.id());
+        } else if (access.authenticated()) {
+            route = route.requireAuth();
+        }
+        register(new McpTool(toolName, route.description(),
+                params(route.params(), "capability " + capability.name()), handler,
+                route.permission(), route.authenticated()));
+        capabilityTools.put(toolName, capability.name());
+        return this;
+    }
+
+    /** The published tool-name → capability-name mapping of every capability projection. */
+    public Map<String, String> capabilityBindings() {
+        return Map.copyOf(capabilityTools);
+    }
+
+    private static List<McpParam> params(List<ApiParameter> declared, String owner) {
+        try {
+            return declared.stream().map(McpParam::new).toList();
+        } catch (ContractException e) {
+            // McpParam owns the rule so no door can skip it; the door that knows which
+            // capability or route broke it is the one that can say so.
+            throw new ContractException(e.error().code(), e.error().message() + " (" + owner + ")");
+        }
     }
 
     public List<McpTool> tools() {
@@ -133,6 +186,8 @@ public class McpRouter implements McpRouterSpec {
             if (tool.description() != null) entry.put("description", tool.description());
             if (tool.authenticated()) entry.put("x-aura-authenticated", true);
             if (tool.permission() != null) entry.put("x-aura-permission", tool.permission());
+            String capability = capabilityTools.get(tool.name());
+            if (capability != null) entry.put("x-aura-capability", capability);
             entry.put("inputSchema", McpUtil.inputSchema(tool.params()));
             toolList.add(entry);
         }
