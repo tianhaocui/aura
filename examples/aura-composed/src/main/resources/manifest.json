@@ -1,0 +1,63 @@
+{
+  "schemaVersion": 1,
+  "modules": [
+    {
+      "id": "capability",
+      "version": "1.0.0",
+      "requires": [],
+      "provides": [
+        "capability.registry"
+      ]
+    },
+    {
+      "id": "orders",
+      "version": "1.0.0",
+      "requires": [
+        {
+          "id": "capability"
+        },
+        {
+          "id": "workflow"
+        }
+      ],
+      "provides": [
+        "orders.api",
+        "orders.workflow"
+      ]
+    },
+    {
+      "id": "workflow",
+      "version": "1.0.0",
+      "requires": [],
+      "provides": [
+        "workflow.registry",
+        "workflow.runtime"
+      ]
+    }
+  ],
+  "capabilities": [
+    {
+      "name": "order.query",
+      "description": "Query an order by id",
+      "access": {
+        "policy": "PERMISSION",
+        "permission": "order.read"
+      },
+      "params": [
+        {
+          "name": "id",
+          "type": "long",
+          "source": "query",
+          "required": true,
+          "description": "Order ID"
+        }
+      ]
+    }
+  ],
+  "permissions": [
+    {
+      "id": "order.read",
+      "description": "Read orders"
+    }
+  ]
+}

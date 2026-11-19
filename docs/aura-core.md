@@ -144,6 +144,83 @@ The equivalent environment variables include `AURA_TLS_KEYSTORE_PATH`,
 proxy entries must be numeric IP addresses or CIDRs; hostnames and malformed
 prefixes fail configuration validation.
 
+## Application Manifest
+
+`io.aura.manifest.ApplicationManifest` is the static-declaration projection of an
+application: what an agent can read from the repository must match what the runtime
+actually installs. It aggregates three independent declaration sources and nothing else:
+
+| Section | Source |
+|---|---|
+| `modules` | ModuleGraph descriptors (`id`, `version`, `requires`, `provides`), sorted by id |
+| `capabilities` | `CapabilityRegistry.schema()` — the verbatim `CapabilityDefinition` declarations, sorted by name; empty when the capability module is not installed |
+| `permissions` | `PermissionRegistry.snapshot()`, sorted by id |
+
+Runtime state — ports, sessions, users, approvals, invocation records — never enters the
+manifest. `generate(AuraRuntime)` works after `app.prepare()`, with no listener opened.
+
+Rendering is deterministic: Gson with `disableHtmlEscaping()` and `setPrettyPrinting()`,
+no `serializeNulls` (absent metadata stays absent), fixed field order, no timestamps.
+Regenerating from the same definitions is byte-identical.
+
+`reconcile(declared, actual)` returns a list of differences, not a boolean: missing or
+undeclared entries in both directions, plus per-field comparison of versions,
+requirements, parameters, schemas, and access policies. JSON numbers parse as doubles,
+so numeric comparison is normalized by value — `1` and `1.0` are equal.
+
+<!-- aura:compile name=core-manifest-reconcile -->
+```java
+package docs.example;
+
+import io.aura.AuraApp;
+import io.aura.manifest.ApplicationManifest;
+
+import java.util.List;
+import java.util.Map;
+
+public final class ManifestReconciliation {
+    private ManifestReconciliation() { }
+
+    public static String render(AuraApp app) {
+        app.prepare();
+        return ApplicationManifest.toJson(ApplicationManifest.generate(app.runtimeView()));
+    }
+
+    public static List<String> drift(AuraApp app, String committedJson) {
+        app.prepare();
+        Map<String, Object> declared = ApplicationManifest.fromJson(committedJson);
+        Map<String, Object> actual = ApplicationManifest.generate(app.runtimeView());
+        return ApplicationManifest.reconcile(declared, actual);
+    }
+}
+```
+
+### Opt-in runtime check
+
+Set `aura.manifest` to a classpath resource path to make `prepare()` and `start()`
+reconcile the installed application against that committed declaration after modules
+install:
+
+```properties
+aura.manifest=manifest.json
+```
+
+Unset, behavior is unchanged. Set, the check is fail-closed: a missing or unparseable
+resource fails with `AURA_MANIFEST_UNREADABLE`, any difference fails with
+`AURA_MANIFEST_DRIFT` carrying the located differences, and both roll back through the
+existing start-failure path. The check is read-only and idempotent.
+
+The declaration side must be independent: commit the manifest from the source
+composition (build time), never from a runtime-generated value compared against itself.
+The reference harness in `examples/aura-composed` shows the full loop — a committed
+`manifest.json`, `ManifestDriftTest` reconciling it after `prepare()`, deliberate
+regeneration with `AURA_MANIFEST_UPDATE=true`, and `scripts/verify-manifest.sh` proving
+in CI that the drift test actually ran.
+
+The MCP projection has its own reconciliation, `McpRouter.reconcileCapabilities(...)`
+in `aura-mcp`, which uses the capability definitions themselves as the declaration side
+so the tool facts cannot silently drift from what the source declares.
+
 ## Cancellation
 
 `CancellationToken` is the shared cooperative cancellation contract. A request

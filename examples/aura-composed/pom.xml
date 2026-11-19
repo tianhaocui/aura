@@ -24,6 +24,11 @@
             <artifactId>aura-workflow</artifactId>
         </dependency>
         <dependency>
+            <groupId>io.github.tianhaocui</groupId>
+            <artifactId>aura-mcp</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter</artifactId>
             <scope>test</scope>

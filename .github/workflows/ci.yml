@@ -51,6 +51,10 @@ jobs:
         if: matrix.java == 17
         run: bash scripts/verify-ai-evals.sh
 
+      - name: Application Manifest Drift
+        if: matrix.java == 17
+        run: bash scripts/verify-manifest.sh
+
       - name: BOM, Starter, and Archetype Smoke
         if: matrix.java == 17
         run: bash scripts/verify-maven-archetype.sh

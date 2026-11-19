@@ -132,6 +132,13 @@ test -x "$repo_root/scripts/record-ai-eval.sh"
 test -f "$repo_root/examples/aura-composed/src/test/java/example/AiEvaluationResultsTest.java"
 rg -q 'example\.AiEvaluationResultsTest' "$repo_root/scripts/verify-ai-evals.sh"
 rg -q 'aura\.eval\.results=true' "$repo_root/scripts/verify-ai-evals.sh"
+# The committed manifest is a declaration, not evidence: the drift test has to reconcile it
+# against the composition, and CI has to run the gate that proves the test executed.
+test -x "$repo_root/scripts/verify-manifest.sh"
+test -f "$repo_root/examples/aura-composed/src/main/resources/manifest.json"
+test -f "$repo_root/examples/aura-composed/src/test/java/example/ManifestDriftTest.java"
+rg -q 'example\.ManifestDriftTest' "$repo_root/scripts/verify-manifest.sh"
+rg -q 'bash scripts/verify-manifest\.sh' "$repo_root/.github/workflows/ci.yml"
 # A record is only repeatable if the thing that produced it is in the repository. The runner has to
 # take the endpoint, the model, and both context recipes as arguments: a default baked in here would
 # let a run inherit its recipe from the machine instead of from the evidence file.
@@ -399,8 +406,11 @@ for deleted_surface in McpToolBuilder McpEnumValue; do
     exit 1
   fi
 done
-if [ "$(rg -c 'public McpRouter tool\(' "$repo_root/aura-mcp/src/main/java/io/aura/mcp/McpRouter.java")" != "1" ]; then
-  echo "McpRouter grew a second tool registration door" >&2
+# Two sanctioned tool registration doors: the route door, and the capability projection
+# door that registers a CapabilityDefinition through the same explicit funnel. A third
+# door would be a new declaration path that skips the shared parameter funnel.
+if [ "$(rg -c 'public McpRouter tool\(' "$repo_root/aura-mcp/src/main/java/io/aura/mcp/McpRouter.java")" != "2" ]; then
+  echo "McpRouter grew a third tool registration door" >&2
   exit 1
 fi
 if ! rg -q 'AURA_MCP_HANDLER_MISMATCH' \

@@ -3,6 +3,11 @@ package example;
 import io.aura.AuraApp;
 import io.aura.AuraModule;
 import io.aura.ModuleContext;
+import io.aura.capability.CapabilityModule;
+import io.aura.capability.CapabilityRegistry;
+import io.aura.contract.AccessPolicy;
+import io.aura.contract.ApiParameter;
+import io.aura.contract.Capability;
 import io.aura.contract.ModuleMetadata;
 import io.aura.contract.Route;
 import io.aura.port.BaseHandler;
@@ -19,18 +24,25 @@ public final class ComposedApp {
     public static AuraApp create() {
         return AuraApp.create()
                 .use(WorkflowModule.create())
+                .use(CapabilityModule.create())
                 .use(new OrderModule());
     }
 
     public static final class OrderModule implements AuraModule {
         @Override public ModuleMetadata descriptor() {
             return ModuleMetadata.of("orders", "1.0.0")
-                    .requires("workflow")
+                    .requires("workflow").requires("capability")
                     .provides("orders.api", "orders.workflow");
         }
 
         @Override public void install(ModuleContext context) {
             WorkflowRegistry workflows = context.require(WorkflowRegistry.class);
+            context.permissions().register("order.read", "Read orders");
+            context.require(CapabilityRegistry.class).register(Capability.of(
+                    "order.query", "Query an order by id",
+                    AccessPolicy.permission("order.read"),
+                    (args, userId) -> "order-" + args.get("id"),
+                    new ApiParameter("id", "long", "query", true, "Order ID")));
             context.route(Route.of("GET", "/orders",
                     (BaseHandler) request -> request.json(List.of("ready"))));
             workflows.register(Workflow.<List<String>>builder("orders.fulfillment")

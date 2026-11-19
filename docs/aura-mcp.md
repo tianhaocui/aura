@@ -269,7 +269,53 @@ mcp.tool(Route.of("GET", "/order/detail", (McpHandler) ctx -> {
 | `getBoolean(name)` | Get param as boolean (false if absent) |
 | `getEnum(name, type)` | Bind the sent name with `Enum.valueOf` |
 | `get(name)` | Get the raw value |
+| `args()` | All arguments as a map (empty when absent) |
 | `userId()` | Identity resolved by the transport, null when anonymous |
+
+### Capability Projection
+
+A `CapabilityDefinition` registered in the core `CapabilityRegistry` is projected into
+MCP explicitly, one capability at a time, with `router.tool(definition)`. The business
+name is never the protocol name: the tool name is the explicit mapping
+`McpUtil.capabilityToolName(name)` (`.` becomes `_`), `tools/list` carries
+`x-aura-capability` back to the business name, and `router.capabilityBindings()` makes
+the mapping queryable. Parameters flow through the same schema funnel as routes — the
+declared `ApiParameter.schema` wins — and the tri-state `AccessPolicy` maps to the same
+fail-closed authentication and permission checks.
+
+Projection is a per-capability composition decision: a capability that is not projected
+is not drift. What must not drift is a projection that misstates its definition.
+`router.reconcileCapabilities(registry)` recomputes the expected tool facts from each
+bound `CapabilityDefinition` through the same funnel and compares them against the
+router's actual tools and schema; any difference fails with
+`AURA_MCP_PROJECTION_DRIFT` naming the tool and field.
+
+<!-- aura:compile name=mcp-capability-projection -->
+```java
+package docs.example;
+
+import io.aura.capability.CapabilityRegistry;
+import io.aura.contract.AccessPolicy;
+import io.aura.contract.ApiParameter;
+import io.aura.contract.Capability;
+import io.aura.mcp.McpRouter;
+
+public final class CapabilityProjection {
+    private CapabilityProjection() { }
+
+    public static McpRouter project(CapabilityRegistry registry) {
+        registry.register(Capability.of(
+                "order.query", "Query an order by id",
+                AccessPolicy.permission("order.read"),
+                (args, userId) -> "order-" + args.get("id"),
+                new ApiParameter("id", "long", "query", true, "Order ID")));
+        McpRouter router = new McpRouter();
+        registry.snapshot().values().forEach(router::tool);
+        router.reconcileCapabilities(registry);
+        return router;
+    }
+}
+```
 
 
 ## Deployment Modes
