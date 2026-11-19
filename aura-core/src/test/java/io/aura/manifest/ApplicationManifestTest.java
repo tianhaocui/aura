@@ -180,6 +180,40 @@ class ApplicationManifestTest {
         app.close();
     }
 
+    @Test
+    void aDuplicateDeclarationIsReportedInsteadOfTheLastOneWinning() {
+        AuraApp app = composedApp();
+        app.prepare();
+        Map<String, Object> declared = roundTrip(app);
+        Map<String, Object> actual = ApplicationManifest.generate(app.runtimeView());
+        // A second entry for the same name that matches the runtime would have made the first
+        // one silently irrelevant when byKey kept whichever copy put() saw last — the contract
+        // names the duplicate instead, whichever of the two is right.
+        capabilities(declared).add(new java.util.LinkedHashMap<>(capabilities(actual).get(0)));
+
+        assertThat(ApplicationManifest.reconcile(declared, actual))
+                .anySatisfy(difference -> assertThat(difference)
+                        .contains("capability 'order.query'").contains("declared twice"));
+        app.close();
+    }
+
+    @Test
+    void nullSidesAreNamedAsDifferencesInsteadOfThrowing() {
+        AuraApp app = composedApp();
+        app.prepare();
+        Map<String, Object> actual = ApplicationManifest.generate(app.runtimeView());
+
+        assertThat(ApplicationManifest.reconcile(null, actual))
+                .singleElement()
+                .isInstanceOfSatisfying(String.class, difference ->
+                        assertThat(difference).contains("declared side").contains("null"));
+        assertThat(ApplicationManifest.reconcile(roundTrip(app), null))
+                .singleElement()
+                .isInstanceOfSatisfying(String.class, difference ->
+                        assertThat(difference).contains("runtime side").contains("null"));
+        app.close();
+    }
+
     private static Map<String, Object> roundTrip(AuraApp app) {
         return ApplicationManifest.fromJson(
                 ApplicationManifest.toJson(ApplicationManifest.generate(app.runtimeView())));

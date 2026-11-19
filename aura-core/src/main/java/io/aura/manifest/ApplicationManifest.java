@@ -75,6 +75,16 @@ public final class ApplicationManifest {
     /** Every difference between the declared manifest and the runtime aggregation, by name and field path. */
     public static List<String> reconcile(Map<String, Object> declared, Map<String, Object> actual) {
         List<String> differences = new ArrayList<>();
+        if (declared == null || actual == null) {
+            // A malformed side is a named difference, not an NPE pointing at a stack frame.
+            if (declared == null) {
+                differences.add("manifest: the declared side is not an object: null");
+            }
+            if (actual == null) {
+                differences.add("manifest: the runtime side is not an object: null");
+            }
+            return differences;
+        }
         Set<String> keys = new LinkedHashSet<>(declared.keySet());
         keys.addAll(actual.keySet());
         for (String key : keys) {
@@ -155,6 +165,14 @@ public final class ApplicationManifest {
         for (Object entry : entries) {
             if (!(entry instanceof Map<?, ?> map) || !(map.get(keyField) instanceof String name)) {
                 differences.add(section + ": entry without a string '" + keyField + "': " + entry);
+                return null;
+            }
+            if (keyed.containsKey(name)) {
+                // A contract file that names an entry twice is ambiguous whichever one wins:
+                // the duplicate is reported by name and the section is not reconciled on the
+                // accident of which copy put() kept last.
+                differences.add(section + " '" + name + "': declared twice —"
+                        + " a manifest must name each entry once");
                 return null;
             }
             keyed.put(name, (Map<String, Object>) map);
