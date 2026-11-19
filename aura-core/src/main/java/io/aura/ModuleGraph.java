@@ -27,6 +27,13 @@ final class ModuleGraph {
                 throw new ModuleException("AURA_MODULE_DUPLICATE", descriptor.id(),
                         "Duplicate module id: " + descriptor.id());
             }
+            try {
+                SemVer.parse(descriptor.version());
+            } catch (IllegalArgumentException invalid) {
+                throw new ModuleException("AURA_MODULE_VERSION_INVALID", descriptor.id(),
+                        "Module " + descriptor.id() + " declares an invalid version: " + invalid.getMessage(),
+                        invalid);
+            }
         }
         List<AuraModule> sorted = new ArrayList<>();
         Set<String> visiting = new LinkedHashSet<>();
@@ -54,11 +61,21 @@ final class ModuleGraph {
                 throw new ModuleException("AURA_MODULE_DEPENDENCY_MISSING", id,
                         "Module " + id + " requires " + requirement.id());
             }
-            if (requirement.versionRange() != null
-                    && !versionMatches(descriptors.apply(dependency).version(), requirement.versionRange())) {
-                throw new ModuleException("AURA_MODULE_VERSION_MISMATCH", id,
-                        "Module " + id + " requires " + requirement.id() + " " + requirement.versionRange()
-                                + " but found " + descriptors.apply(dependency).version());
+            if (requirement.versionRange() != null) {
+                boolean matches;
+                try {
+                    matches = versionMatches(descriptors.apply(dependency).version(), requirement.versionRange());
+                } catch (IllegalArgumentException invalid) {
+                    throw new ModuleException("AURA_MODULE_VERSION_INVALID", id,
+                            "Module " + id + " requires " + requirement.id() + " " + requirement.versionRange()
+                                    + " but the version constraint could not be evaluated: " + invalid.getMessage(),
+                            invalid);
+                }
+                if (!matches) {
+                    throw new ModuleException("AURA_MODULE_VERSION_MISMATCH", id,
+                            "Module " + id + " requires " + requirement.id() + " " + requirement.versionRange()
+                                    + " but found " + descriptors.apply(dependency).version());
+                }
             }
             orderModule(dependency, byId, visiting, visited, sorted, descriptors);
         }
@@ -67,13 +84,22 @@ final class ModuleGraph {
         sorted.add(module);
     }
 
+    /**
+     * Matches a module version against a constraint. Supported forms: {@code *},
+     * {@code MAJOR.*}, {@code MAJOR.MINOR.*}, exact {@code X.Y.Z}, caret {@code ^X.Y.Z},
+     * tilde {@code ~X.Y.Z}, and bracket ranges such as {@code [1.0,2.0)}.
+     * Invalid versions or constraints throw {@link IllegalArgumentException} instead of
+     * silently degrading to {@code 0.0.0}.
+     */
     static boolean versionMatches(String version, String range) {
+        SemVer actual = SemVer.parse(version);
         if (range == null || range.isBlank() || "*".equals(range.trim())) return true;
         String wanted = range.trim();
-        SemVer actual = SemVer.parse(version);
         if (wanted.startsWith("[") || wanted.startsWith("(")) {
             int comma = wanted.indexOf(',');
-            if (comma < 1 || !wanted.endsWith("]") && !wanted.endsWith(")")) return false;
+            if (comma < 1 || !wanted.endsWith("]") && !wanted.endsWith(")")) {
+                throw new IllegalArgumentException("Invalid version range: " + range);
+            }
             String lower = wanted.substring(1, comma).trim();
             String upper = wanted.substring(comma + 1, wanted.length() - 1).trim();
             boolean lowerOk = lower.isEmpty() || actual.compareTo(SemVer.parse(lower))
@@ -93,10 +119,25 @@ final class ModuleGraph {
             SemVer lower = SemVer.parse(wanted.substring(1));
             return actual.compareTo(lower) >= 0 && actual.major == lower.major && actual.minor == lower.minor;
         }
-        if (wanted.endsWith(".*")) return actual.major == SemVer.parse(wanted.substring(0, wanted.length() - 2)).major;
+        if (wanted.endsWith(".*")) {
+            String prefix = wanted.substring(0, wanted.length() - 2);
+            String[] components = prefix.split("\\.", -1);
+            if (components.length > 2) {
+                throw new IllegalArgumentException("Invalid version range: " + range);
+            }
+            SemVer bound = SemVer.parse(prefix);
+            if (actual.major != bound.major) return false;
+            return components.length == 1 || actual.minor == bound.minor;
+        }
         return actual.compareTo(SemVer.parse(wanted)) == 0;
     }
 
+    /**
+     * Strict release-version parser: {@code MAJOR[.MINOR[.PATCH]]} with ASCII-digit
+     * components and no leading zeros. Omitted minor/patch default to zero so range
+     * bounds like {@code [1.0,2.0)} keep their meaning. Prerelease and build metadata
+     * are not supported and are rejected rather than silently stripped.
+     */
     private static final class SemVer implements Comparable<SemVer> {
         private final int major;
         private final int minor;
@@ -109,17 +150,33 @@ final class ModuleGraph {
         }
 
         private static SemVer parse(String value) {
-            if (value == null || value.isBlank()) return new SemVer(0, 0, 0);
-            String[] parts = value.trim().split("\\.");
-            return new SemVer(number(parts, 0), number(parts, 1), number(parts, 2));
+            if (value == null || value.isBlank()) {
+                throw new IllegalArgumentException("version must not be blank");
+            }
+            String[] parts = value.trim().split("\\.", -1);
+            if (parts.length > 3) {
+                throw new IllegalArgumentException(
+                        "Invalid version '" + value + "': expected MAJOR[.MINOR[.PATCH]]");
+            }
+            int[] numbers = new int[3];
+            for (int i = 0; i < parts.length; i++) {
+                numbers[i] = component(value, parts[i]);
+            }
+            return new SemVer(numbers[0], numbers[1], numbers[2]);
         }
 
-        private static int number(String[] parts, int index) {
-            if (index >= parts.length || parts[index].isBlank() || "x".equalsIgnoreCase(parts[index])) return 0;
-            String digits = parts[index].replaceAll("^([0-9]+).*$", "$1");
-            if (digits.isEmpty() || !digits.chars().allMatch(Character::isDigit)) return 0;
-            try { return Integer.parseInt(digits); }
-            catch (NumberFormatException ignored) { return 0; }
+        private static int component(String value, String part) {
+            if (part.isEmpty() || !part.chars().allMatch(c -> c >= '0' && c <= '9')
+                    || (part.length() > 1 && part.charAt(0) == '0')) {
+                throw new IllegalArgumentException("Invalid version '" + value
+                        + "': only numeric MAJOR[.MINOR[.PATCH]] release versions are supported");
+            }
+            try {
+                return Integer.parseInt(part);
+            } catch (NumberFormatException overflow) {
+                throw new IllegalArgumentException(
+                        "Invalid version '" + value + "': component out of range", overflow);
+            }
         }
 
         @Override public int compareTo(SemVer other) {

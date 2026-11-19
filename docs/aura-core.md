@@ -67,6 +67,29 @@ public final class OrdersModule implements AuraModule {
 external resources and `stop(...)` releases them. Dependencies are validated,
 version-checked, cycle-checked, and topologically ordered before installation.
 
+### Version constraints
+
+Module versions and range bounds are strict numeric release versions:
+`MAJOR[.MINOR[.PATCH]]`, no leading zeros, no prerelease or build metadata
+(`1.0.0-SNAPSHOT` and `1.0.0+build` are rejected, not stripped). Omitted
+minor/patch components default to zero, so `[1.0,2.0)` means `[1.0.0,2.0.0)`.
+Supported constraint forms:
+
+| Form | Meaning |
+| --- | --- |
+| `*` | any valid version |
+| `1.*` | major must be 1 |
+| `1.2.*` | major must be 1 and minor must be 2 |
+| `1.2.3` | exact match |
+| `^1.2.3` | semver caret compatibility |
+| `~1.4.0` | same major and minor, at least the given patch |
+| `[1.0,2.0)` | bracket range, `[`/`]` inclusive, `(`/`)` exclusive, open ends allowed |
+
+An invalid declared version or constraint fails startup with
+`ModuleException.code()` `AURA_MODULE_VERSION_INVALID`; a valid version outside
+the constraint fails with `AURA_MODULE_VERSION_MISMATCH`. Nothing silently
+degrades to `0.0.0`.
+
 ## Module Configuration
 
 Each module reads only `aura.<module-id>.*` values and binds them to a record:
