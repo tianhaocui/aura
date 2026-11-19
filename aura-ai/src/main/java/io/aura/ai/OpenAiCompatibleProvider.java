@@ -4,6 +4,7 @@ import com.alibaba.fastjson2.JSON;
 import io.aura.contract.CancellationToken;
 
 import java.io.BufferedReader;
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.net.URI;
@@ -116,17 +117,12 @@ public final class OpenAiCompatibleProvider implements AiProvider {
         StringBuilder content = new StringBuilder();
         Map<String, Object> usage = new LinkedHashMap<>();
         Map<Integer, StreamingToolCall> streamingToolCalls = new TreeMap<>();
-        long[] bytes = {0L};
         try (InputStream body = response.body();
-             BufferedReader reader = new BufferedReader(new InputStreamReader(body, StandardCharsets.UTF_8))) {
+             BufferedReader reader = new BufferedReader(new InputStreamReader(
+                     new LimitedInputStream(body, maxResponseBytes), StandardCharsets.UTF_8))) {
             String line;
             while ((line = reader.readLine()) != null) {
                 request.cancellationToken().throwIfCancelled();
-                bytes[0] += line.getBytes(StandardCharsets.UTF_8).length + 1L;
-                if (bytes[0] > maxResponseBytes) {
-                    throw new AiProviderException("AI_RESPONSE_TOO_LARGE", response.statusCode(),
-                            "AI streaming response exceeds configured limit");
-                }
                 if (!line.startsWith("data:")) continue;
                 String data = line.substring(5).trim();
                 if ("[DONE]".equals(data)) break;
@@ -141,6 +137,9 @@ public final class OpenAiCompatibleProvider implements AiProvider {
                     handler.onToken(token);
                 }
             }
+        } catch (ResponseLimitExceeded tooLarge) {
+            throw new AiProviderException("AI_RESPONSE_TOO_LARGE", response.statusCode(),
+                    "AI streaming response exceeds configured limit");
         }
         request.cancellationToken().throwIfCancelled();
         handler.onComplete(new AiResponse(content.toString(), model(request), usage, null,
@@ -354,6 +353,40 @@ public final class OpenAiCompatibleProvider implements AiProvider {
     private AiProviderException providerError(int status) {
         return new AiProviderException("AI_PROVIDER_HTTP_" + status, status,
                 "AI provider request failed with HTTP " + status);
+    }
+
+    /** Enforces the byte cap while reading so an unterminated line cannot be buffered past the limit. */
+    private static final class LimitedInputStream extends InputStream {
+        private final InputStream delegate;
+        private long remaining;
+
+        private LimitedInputStream(InputStream delegate, long limit) {
+            this.delegate = delegate;
+            this.remaining = limit;
+        }
+
+        @Override public int read() throws IOException {
+            int value = delegate.read();
+            if (value != -1) consume(1);
+            return value;
+        }
+
+        @Override public int read(byte[] buffer, int offset, int length) throws IOException {
+            int read = delegate.read(buffer, offset, length);
+            if (read > 0) consume(read);
+            return read;
+        }
+
+        private void consume(long count) throws ResponseLimitExceeded {
+            remaining -= count;
+            if (remaining < 0) throw new ResponseLimitExceeded();
+        }
+
+        @Override public void close() throws IOException { delegate.close(); }
+    }
+
+    private static final class ResponseLimitExceeded extends IOException {
+        private ResponseLimitExceeded() { }
     }
 
     private static String readLimited(InputStream input, int limit, CancellationToken token) throws Exception {

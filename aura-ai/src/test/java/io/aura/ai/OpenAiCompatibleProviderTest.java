@@ -5,13 +5,18 @@ import com.alibaba.fastjson2.JSONObject;
 import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.Test;
 
+import java.io.IOException;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -135,6 +140,110 @@ class OpenAiCompatibleProviderTest {
                         .followRedirects(java.net.http.HttpClient.Redirect.NORMAL).build(),
                 Duration.ofSeconds(2), 512))
                 .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void streamingRejectsAnOversizedSingleLineWithoutNewline() throws Exception {
+        HttpServer server = HttpServer.create(new InetSocketAddress(0), 0);
+        server.createContext("/long-line", exchange -> {
+            byte[] filler = new byte[64 * 1024];
+            Arrays.fill(filler, (byte) 'a');
+            exchange.getResponseHeaders().add("Content-Type", "text/event-stream");
+            exchange.sendResponseHeaders(200, 0);
+            try (OutputStream output = exchange.getResponseBody()) {
+                output.write("data: ".getBytes(StandardCharsets.UTF_8));
+                for (int i = 0; i < 8; i++) {
+                    output.write(filler);
+                    output.flush();
+                }
+            } catch (IOException expectedDisconnect) {
+                // the client must stop reading once the limit trips
+            } finally {
+                exchange.close();
+            }
+        });
+        server.start();
+        try {
+            OpenAiCompatibleProvider provider = new OpenAiCompatibleProvider(
+                    URI.create("http://localhost:" + server.getAddress().getPort() + "/long-line"),
+                    "", "default", java.net.http.HttpClient.newHttpClient(), Duration.ofSeconds(5), 1024);
+            assertThatThrownBy(() -> provider.stream(new AiRequest("flood"), token -> { }))
+                    .isInstanceOf(AiProviderException.class)
+                    .extracting("code").isEqualTo("AI_RESPONSE_TOO_LARGE");
+        } finally {
+            server.stop(0);
+        }
+    }
+
+    @Test
+    void streamingStopsReadingMidLineOnceTheLimitTrips() throws Exception {
+        long totalBytes = 16L * 1024 * 1024;
+        AtomicLong written = new AtomicLong();
+        AtomicReference<IOException> disconnect = new AtomicReference<>();
+        CountDownLatch serverDone = new CountDownLatch(1);
+        HttpServer server = HttpServer.create(new InetSocketAddress(0), 0);
+        server.createContext("/flood", exchange -> {
+            exchange.getResponseHeaders().add("Content-Type", "text/event-stream");
+            exchange.sendResponseHeaders(200, 0);
+            try (OutputStream output = exchange.getResponseBody()) {
+                byte[] chunk = new byte[64 * 1024];
+                Arrays.fill(chunk, (byte) 'a');
+                output.write("data: ".getBytes(StandardCharsets.UTF_8));
+                long remaining = totalBytes;
+                while (remaining > 0) {
+                    int count = (int) Math.min(chunk.length, remaining);
+                    output.write(chunk, 0, count);
+                    output.flush();
+                    written.addAndGet(count);
+                    remaining -= count;
+                }
+            } catch (IOException error) {
+                disconnect.set(error);
+            } finally {
+                serverDone.countDown();
+                exchange.close();
+            }
+        });
+        server.start();
+        try {
+            OpenAiCompatibleProvider provider = new OpenAiCompatibleProvider(
+                    URI.create("http://localhost:" + server.getAddress().getPort() + "/flood"),
+                    "", "default", java.net.http.HttpClient.newHttpClient(), Duration.ofSeconds(10), 1024);
+            assertThatThrownBy(() -> provider.stream(new AiRequest("flood"), token -> { }))
+                    .isInstanceOf(AiProviderException.class)
+                    .extracting("code").isEqualTo("AI_RESPONSE_TOO_LARGE");
+            assertThat(serverDone.await(10, TimeUnit.SECONDS)).isTrue();
+            assertThat(disconnect.get()).isNotNull();
+            assertThat(written.get()).isLessThan(totalBytes);
+        } finally {
+            server.stop(0);
+        }
+    }
+
+    @Test
+    void streamsASingleLineWithinTheLimitWithoutTrailingNewline() throws Exception {
+        HttpServer server = HttpServer.create(new InetSocketAddress(0), 0);
+        server.createContext("/single-line", exchange -> {
+            byte[] response = "data: {\"choices\":[{\"delta\":{\"content\":\"ok\"}}]}"
+                    .getBytes(StandardCharsets.UTF_8);
+            exchange.getResponseHeaders().add("Content-Type", "text/event-stream");
+            exchange.sendResponseHeaders(200, response.length);
+            try (OutputStream output = exchange.getResponseBody()) { output.write(response); }
+        });
+        server.start();
+        try {
+            OpenAiCompatibleProvider provider = new OpenAiCompatibleProvider(
+                    URI.create("http://localhost:" + server.getAddress().getPort() + "/single-line"),
+                    "", "default", java.net.http.HttpClient.newHttpClient(), Duration.ofSeconds(2), 512);
+            AtomicReference<AiResponse> completed = new AtomicReference<>();
+            provider.stream(new AiRequest("single"), new AiStreamHandler() {
+                @Override public void onToken(String token) { }
+                @Override public void onComplete(AiResponse response) { completed.set(response); }
+            });
+            assertThat(completed.get().content()).isEqualTo("ok");
+        } finally {
+            server.stop(0);
+        }
     }
 
     @Test

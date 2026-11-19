@@ -94,6 +94,7 @@ rates. Reported provider cost always takes precedence over the estimate.
 - `AiProvider` 负责具体 HTTP/API 协议；`AiClient` 负责统一超时、取消和同步/流式调用。
 - `AiRequest` 是不可变请求对象，参数、模型、预算和脱敏策略集中在一个 Builder 中。
 - 取消是协作式的；provider 应在网络读取和 token 回调之间检查 `request.cancellationToken()`。
+- `OpenAiCompatibleProvider` 的 `maxResponseBytes` 在读取过程中硬性生效：同步与流式路径都在字节到达时计数，超限立即以 `AI_RESPONSE_TOO_LARGE` 失败并关闭连接。没有换行符的超长 SSE 行也不会先被完整读入内存。
 - `StructuredOutput` 使用安全 JSON 解析，不执行 AutoType；业务校验通过 `parseAndValidate` 注入。
 - `ConversationStore`、`EmbeddingProvider` 和 `Retriever` 只定义扩展契约，不引入数据库、向量库或具体云厂商依赖。
 - `ConversationStore` 的 append/load 使用不可变 versioned snapshot；`InMemoryConversationStore` 提供有上限的参考实现。持久化适配器必须原子执行 bounds 和 expected-version 检查，不能把会话变成无界字符串列表。
