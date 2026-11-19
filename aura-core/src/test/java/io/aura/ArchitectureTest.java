@@ -77,6 +77,7 @@ public class ArchitectureTest {
     private static final String[] MECHANISM_LIBRARIES = {
             "io.undertow..",
             "com.alibaba.fastjson2..",
+            "com.google.gson..",
             "com.zaxxer.hikari..",
             "com.fasterxml.jackson..",
             "org.flywaydb..",
@@ -109,7 +110,25 @@ public class ArchitectureTest {
                     .resideInAnyPackage("io.aura", "io.aura.annotation..", "io.aura.snapshot..",
                             "io.aura.contract..", "io.aura.port..")
                     .should().dependOnClassesThat().resideInAnyPackage(MECHANISM_LIBRARIES)
-                    .because("Core stays on pure JDK + slf4j-api; framework deps live in mechanism modules only");
+                    .because("Core stays on pure JDK + slf4j-api; framework deps live in mechanism modules only"
+                            + " (io.aura.manifest is the single documented exception, guarded by its own rule)");
+
+    /**
+     * The one documented policy-layer exception: the application manifest is a core lifecycle
+     * concern ({@code app.prepare()} reconciles it), so its JSON lives in {@code io.aura.manifest}
+     * with Gson instead of forcing a mechanism module or a hand-rolled parser. The allowance is
+     * a positive whitelist — Gson plus the policy baseline, nothing else — so the exception
+     * cannot quietly grow into a second mechanism surface.
+     */
+    @ArchTest
+    static final ArchRule manifestIsTheSingleGsonException =
+            classes().that().resideInAPackage("io.aura.manifest..")
+                    .should().onlyDependOnClassesThat()
+                    .resideInAnyPackage("io.aura.manifest..", "io.aura", "io.aura.contract..",
+                            "io.aura.capability..", "java..", "javax..", "com.google.gson..",
+                            "org.slf4j..", "")
+                    .because("The application manifest is the only policy package allowed Gson,"
+                            + " and only alongside the JDK/core/contract baseline");
 
     /**
      * R3: {@code io.aura.contract} is the shared vocabulary — contract-free of everything

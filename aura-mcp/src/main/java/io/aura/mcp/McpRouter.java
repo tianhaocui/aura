@@ -93,6 +93,75 @@ public class McpRouter implements McpRouterSpec {
         return Map.copyOf(capabilityTools);
     }
 
+    /**
+     * Reconciles every capability projection against the authoritative definitions. The
+     * definition — not the manifest, not the projection — is the declaration side: expected
+     * facts are recomputed through the same funnel the projection used
+     * ({@link McpUtil#capabilityToolName}, {@link McpParam}, {@link McpUtil#inputSchema},
+     * {@link AccessPolicy}), so a projection that lost or altered a fact is named, not trusted.
+     *
+     * <p>A capability that was never projected is not drift: projection is a per-capability
+     * composition decision. Drift is a bound tool whose facts no longer match its definition,
+     * a binding whose capability or tool is gone, or a schema entry claiming a capability
+     * without a published binding.
+     */
+    public void reconcileCapabilities(io.aura.capability.CapabilityRegistry registry) {
+        Objects.requireNonNull(registry, "registry");
+        List<String> drift = new ArrayList<>();
+        Map<String, String> bindings = capabilityBindings();
+        for (Map.Entry<String, String> binding : bindings.entrySet()) {
+            String toolName = binding.getKey();
+            String capabilityName = binding.getValue();
+            McpTool tool = tools.stream().filter(t -> t.name().equals(toolName)).findFirst().orElse(null);
+            if (tool == null) {
+                drift.add("tool '" + toolName + "': bound to capability " + capabilityName + " but not registered");
+                continue;
+            }
+            CapabilityDefinition definition;
+            try {
+                definition = registry.get(capabilityName);
+            } catch (ContractException unknown) {
+                drift.add("tool '" + toolName + "': capability " + capabilityName + " is not registered");
+                continue;
+            }
+            if (!toolName.equals(McpUtil.capabilityToolName(definition.name()))) {
+                drift.add("tool '" + toolName + "': name does not match the published mapping of " + definition.name());
+            }
+            Map<String, Object> expectedSchema;
+            try {
+                expectedSchema = McpUtil.inputSchema(definition.params().stream().map(McpParam::new).toList());
+            } catch (ContractException invalid) {
+                drift.add("tool '" + toolName + "': capability " + capabilityName
+                        + " params cannot render: " + invalid.error().message());
+                continue;
+            }
+            if (!expectedSchema.equals(McpUtil.inputSchema(tool.params()))) {
+                drift.add("tool '" + toolName + "': inputSchema differs from capability " + capabilityName);
+            }
+            if (tool.authenticated() != definition.access().authenticated()) {
+                drift.add("tool '" + toolName + "': authenticated flag differs from capability " + capabilityName);
+            }
+            if (!Objects.equals(tool.permission(), definition.access().permissionId())) {
+                drift.add("tool '" + toolName + "': permission differs from capability " + capabilityName);
+            }
+            if (!Objects.equals(tool.description(), definition.description())) {
+                drift.add("tool '" + toolName + "': description differs from capability " + capabilityName);
+            }
+        }
+        for (Object entry : (List<?>) buildSchema().get("tools")) {
+            Map<?, ?> view = (Map<?, ?>) entry;
+            Object claimed = view.get("x-aura-capability");
+            if (claimed == null) continue;
+            String name = String.valueOf(view.get("name"));
+            if (!claimed.equals(bindings.get(name))) {
+                drift.add("tool '" + name + "': claims capability " + claimed + " without a published binding");
+            }
+        }
+        if (!drift.isEmpty()) {
+            throw new ContractException("AURA_MCP_PROJECTION_DRIFT", String.join("; ", drift));
+        }
+    }
+
     private static List<McpParam> params(List<ApiParameter> declared, String owner) {
         try {
             return declared.stream().map(McpParam::new).toList();

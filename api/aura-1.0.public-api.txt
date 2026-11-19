@@ -700,6 +700,14 @@ public final class io.aura.capability.CapabilityRegistry {
   public java.util.Map<java.lang.String, io.aura.contract.CapabilityDefinition> snapshot();
   public java.util.Map<java.lang.String, java.lang.Object> schema();
 }
+### aura-core:io.aura.manifest.ApplicationManifest
+public final class io.aura.manifest.ApplicationManifest {
+  public static final int SCHEMA_VERSION;
+  public static java.util.Map<java.lang.String, java.lang.Object> generate(io.aura.AuraRuntime);
+  public static java.lang.String toJson(java.util.Map<java.lang.String, java.lang.Object>);
+  public static java.util.Map<java.lang.String, java.lang.Object> fromJson(java.lang.String);
+  public static java.util.List<java.lang.String> reconcile(java.util.Map<java.lang.String, java.lang.Object>, java.util.Map<java.lang.String, java.lang.Object>);
+}
 ### aura-core:io.aura.port.AdmissionDecision
 public final class io.aura.port.AdmissionDecision implements java.lang.AutoCloseable {
   public static io.aura.port.AdmissionDecision allow();
@@ -1885,6 +1893,7 @@ public class io.aura.mcp.McpRouter implements io.aura.contract.McpRouterSpec {
   public io.aura.mcp.McpRouter tool(io.aura.contract.Route);
   public io.aura.mcp.McpRouter tool(io.aura.contract.CapabilityDefinition);
   public java.util.Map<java.lang.String, java.lang.String> capabilityBindings();
+  public void reconcileCapabilities(io.aura.capability.CapabilityRegistry);
   public java.util.List<io.aura.mcp.McpTool> tools();
   public io.aura.mcp.McpRouter resource(java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String);
   public io.aura.mcp.McpRouter prompt(java.lang.String, java.lang.String, java.lang.String, java.lang.String...);

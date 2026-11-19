@@ -1,10 +1,12 @@
 package io.aura;
 
+import io.aura.contract.ContractException;
 import io.aura.contract.McpRouterSpec;
 import io.aura.contract.ModuleMetadata;
 import io.aura.contract.PermissionRegistry;
 import io.aura.contract.Route;
 import io.aura.contract.RuntimeState;
+import io.aura.manifest.ApplicationManifest;
 import io.aura.snapshot.SnapshotOptions;
 import io.aura.port.BaseContext;
 import io.aura.port.BaseExceptionHandler;
@@ -167,6 +169,7 @@ final class ModularRuntime implements AuraWebRuntime {
         try {
             moduleManager.install(this::moduleContext, false,
                     moduleFailureCollector(rollbackFailures));
+            verifyManifest();
         } catch (RuntimeException | Error failure) {
             rethrowIfFatal(failure);
             failStart(failure, rollbackFailures);
@@ -175,6 +178,43 @@ final class ModularRuntime implements AuraWebRuntime {
             preparing = false;
         }
         completeRequestedStop();
+    }
+
+    /**
+     * Opt-in manifest reconciliation: with {@code aura.manifest} naming a classpath resource,
+     * the committed declaration must match what actually installed. Read-only and idempotent;
+     * drift aborts preparation/startup through the same rollback as a failed module install.
+     */
+    private void verifyManifest() {
+        String resource = prop("aura.manifest");
+        if (resource == null || resource.isBlank()) return;
+        String json;
+        try (java.io.InputStream stream = ModularRuntime.class.getClassLoader().getResourceAsStream(resource)) {
+            if (stream == null) {
+                throw new ContractException("AURA_MANIFEST_UNREADABLE",
+                        "Manifest resource not found on the classpath: " + resource);
+            }
+            json = new String(stream.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+        } catch (java.io.IOException failure) {
+            throw new ContractException("AURA_MANIFEST_UNREADABLE",
+                    "Manifest resource could not be read: " + resource);
+        }
+        Map<String, Object> declared;
+        try {
+            declared = ApplicationManifest.fromJson(json);
+        } catch (RuntimeException malformed) {
+            throw new ContractException("AURA_MANIFEST_UNREADABLE",
+                    "Manifest resource is not valid JSON: " + resource);
+        }
+        if (declared == null) {
+            throw new ContractException("AURA_MANIFEST_UNREADABLE",
+                    "Manifest resource is empty: " + resource);
+        }
+        List<String> differences = ApplicationManifest.reconcile(declared, ApplicationManifest.generate(this));
+        if (!differences.isEmpty()) {
+            throw new ContractException("AURA_MANIFEST_DRIFT",
+                    "Application manifest drift (" + resource + "): " + String.join("; ", differences));
+        }
     }
 
     @Override public synchronized void start(String[] args) {
@@ -245,6 +285,7 @@ final class ModularRuntime implements AuraWebRuntime {
         try {
             moduleManager.install(this::moduleContext, true,
                     moduleFailureCollector(rollbackFailures));
+            verifyManifest();
             if (completeRequestedStop()) return;
             starter = java.util.ServiceLoader.load(AuraStarter.class).findFirst()
                     .orElseThrow(() -> new IllegalStateException("No AuraStarter found. Add aura-web to your dependencies."));

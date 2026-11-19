@@ -26,6 +26,13 @@
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-api</artifactId>
         </dependency>
+        <!-- The single documented policy-layer exception (ArchitectureTest R2): the application
+             manifest is a core lifecycle concern, so its JSON lives here rather than in a
+             mechanism module. Nothing else in core may touch Gson. -->
+        <dependency>
+            <groupId>com.google.code.gson</groupId>
+            <artifactId>gson</artifactId>
+        </dependency>
         <dependency>
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-simple</artifactId>
