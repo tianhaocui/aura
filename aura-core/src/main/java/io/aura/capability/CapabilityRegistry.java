@@ -77,7 +77,13 @@ public final class CapabilityRegistry {
 
     private static Map<String, Object> access(AccessPolicy policy) {
         if (policy instanceof AccessPolicy.Permission permission) {
-            return Map.of("policy", "PERMISSION", "permission", permission.id());
+            // The manifest renders this map in its iteration order, and Map.of salts that
+            // order per JVM run, so the declaration order is fixed here to make
+            // regeneration byte-identical instead of lucky.
+            Map<String, Object> access = new LinkedHashMap<>();
+            access.put("policy", "PERMISSION");
+            access.put("permission", permission.id());
+            return access;
         }
         return Map.of("policy", policy.authenticated() ? "AUTHENTICATED" : "PUBLIC");
     }
