@@ -208,8 +208,17 @@ db.transaction(() -> {
     db.execute("UPDATE account SET balance = balance + ? WHERE id = ?", 100, 2);
     // Rolls back on any exception
 });
-// Nested transactions throw IllegalStateException
 ```
+
+Nested `transaction(...)` calls join the outer transaction: no new connection and no
+savepoint. If an inner block throws and the outer block catches the exception and keeps
+going, the SQL the inner block already executed is **not** rolled back — it commits or
+rolls back together with the outer transaction. Choose explicitly:
+
+- `transaction(...)` — join the current transaction (or start one);
+- `transactionIndependent(...)` — a separate transaction that commits or rolls back on its own;
+- `beginTransaction()` — manual control; throws `IllegalStateException` inside an active
+  transaction instead of silently joining it.
 
 ### Independent Transaction
 
