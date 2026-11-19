@@ -1,6 +1,7 @@
 package io.aura.mcp;
 
 import io.aura.contract.ApiParameter;
+import io.aura.contract.ContractException;
 import io.aura.contract.Route;
 import org.junit.jupiter.api.Test;
 
@@ -115,15 +116,19 @@ class McpRouterIntegrationTest {
     }
 
     @Test
-    void enumParam_invalidName_throwsIllegalArgument() {
+    void enumParam_invalidNameIsRefusedAtTheBoundary() {
         McpRouter mcp = new McpRouter();
         mcp.tool(Route.of("POST", "/query",
                 (McpHandler) ctx -> ctx.getEnum("status", OrderStatus.class))
                 .describedAs("按状态查询订单")
                 .withParams(List.of(status())));
 
+        // The boundary holds the advertised choices: an invalid name never reaches the
+        // handler's Enum.valueOf — it is refused at the declared schema like every other
+        // violation, instead of surfacing as the handler's IllegalArgumentException.
         assertThatThrownBy(() -> mcp.invoke("post_query", Map.of("status", "INVALID")))
-                .isInstanceOf(IllegalArgumentException.class);
+                .isInstanceOfSatisfying(ContractException.class, e ->
+                        assertThat(e.error().code()).isEqualTo("AURA_PARAM_SCHEMA_VIOLATION"));
     }
 
     // === 3. label→code 转换属于 handler ===
@@ -140,7 +145,12 @@ class McpRouterIntegrationTest {
 
         assertThat(mcp.invoke("post_city", Map.of("city", "北京"))).isEqualTo("code:010");
         assertThat(mcp.invoke("post_city", Map.of("city", "上海"))).isEqualTo("code:021");
-        assertThat(mcp.invoke("post_city", Map.of("city", "深圳"))).isEqualTo("code:深圳");
+        // 广州 is a declared choice the handler maps; 深圳 was never declared, so the boundary
+        // refuses it by name — the handler's fallback cannot mask an advertisement lie here.
+        assertThat(mcp.invoke("post_city", Map.of("city", "广州"))).isEqualTo("code:020");
+        assertThatThrownBy(() -> mcp.invoke("post_city", Map.of("city", "深圳")))
+                .isInstanceOfSatisfying(ContractException.class, e ->
+                        assertThat(e.error().code()).isEqualTo("AURA_PARAM_SCHEMA_VIOLATION"));
     }
 
     // === 4. 多 API 聚合 ===

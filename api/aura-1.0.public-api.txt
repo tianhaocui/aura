@@ -48,6 +48,10 @@ public final class io.aura.contract.ApiParameter extends java.lang.Record {
   public java.lang.String description();
   public java.util.Map<java.lang.String, java.lang.Object> schema();
 }
+### aura-contract:io.aura.contract.ApiSchemaValidation
+public final class io.aura.contract.ApiSchemaValidation {
+  public static void validate(java.util.List<io.aura.contract.ApiParameter>, java.util.Map<java.lang.String, java.lang.Object>);
+}
 ### aura-contract:io.aura.contract.CancellationToken$Registration
 public interface io.aura.contract.CancellationToken$Registration extends java.lang.AutoCloseable {
   public abstract void close();

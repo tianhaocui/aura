@@ -182,7 +182,14 @@ class McpRouterTest {
                         Map.of("type", "string", "enum", List.of("北京", "上海"))))));
 
         assertThat(mcp.invoke("post_city", Map.of("city", "北京"))).isEqualTo("010");
-        assertThat(mcp.invoke("post_city", Map.of("city", "深圳"))).isEqualTo("深圳");
+        // The declared choices are the contract at this door: a value outside them is refused
+        // by name at the boundary. The handler's pass-through still answers callers of
+        // transports that do not enforce the schema — the mapping itself stays the handler's.
+        assertThatThrownBy(() -> mcp.invoke("post_city", Map.of("city", "深圳")))
+                .isInstanceOfSatisfying(ContractException.class, e -> {
+                    assertThat(e.error().code()).isEqualTo("AURA_PARAM_SCHEMA_VIOLATION");
+                    assertThat(e.error().message()).contains("city").contains("深圳");
+                });
     }
 
     @Test

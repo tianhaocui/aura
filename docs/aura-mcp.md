@@ -167,6 +167,16 @@ argument is absent: the answer is `MCP_MISSING_ARGUMENT` on stdio, the HTTP tran
 the bridge alike, so a model that skipped an argument it was told to fill in learns that
 instead of watching the handler run on `0`.
 
+A declared schema is the contract an argument is held to, and it is enforced at the same
+boundary — after authorization, before the handler — by the protocol-independent
+`ApiSchemaValidation` in `aura-contract`: `type`, `enum`, `minimum`, `maximum`, and a
+nested object's `properties`/`required` are checked, so `{"id": "not-a-number"}` or a
+value outside the declared choices never reaches a handler. The refusal is
+`AURA_PARAM_SCHEMA_VIOLATION`, naming the parameter, the violated constraint, and the
+value. A scalar binds the way the typed readers bind it: `"5"` is a valid integer and
+`"5.0"` is not, because the binder would refuse it too. Keywords the validator does not
+implement are ignored, as JSON Schema defines.
+
 Passing a `Route` whose handler belongs to another transport fails at registration with
 `AURA_MCP_HANDLER_MISMATCH` and names the route. Accepting it and ignoring its handler was
 how a tool published a contract whose behaviour lived somewhere else.

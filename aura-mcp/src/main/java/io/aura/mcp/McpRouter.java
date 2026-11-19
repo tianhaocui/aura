@@ -2,6 +2,7 @@ package io.aura.mcp;
 
 import io.aura.contract.AccessPolicy;
 import io.aura.contract.ApiParameter;
+import io.aura.contract.ApiSchemaValidation;
 import io.aura.contract.CapabilityDefinition;
 import io.aura.contract.ContractException;
 import io.aura.contract.McpRouterSpec;
@@ -292,6 +293,12 @@ public class McpRouter implements McpRouterSpec {
                 throw new McpMissingArgument(param.name());
             }
         }
+        // The schema the tool advertised is the contract the handler's arguments are held to.
+        // Between authorization and the handler, at the protocol-independent boundary, so the
+        // route door and the capability door enforce the same declared facts — and a value the
+        // model never could have sent by the schema reaches no handler.
+        ApiSchemaValidation.validate(
+                tool.params().stream().map(McpParam::contract).toList(), args);
         McpContext ctx = new McpContext(args, userId);
         return tool.handler().handle(ctx);
     }
