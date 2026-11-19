@@ -20,15 +20,18 @@ public final class WorkflowDefinition<C> implements AuraWorkflow<C> {
     private final Set<WorkflowVariantBuilder.Edge> baseEdges;
     private final Map<String, Variant<C>> variants;
     private final WorkflowClock clock;
+    private final CancellationPolicy cancellationPolicy;
 
     private WorkflowDefinition(String id, Map<String, WorkflowStepSpec<C>> steps,
                                Set<WorkflowVariantBuilder.Edge> edges,
-                               Map<String, Variant<C>> variants, WorkflowClock clock) {
+                               Map<String, Variant<C>> variants, WorkflowClock clock,
+                               CancellationPolicy cancellationPolicy) {
         this.id = id;
         this.baseSteps = Collections.unmodifiableMap(new LinkedHashMap<>(steps));
         this.baseEdges = Collections.unmodifiableSet(new LinkedHashSet<>(edges));
         this.variants = Collections.unmodifiableMap(new LinkedHashMap<>(variants));
         this.clock = clock;
+        this.cancellationPolicy = cancellationPolicy;
         validate(this.baseSteps, this.baseEdges);
         for (Variant<C> variant : variants.values()) validate(variant.steps, variant.edges);
     }
@@ -164,6 +167,9 @@ public final class WorkflowDefinition<C> implements AuraWorkflow<C> {
             if (currentStep != null && currentStep.status() == StepExecution.Status.RUNNING) {
                 currentStep.cancel(cancelled);
             }
+            if (cancellationPolicy == CancellationPolicy.COMPENSATE_ON_CANCEL) {
+                compensate(context, completed, execution);
+            }
             execution.cancel(cancelled);
             observer.accept(execution);
             return new WorkflowResult(execution, null);
@@ -279,10 +285,16 @@ public final class WorkflowDefinition<C> implements AuraWorkflow<C> {
         private final WorkflowClock clock;
         private final WorkflowVariantBuilder<C> base = new WorkflowVariantBuilder<>();
         private final Map<String, Variant<C>> variants = new LinkedHashMap<>();
+        private CancellationPolicy cancellationPolicy = CancellationPolicy.PRESERVE_COMPLETED;
         private Builder(String id, WorkflowClock clock) {
             if (id == null || id.isBlank()) throw new IllegalArgumentException("workflow id must not be blank");
             this.id = id;
             this.clock = clock;
+        }
+        /** Sets what cancellation does to completed side effects; defaults to {@link CancellationPolicy#PRESERVE_COMPLETED}. */
+        public Builder<C> cancellationPolicy(CancellationPolicy policy) {
+            this.cancellationPolicy = Objects.requireNonNull(policy, "cancellationPolicy");
+            return this;
         }
         public Builder<C> step(String stepId, WorkflowStep<C> step) { base.step(stepId, step); return this; }
         public Builder<C> step(String stepId, WorkflowStep<C> step, StepMode mode) { base.step(stepId, step, mode); return this; }
@@ -311,7 +323,9 @@ public final class WorkflowDefinition<C> implements AuraWorkflow<C> {
         public Builder<C> extension(String name, WorkflowExtension<C> extension) {
             return variant(name, extension::apply);
         }
-        public WorkflowDefinition<C> build() { return new WorkflowDefinition<>(id, base.steps(), base.edges(), variants, clock); }
+        public WorkflowDefinition<C> build() {
+            return new WorkflowDefinition<>(id, base.steps(), base.edges(), variants, clock, cancellationPolicy);
+        }
         private WorkflowVariantBuilder<C> copyBase() {
             WorkflowVariantBuilder<C> copy = new WorkflowVariantBuilder<>();
             base.steps().forEach((stepId, spec) -> copy.step(stepId, spec.step(), spec.mode(), spec.retryPolicy()));

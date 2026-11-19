@@ -77,6 +77,25 @@ The same token overload is available for synchronous `execute(...)` calls.
 When cancellation is observed, the workflow and the currently running step are both marked
 `CANCELLED`; steps that have not started remain `PENDING`.
 
+Cancellation has an explicit compensation contract. The default
+`CancellationPolicy.PRESERVE_COMPLETED` stops further steps and keeps the side effects of
+already succeeded steps — cancelling does not undo completed business operations. Opt in to
+`CancellationPolicy.COMPENSATE_ON_CANCEL` to run the registered compensations of completed
+compensatable steps in reverse order before the execution is marked `CANCELLED`:
+
+```java
+Workflow.<OrderContext>builder("place-order")
+    .cancellationPolicy(CancellationPolicy.COMPENSATE_ON_CANCEL)
+    .step("place-order", Orders::place, StepMode.COMPENSATABLE)
+    .compensate("place-order", Orders::cancelOrder)
+    // ...
+```
+
+A compensation that throws marks that step `FAILED`; the execution still ends `CANCELLED`.
+Like failure compensation, this is in-process best effort: a crash between a side effect and
+its persisted state is still subject to the explicit-recovery contract below, and compensation
+itself must be idempotent business code.
+
 Both `WorkflowRuntime.execute(...)` and `executeAsync(...)` persist the same execution state
 transitions. Calling `WorkflowDefinition.execute(...)` directly remains a lightweight operation
 without a runtime store.

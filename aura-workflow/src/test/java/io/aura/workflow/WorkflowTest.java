@@ -139,6 +139,91 @@ class WorkflowTest {
     }
 
     @Test
+    void cancellationBetweenSuccessfulStepsPreservesCompletedSideEffectsByDefault() {
+        List<String> events = new ArrayList<>();
+        CancellationToken token = new CancellationToken();
+        WorkflowDefinition<List<String>> workflow = Workflow.<List<String>>builder("cancel-preserve")
+                .step("reserve", c -> { c.add("reserve"); return "reservation"; }, StepMode.COMPENSATABLE)
+                .step("charge", c -> { c.add("charge"); token.cancel(); return "charged"; }, StepMode.COMPENSATABLE)
+                .step("ship", c -> { c.add("ship"); return null; })
+                .before("reserve", "charge").before("charge", "ship")
+                .compensate("reserve", (c, value) -> c.add("release:" + value))
+                .compensate("charge", (c, value) -> c.add("refund:" + value))
+                .build();
+
+        WorkflowResult result = workflow.execute(events, WorkflowSelector.defaultVariant(), token, ignored -> { });
+
+        assertThat(result.cancelled()).isTrue();
+        assertThat(events).containsExactly("reserve", "charge");
+        assertThat(result.execution().step("reserve").status()).isEqualTo(StepExecution.Status.SUCCEEDED);
+        assertThat(result.execution().step("charge").status()).isEqualTo(StepExecution.Status.SUCCEEDED);
+        assertThat(result.execution().step("ship").status()).isEqualTo(StepExecution.Status.PENDING);
+    }
+
+    @Test
+    void compensateOnCancelRunsCompensationsInReverseOrderBetweenSteps() {
+        List<String> events = new ArrayList<>();
+        CancellationToken token = new CancellationToken();
+        WorkflowDefinition<List<String>> workflow = Workflow.<List<String>>builder("cancel-compensate")
+                .cancellationPolicy(CancellationPolicy.COMPENSATE_ON_CANCEL)
+                .step("reserve", c -> { c.add("reserve"); return "reservation"; }, StepMode.COMPENSATABLE)
+                .step("charge", c -> { c.add("charge"); token.cancel(); return "charged"; }, StepMode.COMPENSATABLE)
+                .step("ship", c -> { c.add("ship"); return null; })
+                .before("reserve", "charge").before("charge", "ship")
+                .compensate("reserve", (c, value) -> c.add("release:" + value))
+                .compensate("charge", (c, value) -> c.add("refund:" + value))
+                .build();
+
+        WorkflowResult result = workflow.execute(events, WorkflowSelector.defaultVariant(), token, ignored -> { });
+
+        assertThat(result.cancelled()).isTrue();
+        assertThat(events).containsExactly("reserve", "charge", "refund:charged", "release:reservation");
+        assertThat(result.execution().step("reserve").status()).isEqualTo(StepExecution.Status.COMPENSATED);
+        assertThat(result.execution().step("charge").status()).isEqualTo(StepExecution.Status.COMPENSATED);
+        assertThat(result.execution().step("ship").status()).isEqualTo(StepExecution.Status.PENDING);
+    }
+
+    @Test
+    void compensateOnCancelWhileAStepIsRunningCancelsItAndCompensatesCompletedSteps() {
+        List<String> events = new ArrayList<>();
+        CancellationToken token = new CancellationToken();
+        WorkflowDefinition<List<String>> workflow = Workflow.<List<String>>builder("cancel-running")
+                .cancellationPolicy(CancellationPolicy.COMPENSATE_ON_CANCEL)
+                .step("reserve", c -> { c.add("reserve"); return "reservation"; }, StepMode.COMPENSATABLE)
+                .step("charge", c -> { c.add("charge"); token.cancel(); token.throwIfCancelled(); return null; })
+                .before("reserve", "charge")
+                .compensate("reserve", (c, value) -> c.add("release:" + value))
+                .build();
+
+        WorkflowResult result = workflow.execute(events, WorkflowSelector.defaultVariant(), token, ignored -> { });
+
+        assertThat(result.cancelled()).isTrue();
+        assertThat(events).containsExactly("reserve", "charge", "release:reservation");
+        assertThat(result.execution().step("reserve").status()).isEqualTo(StepExecution.Status.COMPENSATED);
+        assertThat(result.execution().step("charge").status()).isEqualTo(StepExecution.Status.CANCELLED);
+    }
+
+    @Test
+    void compensateOnCancelMarksStepFailedWhenCompensationThrows() {
+        List<String> events = new ArrayList<>();
+        CancellationToken token = new CancellationToken();
+        WorkflowDefinition<List<String>> workflow = Workflow.<List<String>>builder("cancel-compensation-failure")
+                .cancellationPolicy(CancellationPolicy.COMPENSATE_ON_CANCEL)
+                .step("reserve", c -> { c.add("reserve"); return "reservation"; }, StepMode.COMPENSATABLE)
+                .step("charge", c -> { c.add("charge"); token.cancel(); return null; }, StepMode.COMPENSATABLE)
+                .step("ship", c -> { c.add("ship"); return null; })
+                .before("reserve", "charge").before("charge", "ship")
+                .compensate("reserve", (c, value) -> { throw new IllegalStateException("release-down"); })
+                .build();
+
+        WorkflowResult result = workflow.execute(events, WorkflowSelector.defaultVariant(), token, ignored -> { });
+
+        assertThat(result.cancelled()).isTrue();
+        assertThat(result.execution().step("reserve").status()).isEqualTo(StepExecution.Status.FAILED);
+        assertThat(result.execution().step("charge").status()).isEqualTo(StepExecution.Status.SUCCEEDED);
+    }
+
+    @Test
     void workflowRuntimeComposesThroughAuraModuleContext() {
         AuraApp app = AuraApp.create()
                 .use(WorkflowModule.create())
