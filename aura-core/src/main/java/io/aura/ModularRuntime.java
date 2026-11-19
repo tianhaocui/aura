@@ -1,5 +1,6 @@
 package io.aura;
 
+import io.aura.capability.CapabilityRegistry;
 import io.aura.contract.ContractException;
 import io.aura.contract.McpRouterSpec;
 import io.aura.contract.ModuleMetadata;
@@ -169,6 +170,7 @@ final class ModularRuntime implements AuraWebRuntime {
         try {
             moduleManager.install(this::moduleContext, false,
                     moduleFailureCollector(rollbackFailures));
+            freezeCapabilities();
             verifyManifest();
         } catch (RuntimeException | Error failure) {
             rethrowIfFatal(failure);
@@ -178,6 +180,17 @@ final class ModularRuntime implements AuraWebRuntime {
             preparing = false;
         }
         completeRequestedStop();
+    }
+
+    /**
+     * Closes the static capability declarations once installation completes, on both the
+     * prepare and the start path. The manifest check that follows reconciles what installed; a
+     * registry that kept accepting registrations after that would make the check a snapshot of
+     * one moment instead of a contract, so a late registration now names itself as closed. A
+     * runtime without the capability module finds nothing and freezes nothing.
+     */
+    private void freezeCapabilities() {
+        find(CapabilityRegistry.class).ifPresent(CapabilityRegistry::freeze);
     }
 
     /**
@@ -285,6 +298,7 @@ final class ModularRuntime implements AuraWebRuntime {
         try {
             moduleManager.install(this::moduleContext, true,
                     moduleFailureCollector(rollbackFailures));
+            freezeCapabilities();
             verifyManifest();
             if (completeRequestedStop()) return;
             starter = java.util.ServiceLoader.load(AuraStarter.class).findFirst()

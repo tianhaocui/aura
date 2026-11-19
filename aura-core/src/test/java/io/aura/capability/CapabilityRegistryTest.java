@@ -66,6 +66,33 @@ class CapabilityRegistryTest {
     }
 
     @Test
+    void registrationIsClosedAfterFreeze() {
+        CapabilityRegistry registry = new CapabilityRegistry();
+        registry.register(orderQuery());
+        registry.freeze();
+
+        assertThatThrownBy(() -> registry.register(Capability.of("late.query", null,
+                AccessPolicy.PUBLIC, HANDLER)))
+                .isInstanceOfSatisfying(ContractException.class, e -> {
+                    assertThat(e.error().code()).isEqualTo("AURA_CAPABILITY_FROZEN");
+                    assertThat(e.error().message()).contains("late.query");
+                });
+        assertThat(registry.contains("late.query")).isFalse();
+    }
+
+    @Test
+    void freezeIsIdempotentAndReadsKeepWorking() {
+        CapabilityRegistry registry = new CapabilityRegistry();
+        CapabilityDefinition definition = orderQuery();
+        registry.register(definition);
+        registry.freeze();
+        registry.freeze();
+
+        assertThat(registry.get("order.query")).isSameAs(definition);
+        assertThat(registry.snapshot()).containsOnlyKeys("order.query");
+    }
+
+    @Test
     @SuppressWarnings("unchecked")
     void schemaIsADeclarationProjectionSortedByName() {
         CapabilityRegistry registry = new CapabilityRegistry();

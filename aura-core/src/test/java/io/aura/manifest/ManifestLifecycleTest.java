@@ -123,6 +123,36 @@ class ManifestLifecycleTest {
     }
 
     @Test
+    void theRegistryIsClosedOnceInstallationCompletes() {
+        AuraApp app = composedApp(null);
+        app.prepare();
+        CapabilityRegistry held = app.require(CapabilityRegistry.class);
+
+        assertThatThrownBy(() -> held.register(Capability.of("late.query",
+                "Registered after prepare", AccessPolicy.PUBLIC,
+                (args, userId) -> "late")))
+                .isInstanceOfSatisfying(ContractException.class, e -> {
+                    assertThat(e.error().code()).isEqualTo("AURA_CAPABILITY_FROZEN");
+                    assertThat(e.error().message()).contains("late.query");
+                });
+        assertThat(held.contains("late.query")).isFalse();
+        app.close();
+    }
+
+    @Test
+    void theRegistryIsClosedOnTheStartPathToo() {
+        AuraApp app = composedApp(null);
+        // aura-core has no AuraStarter on its classpath, so start() fails late — after install
+        // and the freeze, which is exactly the ordering this test pins down.
+        assertThatThrownBy(app::start).isInstanceOf(IllegalStateException.class);
+
+        assertThatThrownBy(() -> app.require(CapabilityRegistry.class).register(Capability.of(
+                "late.query", null, AccessPolicy.PUBLIC, (args, userId) -> "late")))
+                .isInstanceOfSatisfying(ContractException.class, e ->
+                        assertThat(e.error().code()).isEqualTo("AURA_CAPABILITY_FROZEN"));
+    }
+
+    @Test
     void startReconcilesBeforeLookingForAStarter() throws Exception {
         Map<String, Object> declared = currentManifest();
         ((List<?>) declared.get("capabilities")).clear();

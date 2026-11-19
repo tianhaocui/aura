@@ -17,7 +17,9 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * The one registry of explicitly declared capabilities. Registration is putIfAbsent: a second
- * definition under the same name fails instead of silently replacing the first.
+ * definition under the same name fails instead of silently replacing the first. The registry is
+ * open while modules install and {@link #freeze() frozen} afterwards — the static declarations
+ * end where installation ends, so a reconciled manifest stays true for the process lifetime.
  *
  * <p>{@link #schema()} is a declaration projection — names, parameters, access policies — and
  * never runtime state (no caller, session, approval or invocation record). Parameters are
@@ -25,14 +27,33 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public final class CapabilityRegistry {
     private final Map<String, CapabilityDefinition> definitions = new ConcurrentHashMap<>();
+    private volatile boolean frozen;
 
     public CapabilityRegistry register(CapabilityDefinition definition) {
         Objects.requireNonNull(definition, "definition");
+        if (frozen) {
+            throw new ContractException("AURA_CAPABILITY_FROZEN",
+                    "Capability registration is closed: modules finished installing, so '"
+                            + definition.name() + "' must be contributed from a module's install();"
+                            + " a capability that appears at runtime is a separate, explicit"
+                            + " lifecycle of its own, not a late registration into the static"
+                            + " declarations a manifest describes");
+        }
         if (definitions.putIfAbsent(definition.name(), definition) != null) {
             throw new ContractException("AURA_CAPABILITY_DUPLICATE",
                     "Capability already registered: " + definition.name());
         }
         return this;
+    }
+
+    /**
+     * Closes registration. The runtime calls this once module installation completes, on both
+     * the prepare and the start path: the manifest reconciles what installed, and the registry
+     * then keeps that shape — a registry that kept accepting registrations would make the
+     * reconciled manifest a snapshot of one moment rather than a contract. Idempotent.
+     */
+    public void freeze() {
+        frozen = true;
     }
 
     public boolean contains(String name) { return definitions.containsKey(name); }

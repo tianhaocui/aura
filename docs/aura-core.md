@@ -210,6 +210,13 @@ resource fails with `AURA_MANIFEST_UNREADABLE`, any difference fails with
 `AURA_MANIFEST_DRIFT` carrying the located differences, and both roll back through the
 existing start-failure path. The check is read-only and idempotent.
 
+The registry the manifest describes is closed, not just checked: installation completion
+freezes `CapabilityRegistry` — on both the `prepare()` and the `start()` path — so a
+registration after that moment fails with `AURA_CAPABILITY_FROZEN` instead of silently
+turning the reconciled declaration into a snapshot of one moment. Capabilities that
+appear at runtime are a separate lifecycle with their own admission and observability;
+there is no door for them yet.
+
 The declaration side must be independent: commit the manifest from the source
 composition (build time), never from a runtime-generated value compared against itself.
 The reference harness in `examples/aura-composed` shows the full loop — a committed

@@ -695,6 +695,7 @@ public final class io.aura.capability.CapabilityModule implements io.aura.AuraMo
 public final class io.aura.capability.CapabilityRegistry {
   public io.aura.capability.CapabilityRegistry();
   public io.aura.capability.CapabilityRegistry register(io.aura.contract.CapabilityDefinition);
+  public void freeze();
   public boolean contains(java.lang.String);
   public io.aura.contract.CapabilityDefinition get(java.lang.String);
   public java.util.Map<java.lang.String, io.aura.contract.CapabilityDefinition> snapshot();
