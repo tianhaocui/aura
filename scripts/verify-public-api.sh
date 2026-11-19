@@ -2,6 +2,9 @@
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# The classifier is part of this gate: the visible-type rules are checked where the
+# baseline they protect is checked.
+bash "$repo_root/scripts/verify-public-api-classifier.sh"
 snapshot="$repo_root/api/aura-1.0.public-api.txt"
 report="$repo_root/target/aura-public-api-report.json"
 temp_dir="$(mktemp -d "${TMPDIR:-/tmp}/aura-public-api.XXXXXX")"

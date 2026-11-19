@@ -2,6 +2,15 @@
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+# The committed manifest is a declaration, not evidence: the drift test has to reconcile it
+# against the composition, and CI has to run the gate that proves the test executed.
+# The committed manifest is a declaration, not evidence: the drift test has to reconcile it
+# against the composition, and CI has to run the gate that proves the test executed.
+test -f "$repo_root/examples/aura-composed/src/main/resources/manifest.json"
+test -f "$repo_root/examples/aura-composed/src/test/java/example/ManifestDriftTest.java"
+rg -q 'example\.ManifestDriftTest' "$repo_root/scripts/verify-manifest.sh"
+rg -q 'bash scripts/verify-manifest\.sh' "$repo_root/.github/workflows/ci.yml"
 test -f "$repo_root/examples/aura-composed/src/main/resources/manifest.json"
 test -f "$repo_root/examples/aura-composed/src/test/java/example/ManifestDriftTest.java"
 command -v mvn >/dev/null || {

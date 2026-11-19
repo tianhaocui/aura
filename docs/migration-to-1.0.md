@@ -258,7 +258,8 @@ the deadline, or left the outcome unknown.
 1. Run `app.prepare()` or `TestClient.of(app)` to validate module installation without opening a listener.
 2. Assert route behavior and structured errors with `TestClient`.
 3. Inspect `/__schema__`; enable `/openapi.json` explicitly in production.
-4. Run `mvn verify` (it includes `ArchitectureTest` and the coverage checks), then `bash scripts/verify-aura-contracts.sh`.
+4. Run `mvn verify` (it includes `ArchitectureTest` and the coverage checks), then
+   `bash scripts/verify-aura-contracts.sh` and `bash scripts/verify-architecture.sh`.
 5. Keep provider, database, MCP transport, TLS, metrics, and migration implementations in optional modules.
 
 The migration is intentionally direct: remove deprecated API usage rather than adding an adapter

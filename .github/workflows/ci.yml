@@ -44,16 +44,12 @@ jobs:
       - name: Test + Coverage Check
         run: mvn verify --batch-mode --fail-at-end
 
-      - name: Module and Documentation Contract
+      - name: Packaging and CI Wiring Contract
         run: bash scripts/verify-aura-contracts.sh
 
       - name: AI Golden Evaluation
         if: matrix.java == 17
         run: bash scripts/verify-ai-evals.sh
-
-      - name: Application Manifest Drift
-        if: matrix.java == 17
-        run: bash scripts/verify-manifest.sh
 
       - name: BOM, Starter, and Archetype Smoke
         if: matrix.java == 17
@@ -89,19 +85,6 @@ jobs:
           if-no-files-found: error
           retention-days: 90
 
-      - name: Public API Baseline
-        if: matrix.java == 17
-        run: bash scripts/verify-public-api.sh
-
-      - name: Archive Public API Change Report
-        if: always() && matrix.java == 17
-        uses: actions/upload-artifact@v4
-        with:
-          name: aura-1.0-public-api-report
-          path: target/aura-public-api-report.json
-          if-no-files-found: ignore
-          retention-days: 90
-
       - name: Canonical Documentation Code
         if: matrix.java == 17
         run: bash scripts/verify-docs-code.sh
@@ -113,6 +96,67 @@ jobs:
           name: coverage-report
           path: '**/target/site/jacoco/'
           retention-days: 7
+
+  # The three review gates stand on their own: each fails under its own name, none
+  # reuses another job's leftover build state, and each script proves its own
+  # execution. Maven tests remain the base; the gates run the targeted builds they
+  # need instead of trusting a warm target/ directory from an earlier step.
+  api-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+          cache: maven
+
+      - name: Install ripgrep
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ripgrep
+
+      - name: Public API Gate
+        run: bash scripts/verify-public-api.sh
+
+      - name: Archive Public API Change Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: aura-1.0-public-api-report
+          path: target/aura-public-api-report.json
+          if-no-files-found: ignore
+          retention-days: 90
+
+  architecture-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install ripgrep
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ripgrep
+
+      - name: Architecture Gate
+        run: bash scripts/verify-architecture.sh
+
+  manifest-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+          cache: maven
+
+      - name: Install ripgrep
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ripgrep
+
+      - name: Application Manifest Gate
+        run: bash scripts/verify-manifest.sh
 
   dependency-review:
     if: github.event_name == 'pull_request'
