@@ -55,6 +55,17 @@ class CapabilityRegistryTest {
     }
 
     @Test
+    void snapshotIteratesInNameOrderAndCannotBeMutated() {
+        CapabilityRegistry registry = new CapabilityRegistry();
+        registry.register(Capability.of("session.whoami", null, AccessPolicy.AUTHENTICATED, HANDLER));
+        registry.register(orderQuery());
+
+        assertThat(registry.snapshot().keySet()).containsExactly("order.query", "session.whoami");
+        assertThatThrownBy(() -> registry.snapshot().put("order.query", orderQuery()))
+                .isInstanceOf(UnsupportedOperationException.class);
+    }
+
+    @Test
     @SuppressWarnings("unchecked")
     void schemaIsADeclarationProjectionSortedByName() {
         CapabilityRegistry registry = new CapabilityRegistry();

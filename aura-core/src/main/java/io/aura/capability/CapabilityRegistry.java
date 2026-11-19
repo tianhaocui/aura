@@ -6,11 +6,13 @@ import io.aura.contract.CapabilityDefinition;
 import io.aura.contract.ContractException;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -44,7 +46,11 @@ public final class CapabilityRegistry {
     }
 
     public Map<String, CapabilityDefinition> snapshot() {
-        return Map.copyOf(new LinkedHashMap<>(definitions));
+        // Map.copyOf salts its iteration order per JVM run; callers that project the snapshot
+        // (MCP tool registration, repeated regeneration) iterate it, so the order is a property
+        // of the declarations — name order — and not of the process that read them.
+        Map<String, CapabilityDefinition> sorted = new TreeMap<>(definitions);
+        return Collections.unmodifiableMap(sorted);
     }
 
     public Map<String, Object> schema() {
