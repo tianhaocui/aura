@@ -140,6 +140,18 @@ class ManifestLifecycleTest {
     }
 
     @Test
+    void preparingTwiceChangesNothingAboutTheDeclarations() {
+        AuraApp app = composedApp(null);
+        app.prepare();
+        app.prepare();
+
+        CapabilityRegistry registry = app.require(CapabilityRegistry.class);
+        assertThat(registry.snapshot()).containsOnlyKeys("order.query");
+        assertThat(registry.contains("late.query")).isFalse();
+        app.close();
+    }
+
+    @Test
     void theRegistryIsClosedOnTheStartPathToo() {
         AuraApp app = composedApp(null);
         // aura-core has no AuraStarter on its classpath, so start() fails late — after install
