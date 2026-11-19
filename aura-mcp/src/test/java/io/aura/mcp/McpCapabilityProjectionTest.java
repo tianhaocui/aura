@@ -24,7 +24,6 @@ class McpCapabilityProjectionTest {
     }
 
     @Test
-    @SuppressWarnings("unchecked")
     void projectsTheSameDefinitionThroughTheOneSchemaFunnel() {
         CapabilityDefinition definition = orderQuery(AccessPolicy.permission("order.read"),
                 (args, userId) -> "order-" + args.get("id"));
@@ -36,13 +35,16 @@ class McpCapabilityProjectionTest {
             assertThat(tool.authenticated()).isTrue();
             assertThat(tool.permission()).isEqualTo("order.read");
         });
-        Map<String, Object> entry = (Map<String, Object>) ((List<Object>) router.buildSchema()
-                .get("tools")).get(0);
-        assertThat(entry.get("x-aura-capability")).isEqualTo("order.query");
-        assertThat(entry.get("x-aura-authenticated")).isEqualTo(true);
-        assertThat(entry.get("x-aura-permission")).isEqualTo("order.read");
-        assertThat(entry.get("inputSchema")).isEqualTo(McpUtil.inputSchema(
-                definition.params().stream().map(McpParam::new).toList()));
+        McpWire.Tool tool = McpWire.of(router.buildSchema()).tool("order_query");
+        assertThat(tool.description()).isEqualTo("Query an order");
+        assertThat(tool.capability()).isEqualTo("order.query");
+        assertThat(tool.authenticated()).isTrue();
+        assertThat(tool.permission()).isEqualTo("order.read");
+        // The capability door publishes the funnel's own schema: the same McpParam list read back
+        // through the funnel renders byte-for-byte what the tool entry carries, so a projection
+        // that re-derived the schema differently fails here instead of agreeing on fields.
+        assertThat(tool.inputSchema().render()).isEqualTo(McpWire.of(McpUtil.inputSchema(
+                definition.params().stream().map(McpParam::new).toList())).asSchema().render());
         assertThat(router.capabilityBindings()).containsExactlyEntriesOf(
                 Map.of("order_query", "order.query"));
     }

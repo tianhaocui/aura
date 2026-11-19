@@ -82,6 +82,9 @@ final class McpWire {
         String permission() { return json.getString("x-aura-permission"); }
         boolean authenticated() { return json.getBooleanValue("x-aura-authenticated"); }
 
+        /** The business name a capability tool carries back, or null for a route tool. */
+        String capability() { return json.getString("x-aura-capability"); }
+
         /** The tool entry's own keys, so a promise that a key stays absent is an assertion. */
         Set<String> keys() { return json.keySet(); }
 
@@ -108,6 +111,12 @@ final class McpWire {
         }
 
         String type() { return json.getString("type"); }
+
+        /**
+         * The schema as fastjson2 writes it, so two documents produced by the same funnel compare
+         * byte-for-byte instead of field-by-field.
+         */
+        String render() { return JSON.toJSONString(json); }
 
         /** The schema's own keys, so a promise that a key stays absent is still an assertion. */
         Set<String> keys() { return json.keySet(); }
