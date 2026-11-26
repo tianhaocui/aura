@@ -166,6 +166,34 @@ Use `ApiException` or another `CodedException` for expected failures. Responses
 include a stable `code`, location/field when relevant, reason, and repair hint.
 Production 500 responses do not include raw exception messages or stack traces.
 
+`ApiException` names the response the application raises on purpose —
+`badRequest`, `unauthorized`, `forbidden`, `notFound`, `conflict`, `locked` —
+so the status and the code are chosen in one place. A failure that also carries
+a field name or a cause keeps using the constructors.
+
+<!-- aura:compile name=web-structured-errors -->
+```java
+package docs.example;
+
+import io.aura.web.ApiException;
+import io.aura.web.Router;
+
+public final class WebStructuredErrors {
+    private WebStructuredErrors() { }
+
+    public static Router orders() {
+        Router router = new Router();
+        router.get("/orders/{id}", ctx -> {
+            throw ApiException.notFound("ORDER_NOT_FOUND", "order " + ctx.path("id") + " does not exist");
+        });
+        router.post("/orders/{id}/lock", ctx -> {
+            throw ApiException.locked("ORDER_LOCKED", "order is being edited");
+        });
+        return router;
+    }
+}
+```
+
 ## Schema And OpenAPI
 
 `/__schema__` is disabled in production unless explicitly protected or enabled

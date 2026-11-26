@@ -1051,6 +1051,12 @@ public class io.aura.web.ApiException extends java.lang.RuntimeException impleme
   public io.aura.web.ApiException(int, java.lang.String, java.lang.String);
   public io.aura.web.ApiException(int, java.lang.String, java.lang.String, java.lang.String);
   public io.aura.web.ApiException(int, java.lang.String, java.lang.String, java.lang.String, java.lang.Throwable);
+  public static io.aura.web.ApiException badRequest(java.lang.String, java.lang.String);
+  public static io.aura.web.ApiException unauthorized(java.lang.String, java.lang.String);
+  public static io.aura.web.ApiException forbidden(java.lang.String, java.lang.String);
+  public static io.aura.web.ApiException notFound(java.lang.String, java.lang.String);
+  public static io.aura.web.ApiException conflict(java.lang.String, java.lang.String);
+  public static io.aura.web.ApiException locked(java.lang.String, java.lang.String);
   public int status();
   public java.lang.String code();
   public java.lang.String field();
