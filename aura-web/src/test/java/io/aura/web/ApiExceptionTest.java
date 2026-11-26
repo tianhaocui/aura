@@ -24,6 +24,45 @@ class ApiExceptionTest {
     }
 
     @Test
+    void namedFactoriesCarryTheirOwnStatusAndCode() {
+        record Case(int status, String code, String message, ApiException raised) {
+        }
+        var cases = java.util.List.of(
+                new Case(400, "BAD_INPUT", "bad input", ApiException.badRequest("BAD_INPUT", "bad input")),
+                new Case(401, "UNAUTHENTICATED", "no session",
+                        ApiException.unauthorized("UNAUTHENTICATED", "no session")),
+                new Case(403, "ORDER_FORBIDDEN", "not your order",
+                        ApiException.forbidden("ORDER_FORBIDDEN", "not your order")),
+                new Case(404, "ORDER_NOT_FOUND", "no order 42",
+                        ApiException.notFound("ORDER_NOT_FOUND", "no order 42")),
+                new Case(409, "ORDER_DUPLICATE", "order already exists",
+                        ApiException.conflict("ORDER_DUPLICATE", "order already exists")),
+                new Case(423, "ORDER_LOCKED", "order is being edited",
+                        ApiException.locked("ORDER_LOCKED", "order is being edited")));
+
+        for (var c : cases) {
+            assertThat(c.raised()).isInstanceOf(CodedException.class);
+            assertThat(c.raised().status()).isEqualTo(c.status());
+            assertThat(c.raised().code()).isEqualTo(c.code());
+            assertThat(c.raised()).hasMessage(c.message());
+            assertThat(c.raised().field()).isNull();
+        }
+    }
+
+    @Test
+    void aFactoryRaisedFailureReachesTheCallerWithThatStatus() {
+        Router router = new Router();
+        router.get("/orders/42", ctx -> {
+            throw ApiException.notFound("ORDER_NOT_FOUND", "no order 42");
+        });
+
+        TestClient.Response resp = TestApplications.client(router).get("/orders/42").execute();
+
+        assertThat(resp.status()).isEqualTo(404);
+        assertThat(resp.body()).contains("\"code\":\"ORDER_NOT_FOUND\"", "no order 42");
+    }
+
+    @Test
     void unexpectedProductionExceptionDoesNotExposeMessage() {
         Router router = new Router();
         router.get("/fail", ctx -> {
